@@ -1,6 +1,6 @@
-# Hello World Chrome Extension
+# Vocabulary Extension
 
-A simple "Hello World" Chrome extension built with WXT.
+A Chrome extension for sharpening vocabulary and comprehension, built with WXT.
 
 ## Getting Started
 
@@ -41,9 +41,20 @@ npm run zip
 
 This will create a ZIP file ready for Chrome Web Store submission.
 
+## Features
+
+- 🎨 Modern UI with purple accent colors and soft glowing shadow
+- 😺 Cat mascot with glasses
+- 🔄 iOS-style toggle switch (ON/OFF)
+- 📝 Clear instructions for vocabulary learning
+- 💜 Highlighted key terms with purple pill styling
+
 ## Project Structure
 
-- `entrypoints/popup.html` - The popup HTML file that shows "Hello World"
+- `entrypoints/popup.html` - The popup HTML file
+- `assets/popup.css` - Modular CSS styling (separate from HTML)
+- `assets/popup.js` - Toggle functionality JavaScript
+- `assets/logo_1-removebg.png` - Cat logo image
 - `wxt.config.ts` - WXT configuration file
 - `package.json` - Project dependencies and scripts
 

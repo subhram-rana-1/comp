@@ -3,13 +3,40 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Hello World</title>
+  <title>Vocabulary Extension</title>
   <link rel="stylesheet" href="/popup.css">
 </head>
 <body>
-  <div class="container">
-    <h1>Hello World</h1>
+      <!-- Toggle Switch with Finger Icon -->
+  <div class="toggle-container">
+    <span class="finger-point">▶</span>
+    <label class="toggle-switch">
+      <input type="checkbox" id="extensionToggle">
+      <span class="toggle-slider"></span>
+    </label>
   </div>
+
+  
+  <!-- Cat Icon -->
+  <div class="icon-container">
+    <img src="/logo_1-removebg.png" alt="Cat with glasses" class="cat-icon">
+  </div>
+
+  <!-- Title -->
+  <h1 class="title">Vocabulary and comprehension</h1>
+
+
+  <!-- Instructions -->
+  <div class="instructions">
+    <p class="instruction-item">
+      Double click a <span class="highlight">word</span> to select
+    </p>
+    <p class="instruction-item">
+      Select <span class="highlight">text containing multiple</span> words
+    </p>
+  </div>
+
+  <script src="/popup.js"></script>
 </body>
 </html>
 
