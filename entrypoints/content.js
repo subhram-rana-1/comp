@@ -1,9 +1,21 @@
 export default defineContentScript({
   matches: ['<all_urls>'],
   
-  main() {
+  async main() {
     // Initialize the button panel when content script loads
-    ButtonPanel.init();
+    await ButtonPanel.init();
+    
+    // Listen for storage changes to show/hide panel
+    chrome.storage.onChanged.addListener((changes, namespace) => {
+      if (namespace === 'local' && changes.isExtensionEnabledForDomain) {
+        const isEnabled = changes.isExtensionEnabledForDomain.newValue;
+        if (isEnabled) {
+          ButtonPanel.show();
+        } else {
+          ButtonPanel.hide();
+        }
+      }
+    });
   },
 });
 
@@ -12,14 +24,49 @@ export default defineContentScript({
 // ===================================
 const ButtonPanel = {
   panelContainer: null,
+  upperButtonGroup: null,
+  
+  // State variables for button visibility and enabled states
+  state: {
+    showRemoveMeanings: false,    // Controls visibility of "Remove meanings" button
+    showDeselectAll: false,        // Controls visibility of "Deselect all" button
+    isMagicMeaningEnabled: false,  // Controls enabled/disabled state of "Magic meaning" button
+    isAskEnabled: false            // Controls enabled/disabled state of "Ask" button
+  },
 
   /**
    * Initialize the button panel
    */
-  init() {
+  async init() {
     this.createPanel();
     this.attachEventListeners();
-    console.log('Button panel initialized');
+    
+    // Apply initial state
+    this.updateButtonStates();
+    
+    // Check if extension is enabled and show/hide accordingly
+    const isEnabled = await this.checkExtensionEnabled();
+    if (isEnabled) {
+      this.show();
+    } else {
+      this.hide();
+    }
+    
+    console.log('Button panel initialized. Enabled:', isEnabled);
+  },
+
+  /**
+   * Check if extension is enabled from storage
+   * @returns {Promise<boolean>} Whether the extension is enabled
+   */
+  async checkExtensionEnabled() {
+    try {
+      const result = await chrome.storage.local.get(['isExtensionEnabledForDomain']);
+      return result.isExtensionEnabledForDomain ?? true; // Default to true
+    } catch (error) {
+      console.error('Error checking extension state:', error);
+      return true; // Default to true on error
+    }
   },
 
   /**
@@ -36,8 +83,8 @@ const ButtonPanel = {
     mainButtonGroup.className = 'vocab-button-group-main';
 
     // Create upper button group (Remove all meanings, Deselect all)
-    const upperButtonGroup = document.createElement('div');
-    upperButtonGroup.className = 'vocab-button-group-upper';
+    this.upperButtonGroup = document.createElement('div');
+    this.upperButtonGroup.className = 'vocab-button-group-upper';
 
     const upperButtons = [
       {
@@ -58,7 +105,7 @@ const ButtonPanel = {
 
     upperButtons.forEach(btnConfig => {
       const button = this.createButton(btnConfig);
-      upperButtonGroup.appendChild(button);
+      this.upperButtonGroup.appendChild(button);
     });
 
     // Create lower button group (Magic meaning, Ask)
@@ -88,7 +135,7 @@ const ButtonPanel = {
     });
 
     // Append upper and lower groups to main group
-    mainButtonGroup.appendChild(upperButtonGroup);
+    mainButtonGroup.appendChild(this.upperButtonGroup);
     mainButtonGroup.appendChild(lowerButtonGroup);
 
     // Append main group to panel
@@ -193,9 +240,16 @@ const ButtonPanel = {
         position: fixed;
         right: 0;
         top: 50%;
-        transform: translateY(-50%);
+        transform: translateY(-50%) translateX(100%);
         z-index: 999999;
         font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+        transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        opacity: 1;
+      }
+
+      /* Panel visible state */
+      .vocab-helper-panel.visible {
+        transform: translateY(-50%) translateX(0);
       }
 
       /* Main Button Group with Purple Shadow */
@@ -299,6 +353,80 @@ const ButtonPanel = {
         border-color: #7a1fd9;
       }
 
+      /* Disabled Button State */
+      .vocab-btn.disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+      }
+
+      .vocab-btn-solid-purple.disabled {
+        background: #c5aee3;
+        border-color: #c5aee3;
+        opacity: 1;
+      }
+
+      .vocab-btn-solid-purple.disabled:hover {
+        background: #c5aee3;
+        border-color: #c5aee3;
+      }
+
+      .vocab-btn-solid-purple.disabled .vocab-btn-icon svg {
+        opacity: 0.7;
+      }
+
+      .vocab-btn-solid-purple.disabled .vocab-btn-text {
+        opacity: 0.85;
+      }
+
+      /* Allow hover events on disabled buttons for tooltips */
+      .vocab-btn.disabled * {
+        pointer-events: none;
+      }
+
+      /* Tooltip Styles */
+      .vocab-btn-tooltip {
+        position: absolute;
+        bottom: calc(100% + 8px);
+        right: 0;
+        background: white;
+        color: #a78bfa;
+        padding: 10px 14px;
+        border-radius: 10px;
+        font-size: 12px;
+        font-weight: 500;
+        white-space: nowrap;
+        box-shadow: 0 0 0 1px rgba(167, 139, 250, 0.1),
+                    0 4px 12px rgba(167, 139, 250, 0.3),
+                    0 0 20px rgba(167, 139, 250, 0.2);
+        z-index: 10;
+        pointer-events: none;
+        opacity: 0;
+        transform: translateY(5px);
+        transition: opacity 0.2s cubic-bezier(0.4, 0, 0.2, 1),
+                    transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+      }
+
+      .vocab-btn-tooltip.visible {
+        opacity: 1;
+        transform: translateY(0);
+      }
+
+      /* Tooltip arrow */
+      .vocab-btn-tooltip::after {
+        content: '';
+        position: absolute;
+        top: 100%;
+        right: 20px;
+        border: 6px solid transparent;
+        border-top-color: white;
+        filter: drop-shadow(0 2px 3px rgba(167, 139, 250, 0.2));
+      }
+
+      /* Button container needs relative positioning for tooltip */
+      .vocab-btn {
+        position: relative;
+      }
+
       /* Responsive adjustments */
       @media (max-width: 768px) {
         .vocab-helper-panel {
@@ -351,16 +479,88 @@ const ButtonPanel = {
     });
 
     // Magic meaning button
-    buttons.magicMeaning?.addEventListener('click', () => {
+    buttons.magicMeaning?.addEventListener('click', (e) => {
+      if (buttons.magicMeaning.classList.contains('disabled')) {
+        e.preventDefault();
+        e.stopPropagation();
+        return;
+      }
       console.log('Magic meaning clicked');
       this.handleMagicMeaning();
     });
 
     // Ask button
-    buttons.ask?.addEventListener('click', () => {
+    buttons.ask?.addEventListener('click', (e) => {
+      if (buttons.ask.classList.contains('disabled')) {
+        e.preventDefault();
+        e.stopPropagation();
+        return;
+      }
       console.log('Ask clicked');
       this.handleAsk();
     });
+
+    // Add tooltip event listeners
+    this.attachTooltipListeners(buttons.magicMeaning, 'magic-meaning');
+    this.attachTooltipListeners(buttons.ask, 'ask');
+  },
+
+  /**
+   * Attach tooltip event listeners to a button
+   * @param {HTMLElement} button - Button element
+   * @param {string} buttonType - Type of button ('magic-meaning' or 'ask')
+   */
+  attachTooltipListeners(button, buttonType) {
+    if (!button) return;
+
+    let tooltip = null;
+
+    button.addEventListener('mouseenter', () => {
+      const isDisabled = button.classList.contains('disabled');
+      let message = '';
+
+      // Determine tooltip message based on button type and state
+      if (buttonType === 'magic-meaning') {
+        message = isDisabled 
+          ? 'Select words or texts first' 
+          : 'Get meaning and explanations';
+      } else if (buttonType === 'ask') {
+        message = isDisabled 
+          ? 'Select a text first' 
+          : 'Ask about the selected passage';
+      }
+
+      // Create and show tooltip
+      tooltip = this.createTooltip(message);
+      button.appendChild(tooltip);
+      
+      // Trigger animation
+      setTimeout(() => {
+        tooltip.classList.add('visible');
+      }, 10);
+    });
+
+    button.addEventListener('mouseleave', () => {
+      if (tooltip) {
+        tooltip.classList.remove('visible');
+        setTimeout(() => {
+          tooltip.remove();
+          tooltip = null;
+        }, 200);
+      }
+    });
+  },
+
+  /**
+   * Create a tooltip element
+   * @param {string} message - Tooltip message
+   * @returns {HTMLElement} Tooltip element
+   */
+  createTooltip(message) {
+    const tooltip = document.createElement('div');
+    tooltip.className = 'vocab-btn-tooltip';
+    tooltip.textContent = message;
+    return tooltip;
   },
 
   /**
@@ -396,20 +596,22 @@ const ButtonPanel = {
   },
 
   /**
-   * Show the button panel
+   * Show the button panel with slide animation
    */
   show() {
     if (this.panelContainer) {
-      this.panelContainer.style.display = 'block';
+      // Add visible class to trigger slide-in animation
+      this.panelContainer.classList.add('visible');
     }
   },
 
   /**
-   * Hide the button panel
+   * Hide the button panel with slide animation
    */
   hide() {
     if (this.panelContainer) {
-      this.panelContainer.style.display = 'none';
+      // Remove visible class to trigger slide-out animation
+      this.panelContainer.classList.remove('visible');
     }
   },
 
@@ -421,6 +623,90 @@ const ButtonPanel = {
       this.panelContainer.remove();
       this.panelContainer = null;
     }
+  },
+
+  /**
+   * Update button states based on state variables
+   */
+  updateButtonStates() {
+    // Show/hide upper button group based on state
+    const shouldShowUpperGroup = this.state.showRemoveMeanings || this.state.showDeselectAll;
+    if (this.upperButtonGroup) {
+      this.upperButtonGroup.style.display = shouldShowUpperGroup ? 'flex' : 'none';
+    }
+
+    // Update individual button visibility in upper group
+    const removeMeaningsBtn = document.getElementById('remove-all-meanings');
+    const deselectAllBtn = document.getElementById('deselect-all');
+    
+    if (removeMeaningsBtn) {
+      removeMeaningsBtn.style.display = this.state.showRemoveMeanings ? 'grid' : 'none';
+    }
+    if (deselectAllBtn) {
+      deselectAllBtn.style.display = this.state.showDeselectAll ? 'grid' : 'none';
+    }
+
+    // Update enabled/disabled state of lower buttons
+    const magicMeaningBtn = document.getElementById('magic-meaning');
+    const askBtn = document.getElementById('ask');
+
+    if (magicMeaningBtn) {
+      if (this.state.isMagicMeaningEnabled) {
+        magicMeaningBtn.classList.remove('disabled');
+      } else {
+        magicMeaningBtn.classList.add('disabled');
+      }
+    }
+
+    if (askBtn) {
+      if (this.state.isAskEnabled) {
+        askBtn.classList.remove('disabled');
+      } else {
+        askBtn.classList.add('disabled');
+      }
+    }
+  },
+
+  /**
+   * Update state and refresh button states
+   * @param {Object} newState - Partial state object to update
+   */
+  updateState(newState) {
+    this.state = { ...this.state, ...newState };
+    this.updateButtonStates();
+    console.log('Button panel state updated:', this.state);
+  },
+
+  /**
+   * Set visibility of Remove meanings button
+   * @param {boolean} show - Whether to show the button
+   */
+  setShowRemoveMeanings(show) {
+    this.updateState({ showRemoveMeanings: show });
+  },
+
+  /**
+   * Set visibility of Deselect all button
+   * @param {boolean} show - Whether to show the button
+   */
+  setShowDeselectAll(show) {
+    this.updateState({ showDeselectAll: show });
+  },
+
+  /**
+   * Set enabled state of Magic meaning button
+   * @param {boolean} enabled - Whether to enable the button
+   */
+  setMagicMeaningEnabled(enabled) {
+    this.updateState({ isMagicMeaningEnabled: enabled });
+  },
+
+  /**
+   * Set enabled state of Ask button
+   * @param {boolean} enabled - Whether to enable the button
+   */
+  setAskEnabled(enabled) {
+    this.updateState({ isAskEnabled: enabled });
   }
 };
 

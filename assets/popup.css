@@ -16,11 +16,24 @@ body {
   box-shadow: none;
   overflow: hidden;
   transition: border-color 0.3s ease, box-shadow 0.3s ease;
+  animation: slideInFromRight 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Slide in from right animation */
+@keyframes slideInFromRight {
+  0% {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  100% {
+    transform: translateX(0);
+    opacity: 1;
+  }
 }
 
 body.extension-on {
   border-color: #9527F5;
-  animation: borderPulsate 1s ease-out;
+  animation: slideInFromRight 0.3s cubic-bezier(0.4, 0, 0.2, 1), borderPulsate 1s ease-out 0.3s;
 }
 
 @keyframes borderPulsate {
@@ -45,6 +58,7 @@ body.extension-on {
   align-items: center;
   gap: 12px;
   margin-bottom: 4px;
+  animation: fadeInUp 0.4s cubic-bezier(0.4, 0, 0.2, 1) 0.05s both;
 }
 
 .finger-point {
@@ -113,6 +127,18 @@ input:checked + .toggle-slider:before {
   position: absolute;
   top: 20px;
   left: 20px;
+  animation: fadeInScale 0.4s cubic-bezier(0.4, 0, 0.2, 1) 0.1s both;
+}
+
+@keyframes fadeInScale {
+  0% {
+    opacity: 0;
+    transform: scale(0.8);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 
 .cat-icon {
@@ -159,7 +185,19 @@ input:checked + .toggle-slider:before {
   margin: 40px 0 0 0;
   line-height: 1.4;
   white-space: nowrap;
-  transition: color 0.3s ease;
+  transition: color 0.3s ease, margin 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  animation: fadeInUp 0.4s cubic-bezier(0.4, 0, 0.2, 1) 0.15s both;
+}
+
+@keyframes fadeInUp {
+  0% {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 body.extension-on .title {
@@ -171,7 +209,18 @@ body.extension-on .title {
 .instructions {
   text-align: left;
   margin: 20px 0 4px 0;
-  display: none;
+  max-height: 0;
+  overflow: hidden;
+  opacity: 0;
+  transition: max-height 0.4s cubic-bezier(0.4, 0, 0.2, 1), 
+              opacity 0.3s ease 0.1s,
+              margin 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.instructions.show {
+  max-height: 200px;
+  opacity: 1;
+  margin: 20px 0 4px 0;
 }
 
 .instruction-item {
