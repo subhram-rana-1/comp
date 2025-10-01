@@ -54,14 +54,14 @@ const UIManager = {
       // ON state
       this.catIcon.classList.add('active');
       document.body.classList.add('extension-on');
-      this.instructions.style.display = 'block';
+      this.instructions.classList.add('show');
       this.fingerPoint.style.display = 'none';
       console.log('Extension Enabled');
     } else {
       // OFF state
       this.catIcon.classList.remove('active');
       document.body.classList.remove('extension-on');
-      this.instructions.style.display = 'none';
+      this.instructions.classList.remove('show');
       this.fingerPoint.style.display = 'block';
       console.log('Extension Disabled');
     }
