@@ -12,7 +12,7 @@ body {
   position: relative;
   text-align: center;
   box-sizing: border-box;
-  border: 3px solid #ccc;
+  border: 1px solid #ccc;
   box-shadow: none;
   overflow: hidden;
   transition: border-color 0.3s ease, box-shadow 0.3s ease;
@@ -48,11 +48,10 @@ body.extension-on {
 }
 
 .finger-point {
-  font-size: 20px;
-  color: #9b59b6;
+  width: 20px;
+  height: 20px;
   animation: pointAnimation 1.5s ease-in-out infinite;
   display: none;
-  font-weight: bold;
 }
 
 @keyframes pointAnimation {
