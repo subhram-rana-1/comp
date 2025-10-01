@@ -15,6 +15,9 @@ export default defineConfig({
       48: 'chrome-extension-logo.png',
       128: 'chrome-extension-logo.png',
     },
+    permissions: [
+      'storage'
+    ],
   },
 });
 
