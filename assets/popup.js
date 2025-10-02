@@ -1,31 +1,66 @@
 // ===================================
-// Storage Module - Handles Chrome Storage API
+// Domain Manager Module - Handles domain extraction
+// ===================================
+const DomainManager = {
+  /**
+   * Get the current tab's domain
+   * @returns {Promise<string>} The domain of the current tab
+   */
+  async getCurrentDomain() {
+    try {
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (!tab?.url) return 'unknown';
+      
+      const url = new URL(tab.url);
+      return url.hostname;
+    } catch (error) {
+      console.error('Error getting current domain:', error);
+      return 'unknown';
+    }
+  }
+};
+
+// ===================================
+// Storage Module - Handles Chrome Storage API (Per-Domain)
 // ===================================
 const StorageManager = {
-  STORAGE_KEY: 'isExtensionEnabledForDomain',
+  STORAGE_PREFIX: 'isExtensionEnabledFor_',
 
   /**
-   * Save toggle state to Chrome local storage
+   * Get storage key for a specific domain
+   * @param {string} domain - The domain name
+   * @returns {string} Storage key for the domain
+   */
+  getStorageKey(domain) {
+    return `${this.STORAGE_PREFIX}${domain}`;
+  },
+
+  /**
+   * Save toggle state to Chrome local storage for a specific domain
+   * @param {string} domain - The domain name
    * @param {boolean} isEnabled - The toggle state to save
    */
-  async saveToggleState(isEnabled) {
+  async saveToggleState(domain, isEnabled) {
     try {
-      await chrome.storage.local.set({ [this.STORAGE_KEY]: isEnabled });
-      console.log('Toggle state saved:', isEnabled);
+      const key = this.getStorageKey(domain);
+      await chrome.storage.local.set({ [key]: isEnabled });
+      console.log(`Toggle state saved for ${domain}:`, isEnabled);
     } catch (error) {
       console.error('Error saving toggle state:', error);
     }
   },
 
   /**
-   * Load toggle state from Chrome local storage
+   * Load toggle state from Chrome local storage for a specific domain
+   * @param {string} domain - The domain name
    * @returns {Promise<boolean>} The saved toggle state (defaults to true - enabled by default)
    */
-  async loadToggleState() {
+  async loadToggleState(domain) {
     try {
-      const result = await chrome.storage.local.get([this.STORAGE_KEY]);
-      const state = result[this.STORAGE_KEY] ?? true; // Default to true (enabled) if not set
-      console.log('Toggle state loaded:', state);
+      const key = this.getStorageKey(domain);
+      const result = await chrome.storage.local.get([key]);
+      const state = result[key] ?? true; // Default to true (enabled) if not set
+      console.log(`Toggle state loaded for ${domain}:`, state);
       return state;
     } catch (error) {
       console.error('Error loading toggle state:', error);
@@ -80,12 +115,18 @@ const UIManager = {
 // App Initialization and Event Handlers
 // ===================================
 class PopupApp {
+  static currentDomain = null;
+
   /**
    * Initialize the popup application
    */
   static async init() {
-    // Load saved state from storage
-    const savedState = await StorageManager.loadToggleState();
+    // Get current domain
+    this.currentDomain = await DomainManager.getCurrentDomain();
+    console.log('Current domain:', this.currentDomain);
+    
+    // Load saved state from storage for this domain
+    const savedState = await StorageManager.loadToggleState(this.currentDomain);
     
     // Update UI and toggle switch with saved state
     UIManager.setToggleState(savedState);
@@ -102,11 +143,35 @@ class PopupApp {
   static async handleToggleChange(event) {
     const isEnabled = event.target.checked;
     
+    console.log('[Popup] Toggle changed:', isEnabled, 'for domain:', this.currentDomain);
+    
     // Update UI
     UIManager.updateUI(isEnabled);
     
-    // Save state to storage
-    await StorageManager.saveToggleState(isEnabled);
+    // Save state to storage for this domain
+    await StorageManager.saveToggleState(this.currentDomain, isEnabled);
+    console.log('[Popup] State saved to storage');
+    
+    // Notify content script of the change
+    try {
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      console.log('[Popup] Active tab:', tab);
+      
+      if (tab?.id) {
+        console.log('[Popup] Sending message to tab:', tab.id);
+        const response = await chrome.tabs.sendMessage(tab.id, {
+          type: 'TOGGLE_EXTENSION',
+          domain: this.currentDomain,
+          isEnabled: isEnabled
+        });
+        console.log('[Popup] Message sent, response:', response);
+      } else {
+        console.error('[Popup] No active tab found');
+      }
+    } catch (error) {
+      console.error('[Popup] Error sending message to content script:', error);
+      // Storage change listener should still work even if message fails
+    }
   }
 }
 

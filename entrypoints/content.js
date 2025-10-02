@@ -2,18 +2,49 @@ export default defineContentScript({
   matches: ['<all_urls>'],
   
   async main() {
+    // Get current domain
+    const currentDomain = window.location.hostname;
+    const storageKey = `isExtensionEnabledFor_${currentDomain}`;
+    
+    console.log('[Content Script] Current domain:', currentDomain);
+    console.log('[Content Script] Storage key:', storageKey);
+    
     // Initialize the button panel when content script loads
     await ButtonPanel.init();
     
-    // Listen for storage changes to show/hide panel
+    // Listen for storage changes to show/hide panel (per-domain)
     chrome.storage.onChanged.addListener((changes, namespace) => {
-      if (namespace === 'local' && changes.isExtensionEnabledForDomain) {
-        const isEnabled = changes.isExtensionEnabledForDomain.newValue;
-        if (isEnabled) {
+      console.log('[Content Script] Storage changed:', changes, 'Namespace:', namespace);
+      
+      if (namespace === 'local') {
+        // Check if our domain's key changed
+        if (changes[storageKey]) {
+          const isEnabled = changes[storageKey].newValue;
+          console.log(`[Content Script] Toggle state changed for ${currentDomain}:`, isEnabled);
+          
+          if (isEnabled) {
+            ButtonPanel.show();
+          } else {
+            ButtonPanel.hide();
+          }
+        }
+      }
+    });
+    
+    // Listen for messages from popup
+    chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+      console.log('[Content Script] Message received:', message);
+      
+      if (message.type === 'TOGGLE_EXTENSION' && message.domain === currentDomain) {
+        console.log(`[Content Script] Toggling extension for ${currentDomain}:`, message.isEnabled);
+        
+        if (message.isEnabled) {
           ButtonPanel.show();
         } else {
           ButtonPanel.hide();
         }
+        
+        sendResponse({ success: true });
       }
     });
   },
@@ -298,13 +329,15 @@ const ButtonPanel = {
   },
 
   /**
-   * Check if extension is enabled from storage
+   * Check if extension is enabled from storage for current domain
    * @returns {Promise<boolean>} Whether the extension is enabled
    */
   async checkExtensionEnabled() {
     try {
-      const result = await chrome.storage.local.get(['isExtensionEnabledForDomain']);
-      return result.isExtensionEnabledForDomain ?? true; // Default to true
+      const currentDomain = window.location.hostname;
+      const storageKey = `isExtensionEnabledFor_${currentDomain}`;
+      const result = await chrome.storage.local.get([storageKey]);
+      return result[storageKey] ?? true; // Default to true
     } catch (error) {
       console.error('Error checking extension state:', error);
       return true; // Default to true on error
