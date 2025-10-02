@@ -1,5 +1,6 @@
 import ApiService from '../core/services/ApiService.js';
 import SimplifyService from '../core/services/SimplifyService.js';
+import WordExplanationService from '../core/services/WordExplanationService.js';
 
 export default defineContentScript({
   matches: ['<all_urls>'],
@@ -130,6 +131,12 @@ const WordSelector = {
   // Map to store word -> Set of highlight elements (for handling multiple instances)
   wordToHighlights: new Map(),
   
+  // Map to store word -> Array of position objects {element, textStartIndex}
+  wordPositions: new Map(),
+  
+  // Container for explained words (moved from selectedWords after API call)
+  explainedWords: new Map(), // Map of word -> {word, meaning, examples, highlights}
+  
   // Track if the feature is enabled
   isEnabled: false,
   
@@ -150,6 +157,17 @@ const WordSelector = {
     
     // Inject styles for word highlights
     this.injectStyles();
+    
+    // Setup global click handler to close popups
+    document.addEventListener('click', (e) => {
+      // Close popups if clicking outside
+      const clickedInsidePopup = e.target.closest('.vocab-word-popup');
+      const clickedOnWord = e.target.closest('.vocab-word-explained');
+      
+      if (!clickedInsidePopup && !clickedOnWord) {
+        this.hideAllPopups();
+      }
+    });
     
     // Check if extension is enabled for current domain
     const isExtensionEnabled = await this.checkExtensionEnabled();
@@ -437,11 +455,450 @@ const WordSelector = {
     // Clear data structures (O(1) for Set clear)
     this.selectedWords.clear();
     this.wordToHighlights.clear();
+    this.wordPositions.clear();
+    this.explainedWords.clear();
     
     console.log('[WordSelector] All selections cleared');
     
     // Update button states
     ButtonPanel.updateButtonStatesFromSelections();
+  },
+  
+  /**
+   * Get full document text for position calculation
+   * @returns {string} Full document text
+   */
+  getDocumentText() {
+    return document.body.innerText || '';
+  },
+  
+  /**
+   * Find all positions of a word in the document
+   * @param {string} word - The word to find
+   * @returns {Array<number>} Array of character indices where word appears
+   */
+  findWordPositionsInDocument(word) {
+    const docText = this.getDocumentText();
+    const positions = [];
+    const wordLower = word.toLowerCase();
+    const docTextLower = docText.toLowerCase();
+    
+    // Find all occurrences
+    let index = 0;
+    while ((index = docTextLower.indexOf(wordLower, index)) !== -1) {
+      // Check if it's a whole word (not part of another word)
+      const before = index > 0 ? docText[index - 1] : ' ';
+      const after = index + word.length < docText.length ? docText[index + word.length] : ' ';
+      
+      // Check if surrounded by non-word characters
+      if (!/\w/.test(before) && !/\w/.test(after)) {
+        positions.push(index);
+      }
+      index += word.length;
+    }
+    
+    return positions;
+  },
+  
+  /**
+   * Extract context around a word (10 words before and after)
+   * @param {string} docText - Full document text
+   * @param {number} wordIndex - Starting index of the word in document
+   * @param {number} wordLength - Length of the word
+   * @returns {Object} {text, textStartIndex, wordIndexInText}
+   */
+  extractWordContext(docText, wordIndex, wordLength) {
+    // Split document into words (including whitespace for position tracking)
+    const beforeText = docText.substring(0, wordIndex);
+    const afterText = docText.substring(wordIndex + wordLength);
+    
+    // Get words before (up to 10)
+    const wordsBeforeMatch = beforeText.match(/\S+/g) || [];
+    const wordsBefore = wordsBeforeMatch.slice(-10);
+    
+    // Get words after (up to 10)
+    const wordsAfterMatch = afterText.match(/\S+/g) || [];
+    const wordsAfter = wordsAfterMatch.slice(0, 10);
+    
+    // Calculate the actual start index in document
+    let textStartIndex = wordIndex;
+    if (wordsBefore.length > 0) {
+      // Find where the first of our 10 words before starts
+      const beforeJoined = wordsBefore.join(' ');
+      const searchStart = Math.max(0, wordIndex - beforeText.length);
+      textStartIndex = beforeText.lastIndexOf(wordsBefore[0]);
+    }
+    
+    // Build the context text
+    const contextParts = [];
+    if (wordsBefore.length > 0) {
+      contextParts.push(wordsBefore.join(' '));
+    }
+    contextParts.push(docText.substring(wordIndex, wordIndex + wordLength));
+    if (wordsAfter.length > 0) {
+      contextParts.push(wordsAfter.join(' '));
+    }
+    
+    const text = contextParts.join(' ');
+    const wordIndexInText = wordsBefore.length > 0 ? wordsBefore.join(' ').length + 1 : 0;
+    
+    return {
+      text,
+      textStartIndex,
+      wordIndexInText
+    };
+  },
+  
+  /**
+   * Build API payload for word explanation
+   * Algorithm: For each word, extract 10 words before and after. Merge overlapping contexts.
+   * @returns {Array<Object>} Array of payload segments
+   */
+  buildWordsExplanationPayload() {
+    console.log('[WordSelector] ===== Building Words Explanation Payload =====');
+    const docText = this.getDocumentText();
+    const selectedWordsArray = Array.from(this.selectedWords);
+    
+    console.log('[WordSelector] Selected words:', selectedWordsArray);
+    console.log('[WordSelector] Document text length:', docText.length);
+    
+    // Build position data for each word
+    const wordDataList = [];
+    
+    for (const word of selectedWordsArray) {
+      console.log(`[WordSelector] Processing word: "${word}"`);
+      const highlights = this.wordToHighlights.get(word);
+      
+      if (!highlights || highlights.size === 0) {
+        console.warn(`[WordSelector] No highlights found for word: "${word}"`);
+        continue;
+      }
+      
+      console.log(`[WordSelector] Found ${highlights.size} highlight(s) for word: "${word}"`);
+      
+      // Find all positions of this word in document
+      const positions = this.findWordPositionsInDocument(word);
+      console.log(`[WordSelector] Found ${positions.length} position(s) in document for word: "${word}"`, positions);
+      
+      // For each highlight, find its position
+      let highlightIndex = 0;
+      highlights.forEach(highlight => {
+        highlightIndex++;
+        const highlightText = highlight.textContent.replace(/\s+/g, ' ').trim();
+        console.log(`[WordSelector] Processing highlight #${highlightIndex} for "${word}": text="${highlightText}"`);
+        
+        // Try to match this highlight to a position
+        // We'll use the first available position for simplicity
+        if (positions.length > 0) {
+          const position = positions.shift(); // Take first position
+          const context = this.extractWordContext(docText, position, word.length);
+          
+          console.log(`[WordSelector] Assigned position ${position} to highlight #${highlightIndex}`);
+          console.log(`[WordSelector] Context: textStartIndex=${context.textStartIndex}, text="${context.text.substring(0, 50)}..."`);
+          
+          wordDataList.push({
+            word: word,
+            textStartIndex: context.textStartIndex,
+            text: context.text,
+            wordIndexInContext: context.wordIndexInText,
+            wordLength: word.length,
+            highlight: highlight
+          });
+        } else {
+          console.warn(`[WordSelector] No more positions available for highlight #${highlightIndex} of word "${word}"`);
+        }
+      });
+    }
+    
+    console.log('[WordSelector] Total word data entries created:', wordDataList.length);
+    
+    // Sort by textStartIndex (document order)
+    wordDataList.sort((a, b) => a.textStartIndex - b.textStartIndex);
+    console.log('[WordSelector] Sorted word data by position');
+    
+    // Merge overlapping contexts
+    const mergedSegments = [];
+    let currentSegment = null;
+    
+    for (const wordData of wordDataList) {
+      if (!currentSegment) {
+        // Start new segment
+        console.log(`[WordSelector] Starting new segment with word "${wordData.word}" at position ${wordData.textStartIndex}`);
+        currentSegment = {
+          textStartIndex: wordData.textStartIndex,
+          text: wordData.text,
+          important_words_location: [{
+            word: wordData.word,
+            index: wordData.wordIndexInContext,
+            length: wordData.wordLength
+          }],
+          wordHighlights: [wordData.highlight]
+        };
+      } else {
+        const currentEnd = currentSegment.textStartIndex + currentSegment.text.length;
+        const newStart = wordData.textStartIndex;
+        const newEnd = newStart + wordData.text.length;
+        
+        // Check if overlapping or adjacent
+        if (newStart <= currentEnd + 20) { // Allow 20 char gap for merging
+          console.log(`[WordSelector] Merging word "${wordData.word}" into current segment (overlap detected)`);
+          // Merge: extend current segment
+          const mergedStart = Math.min(currentSegment.textStartIndex, newStart);
+          const mergedEnd = Math.max(currentEnd, newEnd);
+          
+          // Recalculate text from document
+          currentSegment.text = docText.substring(mergedStart, mergedEnd);
+          currentSegment.textStartIndex = mergedStart;
+          
+          // Add word location (recalculate index in merged text)
+          const wordIndexInMerged = wordData.textStartIndex + wordData.wordIndexInContext - mergedStart;
+          currentSegment.important_words_location.push({
+            word: wordData.word,
+            index: wordIndexInMerged,
+            length: wordData.wordLength
+          });
+          currentSegment.wordHighlights.push(wordData.highlight);
+        } else {
+          // No overlap, save current and start new
+          console.log(`[WordSelector] No overlap - saving current segment and starting new one for word "${wordData.word}"`);
+          mergedSegments.push(currentSegment);
+          currentSegment = {
+            textStartIndex: wordData.textStartIndex,
+            text: wordData.text,
+            important_words_location: [{
+              word: wordData.word,
+              index: wordData.wordIndexInContext,
+              length: wordData.wordLength
+            }],
+            wordHighlights: [wordData.highlight]
+          };
+        }
+      }
+    }
+    
+    // Add last segment
+    if (currentSegment) {
+      console.log('[WordSelector] Adding final segment');
+      mergedSegments.push(currentSegment);
+    }
+    
+    console.log(`[WordSelector] Created ${mergedSegments.length} merged segment(s)`);
+    mergedSegments.forEach((segment, idx) => {
+      console.log(`[WordSelector] Segment ${idx + 1}: textStartIndex=${segment.textStartIndex}, words=${segment.important_words_location.length}, highlights=${segment.wordHighlights.length}`);
+      console.log(`[WordSelector] Segment ${idx + 1} words:`, segment.important_words_location.map(w => w.word));
+    });
+    
+    // Return payload (remove wordHighlights from API payload, keep for internal use)
+    const payload = mergedSegments.map(segment => ({
+      textStartIndex: segment.textStartIndex,
+      text: segment.text,
+      important_words_location: segment.important_words_location,
+      _wordHighlights: segment.wordHighlights // Keep for internal tracking
+    }));
+    
+    console.log('[WordSelector] ===== Payload Build Complete =====');
+    return payload;
+  },
+  
+  /**
+   * Create popup for word meaning
+   * @param {string} word - The word
+   * @param {string} meaning - The meaning
+   * @param {Array<string>} examples - Example sentences
+   * @returns {HTMLElement} Popup element
+   */
+  createWordPopup(word, meaning, examples) {
+    const popup = document.createElement('div');
+    popup.className = 'vocab-word-popup';
+    
+    // Header
+    const header = document.createElement('div');
+    header.className = 'vocab-word-popup-header';
+    header.textContent = 'Contextual Meaning';
+    popup.appendChild(header);
+    
+    // Meaning
+    const meaningDiv = document.createElement('div');
+    meaningDiv.className = 'vocab-word-popup-meaning';
+    meaningDiv.innerHTML = `<span class="word-bold">${word}</span> means ${meaning}`;
+    popup.appendChild(meaningDiv);
+    
+    // Examples
+    if (examples && examples.length > 0) {
+      const examplesList = document.createElement('ul');
+      examplesList.className = 'vocab-word-popup-examples';
+      
+      examples.forEach(example => {
+        const li = document.createElement('li');
+        // Bold the word in examples
+        const regex = new RegExp(`\\b${word}\\b`, 'gi');
+        const highlightedExample = example.replace(regex, `<span class="word-bold">${word}</span>`);
+        li.innerHTML = highlightedExample;
+        examplesList.appendChild(li);
+      });
+      
+      popup.appendChild(examplesList);
+    }
+    
+    // View more button (placeholder for now)
+    const button = document.createElement('button');
+    button.className = 'vocab-word-popup-button';
+    button.textContent = 'View more examples';
+    button.addEventListener('click', (e) => {
+      e.stopPropagation();
+      console.log('[WordSelector] View more examples clicked for:', word);
+      // TODO: Implement view more functionality
+    });
+    popup.appendChild(button);
+    
+    return popup;
+  },
+  
+  /**
+   * Position popup relative to word highlight
+   * @param {HTMLElement} popup - The popup element
+   * @param {HTMLElement} wordElement - The word highlight element
+   */
+  positionPopup(popup, wordElement) {
+    const rect = wordElement.getBoundingClientRect();
+    const popupHeight = popup.offsetHeight || 250; // Estimated height
+    const popupWidth = popup.offsetWidth || 340;
+    
+    // Calculate position (bottom-right of word, not overlapping)
+    let top = rect.bottom + window.scrollY + 8; // 8px gap below word
+    let left = rect.right + window.scrollX - popupWidth / 2; // Center horizontally with word
+    
+    // Adjust if popup goes off-screen
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+    
+    // Horizontal adjustment
+    if (left + popupWidth > viewportWidth + window.scrollX) {
+      left = viewportWidth + window.scrollX - popupWidth - 10;
+    }
+    if (left < window.scrollX + 10) {
+      left = window.scrollX + 10;
+    }
+    
+    // Vertical adjustment (if not enough space below, show above)
+    if (rect.bottom + popupHeight > viewportHeight + window.scrollY) {
+      top = rect.top + window.scrollY - popupHeight - 8; // Show above
+    }
+    
+    popup.style.top = `${top}px`;
+    popup.style.left = `${left}px`;
+  },
+  
+  /**
+   * Show popup for word (hover or click)
+   * @param {HTMLElement} wordElement - The word highlight element
+   * @param {boolean} sticky - Whether popup should stay (click) or disappear on mouseleave (hover)
+   */
+  showWordPopup(wordElement, sticky = false) {
+    // Remove any existing popups
+    this.hideAllPopups();
+    
+    const word = wordElement.textContent.trim();
+    const meaning = wordElement.getAttribute('data-meaning');
+    const examplesJson = wordElement.getAttribute('data-examples');
+    
+    if (!meaning) return;
+    
+    let examples = [];
+    try {
+      examples = JSON.parse(examplesJson) || [];
+    } catch (e) {
+      console.error('[WordSelector] Error parsing examples:', e);
+    }
+    
+    // Create popup
+    const popup = this.createWordPopup(word, meaning, examples);
+    
+    // Add close button if sticky
+    if (sticky) {
+      const closeBtn = document.createElement('button');
+      closeBtn.className = 'vocab-word-popup-close';
+      closeBtn.innerHTML = `
+        <svg viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M1 1L11 11M11 1L1 11" stroke="#A020F0" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+      `;
+      closeBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.hideAllPopups();
+      });
+      popup.appendChild(closeBtn);
+      popup.classList.add('sticky');
+      popup.setAttribute('data-sticky', 'true');
+    }
+    
+    // Append to body
+    document.body.appendChild(popup);
+    
+    // Position it
+    setTimeout(() => {
+      this.positionPopup(popup, wordElement);
+      popup.classList.add('visible');
+    }, 10);
+    
+    // Store reference
+    wordElement.setAttribute('data-popup-id', 'active');
+    
+    // If not sticky, hide on mouseleave
+    if (!sticky) {
+      const hidePopup = () => {
+        if (popup.getAttribute('data-sticky') !== 'true') {
+          this.hideAllPopups();
+        }
+      };
+      
+      wordElement.addEventListener('mouseleave', hidePopup, { once: true });
+      popup.addEventListener('mouseleave', hidePopup, { once: true });
+    }
+  },
+  
+  /**
+   * Hide all popups
+   */
+  hideAllPopups() {
+    const popups = document.querySelectorAll('.vocab-word-popup');
+    popups.forEach(popup => {
+      popup.classList.remove('visible');
+      setTimeout(() => popup.remove(), 200);
+    });
+    
+    // Clear popup references
+    document.querySelectorAll('[data-popup-id="active"]').forEach(el => {
+      el.removeAttribute('data-popup-id');
+    });
+  },
+  
+  /**
+   * Setup interaction handlers for explained words
+   * This should be called after a word is explained
+   * @param {HTMLElement} wordElement - The word highlight element
+   */
+  setupWordInteractions(wordElement) {
+    // Hover: show popup
+    wordElement.addEventListener('mouseenter', () => {
+      if (!wordElement.classList.contains('vocab-word-explained')) return;
+      if (wordElement.getAttribute('data-popup-id') === 'active') return; // Already showing
+      
+      this.showWordPopup(wordElement, false);
+    });
+    
+    // Click: show sticky popup
+    wordElement.addEventListener('click', (e) => {
+      if (!wordElement.classList.contains('vocab-word-explained')) return;
+      e.stopPropagation();
+      
+      // If already sticky, hide it
+      if (wordElement.getAttribute('data-popup-id') === 'active') {
+        this.hideAllPopups();
+      } else {
+        this.showWordPopup(wordElement, true);
+      }
+    });
   },
   
   /**
@@ -461,13 +918,15 @@ const WordSelector = {
       /* Word highlight wrapper */
       .vocab-word-highlight {
         position: relative;
-        display: inline-block;
+        display: inline;
         background-color: rgba(149, 39, 245, 0.15);
-        padding: 1px 4px;
+        padding: 0 4px;
         border-radius: 4px;
         transition: background-color 0.2s ease;
         cursor: pointer;
-        margin: 0 1px;
+        line-height: inherit;
+        box-decoration-break: clone;
+        -webkit-box-decoration-break: clone;
       }
       
       .vocab-word-highlight:hover {
@@ -517,6 +976,158 @@ const WordSelector = {
       /* Make sure highlight doesn't interfere with text flow */
       .vocab-word-highlight * {
         box-sizing: border-box;
+      }
+      
+      /* Pulsating purple animation for words being processed */
+      @keyframes vocab-word-loading-breathe {
+        0%, 100% {
+          background-color: rgba(149, 39, 245, 0.15);
+        }
+        50% {
+          background-color: rgba(149, 39, 245, 0.35);
+        }
+      }
+      
+      .vocab-word-loading {
+        animation: vocab-word-loading-breathe 1.5s ease-in-out infinite;
+      }
+      
+      /* Green background for explained words */
+      .vocab-word-explained {
+        background-color: rgba(34, 197, 94, 0.20) !important;
+        cursor: pointer;
+      }
+      
+      .vocab-word-explained:hover {
+        background-color: rgba(34, 197, 94, 0.30) !important;
+      }
+      
+      /* Contextual Meaning Popup Card */
+      .vocab-word-popup {
+        position: absolute;
+        background: white;
+        border-radius: 14px;
+        padding: 18px 20px;
+        box-shadow: 0 8px 24px rgba(149, 39, 245, 0.15), 0 2px 8px rgba(0, 0, 0, 0.1);
+        z-index: 9999999;
+        max-width: 380px;
+        min-width: 300px;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+        opacity: 0;
+        transform: translateY(-5px);
+        transition: opacity 0.2s ease, transform 0.2s ease;
+        pointer-events: none;
+      }
+      
+      .vocab-word-popup.visible {
+        opacity: 1;
+        transform: translateY(0);
+        pointer-events: all;
+      }
+      
+      .vocab-word-popup.sticky {
+        pointer-events: all;
+      }
+      
+      .vocab-word-popup-header {
+        text-align: center;
+        color: #A020F0;
+        font-weight: 600;
+        font-size: 16px;
+        margin-bottom: 14px;
+      }
+      
+      .vocab-word-popup-meaning {
+        color: #333;
+        font-size: 15px;
+        line-height: 1.5;
+        margin-bottom: 14px;
+      }
+      
+      .vocab-word-popup-meaning .word-bold {
+        font-weight: 600;
+        color: #A020F0;
+      }
+      
+      .vocab-word-popup-examples {
+        list-style: none;
+        padding: 0;
+        margin: 0 0 14px 0;
+      }
+      
+      .vocab-word-popup-examples li {
+        position: relative;
+        padding-left: 18px;
+        margin-bottom: 10px;
+        color: #333;
+        font-size: 14px;
+        line-height: 1.4;
+      }
+      
+      .vocab-word-popup-examples li:before {
+        content: '';
+        position: absolute;
+        left: 0;
+        top: 7px;
+        width: 6px;
+        height: 6px;
+        background: #A020F0;
+        border-radius: 50%;
+      }
+      
+      .vocab-word-popup-examples li .word-bold {
+        font-weight: 600;
+        color: #A020F0;
+      }
+      
+      .vocab-word-popup-button {
+        width: 100%;
+        padding: 8px 18px;
+        border: 1.5px solid #A020F0;
+        border-radius: 25px;
+        background: white;
+        color: #A020F0;
+        font-weight: 600;
+        font-size: 14px;
+        cursor: pointer;
+        transition: background-color 0.2s ease, color 0.2s ease;
+        text-align: center;
+      }
+      
+      .vocab-word-popup-button:hover {
+        background: rgba(160, 32, 240, 0.1);
+      }
+      
+      .vocab-word-popup-button:active {
+        background: rgba(160, 32, 240, 0.2);
+      }
+      
+      /* Close button for sticky popup */
+      .vocab-word-popup-close {
+        position: absolute;
+        top: 12px;
+        right: 12px;
+        width: 24px;
+        height: 24px;
+        border: none;
+        background: rgba(160, 32, 240, 0.1);
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        opacity: 0.7;
+        transition: opacity 0.2s ease, background-color 0.2s ease;
+      }
+      
+      .vocab-word-popup-close:hover {
+        opacity: 1;
+        background: rgba(160, 32, 240, 0.2);
+      }
+      
+      .vocab-word-popup-close svg {
+        width: 12px;
+        height: 12px;
       }
     `;
     
@@ -4118,12 +4729,13 @@ const ButtonPanel = {
   handleRemoveAllMeanings() {
     console.log('[ButtonPanel] Remove all meanings clicked');
     
-    // Get all asked texts and simplified texts
+    // Get all asked texts, simplified texts, and explained words
     const askedTextsMap = TextSelector.askedTexts;
     const simplifiedTextsMap = TextSelector.simplifiedTexts;
+    const explainedWordsMap = WordSelector.explainedWords;
     
-    if (askedTextsMap.size === 0 && simplifiedTextsMap.size === 0) {
-      console.warn('[ButtonPanel] No texts to remove');
+    if (askedTextsMap.size === 0 && simplifiedTextsMap.size === 0 && explainedWordsMap.size === 0) {
+      console.warn('[ButtonPanel] No meanings to remove');
       return;
     }
     
@@ -4205,6 +4817,49 @@ const ButtonPanel = {
       });
     }
     
+    // Process explained words
+    if (explainedWordsMap.size > 0) {
+      const explainedWordKeys = Array.from(explainedWordsMap.keys());
+      console.log(`[ButtonPanel] Removing ${explainedWordKeys.length} explained words`);
+      
+      explainedWordKeys.forEach(word => {
+        const wordData = explainedWordsMap.get(word);
+        
+        if (wordData && wordData.highlights) {
+          // Remove all highlights for this word
+          wordData.highlights.forEach(highlight => {
+            // Remove the green explained class
+            highlight.classList.remove('vocab-word-explained');
+            
+            // Remove data attributes
+            highlight.removeAttribute('data-meaning');
+            highlight.removeAttribute('data-examples');
+            highlight.removeAttribute('data-popup-id');
+            
+            // Remove the highlight wrapper completely
+            const parent = highlight.parentNode;
+            if (parent) {
+              // Move all child nodes out of the highlight wrapper
+              while (highlight.firstChild) {
+                parent.insertBefore(highlight.firstChild, highlight);
+              }
+              // Remove the empty highlight wrapper
+              highlight.remove();
+            }
+          });
+        }
+        
+        // Remove from explainedWords Map
+        explainedWordsMap.delete(word);
+        
+        // Also remove from wordToHighlights Map
+        WordSelector.wordToHighlights.delete(word);
+      });
+      
+      // Hide any open popups
+      WordSelector.hideAllPopups();
+    }
+    
     console.log('[ButtonPanel] All meanings removed');
     
     // Update button states
@@ -4230,142 +4885,326 @@ const ButtonPanel = {
   async handleMagicMeaning() {
     console.log('[ButtonPanel] Magic meaning clicked');
     
-    // Get all selected texts
+    // Get all selected texts and words
     const selectedTexts = TextSelector.getSelectedTexts();
+    const selectedWords = WordSelector.getSelectedWords();
     
-    if (selectedTexts.size === 0) {
-      console.warn('[ButtonPanel] No text selected');
+    if (selectedTexts.size === 0 && selectedWords.size === 0) {
+      console.warn('[ButtonPanel] No text or words selected');
       return;
     }
     
-    // Build API request payload
-    const textSegments = [];
-    const textKeysToProcess = [];
-    
-    for (const textKey of selectedTexts) {
-      const positionData = TextSelector.textPositions.get(textKey);
+    // ========== Process Text Segments (existing functionality) ==========
+    if (selectedTexts.size > 0) {
+      // Build API request payload
+      const textSegments = [];
+      const textKeysToProcess = [];
       
-      if (positionData) {
-        textSegments.push({
-          textStartIndex: positionData.textStartIndex,
-          textLength: positionData.textLength,
-          text: positionData.text,
-          previousSimplifiedTexts: []
-        });
-        textKeysToProcess.push(textKey);
+      for (const textKey of selectedTexts) {
+        const positionData = TextSelector.textPositions.get(textKey);
+        
+        if (positionData) {
+          textSegments.push({
+            textStartIndex: positionData.textStartIndex,
+            textLength: positionData.textLength,
+            text: positionData.text,
+            previousSimplifiedTexts: []
+          });
+          textKeysToProcess.push(textKey);
+        }
       }
-    }
-    
-    if (textSegments.length === 0) {
-      console.warn('[ButtonPanel] No text segments with position data');
-      return;
-    }
-    
-    console.log('[ButtonPanel] Processing', textSegments.length, 'text segments');
-    
-    // Remove texts from selectedTexts container as API call starts
-    for (const textKey of textKeysToProcess) {
-      TextSelector.selectedTexts.delete(textKey);
-    }
-    
-    // Update button states after removing from selectedTexts
-    this.updateButtonStatesFromSelections();
-    
-    // Start loading animation on all selected highlights
-    for (const textKey of textKeysToProcess) {
-      const highlight = TextSelector.textToHighlights.get(textKey);
-      if (highlight) {
-        // Remove any existing buttons
-        const existingBtn = highlight.querySelector('.vocab-text-remove-btn');
-        if (existingBtn) {
-          existingBtn.remove();
+      
+      if (textSegments.length > 0) {
+        console.log('[ButtonPanel] Processing', textSegments.length, 'text segments');
+        
+        // Remove texts from selectedTexts container as API call starts
+        for (const textKey of textKeysToProcess) {
+          TextSelector.selectedTexts.delete(textKey);
         }
         
-        // Add loading animation class
-        highlight.classList.add('vocab-text-loading');
-      }
-    }
-    
-    // Call SimplifyService with SSE
-    SimplifyService.simplify(
-      textSegments,
-      // onEvent callback - called for each SSE event
-      (eventData) => {
-        console.log('[ButtonPanel] Received simplified text:', eventData);
+        // Update button states after removing from selectedTexts
+        this.updateButtonStatesFromSelections();
         
-        // Find the corresponding textKey for this event
-        // Match by textStartIndex and textLength
-        const matchingTextKey = textKeysToProcess.find(textKey => {
-          const posData = TextSelector.textPositions.get(textKey);
-          return posData && 
-                 posData.textStartIndex === eventData.textStartIndex &&
-                 posData.textLength === eventData.textLength;
-        });
-        
-        if (matchingTextKey) {
-          const highlight = TextSelector.textToHighlights.get(matchingTextKey);
-          
+        // Start loading animation on all selected highlights
+        for (const textKey of textKeysToProcess) {
+          const highlight = TextSelector.textToHighlights.get(textKey);
           if (highlight) {
-            // Remove loading animation
-            highlight.classList.remove('vocab-text-loading');
-            
-            // Change underline to light green
-            highlight.classList.add('vocab-text-simplified');
-            
-            // Replace cross button with book icon
+            // Remove any existing buttons
             const existingBtn = highlight.querySelector('.vocab-text-remove-btn');
             if (existingBtn) {
               existingBtn.remove();
             }
             
-            const bookBtn = TextSelector.createBookButton(matchingTextKey);
-            highlight.appendChild(bookBtn);
+            // Add loading animation class
+            highlight.classList.add('vocab-text-loading');
+          }
+        }
+        
+        // Call SimplifyService with SSE
+        SimplifyService.simplify(
+          textSegments,
+          // onEvent callback - called for each SSE event
+          (eventData) => {
+            console.log('[ButtonPanel] Received simplified text:', eventData);
             
-            // Store simplified text data
-            TextSelector.simplifiedTexts.set(matchingTextKey, {
-              textStartIndex: eventData.textStartIndex,
-              textLength: eventData.textLength,
-              text: eventData.text,
-              simplifiedText: eventData.simplifiedText,
-              previousSimplifiedTexts: eventData.previousSimplifiedTexts || [],
-              shouldAllowSimplifyMore: eventData.shouldAllowSimplifyMore || false
+            // Find the corresponding textKey for this event
+            // Match by textStartIndex and textLength
+            const matchingTextKey = textKeysToProcess.find(textKey => {
+              const posData = TextSelector.textPositions.get(textKey);
+              return posData && 
+                     posData.textStartIndex === eventData.textStartIndex &&
+                     posData.textLength === eventData.textLength;
             });
             
-            // Update button states after adding to simplifiedTexts
-            ButtonPanel.updateButtonStatesFromSelections();
+            if (matchingTextKey) {
+              const highlight = TextSelector.textToHighlights.get(matchingTextKey);
+              
+              if (highlight) {
+                // Remove loading animation
+                highlight.classList.remove('vocab-text-loading');
+                
+                // Change underline to light green
+                highlight.classList.add('vocab-text-simplified');
+                
+                // Replace cross button with book icon
+                const existingBtn = highlight.querySelector('.vocab-text-remove-btn');
+                if (existingBtn) {
+                  existingBtn.remove();
+                }
+                
+                const bookBtn = TextSelector.createBookButton(matchingTextKey);
+                highlight.appendChild(bookBtn);
+                
+                // Store simplified text data
+                TextSelector.simplifiedTexts.set(matchingTextKey, {
+                  textStartIndex: eventData.textStartIndex,
+                  textLength: eventData.textLength,
+                  text: eventData.text,
+                  simplifiedText: eventData.simplifiedText,
+                  previousSimplifiedTexts: eventData.previousSimplifiedTexts || [],
+                  shouldAllowSimplifyMore: eventData.shouldAllowSimplifyMore || false
+                });
+                
+                // Update button states after adding to simplifiedTexts
+                ButtonPanel.updateButtonStatesFromSelections();
+                
+                console.log('[ButtonPanel] Updated UI for text segment:', matchingTextKey);
+              }
+            }
+          },
+          // onComplete callback
+          () => {
+            console.log('[ButtonPanel] All text simplification complete');
             
-            console.log('[ButtonPanel] Updated UI for text segment:', matchingTextKey);
+            // Remove loading animation from any remaining highlights (in case some failed)
+            for (const textKey of textKeysToProcess) {
+              const highlight = TextSelector.textToHighlights.get(textKey);
+              if (highlight && highlight.classList.contains('vocab-text-loading')) {
+                highlight.classList.remove('vocab-text-loading');
+              }
+            }
+          },
+          // onError callback
+          (error) => {
+            console.error('[ButtonPanel] Error during text simplification:', error);
+            
+            // Remove loading animation from all highlights
+            for (const textKey of textKeysToProcess) {
+              const highlight = TextSelector.textToHighlights.get(textKey);
+              if (highlight) {
+                highlight.classList.remove('vocab-text-loading');
+              }
+            }
+            
+            // Show error notification
+            TextSelector.showNotification('Error simplifying text. Please try again.');
           }
-        }
-      },
-      // onComplete callback
-      () => {
-        console.log('[ButtonPanel] All text simplification complete');
-        
-        // Remove loading animation from any remaining highlights (in case some failed)
-        for (const textKey of textKeysToProcess) {
-          const highlight = TextSelector.textToHighlights.get(textKey);
-          if (highlight && highlight.classList.contains('vocab-text-loading')) {
-            highlight.classList.remove('vocab-text-loading');
-          }
-        }
-      },
-      // onError callback
-      (error) => {
-        console.error('[ButtonPanel] Error during text simplification:', error);
-        
-        // Remove loading animation from all highlights
-        for (const textKey of textKeysToProcess) {
-          const highlight = TextSelector.textToHighlights.get(textKey);
-          if (highlight) {
-            highlight.classList.remove('vocab-text-loading');
-          }
-        }
-        
-        // Show error notification
-        TextSelector.showNotification('Error simplifying text. Please try again.');
+        );
       }
-    );
+    }
+    
+    // ========== Process Word Selections (new functionality) ==========
+    if (selectedWords.size > 0) {
+      console.log('[ButtonPanel] ===== MAGIC MEANING: Processing Words =====');
+      console.log('[ButtonPanel] Processing', selectedWords.size, 'selected words');
+      console.log('[ButtonPanel] Selected words list:', Array.from(selectedWords));
+      
+      // Build API payload for words with 10-word context
+      const wordPayload = WordSelector.buildWordsExplanationPayload();
+      
+      if (wordPayload.length === 0) {
+        console.warn('[ButtonPanel] No word segments with position data');
+        return;
+      }
+      
+      console.log('[ButtonPanel] Word payload segments:', wordPayload.length);
+      console.log('[ButtonPanel] Full word payload:', JSON.stringify(wordPayload.map(s => ({
+        textStartIndex: s.textStartIndex,
+        text: s.text.substring(0, 100) + '...',
+        words: s.important_words_location.map(w => w.word),
+        highlightCount: s._wordHighlights ? s._wordHighlights.length : 0
+      })), null, 2));
+      
+      // Track all word highlights for this request
+      const allWordHighlights = [];
+      wordPayload.forEach(segment => {
+        if (segment._wordHighlights) {
+          allWordHighlights.push(...segment._wordHighlights);
+        }
+      });
+      
+      console.log('[ButtonPanel] Total word highlights to process:', allWordHighlights.length);
+      
+      // Remove words from selectedWords container as API call starts
+      selectedWords.forEach(word => {
+        WordSelector.selectedWords.delete(word);
+      });
+      
+      // Update button states
+      this.updateButtonStatesFromSelections();
+      
+      // Visual feedback: Remove cross icons and start pulsating animation
+      allWordHighlights.forEach((highlight, idx) => {
+        const word = highlight.getAttribute('data-word');
+        console.log(`[ButtonPanel] Setting up highlight #${idx + 1} for word "${word}"`);
+        
+        // Remove cross button
+        const existingBtn = highlight.querySelector('.vocab-word-remove-btn');
+        if (existingBtn) {
+          existingBtn.remove();
+        }
+        
+        // Add pulsating purple animation
+        highlight.classList.add('vocab-word-loading');
+      });
+      
+      // Prepare API payload (remove internal tracking property)
+      const apiPayload = wordPayload.map(segment => ({
+        textStartIndex: segment.textStartIndex,
+        text: segment.text,
+        important_words_location: segment.important_words_location
+      }));
+      
+      console.log('[ButtonPanel] Sending API request with payload:', JSON.stringify(apiPayload, null, 2));
+      
+      // Call WordExplanationService with SSE
+      WordExplanationService.explainWords(
+        apiPayload,
+        // onEvent callback - called for each word explanation
+        (eventData) => {
+          console.log('[ButtonPanel] ===== SSE EVENT RECEIVED =====');
+          console.log('[ButtonPanel] Full event data:', JSON.stringify(eventData, null, 2));
+          
+          const wordInfo = eventData.word_info;
+          if (!wordInfo) {
+            console.warn('[ButtonPanel] No word_info in event data');
+            return;
+          }
+          
+          console.log(`[ButtonPanel] Word info - word: "${wordInfo.word}", textStartIndex: ${wordInfo.textStartIndex}`);
+          
+          // Find the corresponding segment and highlight
+          const matchingSegment = wordPayload.find(segment => 
+            segment.textStartIndex === wordInfo.textStartIndex
+          );
+          
+          if (!matchingSegment) {
+            console.error(`[ButtonPanel] No matching segment found for textStartIndex ${wordInfo.textStartIndex}`);
+            console.log('[ButtonPanel] Available segments:', wordPayload.map(s => ({ textStartIndex: s.textStartIndex, words: s.important_words_location.map(w => w.word) })));
+            return;
+          }
+          
+          console.log(`[ButtonPanel] Found matching segment with ${matchingSegment._wordHighlights ? matchingSegment._wordHighlights.length : 0} highlights`);
+          
+          if (matchingSegment && matchingSegment._wordHighlights) {
+            // Find the specific word highlight within this segment
+            const wordLocation = wordInfo.location;
+            console.log(`[ButtonPanel] Looking for word "${wordInfo.word}" in ${matchingSegment._wordHighlights.length} highlights`);
+            
+            matchingSegment._wordHighlights.forEach((hl, idx) => {
+              const dataWord = hl.getAttribute('data-word');
+              console.log(`[ButtonPanel] Highlight #${idx + 1}: data-word="${dataWord}", matches="${dataWord && dataWord.toLowerCase() === wordInfo.word.toLowerCase()}"`);
+            });
+            
+            const wordHighlight = matchingSegment._wordHighlights.find(hl => {
+              const dataWord = hl.getAttribute('data-word');
+              return dataWord && dataWord.toLowerCase() === wordInfo.word.toLowerCase();
+            });
+            
+            if (wordHighlight) {
+              console.log(`[ButtonPanel] ✓ Found matching highlight for word "${wordInfo.word}"`);
+              
+              // Remove pulsating animation
+              wordHighlight.classList.remove('vocab-word-loading');
+              
+              // Change background to green
+              wordHighlight.classList.add('vocab-word-explained');
+              
+              // Store explanation data on the element
+              wordHighlight.setAttribute('data-meaning', wordInfo.meaning);
+              wordHighlight.setAttribute('data-examples', JSON.stringify(wordInfo.examples));
+              
+              // Store in explainedWords map
+              const normalizedWord = wordInfo.word.toLowerCase();
+              if (!WordSelector.explainedWords.has(normalizedWord)) {
+                WordSelector.explainedWords.set(normalizedWord, {
+                  word: wordInfo.word,
+                  meaning: wordInfo.meaning,
+                  examples: wordInfo.examples,
+                  highlights: new Set()
+                });
+              }
+              WordSelector.explainedWords.get(normalizedWord).highlights.add(wordHighlight);
+              
+              // Setup hover and click interactions for this word
+              WordSelector.setupWordInteractions(wordHighlight);
+              
+              // Update button states to show "Remove meanings" button
+              ButtonPanel.updateButtonStatesFromSelections();
+              
+              console.log('[ButtonPanel] ✓ Updated UI for word:', wordInfo.word);
+              console.log('[ButtonPanel] explainedWords container size:', WordSelector.explainedWords.size);
+            } else {
+              console.error(`[ButtonPanel] ✗ No matching highlight found for word "${wordInfo.word}"`);
+            }
+          }
+        },
+        // onComplete callback
+        () => {
+          console.log('[ButtonPanel] ===== SSE STREAM COMPLETE =====');
+          console.log('[ButtonPanel] All word explanations complete');
+          
+          // Count how many words are still loading
+          let stillLoading = 0;
+          allWordHighlights.forEach((highlight, idx) => {
+            const word = highlight.getAttribute('data-word');
+            if (highlight.classList.contains('vocab-word-loading')) {
+              stillLoading++;
+              console.warn(`[ButtonPanel] Highlight #${idx + 1} for word "${word}" still in loading state - no response received`);
+              highlight.classList.remove('vocab-word-loading');
+            }
+          });
+          
+          console.log(`[ButtonPanel] Final status: ${allWordHighlights.length - stillLoading}/${allWordHighlights.length} words successfully explained`);
+          console.log('[ButtonPanel] ===== MAGIC MEANING: Complete =====');
+        },
+        // onError callback
+        (error) => {
+          console.error('[ButtonPanel] ===== SSE ERROR =====');
+          console.error('[ButtonPanel] Error during word explanation:', error);
+          
+          // Remove pulsating animation from all highlights
+          allWordHighlights.forEach((highlight, idx) => {
+            const word = highlight.getAttribute('data-word');
+            console.log(`[ButtonPanel] Removing loading state from highlight #${idx + 1} for word "${word}"`);
+            highlight.classList.remove('vocab-word-loading');
+          });
+          
+          // Show error notification
+          TextSelector.showNotification('Error getting word meanings. Please try again.');
+        }
+      );
+    }
   },
 
   /**
@@ -4507,9 +5346,19 @@ const ButtonPanel = {
     const hasExactlyOneText = TextSelector.selectedTexts.size === 1;
     const hasAskedTexts = TextSelector.askedTexts.size > 0;
     const hasSimplifiedTexts = TextSelector.simplifiedTexts.size > 0;
+    const hasExplainedWords = WordSelector.explainedWords.size > 0;
     
-    // Show "Remove all meanings" if there are any asked texts OR simplified texts
-    this.setShowRemoveMeanings(hasAskedTexts || hasSimplifiedTexts);
+    console.log('[ButtonPanel] Updating button states:', {
+      hasWords,
+      hasTexts,
+      hasAskedTexts,
+      hasSimplifiedTexts,
+      hasExplainedWords,
+      showRemoveMeanings: hasAskedTexts || hasSimplifiedTexts || hasExplainedWords
+    });
+    
+    // Show "Remove all meanings" if there are any asked texts, simplified texts, OR explained words
+    this.setShowRemoveMeanings(hasAskedTexts || hasSimplifiedTexts || hasExplainedWords);
     
     // Show "Deselect all" if there are any words or texts selected
     this.setShowDeselectAll(hasWords || hasTexts);
