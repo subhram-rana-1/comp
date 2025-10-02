@@ -960,22 +960,24 @@ const ButtonPanel = {
   },
 
   /**
-   * Show the button panel with slide animation
+   * Show the button panel
    */
   show() {
     if (this.panelContainer) {
-      // Add visible class to trigger slide-in animation
+      this.panelContainer.style.display = 'block';
+      // Add visible class for initial slide-in animation if at default position
       this.panelContainer.classList.add('visible');
+      console.log('[ButtonPanel] Panel shown');
     }
   },
 
   /**
-   * Hide the button panel with slide animation
+   * Hide the button panel
    */
   hide() {
     if (this.panelContainer) {
-      // Remove visible class to trigger slide-out animation
-      this.panelContainer.classList.remove('visible');
+      this.panelContainer.style.display = 'none';
+      console.log('[ButtonPanel] Panel hidden');
     }
   },
 
