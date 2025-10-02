@@ -1,3 +1,5 @@
+import ApiService from '../core/services/ApiService.js';
+
 export default defineContentScript({
   matches: ['<all_urls>'],
   
@@ -1760,10 +1762,42 @@ const ChatDialog = {
     content.setAttribute('data-content', 'original-text');
     content.style.display = 'none';
     
+    // Create focus button container
+    const buttonContainer = document.createElement('div');
+    buttonContainer.className = 'vocab-chat-focus-btn-container';
+    
+    // Create focus button
+    const focusButton = document.createElement('button');
+    focusButton.className = 'vocab-chat-focus-btn';
+    focusButton.innerHTML = `
+      <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+        <path d="M3 10l7-7v4c7 0 7 6 7 6s-3-3-7-3v4l-7-7z" fill="#9527F5"/>
+      </svg>
+      <span>Focus</span>
+    `;
+    
+    // Add click handler
+    focusButton.addEventListener('click', () => {
+      const highlight = TextSelector.textToHighlights.get(this.currentTextKey);
+      if (highlight) {
+        highlight.scrollIntoView({
+          behavior: 'smooth',
+          block: 'center'
+        });
+        setTimeout(() => {
+          TextSelector.pulsateText(highlight, true);
+        }, 500);
+      }
+    });
+    
+    buttonContainer.appendChild(focusButton);
+    
+    // Create text display
     const textDisplay = document.createElement('div');
     textDisplay.className = 'vocab-chat-original-text';
     textDisplay.textContent = this.currentText || '';
     
+    content.appendChild(buttonContainer);
     content.appendChild(textDisplay);
     
     return content;
@@ -1919,11 +1953,14 @@ const ChatDialog = {
   /**
    * Send message in chat
    */
-  sendMessage() {
+  async sendMessage() {
     const inputField = document.getElementById('vocab-chat-input');
     const message = inputField.value.trim();
     
     if (!message) return;
+    
+    // Auto-switch to chat tab if on original text tab
+    this.switchTab('ask');
     
     // Add user message to chat
     this.addMessageToChat('user', message);
@@ -1932,11 +1969,54 @@ const ChatDialog = {
     inputField.value = '';
     inputField.style.height = 'auto';
     
-    // TODO: Send to AI backend and get response
-    // For now, add a placeholder response
-    setTimeout(() => {
-      this.addMessageToChat('ai', 'This is a placeholder response. AI integration coming soon!');
-    }, 500);
+    // Show loading animation
+    this.showLoadingAnimation();
+    
+    // Prepare chat history from chatHistory
+    const chat_history = this.chatHistory.map(item => ({
+      role: item.type === 'user' ? 'user' : 'assistant',
+      content: item.message
+    }));
+    
+    try {
+      // Call API
+      const response = await ApiService.ask({
+        initial_context: this.currentText,
+        chat_history: chat_history,
+        question: message
+      });
+      
+      // Remove loading animation
+      this.removeLoadingAnimation();
+      
+      if (response.success) {
+        console.log('[ChatDialog] API response data:', response.data);
+        
+        // Extract the latest assistant response from chat_history
+        const chatHistory = response.data.chat_history || [];
+        
+        console.log('[ChatDialog] Chat history from API:', chatHistory);
+        
+        // Find the last assistant message (the latest AI response)
+        let aiResponse = 'No response received';
+        for (let i = chatHistory.length - 1; i >= 0; i--) {
+          if (chatHistory[i].role === 'assistant') {
+            aiResponse = chatHistory[i].content;
+            break;
+          }
+        }
+        
+        console.log('[ChatDialog] Extracted AI response:', aiResponse);
+        this.addMessageToChat('ai', aiResponse);
+      } else {
+        // Show error message with preserved formatting
+        this.addMessageToChat('ai', `⚠️ **Error:**\n\n${response.error}`);
+      }
+    } catch (error) {
+      console.error('[ChatDialog] Error sending message:', error);
+      this.removeLoadingAnimation();
+      this.addMessageToChat('ai', `Error: Failed to get response from server`);
+    }
     
     console.log('[ChatDialog] Message sent:', message);
   },
@@ -1949,7 +2029,7 @@ const ChatDialog = {
   addMessageToChat(type, message) {
     const chatContainer = document.getElementById('vocab-chat-messages');
     
-    // Remove "No chats yet" message if exists
+    // Remove "Ask your doubt" message if exists
     const noChatsMsg = chatContainer.querySelector('.vocab-chat-no-messages');
     if (noChatsMsg) {
       noChatsMsg.remove();
@@ -1961,7 +2041,13 @@ const ChatDialog = {
     
     const messageContent = document.createElement('div');
     messageContent.className = 'vocab-chat-message-content';
-    messageContent.textContent = message;
+    
+    // For AI messages, render markdown
+    if (type === 'ai') {
+      messageContent.innerHTML = this.renderMarkdown(message);
+    } else {
+      messageContent.textContent = message;
+    }
     
     messageBubble.appendChild(messageContent);
     chatContainer.appendChild(messageBubble);
@@ -1974,6 +2060,88 @@ const ChatDialog = {
     
     // Store in history
     this.chatHistory.push({ type, message, timestamp: Date.now() });
+  },
+  
+  /**
+   * Show loading animation (three dots waving)
+   */
+  showLoadingAnimation() {
+    const chatContainer = document.getElementById('vocab-chat-messages');
+    
+    const loadingIndicator = document.createElement('div');
+    loadingIndicator.className = 'vocab-chat-typing-indicator';
+    loadingIndicator.id = 'vocab-chat-loading';
+    loadingIndicator.innerHTML = `
+      <span></span>
+      <span></span>
+      <span></span>
+    `;
+    
+    chatContainer.appendChild(loadingIndicator);
+    
+    // Scroll to bottom
+    chatContainer.scrollTop = chatContainer.scrollHeight;
+  },
+  
+  /**
+   * Remove loading animation
+   */
+  removeLoadingAnimation() {
+    const loadingBubble = document.getElementById('vocab-chat-loading');
+    if (loadingBubble) {
+      loadingBubble.remove();
+    }
+  },
+  
+  /**
+   * Simple markdown renderer
+   * @param {string} text - Markdown text
+   * @returns {string} HTML string
+   */
+  renderMarkdown(text) {
+    if (!text) return '';
+    
+    let html = text;
+    
+    // Escape HTML first
+    html = html.replace(/&/g, '&amp;')
+               .replace(/</g, '&lt;')
+               .replace(/>/g, '&gt;');
+    
+    // Code blocks (```)
+    html = html.replace(/```(\w+)?\n([\s\S]*?)```/g, '<pre><code>$2</code></pre>');
+    
+    // Inline code (`)
+    html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
+    
+    // Bold (**text** or __text__)
+    html = html.replace(/\*\*([^\*]+)\*\*/g, '<strong>$1</strong>');
+    html = html.replace(/__([^_]+)__/g, '<strong>$1</strong>');
+    
+    // Italic (*text* or _text_)
+    html = html.replace(/\*([^\*]+)\*/g, '<em>$1</em>');
+    html = html.replace(/_([^_]+)_/g, '<em>$1</em>');
+    
+    // Links [text](url)
+    html = html.replace(/\[([^\]]+)\]\(([^\)]+)\)/g, '<a href="$2" target="_blank">$1</a>');
+    
+    // Headings
+    html = html.replace(/^### (.+)$/gm, '<h3>$1</h3>');
+    html = html.replace(/^## (.+)$/gm, '<h2>$1</h2>');
+    html = html.replace(/^# (.+)$/gm, '<h1>$1</h1>');
+    
+    // Line breaks
+    html = html.replace(/\n\n/g, '<br><br>');
+    html = html.replace(/\n/g, '<br>');
+    
+    // Lists
+    html = html.replace(/^\* (.+)$/gm, '<li>$1</li>');
+    html = html.replace(/^- (.+)$/gm, '<li>$1</li>');
+    
+    // Wrap consecutive <li> in <ul>
+    html = html.replace(/(<li>.*<\/li>)/gs, '<ul>$1</ul>');
+    
+    return html;
   },
   
   /**
@@ -2152,6 +2320,7 @@ const ChatDialog = {
         z-index: 1000000;
         transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+        user-select: none;  /* Disable text selection in popup */
       }
       
       .vocab-chat-dialog.visible {
@@ -2375,6 +2544,7 @@ const ChatDialog = {
       
       .vocab-chat-message-user {
         align-items: flex-end;
+        margin-right: 8px;
       }
       
       .vocab-chat-message-ai {
@@ -2401,6 +2571,120 @@ const ChatDialog = {
         background: white;
         color: #374151;
         box-shadow: 0 2px 8px rgba(149, 39, 245, 0.15), 0 1px 4px rgba(149, 39, 245, 0.1);
+      }
+      
+      /* Loading Animation - Three Dots Waving */
+      .vocab-chat-typing-indicator {
+        display: flex;
+        gap: 3px;
+        align-items: center;
+        padding: 12px 0;
+        justify-content: flex-start;
+        margin-left: 16px;
+      }
+      
+      .vocab-chat-typing-indicator span {
+        width: 4px;
+        height: 4px;
+        border-radius: 50%;
+        background: #9527F5;
+        animation: typing-wave 1.4s ease-in-out infinite;
+        opacity: 0.7;
+      }
+      
+      .vocab-chat-typing-indicator span:nth-child(1) {
+        animation-delay: 0s;
+      }
+      
+      .vocab-chat-typing-indicator span:nth-child(2) {
+        animation-delay: 0.2s;
+      }
+      
+      .vocab-chat-typing-indicator span:nth-child(3) {
+        animation-delay: 0.4s;
+      }
+      
+      @keyframes typing-wave {
+        0%, 60%, 100% {
+          transform: translateY(0);
+          opacity: 0.7;
+        }
+        30% {
+          transform: translateY(-6px);
+          opacity: 1;
+        }
+      }
+      
+      /* Markdown Styling in AI Messages */
+      .vocab-chat-message-ai .vocab-chat-message-content code {
+        background: #f3f4f6;
+        color: #9527F5;
+        padding: 2px 6px;
+        border-radius: 4px;
+        font-family: 'Courier New', Courier, monospace;
+        font-size: 13px;
+      }
+      
+      .vocab-chat-message-ai .vocab-chat-message-content pre {
+        background: #f3f4f6;
+        padding: 12px;
+        border-radius: 8px;
+        overflow-x: auto;
+        margin: 8px 0;
+      }
+      
+      .vocab-chat-message-ai .vocab-chat-message-content pre code {
+        background: transparent;
+        padding: 0;
+        font-size: 12px;
+        line-height: 1.5;
+      }
+      
+      .vocab-chat-message-ai .vocab-chat-message-content strong {
+        font-weight: 600;
+        color: #1f2937;
+      }
+      
+      .vocab-chat-message-ai .vocab-chat-message-content em {
+        font-style: italic;
+      }
+      
+      .vocab-chat-message-ai .vocab-chat-message-content a {
+        color: #9527F5;
+        text-decoration: underline;
+      }
+      
+      .vocab-chat-message-ai .vocab-chat-message-content a:hover {
+        color: #7a1fd9;
+      }
+      
+      .vocab-chat-message-ai .vocab-chat-message-content h1,
+      .vocab-chat-message-ai .vocab-chat-message-content h2,
+      .vocab-chat-message-ai .vocab-chat-message-content h3 {
+        font-weight: 600;
+        margin: 8px 0;
+        color: #1f2937;
+      }
+      
+      .vocab-chat-message-ai .vocab-chat-message-content h1 {
+        font-size: 18px;
+      }
+      
+      .vocab-chat-message-ai .vocab-chat-message-content h2 {
+        font-size: 16px;
+      }
+      
+      .vocab-chat-message-ai .vocab-chat-message-content h3 {
+        font-size: 15px;
+      }
+      
+      .vocab-chat-message-ai .vocab-chat-message-content ul {
+        margin: 8px 0;
+        padding-left: 20px;
+      }
+      
+      .vocab-chat-message-ai .vocab-chat-message-content li {
+        margin: 4px 0;
       }
       
       /* Input Area */
@@ -2541,6 +2825,53 @@ const ChatDialog = {
         border-bottom: 2px solid #9527F5;
         opacity: 0.5;
         border-bottom-left-radius: 2px;
+      }
+      
+      /* Focus Button Styles */
+      .vocab-chat-focus-btn-container {
+        padding: 16px 16px 12px 16px;
+        border-bottom: 1px solid #e5e7eb;
+        margin-bottom: 12px;
+      }
+      
+      .vocab-chat-focus-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        width: auto;
+        padding: 8px 14px;
+        margin: 0;
+        background: white;
+        border: 2px solid #9527F5;
+        border-radius: 6px;
+        color: #9527F5;
+        font-weight: 500;
+        font-size: 13px;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        box-shadow: 0 1px 2px rgba(149, 39, 245, 0.05);
+      }
+      
+      .vocab-chat-focus-btn:hover {
+        background: #f9f5ff;
+        border-color: #7a1fd9;
+        box-shadow: 0 2px 4px rgba(149, 39, 245, 0.1);
+      }
+      
+      .vocab-chat-focus-btn:active {
+        transform: scale(0.98);
+      }
+      
+      .vocab-chat-focus-btn svg {
+        flex-shrink: 0;
+        width: 16px;
+        height: 16px;
+      }
+      
+      .vocab-chat-focus-btn span {
+        color: #9527F5;
+        font-weight: 500;
       }
       
       /* Responsive */
@@ -3251,8 +3582,57 @@ const ButtonPanel = {
    * Handler for Remove all meanings button
    */
   handleRemoveAllMeanings() {
-    // TODO: Implement remove all meanings functionality
-    console.log('Remove all meanings - to be implemented');
+    console.log('[ButtonPanel] Remove all meanings clicked');
+    
+    // Get all asked texts
+    const askedTextsMap = TextSelector.askedTexts;
+    
+    if (askedTextsMap.size === 0) {
+      console.warn('[ButtonPanel] No asked texts to remove');
+      return;
+    }
+    
+    // Create a copy of the keys to avoid iteration issues during deletion
+    const textKeys = Array.from(askedTextsMap.keys());
+    
+    console.log(`[ButtonPanel] Removing ${textKeys.length} asked texts`);
+    
+    // Remove each asked text
+    textKeys.forEach(textKey => {
+      const askedData = askedTextsMap.get(textKey);
+      
+      if (askedData && askedData.highlight) {
+        const highlight = askedData.highlight;
+        
+        // Remove the chat icon button (green)
+        const chatBtn = highlight.querySelector('.vocab-text-chat-btn');
+        if (chatBtn) {
+          chatBtn.remove();
+        }
+        
+        // Remove the highlight wrapper completely
+        const parent = highlight.parentNode;
+        if (parent) {
+          // Move all child nodes out of the highlight wrapper
+          while (highlight.firstChild) {
+            parent.insertBefore(highlight.firstChild, highlight);
+          }
+          // Remove the empty highlight wrapper
+          highlight.remove();
+        }
+      }
+      
+      // Remove from askedTexts Map
+      askedTextsMap.delete(textKey);
+      
+      // Also remove from textToHighlights Map
+      TextSelector.textToHighlights.delete(textKey);
+    });
+    
+    console.log('[ButtonPanel] All asked texts removed');
+    
+    // Update button states
+    this.updateButtonStatesFromSelections();
   },
 
   /**
@@ -3413,6 +3793,10 @@ const ButtonPanel = {
     const hasWords = WordSelector.selectedWords.size > 0;
     const hasTexts = TextSelector.selectedTexts.size > 0;
     const hasExactlyOneText = TextSelector.selectedTexts.size === 1;
+    const hasAskedTexts = TextSelector.askedTexts.size > 0;
+    
+    // Show "Remove all meanings" if there are any asked texts
+    this.setShowRemoveMeanings(hasAskedTexts);
     
     // Show "Deselect all" if there are any words or texts selected
     this.setShowDeselectAll(hasWords || hasTexts);

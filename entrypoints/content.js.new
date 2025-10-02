@@ -1,0 +1,180 @@
+// Add these methods to your ChatDialog object:
+
+createDialog() {
+  const dialog = document.createElement('div');
+  dialog.className = 'vocab-chat-dialog';
+  dialog.id = 'vocab-chat-dialog';
+  
+  // Prevent main page scroll when mouse is in dialog
+  dialog.addEventListener('mouseenter', () => {
+    document.body.style.overflow = 'hidden';
+  });
+  
+  dialog.addEventListener('mouseleave', () => {
+    document.body.style.overflow = '';
+  });
+  
+  const content = document.createElement('div');
+  content.className = 'vocab-chat-content';
+  
+  // Create collapse button
+  const collapseBtn = document.createElement('button');
+  collapseBtn.className = 'vocab-chat-collapse-btn';
+  collapseBtn.innerHTML = this.createCollapseIcon();
+  collapseBtn.addEventListener('click', () => this.close());
+  
+  // Create tabs
+  const tabsContainer = document.createElement('div');
+  tabsContainer.className = 'vocab-chat-tabs';
+  
+  const originalTextTab = document.createElement('button');
+  originalTextTab.className = 'vocab-chat-tab';
+  originalTextTab.textContent = 'ORIGINAL TEXT';
+  originalTextTab.addEventListener('click', () => this.switchTab('original'));
+  
+  const askTab = document.createElement('button');
+  askTab.className = 'vocab-chat-tab vocab-chat-tab-active';
+  askTab.textContent = 'CHAT';
+  askTab.addEventListener('click', () => this.switchTab('ask'));
+  
+  const tabIndicator = document.createElement('div');
+  tabIndicator.className = 'vocab-chat-tab-indicator';
+  
+  tabsContainer.appendChild(originalTextTab);
+  tabsContainer.appendChild(askTab);
+  tabsContainer.appendChild(tabIndicator);
+  
+  // Create tab contents
+  const originalTextContent = this.createOriginalTextContent();
+  const askContent = this.createAskContent();
+  
+  content.appendChild(collapseBtn);
+  content.appendChild(tabsContainer);
+  content.appendChild(originalTextContent);
+  content.appendChild(askContent);
+  
+  dialog.appendChild(content);
+  
+  return dialog;
+},
+
+createOriginalTextContent() {
+  const content = document.createElement('div');
+  content.className = 'vocab-chat-tab-content';
+  content.id = 'vocab-chat-original-text';
+  
+  // Create focus button container
+  const buttonContainer = document.createElement('div');
+  buttonContainer.className = 'vocab-chat-focus-btn-container';
+  
+  // Create focus button
+  const focusButton = document.createElement('button');
+  focusButton.className = 'vocab-chat-focus-btn';
+  focusButton.innerHTML = `
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M8 2v12M2 8h12" stroke="#9527F5" stroke-width="2" stroke-linecap="round"/>
+    </svg>
+    <span>Focus Selected Text</span>
+  `;
+  
+  // Add click handler
+  focusButton.addEventListener('click', () => {
+    const highlight = TextSelector.textToHighlights.get(this.currentTextKey);
+    if (highlight) {
+      // Scroll the highlight into view
+      highlight.scrollIntoView({
+        behavior: 'smooth',
+        block: 'center'
+      });
+      
+      // Trigger pulsate animation
+      TextSelector.pulsateText(highlight, true);
+    }
+  });
+  
+  buttonContainer.appendChild(focusButton);
+  
+  // Create text container
+  const textContainer = document.createElement('div');
+  textContainer.className = 'vocab-chat-original-text-content';
+  textContainer.textContent = this.currentText;
+  
+  content.appendChild(buttonContainer);
+  content.appendChild(textContainer);
+  
+  return content;
+},
+
+// Add these styles to your injectStyles method:
+injectStyles() {
+  // ... existing styles ...
+  
+  style.textContent += `
+    /* Focus button styles */
+    .vocab-chat-focus-btn-container {
+      padding: 16px 16px 8px;
+    }
+    
+    .vocab-chat-focus-btn {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 16px;
+      background: white;
+      border: 2px solid #9527F5;
+      border-radius: 8px;
+      color: #9527F5;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      width: 100%;
+      justify-content: center;
+    }
+    
+    .vocab-chat-focus-btn:hover {
+      background: #f9f5ff;
+    }
+    
+    .vocab-chat-focus-btn:active {
+      transform: scale(0.98);
+    }
+    
+    .vocab-chat-focus-btn svg {
+      flex-shrink: 0;
+    }
+    
+    .vocab-chat-focus-btn span {
+      font-size: 14px;
+    }
+    
+    .vocab-chat-original-text-content {
+      margin: 0 16px 16px;
+      padding: 16px;
+      background: #f9fafb;
+      border-radius: 8px;
+      font-size: 14px;
+      line-height: 1.6;
+      color: #374151;
+      max-height: calc(100% - 90px);
+      overflow-y: auto;
+    }
+    
+    /* Prevent text selection behavior */
+    .vocab-chat-dialog {
+      position: fixed;
+      /* ... other existing styles ... */
+    }
+    
+    /* Ensure dialog content is scrollable */
+    .vocab-chat-content {
+      height: 100%;
+      overflow: hidden;
+    }
+    
+    /* Make tab contents fill available space */
+    .vocab-chat-tab-content {
+      height: calc(100% - 90px);
+      overflow-y: auto;
+    }
+  `;
+}

@@ -1,0 +1,136 @@
+// Add these methods to your ChatDialog object
+
+createOriginalTextContent() {
+  const content = document.createElement('div');
+  content.className = 'vocab-chat-tab-content';
+  content.id = 'vocab-chat-original-text';
+  
+  // Create focus button container
+  const buttonContainer = document.createElement('div');
+  buttonContainer.className = 'vocab-chat-focus-btn-container';
+  
+  // Create focus button
+  const focusButton = document.createElement('button');
+  focusButton.className = 'vocab-chat-focus-btn';
+  focusButton.innerHTML = `
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M10 4v12M4 10h12" stroke="#9527F5" stroke-width="2" stroke-linecap="round"/>
+    </svg>
+    <span>Focus Selected Text</span>
+  `;
+  
+  // Add click handler
+  focusButton.addEventListener('click', () => {
+    // Find the highlight element
+    const highlight = TextSelector.textToHighlights.get(this.currentTextKey);
+    if (highlight) {
+      // First scroll the highlight into view
+      highlight.scrollIntoView({
+        behavior: 'smooth',
+        block: 'center'
+      });
+      
+      // Then trigger the pulsate animation
+      setTimeout(() => {
+        TextSelector.pulsateText(highlight, true);
+      }, 500); // Wait for scroll to complete
+    }
+  });
+  
+  buttonContainer.appendChild(focusButton);
+  
+  // Create text container
+  const textContainer = document.createElement('div');
+  textContainer.className = 'vocab-chat-original-text-content';
+  textContainer.textContent = this.currentText;
+  
+  // Add components to content
+  content.appendChild(buttonContainer);
+  content.appendChild(textContainer);
+  
+  return content;
+}
+
+// Add these styles to your injectStyles method
+injectStyles() {
+  // ... your existing styles ...
+  
+  style.textContent += `
+    /* Focus Button Styles */
+    .vocab-chat-focus-btn-container {
+      padding: 16px 16px 12px;
+      border-bottom: 1px solid #e5e7eb;
+      margin-bottom: 12px;
+    }
+    
+    .vocab-chat-focus-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      width: 100%;
+      padding: 12px;
+      background: white;
+      border: 2px solid #9527F5;
+      border-radius: 8px;
+      color: #9527F5;
+      font-weight: 500;
+      font-size: 14px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      box-shadow: 0 1px 2px rgba(149, 39, 245, 0.05);
+    }
+    
+    .vocab-chat-focus-btn:hover {
+      background: #f9f5ff;
+      border-color: #7a1fd9;
+      box-shadow: 0 2px 4px rgba(149, 39, 245, 0.1);
+    }
+    
+    .vocab-chat-focus-btn:active {
+      transform: scale(0.98);
+    }
+    
+    .vocab-chat-focus-btn svg {
+      flex-shrink: 0;
+    }
+    
+    .vocab-chat-focus-btn span {
+      font-weight: 500;
+    }
+    
+    /* Original Text Content */
+    .vocab-chat-original-text-content {
+      background: #f9fafb;
+      padding: 16px;
+      margin: 0 16px 16px;
+      border-radius: 8px;
+      font-size: 14px;
+      line-height: 1.6;
+      color: #374151;
+      height: calc(100% - 140px);
+      overflow-y: auto;
+      border: 1px solid #e5e7eb;
+    }
+    
+    /* Green Pulsate Animation */
+    @keyframes vocab-text-pulsate-green {
+      0% { background-color: transparent; }
+      50% { background-color: rgba(34, 197, 94, 0.2); }
+      100% { background-color: transparent; }
+    }
+    
+    .vocab-text-pulsate-green {
+      animation: vocab-text-pulsate-green 1s ease-in-out;
+    }
+  `;
+}
+
+// Update the TextSelector's pulsateText method if you haven't already
+TextSelector.pulsateText = function(highlight, isGreen = false) {
+  const animationClass = isGreen ? 'vocab-text-pulsate-green' : 'vocab-text-pulsate';
+  highlight.classList.add(animationClass);
+  setTimeout(() => {
+    highlight.classList.remove(animationClass);
+  }, 1000);
+};
