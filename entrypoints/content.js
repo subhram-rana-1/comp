@@ -20,6 +20,238 @@ export default defineContentScript({
 });
 
 // ===================================
+// Position Manager Module - Handles saving and loading panel position
+// ===================================
+const PositionManager = {
+  STORAGE_KEY: 'vocab-helper-panel-position',
+  
+  /**
+   * Save panel position to storage
+   * @param {Object} position - Position object {top, left}
+   */
+  async savePosition(position) {
+    try {
+      await chrome.storage.local.set({ [this.STORAGE_KEY]: position });
+    } catch (error) {
+      console.error('Error saving panel position:', error);
+    }
+  },
+  
+  /**
+   * Load panel position from storage
+   * @returns {Promise<Object|null>} Position object or null if not found
+   */
+  async loadPosition() {
+    try {
+      const result = await chrome.storage.local.get([this.STORAGE_KEY]);
+      return result[this.STORAGE_KEY] || null;
+    } catch (error) {
+      console.error('Error loading panel position:', error);
+      return null;
+    }
+  },
+  
+  /**
+   * Clear saved position
+   */
+  async clearPosition() {
+    try {
+      await chrome.storage.local.remove([this.STORAGE_KEY]);
+    } catch (error) {
+      console.error('Error clearing panel position:', error);
+    }
+  }
+};
+
+// ===================================
+// Drag Handle Module - Manages drag-and-drop functionality
+// ===================================
+const DragHandle = {
+  isDragging: false,
+  dragStartX: 0,
+  dragStartY: 0,
+  elementStartX: 0,
+  elementStartY: 0,
+  targetElement: null,
+  handleElement: null,
+  
+  /**
+   * Initialize drag handle
+   * @param {HTMLElement} handle - The drag handle element
+   * @param {HTMLElement} target - The element to be dragged
+   */
+  init(handle, target) {
+    this.handleElement = handle;
+    this.targetElement = target;
+    
+    // Attach event listeners
+    this.handleElement.addEventListener('mousedown', this.onDragStart.bind(this));
+    document.addEventListener('mousemove', this.onDragMove.bind(this));
+    document.addEventListener('mouseup', this.onDragEnd.bind(this));
+    
+    // Touch events for mobile
+    this.handleElement.addEventListener('touchstart', this.onTouchStart.bind(this));
+    document.addEventListener('touchmove', this.onTouchMove.bind(this));
+    document.addEventListener('touchend', this.onDragEnd.bind(this));
+  },
+  
+  /**
+   * Handle mouse drag start
+   * @param {MouseEvent} e - Mouse event
+   */
+  onDragStart(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    this.isDragging = true;
+    this.dragStartX = e.clientX;
+    this.dragStartY = e.clientY;
+    
+    const rect = this.targetElement.getBoundingClientRect();
+    this.elementStartX = rect.left;
+    this.elementStartY = rect.top;
+    
+    // Add dragging visual feedback
+    this.targetElement.style.transition = 'none';
+    this.handleElement.style.cursor = 'grabbing';
+    document.body.style.userSelect = 'none';
+    
+    // Disable pointer events on buttons to prevent hover tooltips during drag
+    this.targetElement.style.pointerEvents = 'none';
+    this.handleElement.style.pointerEvents = 'auto'; // Keep handle interactive
+    
+    // Remove any existing tooltips
+    this.removeAllTooltips();
+  },
+  
+  /**
+   * Handle touch drag start
+   * @param {TouchEvent} e - Touch event
+   */
+  onTouchStart(e) {
+    const touch = e.touches[0];
+    this.onDragStart({
+      preventDefault: () => e.preventDefault(),
+      stopPropagation: () => e.stopPropagation(),
+      clientX: touch.clientX,
+      clientY: touch.clientY
+    });
+  },
+  
+  /**
+   * Handle drag move
+   * @param {MouseEvent} e - Mouse event
+   */
+  onDragMove(e) {
+    if (!this.isDragging) return;
+    
+    e.preventDefault();
+    
+    const deltaX = e.clientX - this.dragStartX;
+    const deltaY = e.clientY - this.dragStartY;
+    
+    const newLeft = this.elementStartX + deltaX;
+    const newTop = this.elementStartY + deltaY;
+    
+    // Apply constraints to keep panel within viewport
+    const constraints = this.calculateConstraints();
+    const constrainedLeft = Math.max(constraints.minX, Math.min(constraints.maxX, newLeft));
+    const constrainedTop = Math.max(constraints.minY, Math.min(constraints.maxY, newTop));
+    
+    // Update position
+    this.targetElement.style.left = `${constrainedLeft}px`;
+    this.targetElement.style.top = `${constrainedTop}px`;
+    this.targetElement.style.right = 'auto';
+    this.targetElement.style.transform = 'none';
+  },
+  
+  /**
+   * Handle touch drag move
+   * @param {TouchEvent} e - Touch event
+   */
+  onTouchMove(e) {
+    if (!this.isDragging) return;
+    const touch = e.touches[0];
+    this.onDragMove({
+      preventDefault: () => e.preventDefault(),
+      clientX: touch.clientX,
+      clientY: touch.clientY
+    });
+  },
+  
+  /**
+   * Handle drag end
+   */
+  onDragEnd() {
+    if (!this.isDragging) return;
+    
+    this.isDragging = false;
+    
+    // Remove visual feedback
+    this.handleElement.style.cursor = 'grab';
+    document.body.style.userSelect = '';
+    
+    // Re-enable pointer events on buttons
+    this.targetElement.style.pointerEvents = '';
+    
+    // Save position
+    const rect = this.targetElement.getBoundingClientRect();
+    PositionManager.savePosition({
+      left: rect.left,
+      top: rect.top
+    });
+  },
+  
+  /**
+   * Calculate viewport constraints to keep panel fully visible
+   * @returns {Object} Constraint boundaries
+   */
+  calculateConstraints() {
+    const rect = this.targetElement.getBoundingClientRect();
+    const minVisibleArea = rect.width * 0.8; // Keep 80% of the panel visible
+    
+    return {
+      minX: -rect.width + minVisibleArea,
+      maxX: window.innerWidth - minVisibleArea,
+      minY: 0,
+      maxY: window.innerHeight - rect.height
+    };
+  },
+  
+  /**
+   * Apply saved position to target element
+   * @param {Object} position - Position object {left, top}
+   */
+  applyPosition(position) {
+    if (!position || !this.targetElement) return;
+    
+    this.targetElement.style.left = `${position.left}px`;
+    this.targetElement.style.top = `${position.top}px`;
+    this.targetElement.style.right = 'auto';
+    this.targetElement.style.transform = 'none';
+  },
+  
+  /**
+   * Reset to default position
+   */
+  resetPosition() {
+    this.targetElement.style.left = '';
+    this.targetElement.style.top = '';
+    this.targetElement.style.right = '0';
+    this.targetElement.style.transform = '';
+    PositionManager.clearPosition();
+  },
+  
+  /**
+   * Remove all visible tooltips
+   */
+  removeAllTooltips() {
+    const tooltips = document.querySelectorAll('.vocab-btn-tooltip');
+    tooltips.forEach(tooltip => tooltip.remove());
+  }
+};
+
+// ===================================
 // Button Panel Module - Manages the floating button UI
 // ===================================
 const ButtonPanel = {
@@ -40,6 +272,16 @@ const ButtonPanel = {
   async init() {
     this.createPanel();
     this.attachEventListeners();
+    
+    // Clear any saved position on init (reset to default on tab refresh)
+    await PositionManager.clearPosition();
+    
+    // Initialize drag functionality - drag the entire panel container
+    const dragHandle = document.getElementById('vocab-drag-handle');
+    if (dragHandle && this.panelContainer) {
+      DragHandle.init(dragHandle, this.panelContainer);
+      // Note: Not loading saved position - always start at default position
+    }
     
     // Apply initial state
     this.updateButtonStates();
@@ -77,6 +319,11 @@ const ButtonPanel = {
     this.panelContainer = document.createElement('div');
     this.panelContainer.id = 'vocab-helper-button-panel';
     this.panelContainer.className = 'vocab-helper-panel';
+
+    // Create wrapper container (invisible, holds button group + pan button)
+    const wrapperContainer = document.createElement('div');
+    wrapperContainer.id = 'vocab-wrapper-container';
+    wrapperContainer.className = 'vocab-wrapper-container';
 
     // Create main button group container with shadow
     const mainButtonGroup = document.createElement('div');
@@ -138,14 +385,57 @@ const ButtonPanel = {
     mainButtonGroup.appendChild(this.upperButtonGroup);
     mainButtonGroup.appendChild(lowerButtonGroup);
 
-    // Append main group to panel
-    this.panelContainer.appendChild(mainButtonGroup);
+    // Create drag handle (separate from button group)
+    const dragHandle = this.createDragHandle();
+
+    // Append button group and drag handle to wrapper
+    wrapperContainer.appendChild(mainButtonGroup);
+    wrapperContainer.appendChild(dragHandle);
+
+    // Append wrapper to panel
+    this.panelContainer.appendChild(wrapperContainer);
 
     // Inject styles
     this.injectStyles();
 
     // Append to body
     document.body.appendChild(this.panelContainer);
+  },
+  
+  /**
+   * Create drag handle element
+   * @returns {HTMLElement} Drag handle element
+   */
+  createDragHandle() {
+    const dragHandle = document.createElement('div');
+    dragHandle.id = 'vocab-drag-handle';
+    dragHandle.className = 'vocab-drag-handle';
+    dragHandle.title = 'Drag to reposition';
+    
+    // Add pan icon
+    dragHandle.innerHTML = this.createPanIcon();
+    
+    return dragHandle;
+  },
+  
+  /**
+   * Create pan/move icon SVG - Simple grip dots icon
+   * @returns {string} SVG markup
+   */
+  createPanIcon() {
+    return `
+      <svg width="20" height="16" viewBox="0 0 20 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="6" cy="4" r="1.5" fill="#9527F5"/>
+        <circle cx="10" cy="4" r="1.5" fill="#9527F5"/>
+        <circle cx="14" cy="4" r="1.5" fill="#9527F5"/>
+        <circle cx="6" cy="8" r="1.5" fill="#9527F5"/>
+        <circle cx="10" cy="8" r="1.5" fill="#9527F5"/>
+        <circle cx="14" cy="8" r="1.5" fill="#9527F5"/>
+        <circle cx="6" cy="12" r="1.5" fill="#9527F5"/>
+        <circle cx="10" cy="12" r="1.5" fill="#9527F5"/>
+        <circle cx="14" cy="12" r="1.5" fill="#9527F5"/>
+      </svg>
+    `;
   },
 
   /**
@@ -252,6 +542,14 @@ const ButtonPanel = {
         transform: translateY(-50%) translateX(0);
       }
 
+      /* Wrapper Container - Invisible container for button group + pan button */
+      .vocab-wrapper-container {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0;
+      }
+
       /* Main Button Group with Purple Shadow */
       .vocab-button-group-main {
         display: flex;
@@ -259,10 +557,9 @@ const ButtonPanel = {
         gap: 8px;
         background: white;
         padding: 10px;
-        border-radius: 16px 0 0 16px;
+        border-radius: 16px;
         box-shadow: 0 4px 20px rgba(149, 39, 245, 0.3), 0 2px 8px rgba(149, 39, 245, 0.2);
         border: 1px solid rgba(149, 39, 245, 0.1);
-        border-right: none;
       }
 
       /* Upper Button Group (no additional styling) */
@@ -277,6 +574,40 @@ const ButtonPanel = {
         display: flex;
         flex-direction: column;
         gap: 8px;
+      }
+
+      /* Drag Handle Styles - Semi-circular (bottom half rounded) */
+      .vocab-drag-handle {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        padding: 6px 16px 8px 16px;
+        cursor: grab;
+        user-select: none;
+        border-radius: 0 0 20px 20px;
+        background: white;
+        width: fit-content;
+        margin-top: -1px;
+        box-shadow: 
+          2px 4px 8px rgba(149, 39, 245, 0.2),
+          -2px 4px 8px rgba(149, 39, 245, 0.2),
+          0 4px 6px rgba(149, 39, 245, 0.15);
+        border: 1px solid rgba(149, 39, 245, 0.1);
+        border-top: none;
+      }
+
+      .vocab-drag-handle:hover {
+        background: white;
+      }
+
+      .vocab-drag-handle:active {
+        cursor: grabbing;
+        background: white;
+      }
+
+      .vocab-drag-handle svg {
+        pointer-events: none;
+        display: block;
       }
 
       /* Base Button Styles */
