@@ -1,4 +1,5 @@
 import ApiService from '../core/services/ApiService.js';
+import SimplifyService from '../core/services/SimplifyService.js';
 
 export default defineContentScript({
   matches: ['<all_urls>'],
@@ -533,8 +534,14 @@ const TextSelector = {
   // Map to store text -> highlight element
   textToHighlights: new Map(),
   
+  // Map to store textKey -> {textStartIndex, textLength, text, range}
+  textPositions: new Map(),
+  
   // Container for texts that have been asked (moved from selectedTexts)
-  askedTexts: new Map(), // Map of textKey -> {text, textKey, highlight}
+  askedTexts: new Map(), // Map of textKey -> {text, textKey, highlight, simplifiedText}
+  
+  // Container for simplified texts metadata
+  simplifiedTexts: new Map(), // Map of textKey -> {textStartIndex, textLength, text, simplifiedText, previousSimplifiedTexts}
   
   // Track if the feature is enabled
   isEnabled: false,
@@ -670,8 +677,8 @@ const TextSelector = {
         return;
       }
       
-      // Add text to selected set (O(1) operation)
-      this.addText(selectedText);
+      // Add text to selected set with range for position tracking (O(1) operation)
+      this.addText(selectedText, range);
       
       // Highlight the text
       this.highlightRange(range, selectedText);
@@ -787,12 +794,44 @@ const TextSelector = {
   },
   
   /**
+   * Calculate text position in document (approximate position in plain text)
+   * @param {Range} range - The range to calculate position for
+   * @returns {{textStartIndex: number, textLength: number, text: string}}
+   */
+  calculateTextPosition(range) {
+    const text = range.toString();
+    const textLength = text.length;
+    
+    // Get the full text content of the body up to the start of the range
+    const bodyText = document.body.innerText || document.body.textContent || '';
+    
+    // Find the approximate position by searching for the text in the body
+    // This is approximate as we're using innerText which may differ from actual positions
+    const rangeText = range.toString();
+    const textStartIndex = bodyText.indexOf(rangeText);
+    
+    return {
+      textStartIndex: textStartIndex >= 0 ? textStartIndex : 0,
+      textLength: textLength,
+      text: text
+    };
+  },
+  
+  /**
    * Add a text to the selected texts set
    * @param {string} text - The text to add
+   * @param {Range} range - The range object (optional, for position tracking)
    */
-  addText(text) {
+  addText(text, range = null) {
     const textKey = this.getTextKey(text);
     this.selectedTexts.add(textKey); // O(1) operation
+    
+    // Store position information if range is provided
+    if (range) {
+      const positionData = this.calculateTextPosition(range);
+      this.textPositions.set(textKey, positionData);
+    }
+    
     // Update button states
     ButtonPanel.updateButtonStatesFromSelections();
   },
@@ -817,6 +856,9 @@ const TextSelector = {
     
     // Remove from selected texts set
     this.selectedTexts.delete(textKey); // O(1) operation
+    
+    // Clean up position data
+    this.textPositions.delete(textKey);
     
     console.log('[TextSelector] Text removed');
     console.log('[TextSelector] Remaining selected texts:', this.selectedTexts.size);
@@ -1075,6 +1117,53 @@ const TextSelector = {
   },
   
   /**
+   * Create book icon button for simplified texts
+   * @param {string} textKey - The text key
+   * @returns {HTMLElement}
+   */
+  createBookButton(textKey) {
+    const btn = document.createElement('button');
+    btn.className = 'vocab-text-book-btn';
+    btn.setAttribute('aria-label', 'View simplified text');
+    btn.innerHTML = this.createBookIcon();
+    
+    // Add click handler (to be implemented later)
+    btn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      
+      // TODO: Implement book icon click handler
+      console.log('[TextSelector] Book icon clicked for:', textKey);
+      
+      // Get simplified text data
+      const simplifiedData = this.simplifiedTexts.get(textKey);
+      if (simplifiedData) {
+        console.log('[TextSelector] Simplified text:', simplifiedData.simplifiedText);
+        // Pulsate the text
+        const highlight = this.textToHighlights.get(textKey);
+        if (highlight) {
+          this.pulsateText(highlight, true);
+        }
+      }
+    });
+    
+    return btn;
+  },
+  
+  /**
+   * Create book icon SVG - Wireframe open book icon with thick green lines
+   * @returns {string} SVG markup
+   */
+  createBookIcon() {
+    return `
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M4 19.5C4 18.837 4.526 18 5.5 18H11M20 19.5C20 18.837 19.474 18 18.5 18H13" stroke="#22c55e" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M12 18V6M12 6C12 6 10 4 6.5 4C4.5 4 4 5 4 6V18C4 18 4.5 18 6.5 18C10 18 12 18 12 18M12 6C12 6 14 4 17.5 4C19.5 4 20 5 20 6V18C20 18 19.5 18 17.5 18C14 18 12 18 12 18" stroke="#22c55e" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    `;
+  },
+  
+  /**
    * Pulsate text highlight with color (green for asked texts, purple for selected)
    * @param {HTMLElement} highlight - The highlight element
    * @param {boolean} isGreen - Whether to use green color (default: false for purple)
@@ -1203,6 +1292,54 @@ const TextSelector = {
         height: 20px;
       }
       
+      /* Book button - Wireframe open book icon on top-left */
+      .vocab-text-book-btn {
+        position: absolute;
+        top: -12px;
+        left: -12px;
+        width: 24px;
+        height: 24px;
+        background: transparent;
+        border: none;
+        border-radius: 4px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        opacity: 0.95;
+        transition: opacity 0.2s ease, transform 0.15s ease;
+        padding: 0;
+        z-index: 999999;
+      }
+      
+      .vocab-text-highlight:hover .vocab-text-book-btn {
+        opacity: 1;
+      }
+      
+      .vocab-text-book-btn:hover {
+        transform: scale(1.1);
+        opacity: 1;
+      }
+      
+      .vocab-text-book-btn:active {
+        transform: scale(0.9);
+      }
+      
+      .vocab-text-book-btn svg {
+        pointer-events: none;
+        display: block;
+        width: 24px;
+        height: 24px;
+        filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.1));
+      }
+      
+      /* Light green dashed underline for simplified texts - same green as chat icon */
+      .vocab-text-simplified {
+        text-decoration-color: #22c55e !important;
+        text-decoration-style: dashed !important;
+        text-decoration-thickness: 1px !important;
+      }
+      
       /* Pulsate animation for text highlights - light purple */
       @keyframes vocab-text-pulsate {
         0% {
@@ -1218,6 +1355,20 @@ const TextSelector = {
       
       .vocab-text-pulsate {
         animation: vocab-text-pulsate 0.6s ease-in-out;
+      }
+      
+      /* Loading animation - gentle breathing effect for readers (non-distracting) */
+      @keyframes vocab-text-loading-breathe {
+        0%, 100% {
+          opacity: 0.5;
+        }
+        50% {
+          opacity: 1;
+        }
+      }
+      
+      .vocab-text-loading {
+        animation: vocab-text-loading-breathe 2.5s ease-in-out infinite;
       }
       
       /* Pulsate animation for text highlights - light green */
@@ -3651,9 +3802,133 @@ const ButtonPanel = {
   /**
    * Handler for Magic meaning button
    */
-  handleMagicMeaning() {
-    // TODO: Implement magic meaning functionality
-    console.log('Magic meaning - to be implemented');
+  async handleMagicMeaning() {
+    console.log('[ButtonPanel] Magic meaning clicked');
+    
+    // Get all selected texts
+    const selectedTexts = TextSelector.getSelectedTexts();
+    
+    if (selectedTexts.size === 0) {
+      console.warn('[ButtonPanel] No text selected');
+      return;
+    }
+    
+    // Build API request payload
+    const textSegments = [];
+    const textKeysToProcess = [];
+    
+    for (const textKey of selectedTexts) {
+      const positionData = TextSelector.textPositions.get(textKey);
+      
+      if (positionData) {
+        textSegments.push({
+          textStartIndex: positionData.textStartIndex,
+          textLength: positionData.textLength,
+          text: positionData.text,
+          previousSimplifiedTexts: []
+        });
+        textKeysToProcess.push(textKey);
+      }
+    }
+    
+    if (textSegments.length === 0) {
+      console.warn('[ButtonPanel] No text segments with position data');
+      return;
+    }
+    
+    console.log('[ButtonPanel] Processing', textSegments.length, 'text segments');
+    
+    // Start loading animation on all selected highlights
+    for (const textKey of textKeysToProcess) {
+      const highlight = TextSelector.textToHighlights.get(textKey);
+      if (highlight) {
+        // Remove any existing buttons
+        const existingBtn = highlight.querySelector('.vocab-text-remove-btn');
+        if (existingBtn) {
+          existingBtn.remove();
+        }
+        
+        // Add loading animation class
+        highlight.classList.add('vocab-text-loading');
+      }
+    }
+    
+    // Call SimplifyService with SSE
+    SimplifyService.simplify(
+      textSegments,
+      // onEvent callback - called for each SSE event
+      (eventData) => {
+        console.log('[ButtonPanel] Received simplified text:', eventData);
+        
+        // Find the corresponding textKey for this event
+        // Match by textStartIndex and textLength
+        const matchingTextKey = textKeysToProcess.find(textKey => {
+          const posData = TextSelector.textPositions.get(textKey);
+          return posData && 
+                 posData.textStartIndex === eventData.textStartIndex &&
+                 posData.textLength === eventData.textLength;
+        });
+        
+        if (matchingTextKey) {
+          const highlight = TextSelector.textToHighlights.get(matchingTextKey);
+          
+          if (highlight) {
+            // Remove loading animation
+            highlight.classList.remove('vocab-text-loading');
+            
+            // Change underline to light green
+            highlight.classList.add('vocab-text-simplified');
+            
+            // Replace cross button with book icon
+            const existingBtn = highlight.querySelector('.vocab-text-remove-btn');
+            if (existingBtn) {
+              existingBtn.remove();
+            }
+            
+            const bookBtn = TextSelector.createBookButton(matchingTextKey);
+            highlight.appendChild(bookBtn);
+            
+            // Store simplified text data
+            TextSelector.simplifiedTexts.set(matchingTextKey, {
+              textStartIndex: eventData.textStartIndex,
+              textLength: eventData.textLength,
+              text: eventData.text,
+              simplifiedText: eventData.simplifiedText,
+              previousSimplifiedTexts: eventData.previousSimplifiedTexts || []
+            });
+            
+            console.log('[ButtonPanel] Updated UI for text segment:', matchingTextKey);
+          }
+        }
+      },
+      // onComplete callback
+      () => {
+        console.log('[ButtonPanel] All text simplification complete');
+        
+        // Remove loading animation from any remaining highlights (in case some failed)
+        for (const textKey of textKeysToProcess) {
+          const highlight = TextSelector.textToHighlights.get(textKey);
+          if (highlight && highlight.classList.contains('vocab-text-loading')) {
+            highlight.classList.remove('vocab-text-loading');
+          }
+        }
+      },
+      // onError callback
+      (error) => {
+        console.error('[ButtonPanel] Error during text simplification:', error);
+        
+        // Remove loading animation from all highlights
+        for (const textKey of textKeysToProcess) {
+          const highlight = TextSelector.textToHighlights.get(textKey);
+          if (highlight) {
+            highlight.classList.remove('vocab-text-loading');
+          }
+        }
+        
+        // Show error notification
+        TextSelector.showNotification('Error simplifying text. Please try again.');
+      }
+    );
   },
 
   /**
