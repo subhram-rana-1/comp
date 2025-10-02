@@ -16,7 +16,9 @@ export default defineConfig({
       128: 'chrome-extension-logo.png',
     },
     permissions: [
-      'storage'
+      'storage',
+      'tabs',
+      'activeTab'
     ],
   },
 });
