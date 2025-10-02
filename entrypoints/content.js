@@ -541,7 +541,7 @@ const TextSelector = {
   askedTexts: new Map(), // Map of textKey -> {text, textKey, highlight, simplifiedText}
   
   // Container for simplified texts metadata
-  simplifiedTexts: new Map(), // Map of textKey -> {textStartIndex, textLength, text, simplifiedText, previousSimplifiedTexts}
+  simplifiedTexts: new Map(), // Map of textKey -> {textStartIndex, textLength, text, simplifiedText, previousSimplifiedTexts, shouldAllowSimplifyMore}
   
   // Track if the feature is enabled
   isEnabled: false,
@@ -1127,23 +1127,24 @@ const TextSelector = {
     btn.setAttribute('aria-label', 'View simplified text');
     btn.innerHTML = this.createBookIcon();
     
-    // Add click handler (to be implemented later)
+    // Add click handler
     btn.addEventListener('click', (e) => {
       e.preventDefault();
       e.stopPropagation();
       
-      // TODO: Implement book icon click handler
       console.log('[TextSelector] Book icon clicked for:', textKey);
       
       // Get simplified text data
       const simplifiedData = this.simplifiedTexts.get(textKey);
       if (simplifiedData) {
-        console.log('[TextSelector] Simplified text:', simplifiedData.simplifiedText);
         // Pulsate the text
         const highlight = this.textToHighlights.get(textKey);
         if (highlight) {
           this.pulsateText(highlight, true);
         }
+        
+        // Open ChatDialog in simplified mode
+        ChatDialog.open(simplifiedData.text, textKey, 'simplified', simplifiedData);
       }
     });
     
@@ -1657,6 +1658,10 @@ const ChatDialog = {
   currentText: null,
   currentTextKey: null,
   chatHistory: [],
+  chatHistories: new Map(), // Store chat history for each textKey
+  mode: 'ask', // 'ask' or 'simplified'
+  simplifiedData: null, // For simplified mode
+  isSimplifying: false, // Track if currently simplifying more
   
   /**
    * Initialize chat dialog
@@ -1670,17 +1675,35 @@ const ChatDialog = {
    * Open chat dialog with selected text
    * @param {string} text - The selected text
    * @param {string} textKey - The text key for identification
+   * @param {string} mode - The dialog mode: 'ask' or 'simplified'
+   * @param {Object} simplifiedData - Simplified text data (for simplified mode)
    */
-  open(text, textKey) {
-    // If dialog is already open, close it first
+  open(text, textKey, mode = 'ask', simplifiedData = null) {
+    // If dialog is already open for the same text
+    if (this.isOpen && this.currentTextKey === textKey) {
+      // If opening in simplified mode and already open for same text
+      if (mode === 'simplified') {
+        // Do nothing - popup is already open for this text
+        console.log('[ChatDialog] Already open for this text, doing nothing');
+        return;
+      }
+      // If opening in 'ask' mode, just switch to ask tab
+      else {
+        this.switchTab('ask');
+      }
+      return; // Don't re-create the dialog
+    }
+    
+    // If dialog is open for different text, close it first
     if (this.isOpen) {
       this.close();
       // Wait for close animation to complete
       setTimeout(() => {
-        this.openDialog(text, textKey);
+        this.openDialog(text, textKey, mode, simplifiedData);
       }, 350);
     } else {
-      this.openDialog(text, textKey);
+      // Dialog is not open, open it
+      this.openDialog(text, textKey, mode, simplifiedData);
     }
   },
   
@@ -1688,16 +1711,24 @@ const ChatDialog = {
    * Internal method to open dialog
    * @param {string} text - The selected text
    * @param {string} textKey - The text key for identification
+   * @param {string} mode - The dialog mode: 'ask' or 'simplified'
+   * @param {Object} simplifiedData - Simplified text data (for simplified mode)
    */
-  openDialog(text, textKey) {
+  openDialog(text, textKey, mode = 'ask', simplifiedData = null) {
     this.currentText = text;
     this.currentTextKey = textKey;
-    this.chatHistory = [];
+    
+    // Load existing chat history for this text, or create new empty array
+    this.chatHistory = this.chatHistories.get(textKey) || [];
+    
+    this.mode = mode;
+    this.simplifiedData = simplifiedData;
     
     this.createDialog();
     this.show();
     
-    console.log('[ChatDialog] Opened for text:', text.substring(0, 50) + '...');
+    console.log('[ChatDialog] Opened in', mode, 'mode for text:', text.substring(0, 50) + '...');
+    console.log('[ChatDialog] Loaded', this.chatHistory.length, 'chat messages');
   },
   
   /**
@@ -1705,6 +1736,12 @@ const ChatDialog = {
    */
   close() {
     if (!this.isOpen) return;
+    
+    // Save chat history before closing
+    if (this.currentTextKey && this.chatHistory.length > 0) {
+      this.chatHistories.set(this.currentTextKey, [...this.chatHistory]);
+      console.log('[ChatDialog] Saved', this.chatHistory.length, 'chat messages for', this.currentTextKey);
+    }
     
     this.hide();
     
@@ -1753,13 +1790,18 @@ const ChatDialog = {
     const contentArea = document.createElement('div');
     contentArea.className = 'vocab-chat-content-area';
     
-    // Create original text content (hidden by default)
-    const originalTextContent = this.createOriginalTextContent();
+    // Create first tab content based on mode (hidden by default)
+    let firstTabContent;
+    if (this.mode === 'simplified') {
+      firstTabContent = this.createSimplifiedContent();
+    } else {
+      firstTabContent = this.createOriginalTextContent();
+    }
     
     // Create ask/chat content (visible by default)
     const askContent = this.createAskContent();
     
-    contentArea.appendChild(originalTextContent);
+    contentArea.appendChild(firstTabContent);
     contentArea.appendChild(askContent);
     
     // Create input area
@@ -1875,25 +1917,38 @@ const ChatDialog = {
     const tabsContainer = document.createElement('div');
     tabsContainer.className = 'vocab-chat-tabs';
     
-    const originalTextTab = document.createElement('button');
-    originalTextTab.className = 'vocab-chat-tab';
-    originalTextTab.setAttribute('data-tab', 'original-text');
-    originalTextTab.textContent = 'ORIGINAL TEXT';
-    originalTextTab.addEventListener('click', () => this.switchTab('original-text'));
+    // First tab: "Original text" for ask mode, "Simplified" for simplified mode
+    const firstTab = document.createElement('button');
     
-    const askTab = document.createElement('button');
-    askTab.className = 'vocab-chat-tab active';
-    askTab.setAttribute('data-tab', 'ask');
-    askTab.textContent = 'CHAT';
-    askTab.addEventListener('click', () => this.switchTab('ask'));
+    if (this.mode === 'simplified') {
+      // In simplified mode, first tab is "Simplified" and is active
+      firstTab.className = 'vocab-chat-tab active';
+      firstTab.setAttribute('data-tab', 'simplified');
+      firstTab.textContent = 'SIMPLIFIED';
+      firstTab.addEventListener('click', () => this.switchTab('simplified'));
+    } else {
+      // In ask mode, first tab is "Original text" and is not active
+      firstTab.className = 'vocab-chat-tab';
+      firstTab.setAttribute('data-tab', 'original-text');
+      firstTab.textContent = 'ORIGINAL TEXT';
+      firstTab.addEventListener('click', () => this.switchTab('original-text'));
+    }
+    
+    // Second tab: Always "Chat"
+    const chatTab = document.createElement('button');
+    // Chat tab is active in ask mode, not active in simplified mode
+    chatTab.className = this.mode === 'simplified' ? 'vocab-chat-tab' : 'vocab-chat-tab active';
+    chatTab.setAttribute('data-tab', 'ask');
+    chatTab.textContent = 'CHAT';
+    chatTab.addEventListener('click', () => this.switchTab('ask'));
     
     // Create sliding indicator
     const indicator = document.createElement('div');
     indicator.className = 'vocab-chat-tab-indicator';
     indicator.id = 'vocab-chat-tab-indicator';
     
-    tabsContainer.appendChild(originalTextTab);
-    tabsContainer.appendChild(askTab);
+    tabsContainer.appendChild(firstTab);
+    tabsContainer.appendChild(chatTab);
     tabsContainer.appendChild(indicator);
     
     // Set initial indicator position after a brief delay to let tabs render
@@ -1955,32 +2010,254 @@ const ChatDialog = {
   },
   
   /**
+   * Create simplified text content
+   */
+  createSimplifiedContent() {
+    const content = document.createElement('div');
+    // In simplified mode, this content is active/visible; in ask mode, it's hidden
+    content.className = this.mode === 'simplified' ? 'vocab-chat-tab-content active' : 'vocab-chat-tab-content';
+    content.setAttribute('data-content', 'simplified');
+    if (this.mode !== 'simplified') {
+      content.style.display = 'none';
+    }
+    
+    // Container for all simplified explanations
+    const explanationsContainer = document.createElement('div');
+    explanationsContainer.id = 'vocab-chat-simplified-container';
+    
+    // Build all simplified explanations (current + previous)
+    this.renderSimplifiedExplanations(explanationsContainer);
+    
+    // Create "Simplify more" button container
+    const buttonContainer = document.createElement('div');
+    buttonContainer.className = 'vocab-chat-simplify-more-container';
+    
+    const simplifyMoreBtn = document.createElement('button');
+    simplifyMoreBtn.className = 'vocab-chat-simplify-more-btn';
+    simplifyMoreBtn.textContent = 'Simplify more';
+    simplifyMoreBtn.id = 'vocab-chat-simplify-more-btn';
+    
+    // Set initial disabled state based on shouldAllowSimplifyMore
+    if (this.simplifiedData && this.simplifiedData.shouldAllowSimplifyMore) {
+      simplifyMoreBtn.disabled = false;
+    } else {
+      simplifyMoreBtn.disabled = true;
+      simplifyMoreBtn.classList.add('disabled');
+    }
+    
+    // Add click handler
+    simplifyMoreBtn.addEventListener('click', () => this.handleSimplifyMore());
+    
+    buttonContainer.appendChild(simplifyMoreBtn);
+    
+    content.appendChild(explanationsContainer);
+    content.appendChild(buttonContainer);
+    
+    return content;
+  },
+  
+  /**
+   * Render all simplified explanations with headers
+   * @param {HTMLElement} container - Container element to render into
+   */
+  renderSimplifiedExplanations(container) {
+    if (!this.simplifiedData) return;
+    
+    container.innerHTML = '';
+    
+    // Get all explanations (previous + current)
+    const allExplanations = [
+      ...(this.simplifiedData.previousSimplifiedTexts || []),
+      this.simplifiedData.simplifiedText
+    ];
+    
+    // Render each explanation with header
+    allExplanations.forEach((explanation, index) => {
+      const item = document.createElement('div');
+      item.className = 'vocab-chat-simplified-item';
+      
+      // Create header
+      const header = document.createElement('div');
+      header.className = 'vocab-chat-simplified-header';
+      header.textContent = `Simplified explanation ${index + 1}`;
+      
+      // Create text display
+      const textDisplay = document.createElement('div');
+      textDisplay.className = 'vocab-chat-simplified-text';
+      textDisplay.textContent = explanation;
+      
+      item.appendChild(header);
+      item.appendChild(textDisplay);
+      container.appendChild(item);
+    });
+  },
+  
+  /**
+   * Handle "Simplify more" button click
+   */
+  async handleSimplifyMore() {
+    if (!this.simplifiedData || !this.currentTextKey) return;
+    if (this.isSimplifying) return;
+    
+    console.log('[ChatDialog] Simplify more clicked');
+    
+    this.isSimplifying = true;
+    
+    // Disable button and show loading state
+    const simplifyMoreBtn = document.getElementById('vocab-chat-simplify-more-btn');
+    if (simplifyMoreBtn) {
+      simplifyMoreBtn.disabled = true;
+      simplifyMoreBtn.classList.add('disabled', 'loading');
+      simplifyMoreBtn.textContent = 'Simplifying...';
+    }
+    
+    // Build API request with previous simplified text
+    const previousSimplifiedTexts = [
+      ...this.simplifiedData.previousSimplifiedTexts,
+      this.simplifiedData.simplifiedText
+    ];
+    
+    const textSegments = [{
+      textStartIndex: this.simplifiedData.textStartIndex,
+      textLength: this.simplifiedData.textLength,
+      text: this.simplifiedData.text,
+      previousSimplifiedTexts: previousSimplifiedTexts
+    }];
+    
+    // Call SimplifyService
+    SimplifyService.simplify(
+      textSegments,
+      // onEvent callback
+      (eventData) => {
+        console.log('[ChatDialog] Received new simplified text:', eventData);
+        
+        // Update simplified data
+        this.simplifiedData = {
+          textStartIndex: eventData.textStartIndex,
+          textLength: eventData.textLength,
+          text: eventData.text,
+          simplifiedText: eventData.simplifiedText,
+          previousSimplifiedTexts: eventData.previousSimplifiedTexts || previousSimplifiedTexts,
+          shouldAllowSimplifyMore: eventData.shouldAllowSimplifyMore || false
+        };
+        
+        // Update stored data
+        TextSelector.simplifiedTexts.set(this.currentTextKey, this.simplifiedData);
+        
+        // Update UI - re-render all explanations
+        const container = this.dialogContainer.querySelector('#vocab-chat-simplified-container');
+        if (container) {
+          this.renderSimplifiedExplanations(container);
+        }
+        
+        // Reset button
+        if (simplifyMoreBtn) {
+          simplifyMoreBtn.classList.remove('loading');
+          simplifyMoreBtn.textContent = 'Simplify more';
+          
+          if (this.simplifiedData.shouldAllowSimplifyMore) {
+            simplifyMoreBtn.disabled = false;
+            simplifyMoreBtn.classList.remove('disabled');
+          } else {
+            simplifyMoreBtn.disabled = true;
+            simplifyMoreBtn.classList.add('disabled');
+          }
+        }
+        
+        this.isSimplifying = false;
+      },
+      // onComplete callback
+      () => {
+        console.log('[ChatDialog] Simplification complete');
+        this.isSimplifying = false;
+      },
+      // onError callback
+      (error) => {
+        console.error('[ChatDialog] Error during simplification:', error);
+        
+        // Reset button
+        if (simplifyMoreBtn) {
+          simplifyMoreBtn.classList.remove('loading');
+          simplifyMoreBtn.textContent = 'Simplify more';
+        }
+        
+        this.isSimplifying = false;
+        
+        // Show error
+        TextSelector.showNotification('Error simplifying text. Please try again.');
+      }
+    );
+  },
+  
+  /**
    * Create ask/chat content
    */
   createAskContent() {
     const content = document.createElement('div');
-    content.className = 'vocab-chat-tab-content active';
+    // In ask mode, this content is active/visible; in simplified mode, it's hidden initially
+    content.className = this.mode === 'ask' ? 'vocab-chat-tab-content active' : 'vocab-chat-tab-content';
     content.setAttribute('data-content', 'ask');
+    if (this.mode === 'simplified') {
+      content.style.display = 'none';
+    }
     
     // Create chat messages container
     const chatContainer = document.createElement('div');
     chatContainer.className = 'vocab-chat-messages';
     chatContainer.id = 'vocab-chat-messages';
     
-    // Show "Ask your doubt" message
-    const noChatsMsg = document.createElement('div');
-    noChatsMsg.className = 'vocab-chat-no-messages';
-    noChatsMsg.innerHTML = `
-      <div class="vocab-chat-no-messages-content">
-        ${this.createChatEmptyIcon()}
-        <span>Ask your doubt</span>
-      </div>
-    `;
-    chatContainer.appendChild(noChatsMsg);
+    // If we have existing chat history, render it
+    if (this.chatHistory && this.chatHistory.length > 0) {
+      this.chatHistory.forEach(item => {
+        this.renderChatMessage(chatContainer, item.type, item.message);
+      });
+      
+      // Update delete button visibility and scroll to bottom after rendering
+      setTimeout(() => {
+        this.updateGlobalClearButton();
+        chatContainer.scrollTop = chatContainer.scrollHeight;
+      }, 10);
+    } else {
+      // Show "Ask your doubt" message
+      const noChatsMsg = document.createElement('div');
+      noChatsMsg.className = 'vocab-chat-no-messages';
+      noChatsMsg.innerHTML = `
+        <div class="vocab-chat-no-messages-content">
+          ${this.createChatEmptyIcon()}
+          <span>Ask your doubt</span>
+        </div>
+      `;
+      chatContainer.appendChild(noChatsMsg);
+    }
     
     content.appendChild(chatContainer);
     
     return content;
+  },
+  
+  /**
+   * Render a chat message in the container
+   * @param {HTMLElement} container - Container element
+   * @param {string} type - Message type ('user' or 'assistant')
+   * @param {string} message - Message content
+   */
+  renderChatMessage(container, type, message) {
+    // Create message bubble with correct class names
+    const messageBubble = document.createElement('div');
+    messageBubble.className = `vocab-chat-message vocab-chat-message-${type}`;
+    
+    const messageContent = document.createElement('div');
+    messageContent.className = 'vocab-chat-message-content';
+    
+    // For AI messages, render markdown; for user messages, use textContent
+    if (type === 'ai') {
+      messageContent.innerHTML = this.renderMarkdown(message);
+    } else {
+      messageContent.textContent = message;
+    }
+    
+    messageBubble.appendChild(messageContent);
+    container.appendChild(messageBubble);
   },
   
   /**
@@ -2640,6 +2917,95 @@ const ChatDialog = {
         word-wrap: break-word;
       }
       
+      /* Simplified Text */
+      .vocab-chat-simplified-text {
+        padding: 16px;
+        background: #faf5ff;
+        border-radius: 12px;
+        font-size: 14px;
+        line-height: 1.6;
+        color: #374151;
+        white-space: pre-wrap;
+        word-wrap: break-word;
+        margin-bottom: 12px;
+      }
+      
+      .vocab-chat-simplified-header {
+        font-size: 13px;
+        font-weight: 600;
+        color: #9527F5;
+        margin-bottom: 8px;
+      }
+      
+      .vocab-chat-simplified-item {
+        margin-bottom: 16px;
+      }
+      
+      .vocab-chat-simplified-item:last-child {
+        margin-bottom: 0;
+      }
+      
+      .vocab-chat-simplify-more-container {
+        display: flex;
+        justify-content: flex-end;
+        margin-top: 12px;
+      }
+      
+      .vocab-chat-simplify-more-btn {
+        background: #9527F5;
+        color: white;
+        border: none;
+        border-radius: 8px;
+        padding: 10px 20px;
+        font-size: 14px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        font-family: inherit;
+      }
+      
+      .vocab-chat-simplify-more-btn:hover:not(.disabled) {
+        background: #7a1fd9;
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(149, 39, 245, 0.3);
+      }
+      
+      .vocab-chat-simplify-more-btn:active:not(.disabled) {
+        transform: translateY(0);
+      }
+      
+      .vocab-chat-simplify-more-btn.disabled {
+        background: #d1d5db;
+        cursor: not-allowed;
+        opacity: 0.6;
+      }
+      
+      .vocab-chat-simplify-more-btn.loading {
+        position: relative;
+        color: transparent;
+      }
+      
+      .vocab-chat-simplify-more-btn.loading::after {
+        content: '';
+        position: absolute;
+        width: 16px;
+        height: 16px;
+        top: 50%;
+        left: 50%;
+        margin-left: -8px;
+        margin-top: -8px;
+        border: 2px solid white;
+        border-radius: 50%;
+        border-top-color: transparent;
+        animation: vocab-chat-spin 0.6s linear infinite;
+      }
+      
+      @keyframes vocab-chat-spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+      
       /* Chat Messages */
       .vocab-chat-messages {
         flex: 1;
@@ -3047,8 +3413,6 @@ const ChatDialog = {
     document.head.appendChild(style);
   }
 };
-
-// ===================================
 // Button Panel Module - Manages the floating button UI
 // ===================================
 const ButtonPanel = {
@@ -3735,52 +4099,94 @@ const ButtonPanel = {
   handleRemoveAllMeanings() {
     console.log('[ButtonPanel] Remove all meanings clicked');
     
-    // Get all asked texts
+    // Get all asked texts and simplified texts
     const askedTextsMap = TextSelector.askedTexts;
+    const simplifiedTextsMap = TextSelector.simplifiedTexts;
     
-    if (askedTextsMap.size === 0) {
-      console.warn('[ButtonPanel] No asked texts to remove');
+    if (askedTextsMap.size === 0 && simplifiedTextsMap.size === 0) {
+      console.warn('[ButtonPanel] No texts to remove');
       return;
     }
     
-    // Create a copy of the keys to avoid iteration issues during deletion
-    const textKeys = Array.from(askedTextsMap.keys());
-    
-    console.log(`[ButtonPanel] Removing ${textKeys.length} asked texts`);
-    
-    // Remove each asked text
-    textKeys.forEach(textKey => {
-      const askedData = askedTextsMap.get(textKey);
+    // Process asked texts
+    if (askedTextsMap.size > 0) {
+      const askedTextKeys = Array.from(askedTextsMap.keys());
+      console.log(`[ButtonPanel] Removing ${askedTextKeys.length} asked texts`);
       
-      if (askedData && askedData.highlight) {
-        const highlight = askedData.highlight;
+      askedTextKeys.forEach(textKey => {
+        const askedData = askedTextsMap.get(textKey);
         
-        // Remove the chat icon button (green)
-        const chatBtn = highlight.querySelector('.vocab-text-chat-btn');
-        if (chatBtn) {
-          chatBtn.remove();
-        }
-        
-        // Remove the highlight wrapper completely
-        const parent = highlight.parentNode;
-        if (parent) {
-          // Move all child nodes out of the highlight wrapper
-          while (highlight.firstChild) {
-            parent.insertBefore(highlight.firstChild, highlight);
+        if (askedData && askedData.highlight) {
+          const highlight = askedData.highlight;
+          
+          // Remove the chat icon button (green)
+          const chatBtn = highlight.querySelector('.vocab-text-chat-btn');
+          if (chatBtn) {
+            chatBtn.remove();
           }
-          // Remove the empty highlight wrapper
-          highlight.remove();
+          
+          // Remove the highlight wrapper completely
+          const parent = highlight.parentNode;
+          if (parent) {
+            // Move all child nodes out of the highlight wrapper
+            while (highlight.firstChild) {
+              parent.insertBefore(highlight.firstChild, highlight);
+            }
+            // Remove the empty highlight wrapper
+            highlight.remove();
+          }
         }
-      }
-      
-      // Remove from askedTexts Map
-      askedTextsMap.delete(textKey);
-      
-      // Also remove from textToHighlights Map
-      TextSelector.textToHighlights.delete(textKey);
-    });
+        
+        // Remove from askedTexts Map
+        askedTextsMap.delete(textKey);
+        
+        // Also remove from textToHighlights Map
+        TextSelector.textToHighlights.delete(textKey);
+      });
+    }
     
-    console.log('[ButtonPanel] All asked texts removed');
+    // Process simplified texts
+    if (simplifiedTextsMap.size > 0) {
+      const simplifiedTextKeys = Array.from(simplifiedTextsMap.keys());
+      console.log(`[ButtonPanel] Removing ${simplifiedTextKeys.length} simplified texts`);
+      
+      simplifiedTextKeys.forEach(textKey => {
+        const highlight = TextSelector.textToHighlights.get(textKey);
+        
+        if (highlight) {
+          // Remove the book icon button
+          const bookBtn = highlight.querySelector('.vocab-text-book-btn');
+          if (bookBtn) {
+            bookBtn.remove();
+          }
+          
+          // Remove the simplified class (green underline)
+          highlight.classList.remove('vocab-text-simplified');
+          
+          // Remove the highlight wrapper completely
+          const parent = highlight.parentNode;
+          if (parent) {
+            // Move all child nodes out of the highlight wrapper
+            while (highlight.firstChild) {
+              parent.insertBefore(highlight.firstChild, highlight);
+            }
+            // Remove the empty highlight wrapper
+            highlight.remove();
+          }
+        }
+        
+        // Remove from simplifiedTexts Map
+        simplifiedTextsMap.delete(textKey);
+        
+        // Also remove from textToHighlights Map
+        TextSelector.textToHighlights.delete(textKey);
+        
+        // Also remove from textPositions Map
+        TextSelector.textPositions.delete(textKey);
+      });
+    }
+    
+    console.log('[ButtonPanel] All meanings removed');
     
     // Update button states
     this.updateButtonStatesFromSelections();
@@ -3838,6 +4244,14 @@ const ButtonPanel = {
     
     console.log('[ButtonPanel] Processing', textSegments.length, 'text segments');
     
+    // Remove texts from selectedTexts container as API call starts
+    for (const textKey of textKeysToProcess) {
+      TextSelector.selectedTexts.delete(textKey);
+    }
+    
+    // Update button states after removing from selectedTexts
+    this.updateButtonStatesFromSelections();
+    
     // Start loading animation on all selected highlights
     for (const textKey of textKeysToProcess) {
       const highlight = TextSelector.textToHighlights.get(textKey);
@@ -3894,8 +4308,12 @@ const ButtonPanel = {
               textLength: eventData.textLength,
               text: eventData.text,
               simplifiedText: eventData.simplifiedText,
-              previousSimplifiedTexts: eventData.previousSimplifiedTexts || []
+              previousSimplifiedTexts: eventData.previousSimplifiedTexts || [],
+              shouldAllowSimplifyMore: eventData.shouldAllowSimplifyMore || false
             });
+            
+            // Update button states after adding to simplifiedTexts
+            ButtonPanel.updateButtonStatesFromSelections();
             
             console.log('[ButtonPanel] Updated UI for text segment:', matchingTextKey);
           }
@@ -4069,9 +4487,10 @@ const ButtonPanel = {
     const hasTexts = TextSelector.selectedTexts.size > 0;
     const hasExactlyOneText = TextSelector.selectedTexts.size === 1;
     const hasAskedTexts = TextSelector.askedTexts.size > 0;
+    const hasSimplifiedTexts = TextSelector.simplifiedTexts.size > 0;
     
-    // Show "Remove all meanings" if there are any asked texts
-    this.setShowRemoveMeanings(hasAskedTexts);
+    // Show "Remove all meanings" if there are any asked texts OR simplified texts
+    this.setShowRemoveMeanings(hasAskedTexts || hasSimplifiedTexts);
     
     // Show "Deselect all" if there are any words or texts selected
     this.setShowDeselectAll(hasWords || hasTexts);
