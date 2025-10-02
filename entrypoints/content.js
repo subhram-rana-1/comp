@@ -12,6 +12,9 @@ export default defineContentScript({
     // Initialize the button panel when content script loads
     await ButtonPanel.init();
     
+    // Initialize the word selector functionality
+    await WordSelector.init();
+    
     // Listen for storage changes to show/hide panel (per-domain)
     chrome.storage.onChanged.addListener((changes, namespace) => {
       console.log('[Content Script] Storage changed:', changes, 'Namespace:', namespace);
@@ -24,8 +27,12 @@ export default defineContentScript({
           
           if (isEnabled) {
             ButtonPanel.show();
+            WordSelector.enable();
           } else {
             ButtonPanel.hide();
+            WordSelector.disable();
+            // Clear all word selections when toggling off
+            WordSelector.clearAll();
           }
         }
       }
@@ -40,8 +47,12 @@ export default defineContentScript({
         
         if (message.isEnabled) {
           ButtonPanel.show();
+          WordSelector.enable();
         } else {
           ButtonPanel.hide();
+          WordSelector.disable();
+          // Clear all word selections when toggling off
+          WordSelector.clearAll();
         }
         
         sendResponse({ success: true });
@@ -91,6 +102,402 @@ const PositionManager = {
     } catch (error) {
       console.error('Error clearing panel position:', error);
     }
+  }
+};
+
+// ===================================
+// Word Selector Module - Handles word selection and highlighting
+// ===================================
+const WordSelector = {
+  // Use Set for O(1) insertion, deletion, and lookup
+  selectedWords: new Set(),
+  
+  // Map to store word -> Set of highlight elements (for handling multiple instances)
+  wordToHighlights: new Map(),
+  
+  // Track if the feature is enabled
+  isEnabled: false,
+  
+  // Counter for generating unique IDs
+  highlightIdCounter: 0,
+  
+  // Store bound handler for proper cleanup
+  boundDoubleClickHandler: null,
+  
+  /**
+   * Initialize word selector
+   */
+  async init() {
+    console.log('[WordSelector] Initializing...');
+    
+    // Bind the handler once for proper cleanup
+    this.boundDoubleClickHandler = this.handleDoubleClick.bind(this);
+    
+    // Inject styles for word highlights
+    this.injectStyles();
+    
+    // Check if extension is enabled for current domain
+    const isExtensionEnabled = await this.checkExtensionEnabled();
+    
+    if (isExtensionEnabled) {
+      this.enable();
+    }
+    
+    console.log('[WordSelector] Initialized. Enabled:', isExtensionEnabled);
+  },
+  
+  /**
+   * Check if extension is enabled from storage
+   * @returns {Promise<boolean>}
+   */
+  async checkExtensionEnabled() {
+    try {
+      const currentDomain = window.location.hostname;
+      const storageKey = `isExtensionEnabledFor_${currentDomain}`;
+      const result = await chrome.storage.local.get([storageKey]);
+      return result[storageKey] ?? true; // Default to true
+    } catch (error) {
+      console.error('[WordSelector] Error checking extension state:', error);
+      return true;
+    }
+  },
+  
+  /**
+   * Enable word selector
+   */
+  enable() {
+    if (this.isEnabled) return;
+    
+    this.isEnabled = true;
+    document.addEventListener('dblclick', this.boundDoubleClickHandler);
+    console.log('[WordSelector] Enabled');
+  },
+  
+  /**
+   * Disable word selector
+   */
+  disable() {
+    if (!this.isEnabled) return;
+    
+    this.isEnabled = false;
+    document.removeEventListener('dblclick', this.boundDoubleClickHandler);
+    console.log('[WordSelector] Disabled');
+  },
+  
+  /**
+   * Handle double-click event
+   * @param {MouseEvent} event
+   */
+  handleDoubleClick(event) {
+    // CRITICAL: Check if feature is enabled
+    if (!this.isEnabled) {
+      return;
+    }
+    
+    // Don't process clicks on our own UI elements (except highlights)
+    if (event.target.closest('.vocab-helper-panel')) {
+      return;
+    }
+    
+    // Check if clicking on an existing highlight to deselect it
+    const clickedHighlight = event.target.closest('.vocab-word-highlight');
+    if (clickedHighlight) {
+      const word = clickedHighlight.getAttribute('data-word');
+      if (word) {
+        this.removeWord(word);
+        console.log('[WordSelector] Word deselected via double-click:', word);
+      }
+      return;
+    }
+    
+    // Get the selected text
+    const selection = window.getSelection();
+    const selectedText = selection.toString().trim();
+    
+    // Check if a word was selected
+    if (!selectedText || selectedText.length === 0) {
+      return;
+    }
+    
+    // Only process single words (no spaces)
+    if (/\s/.test(selectedText)) {
+      return;
+    }
+    
+    // Get the range and validate
+    if (selection.rangeCount === 0) {
+      return;
+    }
+    
+    const normalizedWord = selectedText.toLowerCase();
+    
+    // Check if word is already selected - if so, deselect it
+    if (this.isWordSelected(normalizedWord)) {
+      this.removeWord(selectedText);
+      selection.removeAllRanges();
+      console.log('[WordSelector] Word deselected:', selectedText);
+      return;
+    }
+    
+    const range = selection.getRangeAt(0);
+    
+    // Add word to selected set (O(1) operation)
+    this.addWord(selectedText);
+    
+    // Highlight the word
+    this.highlightRange(range, selectedText);
+    
+    // Clear the selection
+    selection.removeAllRanges();
+    
+    console.log('[WordSelector] Word selected:', selectedText);
+    console.log('[WordSelector] Total selected words:', this.selectedWords.size);
+  },
+  
+  /**
+   * Check if a word is already selected
+   * @param {string} word - The word to check
+   * @returns {boolean}
+   */
+  isWordSelected(word) {
+    const normalizedWord = word.toLowerCase();
+    return this.selectedWords.has(normalizedWord); // O(1) operation
+  },
+  
+  /**
+   * Add a word to the selected words set
+   * @param {string} word - The word to add
+   */
+  addWord(word) {
+    const normalizedWord = word.toLowerCase();
+    this.selectedWords.add(normalizedWord); // O(1) operation
+  },
+  
+  /**
+   * Remove a word from the selected words set
+   * @param {string} word - The word to remove
+   */
+  removeWord(word) {
+    const normalizedWord = word.toLowerCase();
+    
+    // Get all highlights for this word
+    const highlights = this.wordToHighlights.get(normalizedWord);
+    
+    if (highlights) {
+      // Remove all highlight elements for this word
+      highlights.forEach(highlight => {
+        this.removeHighlight(highlight);
+      });
+      
+      // Clean up the mapping
+      this.wordToHighlights.delete(normalizedWord); // O(1) operation
+    }
+    
+    // Remove from selected words set
+    this.selectedWords.delete(normalizedWord); // O(1) operation
+    
+    console.log('[WordSelector] Word removed:', word);
+    console.log('[WordSelector] Remaining selected words:', this.selectedWords.size);
+  },
+  
+  /**
+   * Highlight a range with a styled span
+   * @param {Range} range - The range to highlight
+   * @param {string} word - The word being highlighted
+   */
+  highlightRange(range, word) {
+    const normalizedWord = word.toLowerCase();
+    
+    // Create highlight wrapper
+    const highlight = document.createElement('span');
+    highlight.className = 'vocab-word-highlight';
+    highlight.setAttribute('data-word', normalizedWord);
+    highlight.setAttribute('data-highlight-id', `highlight-${this.highlightIdCounter++}`);
+    
+    // Wrap the selected range FIRST
+    try {
+      range.surroundContents(highlight);
+    } catch (error) {
+      // If surroundContents fails (e.g., partial selection), use extractContents
+      console.warn('[WordSelector] Could not highlight range:', error);
+      const contents = range.extractContents();
+      highlight.appendChild(contents);
+      range.insertNode(highlight);
+    }
+    
+    // Create and append remove button AFTER wrapping the content
+    const removeBtn = this.createRemoveButton(word);
+    highlight.appendChild(removeBtn);
+    
+    // Store the highlight in our map (O(1) operation)
+    if (!this.wordToHighlights.has(normalizedWord)) {
+      this.wordToHighlights.set(normalizedWord, new Set());
+    }
+    this.wordToHighlights.get(normalizedWord).add(highlight);
+  },
+  
+  /**
+   * Create a remove button for the highlight
+   * @param {string} word - The word this button will remove
+   * @returns {HTMLElement}
+   */
+  createRemoveButton(word) {
+    const btn = document.createElement('button');
+    btn.className = 'vocab-word-remove-btn';
+    btn.setAttribute('aria-label', `Remove highlight for "${word}"`);
+    btn.innerHTML = this.createCloseIcon();
+    
+    // Add click handler
+    btn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      this.removeWord(word);
+    });
+    
+    return btn;
+  },
+  
+  /**
+   * Create close/cross icon SVG - Purple wireframe style
+   * @returns {string} SVG markup
+   */
+  createCloseIcon() {
+    return `
+      <svg width="10" height="10" viewBox="0 0 10 10" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M1 1L9 9M9 1L1 9" stroke="#9527F5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    `;
+  },
+  
+  /**
+   * Remove a highlight element and restore original text
+   * @param {HTMLElement} highlight - The highlight element to remove
+   */
+  removeHighlight(highlight) {
+    const parent = highlight.parentNode;
+    if (!parent) return;
+    
+    // Remove the button first
+    const btn = highlight.querySelector('.vocab-word-remove-btn');
+    if (btn) {
+      btn.remove();
+    }
+    
+    // Move all child nodes back to parent
+    while (highlight.firstChild) {
+      parent.insertBefore(highlight.firstChild, highlight);
+    }
+    
+    // Remove the empty highlight span
+    highlight.remove();
+    
+    // Normalize the parent to merge adjacent text nodes
+    parent.normalize();
+  },
+  
+  /**
+   * Get all selected words
+   * @returns {Set<string>}
+   */
+  getSelectedWords() {
+    return new Set(this.selectedWords); // Return a copy
+  },
+  
+  /**
+   * Clear all selections
+   */
+  clearAll() {
+    // Remove all highlights
+    this.wordToHighlights.forEach((highlights) => {
+      highlights.forEach(highlight => {
+        this.removeHighlight(highlight);
+      });
+    });
+    
+    // Clear data structures (O(1) for Set clear)
+    this.selectedWords.clear();
+    this.wordToHighlights.clear();
+    
+    console.log('[WordSelector] All selections cleared');
+  },
+  
+  /**
+   * Inject CSS styles for word highlights
+   */
+  injectStyles() {
+    const styleId = 'vocab-word-selector-styles';
+    
+    // Check if styles already injected
+    if (document.getElementById(styleId)) {
+      return;
+    }
+    
+    const style = document.createElement('style');
+    style.id = styleId;
+    style.textContent = `
+      /* Word highlight wrapper */
+      .vocab-word-highlight {
+        position: relative;
+        display: inline-block;
+        background-color: rgba(149, 39, 245, 0.15);
+        padding: 2px 6px;
+        border-radius: 6px;
+        transition: background-color 0.2s ease;
+        cursor: pointer;
+        margin: 0 1px;
+      }
+      
+      .vocab-word-highlight:hover {
+        background-color: rgba(149, 39, 245, 0.25);
+      }
+      
+      /* Remove button - Clean cross icon without circle */
+      .vocab-word-remove-btn {
+        position: absolute;
+        top: -6px;
+        right: -6px;
+        width: 12px;
+        height: 12px;
+        background: none;
+        border: none;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        opacity: 0.7;
+        transition: opacity 0.2s ease, transform 0.1s ease;
+        padding: 0;
+        z-index: 999999;
+      }
+      
+      .vocab-word-highlight:hover .vocab-word-remove-btn {
+        opacity: 1;
+      }
+      
+      .vocab-word-remove-btn:hover {
+        transform: scale(1.2);
+        opacity: 1;
+      }
+      
+      .vocab-word-remove-btn:active {
+        transform: scale(0.9);
+      }
+      
+      .vocab-word-remove-btn svg {
+        pointer-events: none;
+        display: block;
+        width: 10px;
+        height: 10px;
+        filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.2));
+      }
+      
+      /* Make sure highlight doesn't interfere with text flow */
+      .vocab-word-highlight * {
+        box-sizing: border-box;
+      }
+    `;
+    
+    document.head.appendChild(style);
   }
 };
 
