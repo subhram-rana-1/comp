@@ -622,11 +622,12 @@ const ButtonPanel = {
         width: fit-content;
         margin-top: -1px;
         box-shadow: 
-          2px 4px 8px rgba(149, 39, 245, 0.2),
-          -2px 4px 8px rgba(149, 39, 245, 0.2),
-          0 4px 6px rgba(149, 39, 245, 0.15);
+          2px 4px 4px rgba(149, 39, 245, 0.15),
+          -2px 4px 4px rgba(149, 39, 245, 0.15),
+          0 4px 3px rgba(149, 39, 245, 0.12);
         border: 1px solid rgba(149, 39, 245, 0.1);
         border-top: none;
+        clip-path: inset(0px -10px -10px -10px);
       }
 
       .vocab-drag-handle:hover {
