@@ -15,6 +15,9 @@ export default defineContentScript({
     // Initialize the word selector functionality
     await WordSelector.init();
     
+    // Initialize the text selector functionality
+    await TextSelector.init();
+    
     // Listen for storage changes to show/hide panel (per-domain)
     chrome.storage.onChanged.addListener((changes, namespace) => {
       console.log('[Content Script] Storage changed:', changes, 'Namespace:', namespace);
@@ -28,11 +31,14 @@ export default defineContentScript({
           if (isEnabled) {
             ButtonPanel.show();
             WordSelector.enable();
+            TextSelector.enable();
           } else {
             ButtonPanel.hide();
             WordSelector.disable();
-            // Clear all word selections when toggling off
+            TextSelector.disable();
+            // Clear all selections when toggling off
             WordSelector.clearAll();
+            TextSelector.clearAll();
           }
         }
       }
@@ -48,11 +54,14 @@ export default defineContentScript({
         if (message.isEnabled) {
           ButtonPanel.show();
           WordSelector.enable();
+          TextSelector.enable();
         } else {
           ButtonPanel.hide();
           WordSelector.disable();
-          // Clear all word selections when toggling off
+          TextSelector.disable();
+          // Clear all selections when toggling off
           WordSelector.clearAll();
+          TextSelector.clearAll();
         }
         
         sendResponse({ success: true });
@@ -440,8 +449,8 @@ const WordSelector = {
         position: relative;
         display: inline-block;
         background-color: rgba(149, 39, 245, 0.15);
-        padding: 2px 6px;
-        border-radius: 6px;
+        padding: 1px 4px;
+        border-radius: 4px;
         transition: background-color 0.2s ease;
         cursor: pointer;
         margin: 0 1px;
@@ -494,6 +503,561 @@ const WordSelector = {
       /* Make sure highlight doesn't interfere with text flow */
       .vocab-word-highlight * {
         box-sizing: border-box;
+      }
+    `;
+    
+    document.head.appendChild(style);
+  }
+};
+
+// ===================================
+// Text Selector Module - Handles text selection and highlighting
+// ===================================
+const TextSelector = {
+  // Use Set for O(1) insertion, deletion, and lookup
+  selectedTexts: new Set(),
+  
+  // Map to store text -> highlight element
+  textToHighlights: new Map(),
+  
+  // Track if the feature is enabled
+  isEnabled: false,
+  
+  // Counter for generating unique IDs
+  highlightIdCounter: 0,
+  
+  // Store bound handler for proper cleanup
+  boundMouseUpHandler: null,
+  
+  /**
+   * Initialize text selector
+   */
+  async init() {
+    console.log('[TextSelector] Initializing...');
+    
+    // Bind the handler once for proper cleanup
+    this.boundMouseUpHandler = this.handleMouseUp.bind(this);
+    
+    // Inject styles for text highlights
+    this.injectStyles();
+    
+    // Check if extension is enabled for current domain
+    const isExtensionEnabled = await this.checkExtensionEnabled();
+    
+    if (isExtensionEnabled) {
+      this.enable();
+    }
+    
+    console.log('[TextSelector] Initialized. Enabled:', isExtensionEnabled);
+  },
+  
+  /**
+   * Check if extension is enabled from storage
+   * @returns {Promise<boolean>}
+   */
+  async checkExtensionEnabled() {
+    try {
+      const currentDomain = window.location.hostname;
+      const storageKey = `isExtensionEnabledFor_${currentDomain}`;
+      const result = await chrome.storage.local.get([storageKey]);
+      return result[storageKey] ?? true; // Default to true
+    } catch (error) {
+      console.error('[TextSelector] Error checking extension state:', error);
+      return true;
+    }
+  },
+  
+  /**
+   * Enable text selector
+   */
+  enable() {
+    if (this.isEnabled) return;
+    
+    this.isEnabled = true;
+    document.addEventListener('mouseup', this.boundMouseUpHandler);
+    console.log('[TextSelector] Enabled');
+  },
+  
+  /**
+   * Disable text selector
+   */
+  disable() {
+    if (!this.isEnabled) return;
+    
+    this.isEnabled = false;
+    document.removeEventListener('mouseup', this.boundMouseUpHandler);
+    console.log('[TextSelector] Disabled');
+  },
+  
+  /**
+   * Handle mouse up event (after text selection)
+   * @param {MouseEvent} event
+   */
+  handleMouseUp(event) {
+    // CRITICAL: Check if feature is enabled
+    if (!this.isEnabled) {
+      return;
+    }
+    
+    // Don't process clicks on our own UI elements
+    if (event.target.closest('.vocab-helper-panel') ||
+        event.target.closest('.vocab-text-highlight') ||
+        event.target.closest('.vocab-word-highlight')) {
+      return;
+    }
+    
+    // Small delay to ensure selection is complete
+    setTimeout(() => {
+      const selection = window.getSelection();
+      const selectedText = selection.toString().trim();
+      
+      // Check if text was selected
+      if (!selectedText || selectedText.length === 0) {
+        return;
+      }
+      
+      // Must have at least one space (to differentiate from single words)
+      // Or be longer than typical word length
+      if (!(/\s/.test(selectedText)) && selectedText.length < 15) {
+        return; // Let WordSelector handle single words
+      }
+      
+      // Check if text has at least 3 words
+      const wordCount = selectedText.split(/\s+/).filter(word => word.length > 0).length;
+      if (wordCount < 3) {
+        console.log('[TextSelector] Not enough words selected:', wordCount);
+        this.showNotification("Select atleast 3 words");
+        selection.removeAllRanges();
+        return;
+      }
+      
+      // Get the range and validate
+      if (selection.rangeCount === 0) {
+        return;
+      }
+      
+      const range = selection.getRangeAt(0);
+      
+      // Check if this exact text is already selected
+      const textKey = this.getTextKey(selectedText);
+      if (this.selectedTexts.has(textKey)) {
+        console.log('[TextSelector] Text already selected');
+        selection.removeAllRanges();
+        return;
+      }
+      
+      // Check if the range overlaps with any existing highlight (text or words)
+      if (this.hasOverlap(range)) {
+        console.log('[TextSelector] Selection overlaps with existing highlight');
+        this.showNotification("Can't select an already selected text");
+        selection.removeAllRanges();
+        return;
+      }
+      
+      // Add text to selected set (O(1) operation)
+      this.addText(selectedText);
+      
+      // Highlight the text
+      this.highlightRange(range, selectedText);
+      
+      // Clear the selection
+      selection.removeAllRanges();
+      
+      console.log('[TextSelector] Text selected:', selectedText.substring(0, 50) + '...');
+      console.log('[TextSelector] Total selected texts:', this.selectedTexts.size);
+    }, 10);
+  },
+  
+  /**
+   * Check if a range overlaps with any existing text highlights
+   * (Word selections and text selections are independent)
+   * @param {Range} range - The range to check
+   * @returns {boolean} True if overlap detected
+   */
+  hasOverlap(range) {
+    // Get all existing text highlight elements (only check text, not words)
+    const existingTextHighlights = document.querySelectorAll('.vocab-text-highlight');
+    
+    for (const highlight of existingTextHighlights) {
+      // Create a range for the existing highlight
+      const highlightRange = document.createRange();
+      try {
+        highlightRange.selectNodeContents(highlight);
+        
+        // Check if ranges intersect
+        // Ranges overlap if: (start1 < end2) AND (start2 < end1)
+        const rangesIntersect = 
+          range.compareBoundaryPoints(Range.START_TO_END, highlightRange) > 0 &&
+          range.compareBoundaryPoints(Range.END_TO_START, highlightRange) < 0;
+        
+        if (rangesIntersect) {
+          return true; // Overlap detected
+        }
+      } catch (error) {
+        console.warn('[TextSelector] Error checking text highlight overlap:', error);
+      }
+    }
+    
+    return false; // No overlap
+  },
+  
+  /**
+   * Show notification banner at top right corner
+   * @param {string} message - Message to display
+   */
+  showNotification(message) {
+    // Check if notification already exists
+    const existingNotification = document.getElementById('vocab-text-selector-notification');
+    if (existingNotification) {
+      existingNotification.remove();
+    }
+    
+    // Create notification element
+    const notification = document.createElement('div');
+    notification.id = 'vocab-text-selector-notification';
+    notification.className = 'vocab-notification';
+    
+    // Create close button
+    const closeBtn = document.createElement('button');
+    closeBtn.className = 'vocab-notification-close';
+    closeBtn.setAttribute('aria-label', 'Close notification');
+    closeBtn.innerHTML = `
+      <svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M9 3L3 9M3 3l6 6" stroke="#9527F5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    `;
+    
+    // Close button click handler
+    closeBtn.addEventListener('click', () => {
+      notification.classList.remove('visible');
+      setTimeout(() => {
+        notification.remove();
+      }, 300);
+    });
+    
+    // Create message text
+    const messageText = document.createElement('span');
+    messageText.className = 'vocab-notification-message';
+    messageText.textContent = message;
+    
+    // Append close button and message
+    notification.appendChild(closeBtn);
+    notification.appendChild(messageText);
+    
+    // Add to body
+    document.body.appendChild(notification);
+    
+    // Trigger animation
+    setTimeout(() => {
+      notification.classList.add('visible');
+    }, 10);
+    
+    // Auto-dismiss after 3 seconds
+    setTimeout(() => {
+      notification.classList.remove('visible');
+      setTimeout(() => {
+        notification.remove();
+      }, 300);
+    }, 3000);
+  },
+  
+  /**
+   * Get a unique key for the text (normalized)
+   * @param {string} text - The text
+   * @returns {string}
+   */
+  getTextKey(text) {
+    return text.toLowerCase().replace(/\s+/g, ' ').trim();
+  },
+  
+  /**
+   * Add a text to the selected texts set
+   * @param {string} text - The text to add
+   */
+  addText(text) {
+    const textKey = this.getTextKey(text);
+    this.selectedTexts.add(textKey); // O(1) operation
+  },
+  
+  /**
+   * Remove a text from the selected texts set
+   * @param {string} text - The text to remove
+   */
+  removeText(text) {
+    const textKey = this.getTextKey(text);
+    
+    // Get the highlight for this text
+    const highlight = this.textToHighlights.get(textKey);
+    
+    if (highlight) {
+      // Remove highlight element
+      this.removeHighlight(highlight);
+      
+      // Clean up the mapping
+      this.textToHighlights.delete(textKey); // O(1) operation
+    }
+    
+    // Remove from selected texts set
+    this.selectedTexts.delete(textKey); // O(1) operation
+    
+    console.log('[TextSelector] Text removed');
+    console.log('[TextSelector] Remaining selected texts:', this.selectedTexts.size);
+  },
+  
+  /**
+   * Highlight a range with a styled span
+   * @param {Range} range - The range to highlight
+   * @param {string} text - The text being highlighted
+   */
+  highlightRange(range, text) {
+    const textKey = this.getTextKey(text);
+    
+    // Create highlight wrapper
+    const highlight = document.createElement('span');
+    highlight.className = 'vocab-text-highlight';
+    highlight.setAttribute('data-text-key', textKey);
+    highlight.setAttribute('data-highlight-id', `text-highlight-${this.highlightIdCounter++}`);
+    
+    // Wrap the selected range FIRST
+    try {
+      range.surroundContents(highlight);
+    } catch (error) {
+      // If surroundContents fails (e.g., partial selection), use extractContents
+      console.warn('[TextSelector] Could not highlight range:', error);
+      const contents = range.extractContents();
+      highlight.appendChild(contents);
+      range.insertNode(highlight);
+    }
+    
+    // Create and append remove button AFTER wrapping the content
+    const removeBtn = this.createRemoveButton(text);
+    highlight.appendChild(removeBtn);
+    
+    // Store the highlight in our map (O(1) operation)
+    this.textToHighlights.set(textKey, highlight);
+  },
+  
+  /**
+   * Create a remove button for the highlight
+   * @param {string} text - The text this button will remove
+   * @returns {HTMLElement}
+   */
+  createRemoveButton(text) {
+    const btn = document.createElement('button');
+    btn.className = 'vocab-text-remove-btn';
+    btn.setAttribute('aria-label', `Remove highlight for selected text`);
+    btn.innerHTML = this.createCloseIcon();
+    
+    // Add click handler
+    btn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      this.removeText(text);
+    });
+    
+    return btn;
+  },
+  
+  /**
+   * Create close/cross icon SVG - White cross on purple background
+   * @returns {string} SVG markup
+   */
+  createCloseIcon() {
+    return `
+      <svg width="10" height="10" viewBox="0 0 10 10" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M2 2L8 8M8 2L2 8" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    `;
+  },
+  
+  /**
+   * Remove a highlight element and restore original text
+   * @param {HTMLElement} highlight - The highlight element to remove
+   */
+  removeHighlight(highlight) {
+    const parent = highlight.parentNode;
+    if (!parent) return;
+    
+    // Remove the button first
+    const btn = highlight.querySelector('.vocab-text-remove-btn');
+    if (btn) {
+      btn.remove();
+    }
+    
+    // Move all child nodes back to parent
+    while (highlight.firstChild) {
+      parent.insertBefore(highlight.firstChild, highlight);
+    }
+    
+    // Remove the empty highlight span
+    highlight.remove();
+    
+    // Normalize the parent to merge adjacent text nodes
+    parent.normalize();
+  },
+  
+  /**
+   * Get all selected texts
+   * @returns {Set<string>}
+   */
+  getSelectedTexts() {
+    return new Set(this.selectedTexts); // Return a copy
+  },
+  
+  /**
+   * Clear all selections
+   */
+  clearAll() {
+    // Remove all highlights
+    this.textToHighlights.forEach((highlight) => {
+      this.removeHighlight(highlight);
+    });
+    
+    // Clear data structures (O(1) for Set clear)
+    this.selectedTexts.clear();
+    this.textToHighlights.clear();
+    
+    console.log('[TextSelector] All selections cleared');
+  },
+  
+  /**
+   * Inject CSS styles for text highlights
+   */
+  injectStyles() {
+    const styleId = 'vocab-text-selector-styles';
+    
+    // Check if styles already injected
+    if (document.getElementById(styleId)) {
+      return;
+    }
+    
+    const style = document.createElement('style');
+    style.id = styleId;
+    style.textContent = `
+      /* Text highlight wrapper - Dashed underline that works across paragraphs */
+      .vocab-text-highlight {
+        position: relative;
+        text-decoration-line: underline;
+        text-decoration-style: dashed;
+        text-decoration-color: #9527F5;
+        text-decoration-thickness: 1px;
+        text-underline-offset: 2px;
+        cursor: text;
+      }
+      
+      /* For block-level elements inside highlight, maintain underline */
+      .vocab-text-highlight * {
+        text-decoration: inherit;
+        box-sizing: border-box;
+      }
+      
+      /* Remove button - Solid purple circle with white cross on top-left */
+      .vocab-text-remove-btn {
+        position: absolute;
+        top: -6px;
+        left: -6px;
+        width: 14px;
+        height: 14px;
+        background: #9527F5;
+        border: none;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        opacity: 0.9;
+        transition: opacity 0.2s ease, transform 0.1s ease, background-color 0.2s ease;
+        padding: 0;
+        z-index: 999999;
+        box-shadow: 0 2px 4px rgba(149, 39, 245, 0.4);
+      }
+      
+      .vocab-text-highlight:hover .vocab-text-remove-btn {
+        opacity: 1;
+      }
+      
+      .vocab-text-remove-btn:hover {
+        transform: scale(1.15);
+        opacity: 1;
+        background: #7a1fd9;
+      }
+      
+      .vocab-text-remove-btn:active {
+        transform: scale(0.95);
+      }
+      
+      .vocab-text-remove-btn svg {
+        pointer-events: none;
+        display: block;
+        width: 8px;
+        height: 8px;
+      }
+      
+      /* Notification banner at top right */
+      .vocab-notification {
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        background: white;
+        color: #9527F5;
+        padding: 12px 40px 12px 20px;
+        border-radius: 12px;
+        border: 1px solid #9527F5;
+        font-size: 14px;
+        font-weight: 500;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+        box-shadow: 0 4px 12px rgba(149, 39, 245, 0.3);
+        z-index: 9999999;
+        opacity: 0;
+        transform: translateX(400px);
+        transition: opacity 0.3s ease, transform 0.3s ease;
+        pointer-events: all;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+      
+      .vocab-notification.visible {
+        opacity: 1;
+        transform: translateX(0);
+      }
+      
+      /* Close button inside notification */
+      .vocab-notification-close {
+        position: absolute;
+        left: 8px;
+        top: 50%;
+        transform: translateY(-50%);
+        width: 20px;
+        height: 20px;
+        background: none;
+        border: none;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        opacity: 0.6;
+        transition: opacity 0.2s ease, transform 0.1s ease;
+        padding: 0;
+      }
+      
+      .vocab-notification-close:hover {
+        opacity: 1;
+        transform: translateY(-50%) scale(1.1);
+      }
+      
+      .vocab-notification-close:active {
+        transform: translateY(-50%) scale(0.9);
+      }
+      
+      .vocab-notification-close svg {
+        pointer-events: none;
+        display: block;
+      }
+      
+      /* Notification message text */
+      .vocab-notification-message {
+        margin-left: 24px;
       }
     `;
     
