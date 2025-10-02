@@ -18,6 +18,9 @@ export default defineContentScript({
     // Initialize the text selector functionality
     await TextSelector.init();
     
+    // Initialize the chat dialog
+    ChatDialog.init();
+    
     // Listen for storage changes to show/hide panel (per-domain)
     chrome.storage.onChanged.addListener((changes, namespace) => {
       console.log('[Content Script] Storage changed:', changes, 'Namespace:', namespace);
@@ -528,6 +531,9 @@ const TextSelector = {
   // Map to store text -> highlight element
   textToHighlights: new Map(),
   
+  // Container for texts that have been asked (moved from selectedTexts)
+  askedTexts: new Map(), // Map of textKey -> {text, textKey, highlight}
+  
   // Track if the feature is enabled
   isEnabled: false,
   
@@ -937,6 +943,152 @@ const TextSelector = {
   },
   
   /**
+   * Move text from selectedTexts to askedTexts
+   * @param {string} textKey - The text key
+   * @returns {boolean} Success status
+   */
+  moveToAskedTexts(textKey) {
+    const highlight = this.textToHighlights.get(textKey);
+    
+    if (!highlight) {
+      console.warn('[TextSelector] No highlight found for textKey:', textKey);
+      return false;
+    }
+    
+    // Get the original text
+    const originalText = highlight.textContent.replace(/\s+/g, ' ').trim();
+    
+    // Remove from selectedTexts
+    this.selectedTexts.delete(textKey);
+    
+    // Move to askedTexts
+    this.askedTexts.set(textKey, {
+      text: originalText,
+      textKey: textKey,
+      highlight: highlight
+    });
+    
+    // Remove existing button (purple cross)
+    const existingBtn = highlight.querySelector('.vocab-text-remove-btn');
+    if (existingBtn) {
+      existingBtn.remove();
+    }
+    
+    // Remove underline by changing text-decoration to none
+    highlight.style.textDecoration = 'none';
+    
+    // Add chat icon button (green color)
+    const chatBtn = this.createChatButton(textKey, true); // true = green color
+    highlight.appendChild(chatBtn);
+    
+    // Pulsate the text once with green color
+    this.pulsateText(highlight, true); // true = green pulsate
+    
+    // Update button states
+    ButtonPanel.updateButtonStatesFromSelections();
+    
+    console.log('[TextSelector] Text moved to askedTexts:', textKey);
+    return true;
+  },
+  
+  /**
+   * Remove text from askedTexts and restore to normal
+   * @param {string} textKey - The text key
+   */
+  removeFromAskedTexts(textKey) {
+    const askedData = this.askedTexts.get(textKey);
+    
+    if (!askedData) {
+      console.warn('[TextSelector] No asked text found for textKey:', textKey);
+      return;
+    }
+    
+    const highlight = askedData.highlight;
+    
+    // Remove chat button
+    const chatBtn = highlight.querySelector('.vocab-text-chat-btn');
+    if (chatBtn) {
+      chatBtn.remove();
+    }
+    
+    // Remove highlight completely
+    this.removeHighlight(highlight);
+    
+    // Remove from askedTexts
+    this.askedTexts.delete(textKey);
+    
+    console.log('[TextSelector] Text removed from askedTexts:', textKey);
+  },
+  
+  /**
+   * Create a chat button for the highlight
+   * @param {string} textKey - The text key
+   * @param {boolean} isGreen - Whether to use green color (default: false for purple)
+   * @returns {HTMLElement}
+   */
+  createChatButton(textKey, isGreen = false) {
+    const btn = document.createElement('button');
+    btn.className = isGreen ? 'vocab-text-chat-btn vocab-text-chat-btn-green' : 'vocab-text-chat-btn';
+    btn.setAttribute('aria-label', 'Open chat');
+    btn.innerHTML = this.createChatIcon(isGreen);
+    
+    // Add click handler
+    btn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      
+      // Get text from askedTexts or textToHighlights
+      const askedData = this.askedTexts.get(textKey);
+      const highlight = askedData ? askedData.highlight : this.textToHighlights.get(textKey);
+      
+      if (highlight) {
+        // Use green pulsate if it's a green icon (from askedTexts)
+        this.pulsateText(highlight, isGreen);
+        
+        // Open chat dialog
+        const originalText = highlight.textContent.replace(/\s+/g, ' ').trim();
+        ChatDialog.open(originalText, textKey);
+      }
+    });
+    
+    return btn;
+  },
+  
+  /**
+   * Create chat icon SVG - Solid circle with white chat icon (bigger)
+   * @param {boolean} isGreen - Whether to use green color (default: false for purple)
+   * @returns {string} SVG markup
+   */
+  createChatIcon(isGreen = false) {
+    const color = isGreen ? '#22c55e' : '#9527F5';
+    return `
+      <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="10" cy="10" r="9" fill="${color}"/>
+        <path d="M10 5C7.239 5 5 6.959 5 9.375C5 10.681 5.494 11.9 6.348 12.856L5.244 14.746C5.164 14.89 5.164 15.069 5.244 15.214C5.325 15.358 5.499 15.451 5.681 15.451C5.741 15.451 5.801 15.439 5.858 15.415L8.071 14.464C8.904 14.656 9.818 14.75 10.75 14.75C13.511 14.75 15.75 12.791 15.75 10.375C15.75 7.959 13.511 5 10 5Z" fill="white"/>
+        <circle cx="7.5" cy="9.75" r="1" fill="${color}"/>
+        <circle cx="10" cy="9.75" r="1" fill="${color}"/>
+        <circle cx="12.5" cy="9.75" r="1" fill="${color}"/>
+      </svg>
+    `;
+  },
+  
+  /**
+   * Pulsate text highlight with color (green for asked texts, purple for selected)
+   * @param {HTMLElement} highlight - The highlight element
+   * @param {boolean} isGreen - Whether to use green color (default: false for purple)
+   */
+  pulsateText(highlight, isGreen = false) {
+    // Add appropriate pulsate class
+    const className = isGreen ? 'vocab-text-pulsate-green' : 'vocab-text-pulsate';
+    highlight.classList.add(className);
+    
+    // Remove class after animation completes (0.6s)
+    setTimeout(() => {
+      highlight.classList.remove(className);
+    }, 600);
+  },
+  
+  /**
    * Inject CSS styles for text highlights
    */
   injectStyles() {
@@ -1007,6 +1159,80 @@ const TextSelector = {
         display: block;
         width: 8px;
         height: 8px;
+      }
+      
+      /* Chat button - Solid purple circle with white chat icon on top-left (bigger) */
+      .vocab-text-chat-btn {
+        position: absolute;
+        top: -10px;
+        left: -10px;
+        width: 20px;
+        height: 20px;
+        background: transparent;
+        border: none;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        opacity: 0.95;
+        transition: opacity 0.2s ease, transform 0.1s ease;
+        padding: 0;
+        z-index: 999999;
+      }
+      
+      .vocab-text-highlight:hover .vocab-text-chat-btn {
+        opacity: 1;
+      }
+      
+      .vocab-text-chat-btn:hover {
+        transform: scale(1.15);
+        opacity: 1;
+      }
+      
+      .vocab-text-chat-btn:active {
+        transform: scale(0.95);
+      }
+      
+      .vocab-text-chat-btn svg {
+        pointer-events: none;
+        display: block;
+        width: 20px;
+        height: 20px;
+      }
+      
+      /* Pulsate animation for text highlights - light purple */
+      @keyframes vocab-text-pulsate {
+        0% {
+          background-color: transparent;
+        }
+        50% {
+          background-color: rgba(149, 39, 245, 0.25);
+        }
+        100% {
+          background-color: transparent;
+        }
+      }
+      
+      .vocab-text-pulsate {
+        animation: vocab-text-pulsate 0.6s ease-in-out;
+      }
+      
+      /* Pulsate animation for text highlights - light green */
+      @keyframes vocab-text-pulsate-green {
+        0% {
+          background-color: transparent;
+        }
+        50% {
+          background-color: rgba(34, 197, 94, 0.25);
+        }
+        100% {
+          background-color: transparent;
+        }
+      }
+      
+      .vocab-text-pulsate-green {
+        animation: vocab-text-pulsate-green 0.6s ease-in-out;
       }
       
       /* Notification banner at top right */
@@ -1266,6 +1492,1077 @@ const DragHandle = {
   removeAllTooltips() {
     const tooltips = document.querySelectorAll('.vocab-btn-tooltip');
     tooltips.forEach(tooltip => tooltip.remove());
+  }
+};
+
+// ===================================
+// Chat Dialog Module - Manages the chat popup interface
+// ===================================
+const ChatDialog = {
+  dialogContainer: null,
+  isOpen: false,
+  currentText: null,
+  currentTextKey: null,
+  chatHistory: [],
+  
+  /**
+   * Initialize chat dialog
+   */
+  init() {
+    console.log('[ChatDialog] Initializing...');
+    this.injectStyles();
+  },
+  
+  /**
+   * Open chat dialog with selected text
+   * @param {string} text - The selected text
+   * @param {string} textKey - The text key for identification
+   */
+  open(text, textKey) {
+    // If dialog is already open, close it first
+    if (this.isOpen) {
+      this.close();
+      // Wait for close animation to complete
+      setTimeout(() => {
+        this.openDialog(text, textKey);
+      }, 350);
+    } else {
+      this.openDialog(text, textKey);
+    }
+  },
+  
+  /**
+   * Internal method to open dialog
+   * @param {string} text - The selected text
+   * @param {string} textKey - The text key for identification
+   */
+  openDialog(text, textKey) {
+    this.currentText = text;
+    this.currentTextKey = textKey;
+    this.chatHistory = [];
+    
+    this.createDialog();
+    this.show();
+    
+    console.log('[ChatDialog] Opened for text:', text.substring(0, 50) + '...');
+  },
+  
+  /**
+   * Close chat dialog
+   */
+  close() {
+    if (!this.isOpen) return;
+    
+    this.hide();
+    
+    // Keep the chat icon on the text (don't remove it)
+    // The text should remain in askedTexts container
+    
+    setTimeout(() => {
+      if (this.dialogContainer) {
+        this.dialogContainer.remove();
+        this.dialogContainer = null;
+      }
+    }, 300); // Wait for slide-out animation
+    
+    this.isOpen = false;
+    this.currentText = null;
+    this.currentTextKey = null;
+    this.chatHistory = [];
+    
+    console.log('[ChatDialog] Closed');
+  },
+  
+  /**
+   * Create dialog DOM structure
+   */
+  createDialog() {
+    // Create main container
+    this.dialogContainer = document.createElement('div');
+    this.dialogContainer.id = 'vocab-chat-dialog';
+    this.dialogContainer.className = 'vocab-chat-dialog';
+    
+    // Create dialog content
+    const dialogContent = document.createElement('div');
+    dialogContent.className = 'vocab-chat-content';
+    
+    // Create collapse button
+    const collapseBtn = document.createElement('button');
+    collapseBtn.className = 'vocab-chat-collapse-btn';
+    collapseBtn.setAttribute('aria-label', 'Close chat');
+    collapseBtn.innerHTML = this.createCollapseIcon();
+    collapseBtn.addEventListener('click', () => this.close());
+    
+    // Create tabs
+    const tabsContainer = this.createTabs();
+    
+    // Create content area
+    const contentArea = document.createElement('div');
+    contentArea.className = 'vocab-chat-content-area';
+    
+    // Create original text content (hidden by default)
+    const originalTextContent = this.createOriginalTextContent();
+    
+    // Create ask/chat content (visible by default)
+    const askContent = this.createAskContent();
+    
+    contentArea.appendChild(originalTextContent);
+    contentArea.appendChild(askContent);
+    
+    // Create input area
+    const inputArea = this.createInputArea();
+    
+    // Create resize handles
+    const resizeHandles = this.createResizeHandles();
+    
+    // Assemble dialog
+    dialogContent.appendChild(collapseBtn);
+    dialogContent.appendChild(tabsContainer);
+    dialogContent.appendChild(contentArea);
+    dialogContent.appendChild(inputArea);
+    
+    this.dialogContainer.appendChild(dialogContent);
+    this.dialogContainer.appendChild(resizeHandles.left);
+    this.dialogContainer.appendChild(resizeHandles.bottom);
+    this.dialogContainer.appendChild(resizeHandles.bottomLeft);
+    
+    document.body.appendChild(this.dialogContainer);
+    
+    // Initialize resize functionality
+    this.initResize();
+  },
+  
+  /**
+   * Create resize handles
+   */
+  createResizeHandles() {
+    const leftHandle = document.createElement('div');
+    leftHandle.className = 'vocab-chat-resize-handle vocab-chat-resize-left';
+    
+    const bottomHandle = document.createElement('div');
+    bottomHandle.className = 'vocab-chat-resize-handle vocab-chat-resize-bottom';
+    
+    const bottomLeftHandle = document.createElement('div');
+    bottomLeftHandle.className = 'vocab-chat-resize-handle vocab-chat-resize-bottom-left';
+    
+    return {
+      left: leftHandle,
+      bottom: bottomHandle,
+      bottomLeft: bottomLeftHandle
+    };
+  },
+  
+  /**
+   * Initialize resize functionality
+   */
+  initResize() {
+    let isResizing = false;
+    let resizeType = null;
+    let startX = 0;
+    let startY = 0;
+    let startWidth = 0;
+    let startHeight = 0;
+    
+    const startResize = (e, type) => {
+      isResizing = true;
+      resizeType = type;
+      startX = e.clientX;
+      startY = e.clientY;
+      
+      const rect = this.dialogContainer.getBoundingClientRect();
+      startWidth = rect.width;
+      startHeight = rect.height;
+      
+      e.preventDefault();
+      document.body.style.userSelect = 'none';
+    };
+    
+    const resize = (e) => {
+      if (!isResizing) return;
+      
+      const deltaX = startX - e.clientX; // Inverted for right-side panel
+      const deltaY = e.clientY - startY;
+      
+      if (resizeType === 'left' || resizeType === 'bottom-left') {
+        const newWidth = Math.max(300, Math.min(800, startWidth + deltaX));
+        this.dialogContainer.style.width = `${newWidth}px`;
+      }
+      
+      if (resizeType === 'bottom' || resizeType === 'bottom-left') {
+        const newHeight = Math.max(400, Math.min(window.innerHeight * 0.9, startHeight + deltaY));
+        this.dialogContainer.style.height = `${newHeight}px`;
+      }
+    };
+    
+    const stopResize = () => {
+      if (!isResizing) return;
+      
+      isResizing = false;
+      resizeType = null;
+      document.body.style.userSelect = '';
+    };
+    
+    // Attach event listeners to resize handles
+    const leftHandle = this.dialogContainer.querySelector('.vocab-chat-resize-left');
+    const bottomHandle = this.dialogContainer.querySelector('.vocab-chat-resize-bottom');
+    const bottomLeftHandle = this.dialogContainer.querySelector('.vocab-chat-resize-bottom-left');
+    
+    leftHandle.addEventListener('mousedown', (e) => startResize(e, 'left'));
+    bottomHandle.addEventListener('mousedown', (e) => startResize(e, 'bottom'));
+    bottomLeftHandle.addEventListener('mousedown', (e) => startResize(e, 'bottom-left'));
+    
+    document.addEventListener('mousemove', resize);
+    document.addEventListener('mouseup', stopResize);
+  },
+  
+  /**
+   * Create tabs section
+   */
+  createTabs() {
+    const tabsContainer = document.createElement('div');
+    tabsContainer.className = 'vocab-chat-tabs';
+    
+    const originalTextTab = document.createElement('button');
+    originalTextTab.className = 'vocab-chat-tab';
+    originalTextTab.setAttribute('data-tab', 'original-text');
+    originalTextTab.textContent = 'ORIGINAL TEXT';
+    originalTextTab.addEventListener('click', () => this.switchTab('original-text'));
+    
+    const askTab = document.createElement('button');
+    askTab.className = 'vocab-chat-tab active';
+    askTab.setAttribute('data-tab', 'ask');
+    askTab.textContent = 'CHAT';
+    askTab.addEventListener('click', () => this.switchTab('ask'));
+    
+    // Create sliding indicator
+    const indicator = document.createElement('div');
+    indicator.className = 'vocab-chat-tab-indicator';
+    indicator.id = 'vocab-chat-tab-indicator';
+    
+    tabsContainer.appendChild(originalTextTab);
+    tabsContainer.appendChild(askTab);
+    tabsContainer.appendChild(indicator);
+    
+    // Set initial indicator position after a brief delay to let tabs render
+    setTimeout(() => {
+      this.updateIndicatorPosition();
+    }, 50);
+    
+    return tabsContainer;
+  },
+  
+  /**
+   * Create original text content
+   */
+  createOriginalTextContent() {
+    const content = document.createElement('div');
+    content.className = 'vocab-chat-tab-content';
+    content.setAttribute('data-content', 'original-text');
+    content.style.display = 'none';
+    
+    const textDisplay = document.createElement('div');
+    textDisplay.className = 'vocab-chat-original-text';
+    textDisplay.textContent = this.currentText || '';
+    
+    content.appendChild(textDisplay);
+    
+    return content;
+  },
+  
+  /**
+   * Create ask/chat content
+   */
+  createAskContent() {
+    const content = document.createElement('div');
+    content.className = 'vocab-chat-tab-content active';
+    content.setAttribute('data-content', 'ask');
+    
+    // Create chat messages container
+    const chatContainer = document.createElement('div');
+    chatContainer.className = 'vocab-chat-messages';
+    chatContainer.id = 'vocab-chat-messages';
+    
+    // Show "Ask your doubt" message
+    const noChatsMsg = document.createElement('div');
+    noChatsMsg.className = 'vocab-chat-no-messages';
+    noChatsMsg.innerHTML = `
+      <div class="vocab-chat-no-messages-content">
+        ${this.createChatEmptyIcon()}
+        <span>Ask your doubt</span>
+      </div>
+    `;
+    chatContainer.appendChild(noChatsMsg);
+    
+    content.appendChild(chatContainer);
+    
+    return content;
+  },
+  
+  /**
+   * Create input area
+   */
+  createInputArea() {
+    const inputArea = document.createElement('div');
+    inputArea.className = 'vocab-chat-input-area';
+    
+    const inputField = document.createElement('textarea');
+    inputField.className = 'vocab-chat-input';
+    inputField.id = 'vocab-chat-input';
+    inputField.placeholder = 'Type your question here ...';
+    inputField.rows = 1;
+    
+    // Auto-resize textarea
+    inputField.addEventListener('input', (e) => {
+      e.target.style.height = 'auto';
+      e.target.style.height = Math.min(e.target.scrollHeight, 120) + 'px';
+    });
+    
+    // Handle Enter key (Shift+Enter for new line)
+    inputField.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        this.sendMessage();
+      }
+    });
+    
+    // Create delete button
+    const deleteBtn = document.createElement('button');
+    deleteBtn.className = 'vocab-chat-delete-conversation-btn';
+    deleteBtn.id = 'vocab-chat-delete-conversation-btn';
+    deleteBtn.setAttribute('aria-label', 'Delete conversation');
+    deleteBtn.title = 'Delete conversation';
+    deleteBtn.innerHTML = this.createTrashIcon();
+    deleteBtn.style.display = 'none'; // Hidden by default
+    deleteBtn.addEventListener('click', () => this.deleteConversation());
+    
+    const sendBtn = document.createElement('button');
+    sendBtn.className = 'vocab-chat-send-btn';
+    sendBtn.setAttribute('aria-label', 'Send message');
+    sendBtn.innerHTML = this.createSendIcon();
+    sendBtn.addEventListener('click', () => this.sendMessage());
+    
+    inputArea.appendChild(inputField);
+    inputArea.appendChild(sendBtn);
+    inputArea.appendChild(deleteBtn);
+    
+    return inputArea;
+  },
+  
+  /**
+   * Switch between tabs
+   * @param {string} tabName - Tab name ('original-text' or 'ask')
+   */
+  switchTab(tabName) {
+    // Update tab buttons
+    const tabs = this.dialogContainer.querySelectorAll('.vocab-chat-tab');
+    tabs.forEach(tab => {
+      if (tab.getAttribute('data-tab') === tabName) {
+        tab.classList.add('active');
+      } else {
+        tab.classList.remove('active');
+      }
+    });
+    
+    // Update indicator position
+    this.updateIndicatorPosition();
+    
+    // Update content areas with sliding animation
+    const contents = this.dialogContainer.querySelectorAll('.vocab-chat-tab-content');
+    contents.forEach(content => {
+      if (content.getAttribute('data-content') === tabName) {
+        // Slide in the new content
+        content.style.display = 'flex';
+        content.classList.remove('slide-out-left', 'slide-out-right');
+        content.classList.add('active', 'slide-in');
+        
+        // Remove animation class after animation completes
+        setTimeout(() => {
+          content.classList.remove('slide-in');
+        }, 300);
+      } else {
+        // Slide out the old content
+        content.classList.remove('active', 'slide-in');
+        content.classList.add('slide-out-right');
+        
+        // Hide after animation completes
+        setTimeout(() => {
+          content.style.display = 'none';
+          content.classList.remove('slide-out-right');
+        }, 300);
+      }
+    });
+  },
+  
+  /**
+   * Update indicator position to match active tab
+   */
+  updateIndicatorPosition() {
+    const indicator = document.getElementById('vocab-chat-tab-indicator');
+    if (!indicator) return;
+    
+    const activeTab = this.dialogContainer.querySelector('.vocab-chat-tab.active');
+    if (!activeTab) return;
+    
+    const tabsContainer = activeTab.parentElement;
+    const containerRect = tabsContainer.getBoundingClientRect();
+    const tabRect = activeTab.getBoundingClientRect();
+    
+    // Calculate position relative to container
+    const left = tabRect.left - containerRect.left;
+    const width = tabRect.width;
+    
+    // Update indicator position and width
+    indicator.style.left = `${left}px`;
+    indicator.style.width = `${width}px`;
+  },
+  
+  /**
+   * Send message in chat
+   */
+  sendMessage() {
+    const inputField = document.getElementById('vocab-chat-input');
+    const message = inputField.value.trim();
+    
+    if (!message) return;
+    
+    // Add user message to chat
+    this.addMessageToChat('user', message);
+    
+    // Clear input
+    inputField.value = '';
+    inputField.style.height = 'auto';
+    
+    // TODO: Send to AI backend and get response
+    // For now, add a placeholder response
+    setTimeout(() => {
+      this.addMessageToChat('ai', 'This is a placeholder response. AI integration coming soon!');
+    }, 500);
+    
+    console.log('[ChatDialog] Message sent:', message);
+  },
+  
+  /**
+   * Add message to chat
+   * @param {string} type - 'user' or 'ai'
+   * @param {string} message - Message content
+   */
+  addMessageToChat(type, message) {
+    const chatContainer = document.getElementById('vocab-chat-messages');
+    
+    // Remove "No chats yet" message if exists
+    const noChatsMsg = chatContainer.querySelector('.vocab-chat-no-messages');
+    if (noChatsMsg) {
+      noChatsMsg.remove();
+    }
+    
+    // Create message bubble
+    const messageBubble = document.createElement('div');
+    messageBubble.className = `vocab-chat-message vocab-chat-message-${type}`;
+    
+    const messageContent = document.createElement('div');
+    messageContent.className = 'vocab-chat-message-content';
+    messageContent.textContent = message;
+    
+    messageBubble.appendChild(messageContent);
+    chatContainer.appendChild(messageBubble);
+    
+    // Show global clear button
+    this.updateGlobalClearButton();
+    
+    // Scroll to bottom
+    chatContainer.scrollTop = chatContainer.scrollHeight;
+    
+    // Store in history
+    this.chatHistory.push({ type, message, timestamp: Date.now() });
+  },
+  
+  /**
+   * Clear chat history
+   */
+  clearChat() {
+    const chatContainer = document.getElementById('vocab-chat-messages');
+    chatContainer.innerHTML = '';
+    
+    // Show "No chats yet" message
+    const noChatsMsg = document.createElement('div');
+    noChatsMsg.className = 'vocab-chat-no-messages';
+    noChatsMsg.innerHTML = `
+      <div class="vocab-chat-no-messages-content">
+        ${this.createChatEmptyIcon()}
+        <span>Ask your doubt</span>
+      </div>
+    `;
+    chatContainer.appendChild(noChatsMsg);
+    
+    this.chatHistory = [];
+    
+    // Hide global clear button
+    this.updateGlobalClearButton();
+    
+    console.log('[ChatDialog] Chat cleared');
+  },
+  
+  /**
+   * Update visibility of delete conversation button
+   */
+  updateGlobalClearButton() {
+    const deleteBtn = document.getElementById('vocab-chat-delete-conversation-btn');
+    if (!deleteBtn) return;
+    
+    // Show button only if there are messages
+    if (this.chatHistory.length > 0) {
+      deleteBtn.style.display = 'flex';
+    } else {
+      deleteBtn.style.display = 'none';
+    }
+  },
+  
+  /**
+   * Show dialog
+   */
+  show() {
+    if (this.dialogContainer) {
+      this.isOpen = true;
+      setTimeout(() => {
+        this.dialogContainer.classList.add('visible');
+      }, 10);
+    }
+  },
+  
+  /**
+   * Hide dialog
+   */
+  hide() {
+    if (this.dialogContainer) {
+      this.dialogContainer.classList.remove('visible');
+    }
+  },
+  
+  /**
+   * Create collapse icon (left arrow)
+   */
+  createCollapseIcon() {
+    return `
+      <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M12.5 15L7.5 10L12.5 5" stroke="#9527F5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    `;
+  },
+  
+  /**
+   * Create delete icon
+   */
+  createDeleteIcon() {
+    return `
+      <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M2.25 4.5h13.5M6 4.5V3a1.5 1.5 0 0 1 1.5-1.5h3A1.5 1.5 0 0 1 12 3v1.5m2.25 0v10.5a1.5 1.5 0 0 1-1.5 1.5h-7.5a1.5 1.5 0 0 1-1.5-1.5V4.5h10.5Z" stroke="#ef4444" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M7.5 8.25v4.5M10.5 8.25v4.5" stroke="#ef4444" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    `;
+  },
+  
+  /**
+   * Delete the entire conversation and remove the asked text
+   */
+  deleteConversation() {
+    if (!this.currentTextKey) return;
+    
+    // Close the dialog
+    this.close();
+    
+    // Remove the text from askedTexts and clear the highlight
+    setTimeout(() => {
+      TextSelector.removeFromAskedTexts(this.currentTextKey);
+    }, 300);
+    
+    console.log('[ChatDialog] Conversation deleted');
+  },
+  
+  /**
+   * Create send icon (up arrow) - purple color for wireframe button
+   */
+  createSendIcon() {
+    return `
+      <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M10 15V5M10 5L5 10M10 5L15 10" stroke="#9527F5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    `;
+  },
+  
+  /**
+   * Create trash icon - red color for wireframe button
+   */
+  createTrashIcon() {
+    return `
+      <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M2.25 4.5h13.5M6 4.5V3a1.5 1.5 0 0 1 1.5-1.5h3A1.5 1.5 0 0 1 12 3v1.5m2.25 0v10.5a1.5 1.5 0 0 1-1.5 1.5h-7.5a1.5 1.5 0 0 1-1.5-1.5V4.5h10.5Z" stroke="#ef4444" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M7.5 8.25v4.5M10.5 8.25v4.5" stroke="#ef4444" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    `;
+  },
+  
+  /**
+   * Create chat empty icon (professional purple)
+   */
+  createChatEmptyIcon() {
+    return `
+      <svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <!-- Background Circle -->
+        <circle cx="32" cy="32" r="30" fill="#f3e8ff" stroke="#9527F5" stroke-width="2"/>
+        
+        <!-- Chat Bubble -->
+        <path d="M32 16C22.059 16 14 22.925 14 31.5C14 35.635 15.785 39.44 18.667 42.385L14.879 48.879C14.585 49.464 14.585 50.166 14.879 50.754C15.17 51.339 15.791 51.702 16.451 51.702C16.67 51.702 16.889 51.657 17.099 51.564L24.371 48.133C26.735 48.7 29.281 49 32 49C41.941 49 50 43.075 50 34.5C50 25.925 41.941 16 32 16Z" fill="#9527F5"/>
+        
+        <!-- Message Dots -->
+        <circle cx="24" cy="34.5" r="2" fill="white"/>
+        <circle cx="32" cy="34.5" r="2" fill="white"/>
+        <circle cx="40" cy="34.5" r="2" fill="white"/>
+        
+        <!-- Decorative Elements -->
+        <circle cx="46" cy="20" r="3" fill="#D097FF" opacity="0.6"/>
+        <circle cx="18" cy="18" r="2" fill="#D097FF" opacity="0.4"/>
+        <circle cx="48" cy="46" r="2.5" fill="#D097FF" opacity="0.5"/>
+      </svg>
+    `;
+  },
+  
+  /**
+   * Inject styles for chat dialog
+   */
+  injectStyles() {
+    const styleId = 'vocab-chat-dialog-styles';
+    
+    if (document.getElementById(styleId)) {
+      return;
+    }
+    
+    const style = document.createElement('style');
+    style.id = styleId;
+    style.textContent = `
+      /* Chat Dialog Container */
+      .vocab-chat-dialog {
+        position: fixed;
+        right: 0;
+        top: 50%;
+        transform: translateY(-50%) translateX(100%);
+        width: 400px;
+        max-width: 90vw;
+        height: 600px;
+        max-height: 80vh;
+        z-index: 1000000;
+        transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      }
+      
+      .vocab-chat-dialog.visible {
+        transform: translateY(-50%) translateX(0);
+      }
+      
+      /* Dialog Content */
+      .vocab-chat-content {
+        background: white;
+        height: 100%;
+        border-radius: 16px 0 0 16px;
+        box-shadow: -4px 0 24px rgba(149, 39, 245, 0.2), -2px 0 12px rgba(149, 39, 245, 0.1);
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        position: relative;
+      }
+      
+      /* Collapse Button */
+      .vocab-chat-collapse-btn {
+        position: absolute;
+        top: 16px;
+        left: 16px;
+        width: 32px;
+        height: 32px;
+        background: white;
+        border: 1px solid #e5e7eb;
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        z-index: 10;
+        transition: all 0.2s ease;
+        margin-bottom: 8px;
+      }
+      
+      .vocab-chat-collapse-btn:hover {
+        background: #f9fafb;
+        border-color: #9527F5;
+      }
+      
+      /* Flip collapse icon when dialog is visible */
+      .vocab-chat-dialog.visible .vocab-chat-collapse-btn svg {
+        transform: scaleX(-1);
+      }
+      
+      
+      /* Tabs */
+      .vocab-chat-tabs {
+        display: flex;
+        gap: 0;
+        padding: 12px 60px 0px 60px;
+        border-bottom: 1px solid #e5e7eb;
+        width: 100%;
+        box-sizing: border-box;
+        position: relative;
+      }
+      
+      .vocab-chat-tab {
+        flex: 1;
+        padding: 10px 8px 12px 8px;
+        border: none;
+        background: transparent;
+        border-radius: 0;
+        font-size: 12px;
+        font-weight: 600;
+        color: #6b7280;
+        cursor: pointer;
+        transition: color 0.2s ease, background-color 0.2s ease;
+        letter-spacing: 0.5px;
+        text-align: center;
+        margin: 0 4px;
+        min-width: 0;
+        position: relative;
+      }
+      
+      .vocab-chat-tab:first-child {
+        margin-left: 0;
+      }
+      
+      .vocab-chat-tab:last-child {
+        margin-right: 0;
+      }
+      
+      .vocab-chat-tab.active {
+        color: #9527F5;
+      }
+      
+      .vocab-chat-tab:hover:not(.active) {
+        color: #9ca3af;
+      }
+      
+      /* Sliding tab indicator */
+      .vocab-chat-tab-indicator {
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        height: 3px;
+        background: #9527F5;
+        border-radius: 3px 3px 0 0;
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        z-index: 1;
+      }
+      
+      /* Content Area */
+      .vocab-chat-content-area {
+        flex: 1;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+      }
+      
+      .vocab-chat-tab-content {
+        flex: 1;
+        overflow-y: auto;
+        padding: 16px;
+        display: none;
+        flex-direction: column;
+      }
+      
+      .vocab-chat-tab-content.active {
+        display: flex;
+      }
+      
+      /* Tab content sliding animations */
+      @keyframes slideIn {
+        from {
+          opacity: 0;
+          transform: translateX(20px);
+        }
+        to {
+          opacity: 1;
+          transform: translateX(0);
+        }
+      }
+      
+      @keyframes slideOutRight {
+        from {
+          opacity: 1;
+          transform: translateX(0);
+        }
+        to {
+          opacity: 0;
+          transform: translateX(-20px);
+        }
+      }
+      
+      .vocab-chat-tab-content.slide-in {
+        animation: slideIn 0.3s ease-out;
+      }
+      
+      .vocab-chat-tab-content.slide-out-right {
+        animation: slideOutRight 0.3s ease-out;
+      }
+      
+      /* Original Text Content */
+      .vocab-chat-original-text {
+        padding: 16px;
+        background: #f9fafb;
+        border-radius: 12px;
+        font-size: 14px;
+        line-height: 1.6;
+        color: #374151;
+        white-space: pre-wrap;
+        word-wrap: break-word;
+      }
+      
+      /* Chat Messages */
+      .vocab-chat-messages {
+        flex: 1;
+        overflow-y: auto;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        padding: 0;
+      }
+      
+      .vocab-chat-messages::-webkit-scrollbar {
+        width: 6px;
+      }
+      
+      .vocab-chat-messages::-webkit-scrollbar-track {
+        background: #f3f4f6;
+        border-radius: 3px;
+      }
+      
+      .vocab-chat-messages::-webkit-scrollbar-thumb {
+        background: #D097FF;
+        border-radius: 3px;
+      }
+      
+      /* No Messages State */
+      .vocab-chat-no-messages {
+        flex: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      
+      .vocab-chat-no-messages-content {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 16px;
+        opacity: 0.5;
+      }
+      
+      .vocab-chat-no-messages-content span {
+        font-size: 14px;
+        font-weight: 500;
+        color: #9527F5;
+      }
+      
+      /* Message Bubbles */
+      .vocab-chat-message {
+        display: flex;
+        flex-direction: column;
+        position: relative;
+      }
+      
+      .vocab-chat-message-user {
+        align-items: flex-end;
+      }
+      
+      .vocab-chat-message-ai {
+        align-items: flex-start;
+        margin-left: 12px;
+      }
+      
+      .vocab-chat-message-content {
+        padding: 12px 16px;
+        border-radius: 12px;
+        font-size: 14px;
+        line-height: 1.5;
+        max-width: 85%;
+        word-wrap: break-word;
+        white-space: pre-wrap;
+      }
+      
+      .vocab-chat-message-user .vocab-chat-message-content {
+        background: #f3e8ff;
+        color: #374151;
+      }
+      
+      .vocab-chat-message-ai .vocab-chat-message-content {
+        background: white;
+        color: #374151;
+        box-shadow: 0 2px 8px rgba(149, 39, 245, 0.15), 0 1px 4px rgba(149, 39, 245, 0.1);
+      }
+      
+      /* Input Area */
+      .vocab-chat-input-area {
+        display: flex;
+        gap: 8px;
+        padding: 16px;
+        border-top: 1px solid #e5e7eb;
+        background: white;
+        align-items: flex-end;
+      }
+      
+      .vocab-chat-input {
+        flex: 1;
+        padding: 10px 12px;
+        border: 1px solid #e5e7eb;
+        border-radius: 10px;
+        font-size: 14px;
+        font-family: inherit;
+        resize: none;
+        outline: none;
+        transition: border-color 0.2s ease;
+        min-height: 40px;
+        max-height: 120px;
+      }
+      
+      .vocab-chat-input:focus {
+        border-color: #9527F5;
+      }
+      
+      .vocab-chat-input::placeholder {
+        color: #9ca3af;
+      }
+      
+      /* Send Button - Wireframe Purple Circular */
+      .vocab-chat-send-btn {
+        width: 44px;
+        height: 44px;
+        background: white;
+        border: 2px solid #9527F5;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        flex-shrink: 0;
+      }
+      
+      .vocab-chat-send-btn:hover {
+        background: #f0e6ff;
+        border-color: #7a1fd9;
+        transform: translateY(-1px);
+      }
+      
+      .vocab-chat-send-btn:active {
+        transform: translateY(0) scale(0.95);
+      }
+      
+      /* Delete Conversation Button - Wireframe Red Circular */
+      .vocab-chat-delete-conversation-btn {
+        width: 44px;
+        height: 44px;
+        background: white;
+        border: 2px solid #ef4444;
+        border-radius: 50%;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        flex-shrink: 0;
+        margin-left: 4px;
+      }
+      
+      .vocab-chat-delete-conversation-btn:hover {
+        background: #fef2f2;
+        border-color: #dc2626;
+        transform: translateY(-1px);
+      }
+      
+      .vocab-chat-delete-conversation-btn:active {
+        transform: translateY(0) scale(0.95);
+      }
+      
+      /* Resize Handles */
+      .vocab-chat-resize-handle {
+        position: absolute;
+        z-index: 1000001;
+      }
+      
+      .vocab-chat-resize-left {
+        left: 0;
+        top: 0;
+        bottom: 0;
+        width: 4px;
+        cursor: ew-resize;
+        background: transparent;
+        transition: background 0.2s ease;
+      }
+      
+      .vocab-chat-resize-left:hover {
+        background: rgba(149, 39, 245, 0.3);
+      }
+      
+      .vocab-chat-resize-bottom {
+        left: 0;
+        right: 0;
+        bottom: 0;
+        height: 4px;
+        cursor: ns-resize;
+        background: transparent;
+        transition: background 0.2s ease;
+      }
+      
+      .vocab-chat-resize-bottom:hover {
+        background: rgba(149, 39, 245, 0.3);
+      }
+      
+      .vocab-chat-resize-bottom-left {
+        left: 0;
+        bottom: 0;
+        width: 12px;
+        height: 12px;
+        cursor: nesw-resize;
+        background: transparent;
+        border-bottom-left-radius: 4px;
+      }
+      
+      .vocab-chat-resize-bottom-left::after {
+        content: '';
+        position: absolute;
+        left: 2px;
+        bottom: 2px;
+        width: 8px;
+        height: 8px;
+        border-left: 2px solid #9527F5;
+        border-bottom: 2px solid #9527F5;
+        opacity: 0.5;
+        border-bottom-left-radius: 2px;
+      }
+      
+      /* Responsive */
+      @media (max-width: 768px) {
+        .vocab-chat-dialog {
+          width: 100vw;
+          max-width: 100vw;
+          height: 100vh;
+          max-height: 100vh;
+        }
+        
+        .vocab-chat-content {
+          border-radius: 0;
+        }
+        
+        .vocab-chat-resize-handle {
+          display: none;
+        }
+      }
+    `;
+    
+    document.head.appendChild(style);
   }
 };
 
@@ -1913,7 +3210,7 @@ const ButtonPanel = {
           : 'Get meanings and explanations';
       } else if (buttonType === 'ask') {
         message = isDisabled 
-          ? 'Select a text first' 
+          ? 'Select exactly one text' 
           : 'Ask about the selected passage';
       }
 
@@ -1983,8 +3280,34 @@ const ButtonPanel = {
    * Handler for Ask button
    */
   handleAsk() {
-    // TODO: Implement ask functionality
-    console.log('Ask - to be implemented');
+    console.log('[ButtonPanel] Ask button clicked');
+    
+    // Get the first selected text
+    const selectedTexts = TextSelector.getSelectedTexts();
+    
+    if (selectedTexts.size === 0) {
+      console.warn('[ButtonPanel] No text selected');
+      return;
+    }
+    
+    if (selectedTexts.size > 1) {
+      console.warn('[ButtonPanel] Multiple texts selected, button should be disabled');
+      return;
+    }
+    
+    // Get the first (and only) text
+    const textKey = Array.from(selectedTexts)[0];
+    const textHighlight = TextSelector.textToHighlights.get(textKey);
+    
+    if (textHighlight) {
+      const originalText = textHighlight.textContent.replace(/\s+/g, ' ').trim();
+      
+      // Move text from selectedTexts to askedTexts
+      TextSelector.moveToAskedTexts(textKey);
+      
+      // Open chat dialog
+      ChatDialog.open(originalText, textKey);
+    }
   },
 
   /**
@@ -2089,6 +3412,7 @@ const ButtonPanel = {
   updateButtonStatesFromSelections() {
     const hasWords = WordSelector.selectedWords.size > 0;
     const hasTexts = TextSelector.selectedTexts.size > 0;
+    const hasExactlyOneText = TextSelector.selectedTexts.size === 1;
     
     // Show "Deselect all" if there are any words or texts selected
     this.setShowDeselectAll(hasWords || hasTexts);
@@ -2096,8 +3420,8 @@ const ButtonPanel = {
     // Enable "Magic meaning" if there are any words or texts selected
     this.setMagicMeaningEnabled(hasWords || hasTexts);
     
-    // Enable "Ask" if there are any texts selected
-    this.setAskEnabled(hasTexts);
+    // Enable "Ask" only if exactly one text is selected
+    this.setAskEnabled(hasExactlyOneText);
   },
 
   /**
