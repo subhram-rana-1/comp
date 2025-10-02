@@ -280,6 +280,8 @@ const WordSelector = {
   addWord(word) {
     const normalizedWord = word.toLowerCase();
     this.selectedWords.add(normalizedWord); // O(1) operation
+    // Update button states
+    ButtonPanel.updateButtonStatesFromSelections();
   },
   
   /**
@@ -307,6 +309,9 @@ const WordSelector = {
     
     console.log('[WordSelector] Word removed:', word);
     console.log('[WordSelector] Remaining selected words:', this.selectedWords.size);
+    
+    // Update button states
+    ButtonPanel.updateButtonStatesFromSelections();
   },
   
   /**
@@ -428,6 +433,9 @@ const WordSelector = {
     this.wordToHighlights.clear();
     
     console.log('[WordSelector] All selections cleared');
+    
+    // Update button states
+    ButtonPanel.updateButtonStatesFromSelections();
   },
   
   /**
@@ -777,6 +785,8 @@ const TextSelector = {
   addText(text) {
     const textKey = this.getTextKey(text);
     this.selectedTexts.add(textKey); // O(1) operation
+    // Update button states
+    ButtonPanel.updateButtonStatesFromSelections();
   },
   
   /**
@@ -802,6 +812,9 @@ const TextSelector = {
     
     console.log('[TextSelector] Text removed');
     console.log('[TextSelector] Remaining selected texts:', this.selectedTexts.size);
+    
+    // Update button states
+    ButtonPanel.updateButtonStatesFromSelections();
   },
   
   /**
@@ -918,6 +931,9 @@ const TextSelector = {
     this.textToHighlights.clear();
     
     console.log('[TextSelector] All selections cleared');
+    
+    // Update button states
+    ButtonPanel.updateButtonStatesFromSelections();
   },
   
   /**
@@ -1340,14 +1356,14 @@ const ButtonPanel = {
     const upperButtons = [
       {
         id: 'remove-all-meanings',
-        className: 'vocab-btn vocab-btn-outline-green',
+        className: 'vocab-btn vocab-btn-outline-green hidden',
         icon: this.createTrashIcon('green'),
         text: 'Remove meanings',
         type: 'outline-green'
       },
       {
         id: 'deselect-all',
-        className: 'vocab-btn vocab-btn-outline-purple',
+        className: 'vocab-btn vocab-btn-outline-purple hidden',
         icon: this.createTrashIcon('purple'),
         text: 'Deselect all',
         type: 'outline-purple'
@@ -1558,19 +1574,35 @@ const ButtonPanel = {
       .vocab-button-group-main {
         display: flex;
         flex-direction: column;
-        gap: 8px;
+        gap: 0;
         background: white;
-        padding: 10px;
+        padding: 10px 10px 10px 10px;
         border-radius: 16px;
         box-shadow: 0 4px 20px rgba(149, 39, 245, 0.3), 0 2px 8px rgba(149, 39, 245, 0.2);
         border: 1px solid rgba(149, 39, 245, 0.1);
       }
 
-      /* Upper Button Group (no additional styling) */
+      /* Upper Button Group with smooth transitions */
       .vocab-button-group-upper {
         display: flex;
         flex-direction: column;
         gap: 8px;
+        max-height: 0;
+        overflow: hidden;
+        opacity: 0;
+        transform: scaleY(0);
+        transform-origin: top;
+        transition: max-height 0.3s ease, opacity 0.3s ease, transform 0.3s ease, margin 0.3s ease, padding 0.3s ease;
+        margin-bottom: 0;
+        padding-top: 0;
+      }
+      
+      .vocab-button-group-upper.visible {
+        max-height: 200px;
+        opacity: 1;
+        transform: scaleY(1);
+        margin-bottom: 8px;
+        padding-top: 0;
       }
 
       /* Lower Button Group (no additional styling) */
@@ -1578,6 +1610,7 @@ const ButtonPanel = {
         display: flex;
         flex-direction: column;
         gap: 8px;
+        padding-top: 0;
       }
 
       /* Drag Handle Styles - Semi-circular (bottom half rounded) */
@@ -1620,20 +1653,37 @@ const ButtonPanel = {
         display: grid;
         grid-template-columns: 20px 1fr;
         align-items: center;
-        gap: 6px;
-        padding: 8px 10px;
+        gap: 8px;
+        padding: 10px 12px;
         border-radius: 10px;
-        font-size: 12px;
+        font-size: 11.5px;
         font-weight: 500;
         border: 2px solid;
         cursor: pointer;
-        transition: all 0.2s ease;
+        transition: all 0.2s ease, opacity 0.3s ease, transform 0.3s ease, max-height 0.3s ease;
         outline: none;
-        width: 110px;
+        width: 120px;
+        max-height: 100px;
+        overflow: hidden;
+        opacity: 1;
+        transform: scaleY(1);
+        transform-origin: top;
+        min-height: 36px;
+      }
+      
+      .vocab-btn.hidden {
+        display: none !important;
+        max-height: 0;
+        opacity: 0;
+        transform: scaleY(0);
+        padding: 0;
+        margin: 0;
+        border: none;
+        pointer-events: none;
       }
 
-      .vocab-btn:active {
-        transform: scale(0.98);
+      .vocab-btn:active:not(.hidden) {
+        transform: scale(0.98) !important;
       }
 
       /* Button Icon */
@@ -1647,8 +1697,9 @@ const ButtonPanel = {
 
       .vocab-btn-text {
         text-align: left;
-        line-height: 1.3;
+        line-height: 1.2;
         word-wrap: break-word;
+        white-space: normal;
       }
 
       /* Green Outline Button */
@@ -1774,11 +1825,11 @@ const ButtonPanel = {
         }
 
         .vocab-btn {
-          width: 100px;
-          padding: 7px 8px;
+          width: 110px;
+          padding: 7px 10px;
           font-size: 11px;
           grid-template-columns: 16px 1fr;
-          gap: 5px;
+          gap: 6px;
         }
 
         .vocab-btn-icon {
@@ -1859,7 +1910,7 @@ const ButtonPanel = {
       if (buttonType === 'magic-meaning') {
         message = isDisabled 
           ? 'Select words or texts first' 
-          : 'Get meaning and explanations';
+          : 'Get meanings and explanations';
       } else if (buttonType === 'ask') {
         message = isDisabled 
           ? 'Select a text first' 
@@ -1911,8 +1962,13 @@ const ButtonPanel = {
    * Handler for Deselect all button
    */
   handleDeselectAll() {
-    // TODO: Implement deselect all functionality
-    console.log('Deselect all - to be implemented');
+    console.log('Deselect all clicked');
+    // Clear all word selections
+    WordSelector.clearAll();
+    // Clear all text selections
+    TextSelector.clearAll();
+    // Update button states
+    this.updateButtonStatesFromSelections();
   },
 
   /**
@@ -1967,21 +2023,33 @@ const ButtonPanel = {
    * Update button states based on state variables
    */
   updateButtonStates() {
-    // Show/hide upper button group based on state
+    // Show/hide upper button group based on state with smooth animation
     const shouldShowUpperGroup = this.state.showRemoveMeanings || this.state.showDeselectAll;
     if (this.upperButtonGroup) {
-      this.upperButtonGroup.style.display = shouldShowUpperGroup ? 'flex' : 'none';
+      if (shouldShowUpperGroup) {
+        this.upperButtonGroup.classList.add('visible');
+      } else {
+        this.upperButtonGroup.classList.remove('visible');
+      }
     }
 
-    // Update individual button visibility in upper group
+    // Update individual button visibility in upper group with smooth animation
     const removeMeaningsBtn = document.getElementById('remove-all-meanings');
     const deselectAllBtn = document.getElementById('deselect-all');
     
     if (removeMeaningsBtn) {
-      removeMeaningsBtn.style.display = this.state.showRemoveMeanings ? 'grid' : 'none';
+      if (this.state.showRemoveMeanings) {
+        removeMeaningsBtn.classList.remove('hidden');
+      } else {
+        removeMeaningsBtn.classList.add('hidden');
+      }
     }
     if (deselectAllBtn) {
-      deselectAllBtn.style.display = this.state.showDeselectAll ? 'grid' : 'none';
+      if (this.state.showDeselectAll) {
+        deselectAllBtn.classList.remove('hidden');
+      } else {
+        deselectAllBtn.classList.add('hidden');
+      }
     }
 
     // Update enabled/disabled state of lower buttons
@@ -2013,6 +2081,23 @@ const ButtonPanel = {
     this.state = { ...this.state, ...newState };
     this.updateButtonStates();
     console.log('Button panel state updated:', this.state);
+  },
+  
+  /**
+   * Update button states based on selections
+   */
+  updateButtonStatesFromSelections() {
+    const hasWords = WordSelector.selectedWords.size > 0;
+    const hasTexts = TextSelector.selectedTexts.size > 0;
+    
+    // Show "Deselect all" if there are any words or texts selected
+    this.setShowDeselectAll(hasWords || hasTexts);
+    
+    // Enable "Magic meaning" if there are any words or texts selected
+    this.setMagicMeaningEnabled(hasWords || hasTexts);
+    
+    // Enable "Ask" if there are any texts selected
+    this.setAskEnabled(hasTexts);
   },
 
   /**
