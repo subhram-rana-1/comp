@@ -1254,10 +1254,25 @@ const TextSelector = {
       }
       
       /* Chat button - Solid purple circle with white chat icon on top-left (bigger) */
+      /* Smooth icon appearance animation - slide from left */
+      @keyframes vocab-icon-appear {
+        0% {
+          opacity: 0;
+          transform: translateX(-15px) scale(0.8);
+        }
+        60% {
+          transform: translateX(0) scale(1.05);
+        }
+        100% {
+          opacity: 0.95;
+          transform: translateX(0) scale(1);
+        }
+      }
+      
       .vocab-text-chat-btn {
         position: absolute;
         top: -10px;
-        left: -10px;
+        left: -28px;
         width: 20px;
         height: 20px;
         background: transparent;
@@ -1271,6 +1286,7 @@ const TextSelector = {
         transition: opacity 0.2s ease, transform 0.1s ease;
         padding: 0;
         z-index: 999999;
+        animation: vocab-icon-appear 0.4s ease-out;
       }
       
       .vocab-text-highlight:hover .vocab-text-chat-btn {
@@ -1297,7 +1313,7 @@ const TextSelector = {
       .vocab-text-book-btn {
         position: absolute;
         top: -12px;
-        left: -12px;
+        left: -32px;
         width: 24px;
         height: 24px;
         background: transparent;
@@ -1311,6 +1327,7 @@ const TextSelector = {
         transition: opacity 0.2s ease, transform 0.15s ease;
         padding: 0;
         z-index: 999999;
+        animation: vocab-icon-appear 0.4s ease-out;
       }
       
       .vocab-text-highlight:hover .vocab-text-book-btn {
@@ -1358,18 +1375,20 @@ const TextSelector = {
         animation: vocab-text-pulsate 0.6s ease-in-out;
       }
       
-      /* Loading animation - gentle breathing effect for readers (non-distracting) */
+      /* Loading animation - pulsating light purple background */
       @keyframes vocab-text-loading-breathe {
         0%, 100% {
-          opacity: 0.5;
+          background-color: transparent;
         }
         50% {
-          opacity: 1;
+          background-color: rgba(149, 39, 245, 0.15);
         }
       }
       
       .vocab-text-loading {
-        animation: vocab-text-loading-breathe 2.5s ease-in-out infinite;
+        animation: vocab-text-loading-breathe 2s ease-in-out infinite;
+        text-decoration: none !important;
+        border-radius: 3px;
       }
       
       /* Pulsate animation for text highlights - light green */
