@@ -135,7 +135,7 @@ const WordSelector = {
   wordPositions: new Map(),
   
   // Container for explained words (moved from selectedWords after API call)
-  explainedWords: new Map(), // Map of word -> {word, meaning, examples, highlights}
+  explainedWords: new Map(), // Map of word -> {word, meaning, examples, highlights, hasCalledGetMoreExamples}
   
   // Track if the feature is enabled
   isEnabled: false,
@@ -746,9 +746,10 @@ const WordSelector = {
    * @param {string} word - The word
    * @param {string} meaning - The meaning
    * @param {Array<string>} examples - Example sentences
+   * @param {boolean} shouldAllowFetchMoreExamples - Whether to show the "View more examples" button
    * @returns {HTMLElement} Popup element
    */
-  createWordPopup(word, meaning, examples) {
+  createWordPopup(word, meaning, examples, shouldAllowFetchMoreExamples = true) {
     const popup = document.createElement('div');
     popup.className = 'vocab-word-popup';
     popup.setAttribute('data-word', word.toLowerCase());
@@ -794,6 +795,12 @@ const WordSelector = {
     button.textContent = 'View more examples';
     button.setAttribute('data-word', word.toLowerCase());
     button.setAttribute('data-meaning', meaning);
+    
+    // Set initial button visibility based on shouldAllowFetchMoreExamples
+    if (!shouldAllowFetchMoreExamples) {
+      button.style.display = 'none';
+    }
+    
     button.addEventListener('click', async (e) => {
       e.stopPropagation();
       console.log('[WordSelector] View more examples clicked for:', word);
@@ -819,11 +826,29 @@ const WordSelector = {
     button.textContent = 'Loading...';
     
     try {
-      // Call API to get more examples
-      const response = await WordExplanationService.getMoreExplanations(word, meaning, currentExamples);
+      // Extract all currently displayed examples from the popup
+      const examplesList = document.getElementById(`vocab-word-examples-${word.toLowerCase()}`);
+      let allCurrentExamples = [];
+      
+      if (examplesList) {
+        // Get all example text from the list items
+        const listItems = examplesList.querySelectorAll('li');
+        allCurrentExamples = Array.from(listItems).map(li => {
+          // Remove the highlighting spans to get clean text
+          const text = li.textContent || li.innerText;
+          return text.trim();
+        });
+      }
+      
+      console.log('[WordSelector] Current examples in popup:', allCurrentExamples);
+      console.log('[WordSelector] Original examples passed:', currentExamples);
+      
+      // Use all currently displayed examples for the API call
+      const response = await WordExplanationService.getMoreExplanations(word, meaning, allCurrentExamples);
       
       if (response.success && response.data) {
         const newExamples = response.data.examples || [];
+        const shouldAllowFetchMoreExamples = response.data.shouldAllowFetchMoreExamples || false;
         
         // Update the examples list in the popup
         const examplesList = document.getElementById(`vocab-word-examples-${word.toLowerCase()}`);
@@ -842,6 +867,28 @@ const WordSelector = {
           
           console.log('[WordSelector] Updated examples for word:', word);
         }
+        
+        // Update button visibility based on shouldAllowFetchMoreExamples
+        if (shouldAllowFetchMoreExamples) {
+          button.style.display = 'block';
+          button.disabled = false;
+          button.classList.remove('disabled');
+        } else {
+          button.style.display = 'none';
+        }
+        
+        // Update stored word data with new examples and shouldAllowFetchMoreExamples value
+        const normalizedWord = word.toLowerCase();
+        if (this.explainedWords.has(normalizedWord)) {
+          const wordData = this.explainedWords.get(normalizedWord);
+          wordData.examples = newExamples; // Update with all examples from API response
+          wordData.shouldAllowFetchMoreExamples = shouldAllowFetchMoreExamples;
+          wordData.hasCalledGetMoreExamples = true; // Mark that API has been called
+          console.log('[WordSelector] Updated examples and shouldAllowFetchMoreExamples for word:', word);
+          console.log('[WordSelector] New examples count:', newExamples.length);
+          console.log('[WordSelector] shouldAllowFetchMoreExamples:', shouldAllowFetchMoreExamples);
+          console.log('[WordSelector] hasCalledGetMoreExamples set to true');
+        }
       } else {
         console.error('[WordSelector] Failed to get more examples:', response.error);
         TextSelector.showNotification('Failed to load more examples');
@@ -851,7 +898,6 @@ const WordSelector = {
       TextSelector.showNotification('Error loading more examples');
     } finally {
       // Reset button state
-      button.disabled = false;
       button.classList.remove('loading');
       button.textContent = originalText;
     }
@@ -914,8 +960,22 @@ const WordSelector = {
       console.error('[WordSelector] Error parsing examples:', e);
     }
     
+    // Get shouldAllowFetchMoreExamples from stored word data
+    const normalizedWord = word.toLowerCase();
+    let shouldAllowFetchMoreExamples = true; // Default to true
+    if (this.explainedWords.has(normalizedWord)) {
+      const wordData = this.explainedWords.get(normalizedWord);
+      // If get-more-explanations API has been called, use the field from response
+      // Otherwise, show button by default
+      if (wordData.hasCalledGetMoreExamples) {
+        shouldAllowFetchMoreExamples = wordData.shouldAllowFetchMoreExamples || false;
+      } else {
+        shouldAllowFetchMoreExamples = true; // Show by default before first API call
+      }
+    }
+    
     // Create popup
-    const popup = this.createWordPopup(word, meaning, examples);
+    const popup = this.createWordPopup(word, meaning, examples, shouldAllowFetchMoreExamples);
     
     // Mark as sticky or not
     if (sticky) {
@@ -5675,6 +5735,8 @@ const ButtonPanel = {
                   word: targetWord,
                   meaning: wordInfo.meaning,
                   examples: wordInfo.examples,
+                  shouldAllowFetchMoreExamples: wordInfo.shouldAllowFetchMoreExamples || false,
+                  hasCalledGetMoreExamples: false, // Track if get-more-explanations API has been called
                   highlights: new Set()
                 });
               }
