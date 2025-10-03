@@ -5002,6 +5002,7 @@ const ButtonPanel = {
         flex-direction: column;
         align-items: center;
         gap: 0;
+        overflow: visible !important;
       }
 
       /* Main Button Group with Purple Shadow */
@@ -5014,6 +5015,7 @@ const ButtonPanel = {
         border-radius: 16px;
         box-shadow: 0 4px 20px rgba(149, 39, 245, 0.3), 0 2px 8px rgba(149, 39, 245, 0.2);
         border: 1px solid rgba(149, 39, 245, 0.1);
+        overflow: visible !important;
       }
 
       /* Upper Button Group with smooth transitions */
@@ -5211,33 +5213,43 @@ const ButtonPanel = {
       .vocab-btn.disabled * {
         pointer-events: none; /* But disable pointer events on child elements */
       }
+      
+      /* Allow tooltips to be visible on disabled buttons */
+      .vocab-btn.disabled .vocab-btn-tooltip {
+        pointer-events: auto;
+      }
 
       /* Tooltip Styles */
       .vocab-btn-tooltip {
-        position: absolute;
-        bottom: calc(100% + 8px);
-        right: 0;
-        background: white;
-        color: #a78bfa;
-        padding: 10px 14px;
-        border-radius: 10px;
-        font-size: 12px;
-        font-weight: 500;
-        white-space: nowrap;
-        box-shadow: 0 0 0 1px rgba(167, 139, 250, 0.1),
-                    0 4px 12px rgba(167, 139, 250, 0.3),
-                    0 0 20px rgba(167, 139, 250, 0.2);
-        z-index: 10;
-        pointer-events: none;
-        opacity: 0;
-        transform: translateY(5px);
-        transition: opacity 0.2s cubic-bezier(0.4, 0, 0.2, 1),
-                    transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        position: fixed !important;
+        background: white !important;
+        color: #b29cfb !important;
+        padding: 10px 20px !important;
+        border-radius: 20px !important;
+        font-size: 13px !important;
+        font-weight: 500 !important;
+        white-space: nowrap !important;
+        text-align: center !important;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif !important;
+        box-shadow: 0 0 20px rgba(178, 156, 251, 0.3), 0 4px 12px rgba(178, 156, 251, 0.2) !important;
+        z-index: 9999999 !important;
+        pointer-events: none !important;
+        opacity: 0 !important;
+        transform: translateY(5px) scale(0.95) !important;
+        transition: opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1), 
+                   transform 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        visibility: visible !important;
+        width: auto !important;
+        height: auto !important;
+        min-height: 40px !important;
       }
 
       .vocab-btn-tooltip.visible {
-        opacity: 1;
-        transform: translateY(0);
+        opacity: 1 !important;
+        transform: translateY(0) scale(1) !important;
       }
 
       /* Tooltip arrow */
@@ -5351,13 +5363,23 @@ const ButtonPanel = {
    * @param {string} buttonType - Type of button ('magic-meaning' or 'ask')
    */
   attachTooltipListeners(button, buttonType) {
-    if (!button) return;
+    if (!button) {
+      console.log(`[ButtonPanel] attachTooltipListeners: No button provided for ${buttonType}`);
+      return;
+    }
+
+    console.log(`[ButtonPanel] attachTooltipListeners: Setting up tooltip for ${buttonType} button`, button);
 
     let tooltip = null;
 
     button.addEventListener('mouseenter', () => {
       console.log(`[ButtonPanel] Mouse enter on ${buttonType} button`);
+      console.log(`[ButtonPanel] Button element:`, button);
+      console.log(`[ButtonPanel] Button classes:`, button.className);
+      
       const isDisabled = button.classList.contains('disabled');
+      console.log(`[ButtonPanel] Is disabled: ${isDisabled}`);
+      
       let message = '';
 
       // Determine tooltip message based on button type and state
@@ -5365,6 +5387,7 @@ const ButtonPanel = {
         message = isDisabled 
           ? 'Select words or texts first' 
           : 'Get meanings and explanations';
+        console.log(`[ButtonPanel] Magic-meaning button message: "${message}"`);
       } else if (buttonType === 'ask') {
         if (isDisabled) {
           // Check specific conditions for Ask button
@@ -5379,27 +5402,64 @@ const ButtonPanel = {
         } else {
           message = 'Ask about the selected passage';
         }
+        console.log(`[ButtonPanel] Ask button message: "${message}" (textCount: ${TextSelector.selectedTexts.size})`);
       }
 
-      console.log(`[ButtonPanel] Showing tooltip: "${message}" (disabled: ${isDisabled})`);
+      console.log(`[ButtonPanel] Final tooltip message: "${message}" (disabled: ${isDisabled})`);
 
       // Create and show tooltip
+      console.log(`[ButtonPanel] Creating tooltip element...`);
       tooltip = this.createTooltip(message);
-      button.appendChild(tooltip);
+      console.log(`[ButtonPanel] Tooltip created:`, tooltip);
+      
+      console.log(`[ButtonPanel] Appending tooltip to document.body...`);
+      document.body.appendChild(tooltip);
+      console.log(`[ButtonPanel] Tooltip appended to body`);
+      
+      // Position tooltip relative to button (top-left)
+      const buttonRect = button.getBoundingClientRect();
+      tooltip.style.position = 'fixed';
+      tooltip.style.top = (buttonRect.top - 50) + 'px';
+      // Position tooltip to the left of the button, accounting for tooltip width
+      const tooltipWidth = 200; // Approximate tooltip width
+      tooltip.style.left = (buttonRect.left - tooltipWidth - 10) + 'px';
+      tooltip.style.zIndex = '9999999';
+      console.log(`[ButtonPanel] Tooltip positioned at:`, tooltip.style.top, tooltip.style.left);
+      console.log(`[ButtonPanel] Button rect:`, buttonRect);
       
       // Trigger animation
+      console.log(`[ButtonPanel] Setting timeout to show tooltip...`);
       setTimeout(() => {
+        console.log(`[ButtonPanel] Adding 'visible' class to tooltip...`);
         tooltip.classList.add('visible');
+        console.log(`[ButtonPanel] Tooltip classes after adding visible:`, tooltip.className);
+        const computedStyle = window.getComputedStyle(tooltip);
+        console.log(`[ButtonPanel] Tooltip computed style - display:`, computedStyle.display);
+        console.log(`[ButtonPanel] Tooltip computed style - visibility:`, computedStyle.visibility);
+        console.log(`[ButtonPanel] Tooltip computed style - opacity:`, computedStyle.opacity);
+        console.log(`[ButtonPanel] Tooltip computed style - position:`, computedStyle.position);
+        console.log(`[ButtonPanel] Tooltip computed style - z-index:`, computedStyle.zIndex);
+        console.log(`[ButtonPanel] Tooltip computed style - top:`, computedStyle.top);
+        console.log(`[ButtonPanel] Tooltip computed style - right:`, computedStyle.right);
+        console.log(`[ButtonPanel] Tooltip computed style - bottom:`, computedStyle.bottom);
+        console.log(`[ButtonPanel] Tooltip computed style - pointer-events:`, computedStyle.pointerEvents);
+        console.log(`[ButtonPanel] Tooltip getBoundingClientRect:`, tooltip.getBoundingClientRect());
+        console.log(`[ButtonPanel] Button getBoundingClientRect:`, button.getBoundingClientRect());
       }, 10);
     });
 
     button.addEventListener('mouseleave', () => {
+      console.log(`[ButtonPanel] Mouse leave on ${buttonType} button`);
       if (tooltip) {
+        console.log(`[ButtonPanel] Hiding tooltip...`);
         tooltip.classList.remove('visible');
         setTimeout(() => {
+          console.log(`[ButtonPanel] Tooltip removed from DOM`);
           tooltip.remove();
           tooltip = null;
         }, 200);
+      } else {
+        console.log(`[ButtonPanel] No tooltip to remove`);
       }
     });
   },
@@ -5410,9 +5470,13 @@ const ButtonPanel = {
    * @returns {HTMLElement} Tooltip element
    */
   createTooltip(message) {
+    console.log(`[ButtonPanel] createTooltip: Creating tooltip with message: "${message}"`);
     const tooltip = document.createElement('div');
     tooltip.className = 'vocab-btn-tooltip';
     tooltip.textContent = message;
+    console.log(`[ButtonPanel] createTooltip: Tooltip element created:`, tooltip);
+    console.log(`[ButtonPanel] createTooltip: Tooltip classes:`, tooltip.className);
+    console.log(`[ButtonPanel] createTooltip: Tooltip text content:`, tooltip.textContent);
     return tooltip;
   },
 
