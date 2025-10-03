@@ -5,7 +5,7 @@
 
 class SimplifyService {
   // Configurable base URL - uses same base as ApiService
-  static BASE_URL = 'http://localhost:8000';
+  static BASE_URL = 'https://caten-production.up.railway.app';
   
   // API endpoint
   static ENDPOINT = '/api/v2/simplify';

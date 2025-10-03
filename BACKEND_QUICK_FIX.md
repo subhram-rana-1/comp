@@ -79,7 +79,7 @@ spring.web.cors.allow-credentials=true
 After adding the configuration and restarting your server, test with this command:
 
 ```bash
-curl -X OPTIONS http://localhost:8000/api/v2/ask \
+curl -X OPTIONS https://caten-production.up.railway.app/api/v2/ask \
   -H "Origin: https://www.nytimes.com" \
   -H "Access-Control-Request-Method: POST" \
   -H "Access-Control-Request-Headers: Content-Type" \
@@ -111,7 +111,7 @@ Access-Control-Allow-Headers: Content-Type
 
 If CORS is still not working, check:
 
-1. **Server is running**: `curl http://localhost:8000/api/v2/ask` should respond
+1. **Server is running**: `curl https://caten-production.up.railway.app/api/v2/ask` should respond
 2. **No proxy/firewall**: Make sure nothing is blocking localhost
 3. **Check console logs**: Your backend should log CORS-related errors
 4. **Spring Boot version**: Make sure you're using Spring Boot 2.4+ (for `originPatterns` support)

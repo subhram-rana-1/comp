@@ -1,7 +1,7 @@
 # Backend CORS Configuration Guide
 
 ## The Problem
-Your Chrome extension content script runs on various websites (like `https://www.nytimes.com`) and tries to call your API at `http://localhost:8000`. This is a cross-origin request that requires proper CORS configuration.
+Your Chrome extension content script runs on various websites (like `https://www.nytimes.com`) and tries to call your API at `https://caten-production.up.railway.app`. This is a cross-origin request that requires proper CORS configuration.
 
 ## Required Backend Changes
 
@@ -172,14 +172,14 @@ You can test if CORS is configured correctly using curl:
 
 ```bash
 # Test preflight request
-curl -X OPTIONS http://localhost:8000/api/v2/ask \
+curl -X OPTIONS https://caten-production.up.railway.app/api/v2/ask \
   -H "Origin: https://www.nytimes.com" \
   -H "Access-Control-Request-Method: POST" \
   -H "Access-Control-Request-Headers: Content-Type" \
   -v
 
 # Test actual request
-curl -X POST http://localhost:8000/api/v2/ask \
+curl -X POST https://caten-production.up.railway.app/api/v2/ask \
   -H "Origin: https://www.nytimes.com" \
   -H "Content-Type: application/json" \
   -d '{"initial_context":"test","chat_history":[],"question":"test"}' \
