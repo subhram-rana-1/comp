@@ -51,7 +51,7 @@ export default defineContentScript({
       }
     });
     
-    // Listen for messages from popup
+    // Listen for messages from popup and background script
     chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       console.log('[Content Script] Message received:', message);
       
@@ -72,10 +72,98 @@ export default defineContentScript({
         }
         
         sendResponse({ success: true });
+      } else if (message.type === 'TAB_STATE_CHANGE' && message.domain === currentDomain) {
+        console.log(`[Content Script] Tab state change for ${currentDomain}:`, message.eventType);
+        handleTabStateChange(message.domain, message.eventType, sendResponse);
+      } else if (message.type === 'CHECK_EXTENSION_STATE') {
+        handleExtensionStateCheck(message.domain, sendResponse);
       }
     });
   },
 });
+
+// ===================================
+// Tab State Management Functions
+// ===================================
+
+/**
+ * Handle tab state change events from background script
+ * @param {string} domain - The domain name
+ * @param {string} eventType - Type of event (TAB_LOADED, TAB_SWITCHED, TAB_CREATED)
+ * @param {Function} sendResponse - Response callback
+ */
+async function handleTabStateChange(domain, eventType, sendResponse) {
+  try {
+    console.log(`[Content Script] Handling tab state change: ${eventType} for ${domain}`);
+    
+    // Check if extension state exists in storage
+    const storageKey = `isExtensionEnabledFor_${domain}`;
+    const result = await chrome.storage.local.get([storageKey]);
+    const isEnabled = result[storageKey];
+    
+    if (isEnabled === undefined) {
+      // No storage data found - this is a new domain, set to disabled
+      console.log(`[Content Script] New domain detected: ${domain}, setting to disabled`);
+      
+      // Ensure all components are disabled
+      ButtonPanel.hide();
+      WordSelector.disable();
+      TextSelector.disable();
+      WordSelector.clearAll();
+      TextSelector.clearAll();
+      
+      sendResponse({ success: true, isEnabled: false, isNewDomain: true });
+    } else {
+      // Storage data exists, use the stored value
+      console.log(`[Content Script] Existing domain: ${domain}, enabled: ${isEnabled}`);
+      
+      if (isEnabled) {
+        ButtonPanel.show();
+        WordSelector.enable();
+        TextSelector.enable();
+      } else {
+        ButtonPanel.hide();
+        WordSelector.disable();
+        TextSelector.disable();
+        WordSelector.clearAll();
+        TextSelector.clearAll();
+      }
+      
+      sendResponse({ success: true, isEnabled: isEnabled, isNewDomain: false });
+    }
+  } catch (error) {
+    console.error('[Content Script] Error handling tab state change:', error);
+    sendResponse({ success: false, error: error.message });
+  }
+}
+
+/**
+ * Handle extension state check request
+ * @param {string} domain - The domain to check
+ * @param {Function} sendResponse - Response callback
+ */
+async function handleExtensionStateCheck(domain, sendResponse) {
+  try {
+    const storageKey = `isExtensionEnabledFor_${domain}`;
+    const result = await chrome.storage.local.get([storageKey]);
+    const isEnabled = result[storageKey] ?? false; // Default to false for new domains
+    
+    console.log(`[Content Script] Extension state check for ${domain}:`, isEnabled);
+    
+    sendResponse({
+      success: true,
+      isEnabled: isEnabled,
+      domain: domain
+    });
+  } catch (error) {
+    console.error('[Content Script] Error checking extension state:', error);
+    sendResponse({
+      success: false,
+      error: error.message,
+      isEnabled: false
+    });
+  }
+}
 
 // ===================================
 // Position Manager Module - Handles saving and loading panel position
@@ -171,9 +259,16 @@ const WordSelector = {
       
       // Close popup if clicking outside both popup and word
       if (!clickedInsidePopup && !clickedOnWord) {
-        this.hideAllPopups();
+        // Use a longer delay to ensure the click event has fully processed
+        setTimeout(() => {
+          // Double-check that we still have sticky popups (in case they were closed by other means)
+          const currentStickyPopups = document.querySelectorAll('.vocab-word-popup[data-sticky="true"]');
+          if (currentStickyPopups.length > 0) {
+            this.hideAllPopups();
+          }
+        }, 10);
       }
-    }, true); // Use capture phase to handle clicks before other handlers
+    }, false); // Use bubble phase instead of capture phase
     
     // Check if extension is enabled for current domain
     const isExtensionEnabled = await this.checkExtensionEnabled();
@@ -194,10 +289,10 @@ const WordSelector = {
       const currentDomain = window.location.hostname;
       const storageKey = `isExtensionEnabledFor_${currentDomain}`;
       const result = await chrome.storage.local.get([storageKey]);
-      return result[storageKey] ?? true; // Default to true
+      return result[storageKey] ?? false; // Default to false for new domains
     } catch (error) {
       console.error('[WordSelector] Error checking extension state:', error);
-      return true;
+      return false; // Default to false on error
     }
   },
   
@@ -948,23 +1043,19 @@ const WordSelector = {
     this.hideAllPopups();
     
     const word = wordElement.textContent.trim();
-    const meaning = wordElement.getAttribute('data-meaning');
-    const examplesJson = wordElement.getAttribute('data-examples');
-    
-    if (!meaning) return;
-    
-    let examples = [];
-    try {
-      examples = JSON.parse(examplesJson) || [];
-    } catch (e) {
-      console.error('[WordSelector] Error parsing examples:', e);
-    }
-    
-    // Get shouldAllowFetchMoreExamples from stored word data
     const normalizedWord = word.toLowerCase();
+    
+    // Get word data from explainedWords map (this contains the most up-to-date data)
+    let wordData = null;
+    let meaning = '';
+    let examples = [];
     let shouldAllowFetchMoreExamples = true; // Default to true
+    
     if (this.explainedWords.has(normalizedWord)) {
-      const wordData = this.explainedWords.get(normalizedWord);
+      wordData = this.explainedWords.get(normalizedWord);
+      meaning = wordData.meaning;
+      examples = wordData.examples || [];
+      
       // If get-more-explanations API has been called, use the field from response
       // Otherwise, show button by default
       if (wordData.hasCalledGetMoreExamples) {
@@ -972,7 +1063,29 @@ const WordSelector = {
       } else {
         shouldAllowFetchMoreExamples = true; // Show by default before first API call
       }
+      
+      console.log(`[WordSelector] Using updated data from explainedWords for "${word}":`, {
+        meaning: meaning,
+        examplesCount: examples.length,
+        shouldAllowFetchMoreExamples: shouldAllowFetchMoreExamples,
+        hasCalledGetMoreExamples: wordData.hasCalledGetMoreExamples
+      });
+    } else {
+      // Fallback to DOM attributes if not found in explainedWords (shouldn't happen normally)
+      console.warn(`[WordSelector] Word "${word}" not found in explainedWords, using DOM attributes as fallback`);
+      meaning = wordElement.getAttribute('data-meaning');
+      const examplesJson = wordElement.getAttribute('data-examples');
+      
+      if (!meaning) return;
+      
+      try {
+        examples = JSON.parse(examplesJson) || [];
+      } catch (e) {
+        console.error('[WordSelector] Error parsing examples:', e);
+      }
     }
+    
+    if (!meaning) return;
     
     // Create popup
     const popup = this.createWordPopup(word, meaning, examples, shouldAllowFetchMoreExamples);
@@ -981,20 +1094,6 @@ const WordSelector = {
     if (sticky) {
       popup.classList.add('sticky');
       popup.setAttribute('data-sticky', 'true');
-      
-      // Add close button for sticky popup
-      const closeBtn = document.createElement('button');
-      closeBtn.className = 'vocab-word-popup-close';
-      closeBtn.innerHTML = `
-        <svg viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path d="M1 1L11 11M11 1L1 11" stroke="#A020F0" stroke-width="2" stroke-linecap="round"/>
-        </svg>
-      `;
-      closeBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        this.hideAllPopups();
-      });
-      popup.appendChild(closeBtn);
     } else {
       popup.setAttribute('data-sticky', 'false');
     }
@@ -1010,6 +1109,24 @@ const WordSelector = {
     
     // Store reference
     wordElement.setAttribute('data-popup-id', 'active');
+    
+    // Add mouse event handlers to prevent popup from closing when moving cursor into it
+    if (sticky) {
+      popup.addEventListener('mouseenter', (e) => {
+        e.stopPropagation();
+        console.log('[WordSelector] Mouse entered sticky popup');
+      });
+      
+      popup.addEventListener('mouseleave', (e) => {
+        e.stopPropagation();
+        console.log('[WordSelector] Mouse left sticky popup');
+      });
+      
+      popup.addEventListener('click', (e) => {
+        e.stopPropagation();
+        console.log('[WordSelector] Clicked inside sticky popup');
+      });
+    }
     
     // If not sticky (hover mode), hide on mouseleave with delay
     if (!sticky) {
@@ -1084,14 +1201,7 @@ const WordSelector = {
       this.showWordPopup(wordElement, false);
     });
     
-    // Click: show sticky popup that stays visible until outside click
-    wordElement.addEventListener('click', (e) => {
-      if (!wordElement.classList.contains('vocab-word-explained')) return;
-      e.stopPropagation();
-      
-      // Always show sticky popup on click (replaces any existing popup)
-      this.showWordPopup(wordElement, true);
-    });
+    // Click event handler removed - green background words no longer respond to clicks
   },
   
   /**
@@ -1124,7 +1234,7 @@ const WordSelector = {
   createGreenCrossIcon() {
     return `
       <svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M2 2L12 12M12 2L2 12" stroke="#22c55e" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M2 2L12 12M12 2L2 12" stroke="#22c55e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
       </svg>
     `;
   },
@@ -1570,10 +1680,10 @@ const TextSelector = {
       const currentDomain = window.location.hostname;
       const storageKey = `isExtensionEnabledFor_${currentDomain}`;
       const result = await chrome.storage.local.get([storageKey]);
-      return result[storageKey] ?? true; // Default to true
+      return result[storageKey] ?? false; // Default to false for new domains
     } catch (error) {
       console.error('[TextSelector] Error checking extension state:', error);
-      return true;
+      return false; // Default to false on error
     }
   },
   
@@ -2258,10 +2368,10 @@ const TextSelector = {
       
       .vocab-text-chat-btn {
         position: absolute;
-        top: -10px;
-        left: -28px;
-        width: 20px;
-        height: 20px;
+        top: -12px;
+        left: -32px;
+        width: 24px;
+        height: 24px;
         background: transparent;
         border: none;
         border-radius: 50%;
@@ -2292,8 +2402,8 @@ const TextSelector = {
       .vocab-text-chat-btn svg {
         pointer-events: none;
         display: block;
-        width: 20px;
-        height: 20px;
+        width: 24px;
+        height: 24px;
       }
       
       /* Book button - Wireframe open book icon on top-left */
@@ -3027,6 +3137,36 @@ const ChatDialog = {
       content.style.display = 'none';
     }
     
+    // Create focus button container
+    const focusButtonContainer = document.createElement('div');
+    focusButtonContainer.className = 'vocab-chat-focus-btn-container';
+    
+    // Create focus button
+    const focusButton = document.createElement('button');
+    focusButton.className = 'vocab-chat-focus-btn';
+    focusButton.innerHTML = `
+      <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+        <path d="M3 10l7-7v4c7 0 7 6 7 6s-3-3-7-3v4l-7-7z" fill="#9527F5"/>
+      </svg>
+      <span>Focus</span>
+    `;
+    
+    // Add click handler
+    focusButton.addEventListener('click', () => {
+      const highlight = TextSelector.textToHighlights.get(this.currentTextKey);
+      if (highlight) {
+        highlight.scrollIntoView({
+          behavior: 'smooth',
+          block: 'center'
+        });
+        setTimeout(() => {
+          TextSelector.pulsateText(highlight, true);
+        }, 500);
+      }
+    });
+    
+    focusButtonContainer.appendChild(focusButton);
+    
     // Container for all simplified explanations
     const explanationsContainer = document.createElement('div');
     explanationsContainer.id = 'vocab-chat-simplified-container';
@@ -3056,6 +3196,7 @@ const ChatDialog = {
     
     buttonContainer.appendChild(simplifyMoreBtn);
     
+    content.appendChild(focusButtonContainer);
     content.appendChild(explanationsContainer);
     content.appendChild(buttonContainer);
     
@@ -3406,6 +3547,11 @@ const ChatDialog = {
     // Show loading animation
     this.showLoadingAnimation();
     
+    // Capture the current textKey and text at the time of making the request
+    // This ensures the response goes to the correct chat even if user switches tabs
+    const requestTextKey = this.currentTextKey;
+    const requestText = this.currentText;
+    
     // Prepare chat history from chatHistory
     const chat_history = this.chatHistory.map(item => ({
       role: item.type === 'user' ? 'user' : 'assistant',
@@ -3415,7 +3561,7 @@ const ChatDialog = {
     try {
       // Call API
       const response = await ApiService.ask({
-        initial_context: this.currentText,
+        initial_context: requestText,
         chat_history: chat_history,
         question: message
       });
@@ -3441,15 +3587,80 @@ const ChatDialog = {
         }
         
         console.log('[ChatDialog] Extracted AI response:', aiResponse);
-        this.addMessageToChat('ai', aiResponse);
+        
+        // Check if we're still in the same chat tab that initiated the request
+        if (this.currentTextKey === requestTextKey) {
+          // We're still in the same chat, add the response normally
+          this.addMessageToChat('ai', aiResponse);
+        } else {
+          // User switched to a different chat tab, add response to the correct chat history
+          console.log('[ChatDialog] User switched tabs, adding response to correct chat history for textKey:', requestTextKey);
+          
+          // Get the chat history for the original textKey
+          const originalChatHistory = this.chatHistories.get(requestTextKey) || [];
+          
+          // Add the user message and AI response to the original chat history
+          originalChatHistory.push({
+            type: 'user',
+            message: message,
+            timestamp: new Date().toISOString()
+          });
+          originalChatHistory.push({
+            type: 'ai',
+            message: aiResponse,
+            timestamp: new Date().toISOString()
+          });
+          
+          // Update the stored chat history
+          this.chatHistories.set(requestTextKey, originalChatHistory);
+          
+          // If the original chat is currently open, update its display
+          if (this.isOpen && this.currentTextKey === requestTextKey) {
+            this.addMessageToChat('ai', aiResponse);
+          }
+        }
       } else {
-        // Show error message with preserved formatting
-        this.addMessageToChat('ai', `⚠️ **Error:**\n\n${response.error}`);
+        // Handle error case - check if we're still in the same chat
+        if (this.currentTextKey === requestTextKey) {
+          this.addMessageToChat('ai', `⚠️ **Error:**\n\n${response.error}`);
+        } else {
+          // Add error to the original chat history
+          const originalChatHistory = this.chatHistories.get(requestTextKey) || [];
+          originalChatHistory.push({
+            type: 'user',
+            message: message,
+            timestamp: new Date().toISOString()
+          });
+          originalChatHistory.push({
+            type: 'ai',
+            message: `⚠️ **Error:**\n\n${response.error}`,
+            timestamp: new Date().toISOString()
+          });
+          this.chatHistories.set(requestTextKey, originalChatHistory);
+        }
       }
     } catch (error) {
       console.error('[ChatDialog] Error sending message:', error);
       this.removeLoadingAnimation();
-      this.addMessageToChat('ai', `Error: Failed to get response from server`);
+      
+      // Handle error case - check if we're still in the same chat
+      if (this.currentTextKey === requestTextKey) {
+        this.addMessageToChat('ai', `Error: Failed to get response from server`);
+      } else {
+        // Add error to the original chat history
+        const originalChatHistory = this.chatHistories.get(requestTextKey) || [];
+        originalChatHistory.push({
+          type: 'user',
+          message: message,
+          timestamp: new Date().toISOString()
+        });
+        originalChatHistory.push({
+          type: 'ai',
+          message: `Error: Failed to get response from server`,
+          timestamp: new Date().toISOString()
+        });
+        this.chatHistories.set(requestTextKey, originalChatHistory);
+      }
     }
     
     console.log('[ChatDialog] Message sent:', message);
@@ -3493,7 +3704,13 @@ const ChatDialog = {
     chatContainer.scrollTop = chatContainer.scrollHeight;
     
     // Store in history
-    this.chatHistory.push({ type, message, timestamp: Date.now() });
+    const messageData = { type, message, timestamp: new Date().toISOString() };
+    this.chatHistory.push(messageData);
+    
+    // Also update the stored chat history for this textKey
+    if (this.currentTextKey) {
+      this.chatHistories.set(this.currentTextKey, [...this.chatHistory]);
+    }
   },
   
   /**
@@ -3664,20 +3881,21 @@ const ChatDialog = {
   },
   
   /**
-   * Delete the entire conversation and remove the asked text
+   * Delete the conversation history (clear chat messages)
    */
   deleteConversation() {
     if (!this.currentTextKey) return;
     
-    // Close the dialog
-    this.close();
+    // Clear the current chat history
+    this.chatHistory = [];
     
-    // Remove the text from askedTexts and clear the highlight
-    setTimeout(() => {
-      TextSelector.removeFromAskedTexts(this.currentTextKey);
-    }, 300);
+    // Clear the stored chat history for this textKey
+    this.chatHistories.set(this.currentTextKey, []);
     
-    console.log('[ChatDialog] Conversation deleted');
+    // Clear the chat display
+    this.clearChat();
+    
+    console.log('[ChatDialog] Conversation history cleared for textKey:', this.currentTextKey);
   },
   
   /**
@@ -3741,6 +3959,15 @@ const ChatDialog = {
     const style = document.createElement('style');
     style.id = styleId;
     style.textContent = `
+      /* Global button underline prevention */
+      button, .vocab-btn, .vocab-chat-tab, .vocab-chat-focus-btn, .vocab-chat-send-btn, .vocab-chat-delete-conversation-btn, .vocab-chat-collapse-btn, .vocab-chat-simplify-more-btn {
+        text-decoration: none !important;
+      }
+      
+      button:hover, .vocab-btn:hover, .vocab-chat-tab:hover, .vocab-chat-focus-btn:hover, .vocab-chat-send-btn:hover, .vocab-chat-delete-conversation-btn:hover, .vocab-chat-collapse-btn:hover, .vocab-chat-simplify-more-btn:hover {
+        text-decoration: none !important;
+      }
+      
       /* Chat Dialog Container */
       .vocab-chat-dialog {
         position: fixed;
@@ -3790,11 +4017,13 @@ const ChatDialog = {
         z-index: 10;
         transition: all 0.2s ease;
         margin-bottom: 8px;
+        text-decoration: none;
       }
       
       .vocab-chat-collapse-btn:hover {
         background: #f9fafb;
         border-color: #9527F5;
+        text-decoration: none;
       }
       
       /* Flip collapse icon when dialog is visible */
@@ -3830,6 +4059,7 @@ const ChatDialog = {
         margin: 0 4px;
         min-width: 0;
         position: relative;
+        text-decoration: none;
       }
       
       .vocab-chat-tab:first-child {
@@ -3846,6 +4076,7 @@ const ChatDialog = {
       
       .vocab-chat-tab:hover:not(.active) {
         color: #9ca3af;
+        text-decoration: none;
       }
       
       /* Sliding tab indicator */
@@ -3968,12 +4199,14 @@ const ChatDialog = {
         cursor: pointer;
         transition: all 0.2s ease;
         font-family: inherit;
+        text-decoration: none;
       }
       
       .vocab-chat-simplify-more-btn:hover:not(.disabled) {
         background: #7a1fd9;
         transform: translateY(-1px);
         box-shadow: 0 4px 12px rgba(149, 39, 245, 0.3);
+        text-decoration: none;
       }
       
       .vocab-chat-simplify-more-btn:active:not(.disabled) {
@@ -4255,12 +4488,14 @@ const ChatDialog = {
         cursor: pointer;
         transition: all 0.2s ease;
         flex-shrink: 0;
+        text-decoration: none;
       }
       
       .vocab-chat-send-btn:hover {
         background: #f0e6ff;
         border-color: #7a1fd9;
         transform: translateY(-1px);
+        text-decoration: none;
       }
       
       .vocab-chat-send-btn:active {
@@ -4281,12 +4516,14 @@ const ChatDialog = {
         transition: all 0.2s ease;
         flex-shrink: 0;
         margin-left: 4px;
+        text-decoration: none;
       }
       
       .vocab-chat-delete-conversation-btn:hover {
         background: #fef2f2;
         border-color: #dc2626;
         transform: translateY(-1px);
+        text-decoration: none;
       }
       
       .vocab-chat-delete-conversation-btn:active {
@@ -4353,7 +4590,6 @@ const ChatDialog = {
       /* Focus Button Styles */
       .vocab-chat-focus-btn-container {
         padding: 16px 16px 12px 16px;
-        border-bottom: 1px solid #e5e7eb;
         margin-bottom: 12px;
       }
       
@@ -4374,12 +4610,14 @@ const ChatDialog = {
         cursor: pointer;
         transition: all 0.2s ease;
         box-shadow: 0 1px 2px rgba(149, 39, 245, 0.05);
+        text-decoration: none;
       }
       
       .vocab-chat-focus-btn:hover {
         background: #f9f5ff;
         border-color: #7a1fd9;
         box-shadow: 0 2px 4px rgba(149, 39, 245, 0.1);
+        text-decoration: none;
       }
       
       .vocab-chat-focus-btn:active {
@@ -4438,20 +4676,21 @@ const ButtonPanel = {
    */
   async init() {
     this.createPanel();
-    this.attachEventListeners();
     
-    // Clear any saved position on init (reset to default on tab refresh)
-    await PositionManager.clearPosition();
+    // Load and apply saved position
+    await this.loadAndApplyPosition();
     
     // Initialize drag functionality - drag the entire panel container
     const dragHandle = document.getElementById('vocab-drag-handle');
     if (dragHandle && this.panelContainer) {
       DragHandle.init(dragHandle, this.panelContainer);
-      // Note: Not loading saved position - always start at default position
     }
     
     // Apply initial state
     this.updateButtonStates();
+    
+    // Attach event listeners after panel is created and added to DOM
+    this.attachEventListeners();
     
     // Check if extension is enabled and show/hide accordingly
     const isEnabled = await this.checkExtensionEnabled();
@@ -4465,6 +4704,52 @@ const ButtonPanel = {
   },
 
   /**
+   * Load and apply saved position to the panel
+   */
+  async loadAndApplyPosition() {
+    try {
+      const savedPosition = await PositionManager.loadPosition();
+      if (savedPosition && this.panelContainer) {
+        // Apply constraints to ensure panel stays within viewport
+        const constraints = this.calculateConstraints();
+        const constrainedLeft = Math.max(constraints.minX, Math.min(constraints.maxX, savedPosition.left));
+        const constrainedTop = Math.max(constraints.minY, Math.min(constraints.maxY, savedPosition.top));
+        
+        // Apply the position
+        this.panelContainer.style.left = `${constrainedLeft}px`;
+        this.panelContainer.style.top = `${constrainedTop}px`;
+        this.panelContainer.style.right = 'auto';
+        this.panelContainer.style.transform = 'none';
+        
+        console.log('[ButtonPanel] Applied saved position:', { left: constrainedLeft, top: constrainedTop });
+      }
+    } catch (error) {
+      console.error('[ButtonPanel] Error loading position:', error);
+    }
+  },
+
+  /**
+   * Calculate viewport constraints to keep panel fully visible
+   * @returns {Object} Constraint boundaries
+   */
+  calculateConstraints() {
+    if (!this.panelContainer) {
+      return { minX: 0, maxX: 0, minY: 0, maxY: 0 };
+    }
+    
+    const panelRect = this.panelContainer.getBoundingClientRect();
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+    
+    return {
+      minX: 0,
+      maxX: viewportWidth - panelRect.width,
+      minY: 0,
+      maxY: viewportHeight - panelRect.height
+    };
+  },
+
+  /**
    * Check if extension is enabled from storage for current domain
    * @returns {Promise<boolean>} Whether the extension is enabled
    */
@@ -4473,10 +4758,10 @@ const ButtonPanel = {
       const currentDomain = window.location.hostname;
       const storageKey = `isExtensionEnabledFor_${currentDomain}`;
       const result = await chrome.storage.local.get([storageKey]);
-      return result[storageKey] ?? true; // Default to true
+      return result[storageKey] ?? false; // Default to false for new domains
     } catch (error) {
       console.error('Error checking extension state:', error);
-      return true; // Default to true on error
+      return false; // Default to false on error
     }
   },
 
@@ -4725,7 +5010,7 @@ const ButtonPanel = {
         flex-direction: column;
         gap: 0;
         background: white;
-        padding: 10px 10px 10px 10px;
+        padding: 6px 6px 6px 6px;
         border-radius: 16px;
         box-shadow: 0 4px 20px rgba(149, 39, 245, 0.3), 0 2px 8px rgba(149, 39, 245, 0.2);
         border: 1px solid rgba(149, 39, 245, 0.1);
@@ -4735,7 +5020,7 @@ const ButtonPanel = {
       .vocab-button-group-upper {
         display: flex;
         flex-direction: column;
-        gap: 8px;
+        gap: 6px;
         max-height: 0;
         overflow: hidden;
         opacity: 0;
@@ -4750,7 +5035,7 @@ const ButtonPanel = {
         max-height: 200px;
         opacity: 1;
         transform: scaleY(1);
-        margin-bottom: 8px;
+        margin-bottom: 6px;
         padding-top: 0;
       }
 
@@ -4758,7 +5043,7 @@ const ButtonPanel = {
       .vocab-button-group-lower {
         display: flex;
         flex-direction: column;
-        gap: 8px;
+        gap: 6px;
         padding-top: 0;
       }
 
@@ -4802,8 +5087,8 @@ const ButtonPanel = {
         display: grid;
         grid-template-columns: 20px 1fr;
         align-items: center;
-        gap: 8px;
-        padding: 10px 12px;
+        gap: 6px;
+        padding: 8px 10px;
         border-radius: 10px;
         font-size: 11.5px;
         font-weight: 500;
@@ -4817,7 +5102,8 @@ const ButtonPanel = {
         opacity: 1;
         transform: scaleY(1);
         transform-origin: top;
-        min-height: 36px;
+        min-height: 32px;
+        text-decoration: none;
       }
       
       .vocab-btn.hidden {
@@ -4862,6 +5148,7 @@ const ButtonPanel = {
         background: #f0fdf4;
         border-color: #16a34a;
         color: #16a34a;
+        text-decoration: none;
       }
 
       /* Purple Outline Button */
@@ -4875,6 +5162,7 @@ const ButtonPanel = {
         background: #f0e6ff;
         border-color: #7a1fd9;
         color: #7a1fd9;
+        text-decoration: none;
       }
 
       /* Solid Purple Button */
@@ -4887,6 +5175,7 @@ const ButtonPanel = {
       .vocab-btn-solid-purple:hover {
         background: #7a1fd9;
         border-color: #7a1fd9;
+        text-decoration: none;
       }
 
       /* Disabled Button State */
@@ -4915,8 +5204,12 @@ const ButtonPanel = {
       }
 
       /* Allow hover events on disabled buttons for tooltips */
+      .vocab-btn.disabled {
+        pointer-events: auto; /* Allow hover events on the button itself */
+      }
+      
       .vocab-btn.disabled * {
-        pointer-events: none;
+        pointer-events: none; /* But disable pointer events on child elements */
       }
 
       /* Tooltip Styles */
@@ -4970,15 +5263,15 @@ const ButtonPanel = {
         }
 
         .vocab-button-group-main {
-          padding: 8px;
+          padding: 4px;
         }
 
         .vocab-btn {
           width: 110px;
-          padding: 7px 10px;
+          padding: 6px 8px;
           font-size: 11px;
           grid-template-columns: 16px 1fr;
-          gap: 6px;
+          gap: 4px;
         }
 
         .vocab-btn-icon {
@@ -5037,8 +5330,19 @@ const ButtonPanel = {
     });
 
     // Add tooltip event listeners
-    this.attachTooltipListeners(buttons.magicMeaning, 'magic-meaning');
-    this.attachTooltipListeners(buttons.ask, 'ask');
+    if (buttons.magicMeaning) {
+      console.log('[ButtonPanel] Attaching tooltip to Magic meaning button');
+      this.attachTooltipListeners(buttons.magicMeaning, 'magic-meaning');
+    } else {
+      console.warn('[ButtonPanel] Magic meaning button not found');
+    }
+    
+    if (buttons.ask) {
+      console.log('[ButtonPanel] Attaching tooltip to Ask button');
+      this.attachTooltipListeners(buttons.ask, 'ask');
+    } else {
+      console.warn('[ButtonPanel] Ask button not found');
+    }
   },
 
   /**
@@ -5052,6 +5356,7 @@ const ButtonPanel = {
     let tooltip = null;
 
     button.addEventListener('mouseenter', () => {
+      console.log(`[ButtonPanel] Mouse enter on ${buttonType} button`);
       const isDisabled = button.classList.contains('disabled');
       let message = '';
 
@@ -5061,10 +5366,22 @@ const ButtonPanel = {
           ? 'Select words or texts first' 
           : 'Get meanings and explanations';
       } else if (buttonType === 'ask') {
-        message = isDisabled 
-          ? 'Select exactly one text' 
-          : 'Ask about the selected passage';
+        if (isDisabled) {
+          // Check specific conditions for Ask button
+          const textCount = TextSelector.selectedTexts.size;
+          if (textCount === 0) {
+            message = 'Select a text first';
+          } else if (textCount > 1) {
+            message = 'Select only one text';
+          } else {
+            message = 'Select a text first'; // Fallback
+          }
+        } else {
+          message = 'Ask about the selected passage';
+        }
       }
+
+      console.log(`[ButtonPanel] Showing tooltip: "${message}" (disabled: ${isDisabled})`);
 
       // Create and show tooltip
       tooltip = this.createTooltip(message);
