@@ -85,13 +85,28 @@ class WordExplanationService {
                 // Parse JSON data
                 try {
                   const eventData = JSON.parse(data);
-                  console.log('[WordExplanationService] Received event:', eventData);
+                  console.log('[WordExplanationService] ===== RAW EVENT RECEIVED =====');
+                  console.log('[WordExplanationService] Raw event data:', data);
+                  console.log('[WordExplanationService] Parsed event data:', eventData);
+                  
+                  if (eventData.word_info) {
+                    console.log(`[WordExplanationService] Event contains word_info for word: "${eventData.word_info.word}"`);
+                    console.log(`[WordExplanationService] Word textStartIndex: ${eventData.word_info.textStartIndex}`);
+                    console.log(`[WordExplanationService] Word meaning: ${eventData.word_info.meaning}`);
+                  } else {
+                    console.warn('[WordExplanationService] Event does not contain word_info');
+                  }
                   
                   if (onEvent) {
+                    console.log('[WordExplanationService] Calling onEvent callback');
                     onEvent(eventData);
+                    console.log('[WordExplanationService] onEvent callback completed');
+                  } else {
+                    console.warn('[WordExplanationService] No onEvent callback provided');
                   }
                 } catch (parseError) {
                   console.error('[WordExplanationService] Error parsing event data:', parseError);
+                  console.error('[WordExplanationService] Raw data that failed to parse:', data);
                 }
               }
             }
@@ -133,6 +148,60 @@ class WordExplanationService {
       
       // Return a no-op abort function
       return () => {};
+    }
+  }
+  
+  /**
+   * Get more explanations/examples for a word
+   * @param {string} word - The word
+   * @param {string} meaning - Current meaning
+   * @param {Array<string>} examples - Current examples
+   * @returns {Promise<Object>} Response with {success, data, error}
+   */
+  static async getMoreExplanations(word, meaning, examples) {
+    const url = `${this.BASE_URL}/api/v1/get-more-explanations`;
+    
+    try {
+      console.log('[WordExplanationService] Fetching more explanations for:', word);
+      
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          word: word,
+          meaning: meaning,
+          examples: examples
+        })
+      });
+      
+      if (!response.ok) {
+        throw new Error(`API request failed: ${response.status} ${response.statusText}`);
+      }
+      
+      const data = await response.json();
+      console.log('[WordExplanationService] Received more explanations:', data);
+      
+      return {
+        success: true,
+        data: data
+      };
+    } catch (error) {
+      console.error('[WordExplanationService] Error fetching more explanations:', error);
+      
+      let errorMessage = error.message;
+      
+      if (error.message.includes('Failed to fetch') || error.name === 'TypeError') {
+        errorMessage = 'Cannot connect to API server. Please check:\n' +
+                      '1. Backend server is running at ' + this.BASE_URL + '\n' +
+                      '2. CORS is properly configured to allow requests from this origin';
+      }
+      
+      return {
+        success: false,
+        error: errorMessage
+      };
     }
   }
   
