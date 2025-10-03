@@ -43,8 +43,15 @@ const StorageManager = {
   async saveToggleState(domain, isEnabled) {
     try {
       const key = this.getStorageKey(domain);
-      await chrome.storage.local.set({ [key]: isEnabled });
-      console.log(`Toggle state saved for ${domain}:`, isEnabled);
+      if (isEnabled) {
+        // Save the enabled state
+        await chrome.storage.local.set({ [key]: isEnabled });
+        console.log(`Toggle state saved for ${domain}:`, isEnabled);
+      } else {
+        // Remove the key from storage when disabled
+        await chrome.storage.local.remove([key]);
+        console.log(`Toggle state removed for ${domain} (disabled)`);
+      }
     } catch (error) {
       console.error('Error saving toggle state:', error);
     }
@@ -53,18 +60,18 @@ const StorageManager = {
   /**
    * Load toggle state from Chrome local storage for a specific domain
    * @param {string} domain - The domain name
-   * @returns {Promise<boolean>} The saved toggle state (defaults to true - enabled by default)
+   * @returns {Promise<boolean>} The saved toggle state (defaults to false - disabled by default)
    */
   async loadToggleState(domain) {
     try {
       const key = this.getStorageKey(domain);
       const result = await chrome.storage.local.get([key]);
-      const state = result[key] ?? true; // Default to true (enabled) if not set
+      const state = result[key] ?? false; // Default to false (disabled) if not set
       console.log(`Toggle state loaded for ${domain}:`, state);
       return state;
     } catch (error) {
       console.error('Error loading toggle state:', error);
-      return true; // Default to true (enabled) on error
+      return false; // Default to false (disabled) on error
     }
   }
 };
