@@ -11,7 +11,7 @@ The base URL for all API calls is configured in a single location:
 
 ```javascript
 // In ApiService.js
-static BASE_URL = 'http://localhost:8000';
+static BASE_URL = 'https://caten-production.up.railway.app';
 ```
 
 ### Changing the Base URL

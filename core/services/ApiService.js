@@ -5,7 +5,7 @@
 
 class ApiService {
   // Configurable base URL - change this single place to update for all API calls
-  static BASE_URL = 'http://localhost:8000';
+  static BASE_URL = 'https://caten-production.up.railway.app';
   
   // API endpoints
   static ENDPOINTS = {
