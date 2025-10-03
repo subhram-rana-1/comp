@@ -317,8 +317,10 @@ const WordSelector = {
    * @param {string} word - The word to add
    */
   addWord(word) {
-    const normalizedWord = word.toLowerCase();
+    const normalizedWord = word.toLowerCase().trim();
+    console.log(`[WordSelector] Adding word: "${word}" (normalized: "${normalizedWord}")`);
     this.selectedWords.add(normalizedWord); // O(1) operation
+    console.log(`[WordSelector] Selected words now:`, Array.from(this.selectedWords));
     // Update button states
     ButtonPanel.updateButtonStatesFromSelections();
   },
@@ -328,7 +330,9 @@ const WordSelector = {
    * @param {string} word - The word to remove
    */
   removeWord(word) {
-    const normalizedWord = word.toLowerCase();
+    const normalizedWord = word.toLowerCase().trim();
+    
+    console.log(`[WordSelector] Removing word: "${word}" (normalized: "${normalizedWord}")`);
     
     // Get all highlights for this word
     const highlights = this.wordToHighlights.get(normalizedWord);
@@ -348,6 +352,7 @@ const WordSelector = {
     
     console.log('[WordSelector] Word removed:', word);
     console.log('[WordSelector] Remaining selected words:', this.selectedWords.size);
+    console.log('[WordSelector] Selected words now:', Array.from(this.selectedWords));
     
     // Update button states
     ButtonPanel.updateButtonStatesFromSelections();
@@ -1035,16 +1040,18 @@ const WordSelector = {
    * @returns {HTMLElement}
    */
   createRemoveExplainedButton(word) {
+    const normalizedWord = word.toLowerCase().trim();
     const btn = document.createElement('button');
     btn.className = 'vocab-word-remove-explained-btn';
     btn.setAttribute('aria-label', `Remove explanation for "${word}"`);
     btn.innerHTML = this.createGreenCrossIcon();
     
-    // Add click handler
+    // Add click handler - use normalized word for consistent lookup
     btn.addEventListener('click', (e) => {
       e.preventDefault();
       e.stopPropagation();
-      this.removeExplainedWord(word);
+      console.log(`[WordSelector] Green cross button clicked for word: "${word}" (normalized: "${normalizedWord}")`);
+      this.removeExplainedWord(normalizedWord);
     });
     
     return btn;
@@ -1067,17 +1074,23 @@ const WordSelector = {
    * @param {string} word - The word to remove
    */
   removeExplainedWord(word) {
-    const normalizedWord = word.toLowerCase();
+    const normalizedWord = word.toLowerCase().trim();
     
-    console.log('[WordSelector] Removing explained word:', word);
+    console.log('[WordSelector] ===== REMOVING EXPLAINED WORD =====');
+    console.log('[WordSelector] Original word:', word);
+    console.log('[WordSelector] Normalized word:', normalizedWord);
+    console.log('[WordSelector] Available explained words:', Array.from(this.explainedWords.keys()));
     
     // Get the word data from explainedWords
     const wordData = this.explainedWords.get(normalizedWord);
     
     if (!wordData) {
-      console.warn('[WordSelector] Word not found in explainedWords:', word);
+      console.warn('[WordSelector] ✗ Word not found in explainedWords:', normalizedWord);
+      console.warn('[WordSelector] Available keys:', Array.from(this.explainedWords.keys()));
       return;
     }
+    
+    console.log('[WordSelector] ✓ Found word data in explainedWords:', wordData);
     
     // Remove green background and buttons from all highlights
     if (wordData.highlights) {
@@ -5126,7 +5139,10 @@ const ButtonPanel = {
       console.log(`[ButtonPanel] Removing ${explainedWordKeys.length} explained words`);
       
       explainedWordKeys.forEach(word => {
+        const normalizedWord = word.toLowerCase().trim();
         const wordData = explainedWordsMap.get(word);
+        
+        console.log(`[ButtonPanel] Removing explained word: "${word}" (normalized: "${normalizedWord}")`);
         
         if (wordData && wordData.highlights) {
           // Remove all highlights for this word
@@ -5155,8 +5171,8 @@ const ButtonPanel = {
         // Remove from explainedWords Map
         explainedWordsMap.delete(word);
         
-        // Also remove from wordToHighlights Map
-        WordSelector.wordToHighlights.delete(word);
+        // Also remove from wordToHighlights Map using normalized word
+        WordSelector.wordToHighlights.delete(normalizedWord);
       });
       
       // Hide any open popups
@@ -5419,6 +5435,13 @@ const ButtonPanel = {
           console.log(`[ButtonPanel] Word meaning:`, wordInfo.meaning);
           console.log(`[ButtonPanel] Word examples:`, wordInfo.examples);
           
+          // Special debugging for "government" word
+          if (normalizedTargetWord === 'government' || wordInfo.word?.toLowerCase().includes('government')) {
+            console.log(`[ButtonPanel] ===== SPECIAL DEBUG FOR GOVERNMENT WORD =====`);
+            console.log(`[ButtonPanel] This is the government word!`);
+            console.log(`[ButtonPanel] Full event data for government:`, JSON.stringify(eventData, null, 2));
+          }
+          
           // Log all available segments for debugging
           console.log('[ButtonPanel] Available segments for matching:');
           wordPayload.forEach((segment, idx) => {
@@ -5429,6 +5452,19 @@ const ButtonPanel = {
               words: segment.important_words_location.map(w => w.word),
               highlightCount: segment._wordHighlights ? segment._wordHighlights.length : 0
             });
+            
+            // Special debugging for government word segments
+            if (normalizedTargetWord === 'government' || wordInfo.word?.toLowerCase().includes('government')) {
+              console.log(`[ButtonPanel] ===== GOVERNMENT SEGMENT DEBUG #${idx + 1} =====`);
+              console.log(`[ButtonPanel] Segment textStartIndex: ${segment.textStartIndex}`);
+              console.log(`[ButtonPanel] Segment text: "${segment.text}"`);
+              console.log(`[ButtonPanel] Important words in segment:`, segment.important_words_location);
+              console.log(`[ButtonPanel] Highlights in segment:`, segment._wordHighlights?.map(hl => ({
+                dataWord: hl.getAttribute('data-word'),
+                textContent: hl.textContent.trim(),
+                classes: hl.className
+              })));
+            }
           });
           
           // Find the corresponding segment and highlight
@@ -5438,6 +5474,17 @@ const ButtonPanel = {
           );
           
           console.log(`[ButtonPanel] Exact match result:`, matchingSegment ? 'FOUND' : 'NOT FOUND');
+          
+          // Special debugging for government word matching
+          if (normalizedTargetWord === 'government' || wordInfo.word?.toLowerCase().includes('government')) {
+            console.log(`[ButtonPanel] ===== GOVERNMENT EXACT MATCH DEBUG =====`);
+            console.log(`[ButtonPanel] Looking for textStartIndex: ${wordInfo.textStartIndex}`);
+            wordPayload.forEach((segment, idx) => {
+              const isMatch = segment.textStartIndex === wordInfo.textStartIndex;
+              console.log(`[ButtonPanel] Segment #${idx + 1} textStartIndex: ${segment.textStartIndex}, matches: ${isMatch}`);
+            });
+            console.log(`[ButtonPanel] Matching segment found:`, matchingSegment ? 'YES' : 'NO');
+          }
           
           // If no exact match, try to find by word name and location within merged segments
           if (!matchingSegment) {
@@ -5456,6 +5503,17 @@ const ButtonPanel = {
               const isInRange = wordInfo.textStartIndex >= segment.textStartIndex && wordInfo.textStartIndex < segmentEnd;
               
               console.log(`[ButtonPanel] Checking segment (${segment.textStartIndex}-${segmentEnd}): word "${normalizedTargetWord}" found: ${!!wordLocation}, inRange: ${isInRange}`);
+              
+              // Special debugging for government word
+              if (normalizedTargetWord === 'government' || wordInfo.word?.toLowerCase().includes('government')) {
+                console.log(`[ButtonPanel] ===== GOVERNMENT WORD-BASED MATCH DEBUG =====`);
+                console.log(`[ButtonPanel] Segment textStartIndex: ${segment.textStartIndex}`);
+                console.log(`[ButtonPanel] Segment textEnd: ${segmentEnd}`);
+                console.log(`[ButtonPanel] Word textStartIndex: ${wordInfo.textStartIndex}`);
+                console.log(`[ButtonPanel] Word location found:`, wordLocation);
+                console.log(`[ButtonPanel] Is in range: ${isInRange}`);
+                console.log(`[ButtonPanel] All words in segment:`, segment.important_words_location.map(w => w.word));
+              }
               
               return isInRange;
             });
@@ -5498,6 +5556,19 @@ const ButtonPanel = {
                 isAlreadyExplained: isAlreadyExplained,
                 matchesTargetWord: dataWord && dataWord.toLowerCase() === normalizedTargetWord
               });
+              
+              // Special debugging for government word highlights
+              if (normalizedTargetWord === 'government' || wordInfo.word?.toLowerCase().includes('government')) {
+                console.log(`[ButtonPanel] ===== GOVERNMENT HIGHLIGHT DEBUG #${idx + 1} =====`);
+                console.log(`[ButtonPanel] Highlight data-word: "${dataWord}"`);
+                console.log(`[ButtonPanel] Highlight textContent: "${textContent}"`);
+                console.log(`[ButtonPanel] Highlight classes: "${classes}"`);
+                console.log(`[ButtonPanel] Target word: "${normalizedTargetWord}"`);
+                console.log(`[ButtonPanel] Does data-word match target: ${dataWord && dataWord.toLowerCase() === normalizedTargetWord}`);
+                console.log(`[ButtonPanel] Does textContent match target: ${textContent.toLowerCase() === normalizedTargetWord}`);
+                console.log(`[ButtonPanel] Is currently loading: ${isCurrentlyLoading}`);
+                console.log(`[ButtonPanel] Is already explained: ${isAlreadyExplained}`);
+              }
             });
             
             // Try multiple matching strategies for robustness
@@ -5507,6 +5578,15 @@ const ButtonPanel = {
               const dataWord = hl.getAttribute('data-word');
               const matches = dataWord && dataWord.toLowerCase() === normalizedTargetWord;
               console.log(`[ButtonPanel] Strategy 1 (data-word): "${dataWord}" === "${normalizedTargetWord}" = ${matches}`);
+              
+              // Special debugging for government word
+              if (normalizedTargetWord === 'government' || wordInfo.word?.toLowerCase().includes('government')) {
+                console.log(`[ButtonPanel] ===== GOVERNMENT STRATEGY 1 DEBUG =====`);
+                console.log(`[ButtonPanel] Checking highlight with data-word: "${dataWord}"`);
+                console.log(`[ButtonPanel] Target normalized word: "${normalizedTargetWord}"`);
+                console.log(`[ButtonPanel] Match result: ${matches}`);
+              }
+              
               return matches;
             });
             
@@ -5517,6 +5597,15 @@ const ButtonPanel = {
                 const highlightText = hl.textContent.trim().toLowerCase();
                 const matches = highlightText === normalizedTargetWord;
                 console.log(`[ButtonPanel] Strategy 2 (text content): "${highlightText}" === "${normalizedTargetWord}" = ${matches}`);
+                
+                // Special debugging for government word
+                if (normalizedTargetWord === 'government' || wordInfo.word?.toLowerCase().includes('government')) {
+                  console.log(`[ButtonPanel] ===== GOVERNMENT STRATEGY 2 DEBUG =====`);
+                  console.log(`[ButtonPanel] Checking highlight with textContent: "${highlightText}"`);
+                  console.log(`[ButtonPanel] Target normalized word: "${normalizedTargetWord}"`);
+                  console.log(`[ButtonPanel] Match result: ${matches}`);
+                }
+                
                 return matches;
               });
             }
@@ -5529,6 +5618,15 @@ const ButtonPanel = {
                 const matches = highlightText.includes(normalizedTargetWord) || 
                        normalizedTargetWord.includes(highlightText);
                 console.log(`[ButtonPanel] Strategy 3 (partial): "${highlightText}" includes "${normalizedTargetWord}" = ${matches}`);
+                
+                // Special debugging for government word
+                if (normalizedTargetWord === 'government' || wordInfo.word?.toLowerCase().includes('government')) {
+                  console.log(`[ButtonPanel] ===== GOVERNMENT STRATEGY 3 DEBUG =====`);
+                  console.log(`[ButtonPanel] Checking highlight with textContent: "${highlightText}"`);
+                  console.log(`[ButtonPanel] Target normalized word: "${normalizedTargetWord}"`);
+                  console.log(`[ButtonPanel] Partial match result: ${matches}`);
+                }
+                
                 return matches;
               });
             }
@@ -5566,15 +5664,15 @@ const ButtonPanel = {
               
               // Add green wireframe cross button
               console.log(`[ButtonPanel] Adding green cross button`);
-              const greenCrossBtn = WordSelector.createRemoveExplainedButton(wordInfo.word);
+              const greenCrossBtn = WordSelector.createRemoveExplainedButton(targetWord);
               wordHighlight.appendChild(greenCrossBtn);
               
               // Store in explainedWords map
-              const normalizedWord = wordInfo.word.toLowerCase();
+              const normalizedWord = normalizedTargetWord;
               if (!WordSelector.explainedWords.has(normalizedWord)) {
                 console.log(`[ButtonPanel] Creating new entry in explainedWords map for "${normalizedWord}"`);
                 WordSelector.explainedWords.set(normalizedWord, {
-                  word: wordInfo.word,
+                  word: targetWord,
                   meaning: wordInfo.meaning,
                   examples: wordInfo.examples,
                   highlights: new Set()
