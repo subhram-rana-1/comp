@@ -2892,32 +2892,53 @@ const ChatDialog = {
     const dialogContent = document.createElement('div');
     dialogContent.className = 'vocab-chat-content';
     
-    // Create collapse button
+    // Create left side button container (collapse and delete buttons stacked vertically)
+    const leftButtonContainer = document.createElement('div');
+    leftButtonContainer.className = 'vocab-chat-left-buttons';
+    
+    // Create collapse button (smaller size)
     const collapseBtn = document.createElement('button');
-    collapseBtn.className = 'vocab-chat-collapse-btn';
+    collapseBtn.className = 'vocab-chat-collapse-btn-small';
     collapseBtn.setAttribute('aria-label', 'Close chat');
     collapseBtn.innerHTML = this.createCollapseIcon();
     collapseBtn.addEventListener('click', () => this.close());
     
-    // Create tabs
-    const tabsContainer = this.createTabs();
+    leftButtonContainer.appendChild(collapseBtn);
+    
+    // Create focus button for top right corner
+    const focusButton = document.createElement('button');
+    focusButton.className = 'vocab-chat-focus-btn-top-right';
+    focusButton.innerHTML = `
+      <svg width="16" height="16" viewBox="0 0 20 20" fill="none">
+        <path d="M3 10l7-7v4c7 0 7 6 7 6s-3-3-7-3v4l-7-7z" fill="#9527F5"/>
+      </svg>
+      <span>Focus</span>
+    `;
+    
+    // Add click handler for focus button
+    focusButton.addEventListener('click', () => {
+      if (this.currentTextKey) {
+        const highlight = TextSelector.textToHighlights.get(this.currentTextKey);
+        if (highlight) {
+          // First scroll to the element
+          highlight.scrollIntoView({
+            behavior: 'smooth',
+            block: 'center'
+          });
+          // Then move to asked texts and pulsate
+          setTimeout(() => {
+            TextSelector.moveToAskedTexts(this.currentTextKey);
+          }, 300); // Small delay to let scroll complete
+        }
+      }
+    });
     
     // Create content area
     const contentArea = document.createElement('div');
     contentArea.className = 'vocab-chat-content-area';
     
-    // Create first tab content based on mode (hidden by default)
-    let firstTabContent;
-    if (this.mode === 'simplified') {
-      firstTabContent = this.createSimplifiedContent();
-    } else {
-      firstTabContent = this.createOriginalTextContent();
-    }
-    
-    // Create ask/chat content (visible by default)
+    // Create ask/chat content
     const askContent = this.createAskContent();
-    
-    contentArea.appendChild(firstTabContent);
     contentArea.appendChild(askContent);
     
     // Create input area
@@ -2927,8 +2948,8 @@ const ChatDialog = {
     const resizeHandles = this.createResizeHandles();
     
     // Assemble dialog
-    dialogContent.appendChild(collapseBtn);
-    dialogContent.appendChild(tabsContainer);
+    dialogContent.appendChild(leftButtonContainer);
+    dialogContent.appendChild(focusButton);
     dialogContent.appendChild(contentArea);
     dialogContent.appendChild(inputArea);
     
@@ -3341,12 +3362,8 @@ const ChatDialog = {
    */
   createAskContent() {
     const content = document.createElement('div');
-    // In ask mode, this content is active/visible; in simplified mode, it's hidden initially
-    content.className = this.mode === 'ask' ? 'vocab-chat-tab-content active' : 'vocab-chat-tab-content';
+    content.className = 'vocab-chat-tab-content active';
     content.setAttribute('data-content', 'ask');
-    if (this.mode === 'simplified') {
-      content.style.display = 'none';
-    }
     
     // Create chat messages container
     const chatContainer = document.createElement('div');
@@ -3420,10 +3437,19 @@ const ChatDialog = {
     inputField.placeholder = 'Type your question here ...';
     inputField.rows = 1;
     
-    // Auto-resize textarea
+    // Auto-resize textarea with scroll when max height reached
     inputField.addEventListener('input', (e) => {
       e.target.style.height = 'auto';
-      e.target.style.height = Math.min(e.target.scrollHeight, 120) + 'px';
+      const maxHeight = 120; // Maximum height in pixels
+      const newHeight = Math.min(e.target.scrollHeight, maxHeight);
+      e.target.style.height = newHeight + 'px';
+      
+      // Add scroll when max height is reached
+      if (e.target.scrollHeight > maxHeight) {
+        e.target.style.overflowY = 'auto';
+      } else {
+        e.target.style.overflowY = 'hidden';
+      }
     });
     
     // Handle Enter key (Shift+Enter for new line)
@@ -3434,7 +3460,14 @@ const ChatDialog = {
       }
     });
     
-    // Create delete button
+    // Create send button (restore original styling but same size as delete)
+    const sendBtn = document.createElement('button');
+    sendBtn.className = 'vocab-chat-send-btn';
+    sendBtn.setAttribute('aria-label', 'Send message');
+    sendBtn.innerHTML = this.createSendIcon();
+    sendBtn.addEventListener('click', () => this.sendMessage());
+    
+    // Create delete button (same size as send button)
     const deleteBtn = document.createElement('button');
     deleteBtn.className = 'vocab-chat-delete-conversation-btn';
     deleteBtn.id = 'vocab-chat-delete-conversation-btn';
@@ -3444,12 +3477,6 @@ const ChatDialog = {
     deleteBtn.style.display = 'none'; // Hidden by default
     deleteBtn.addEventListener('click', () => this.deleteConversation());
     
-    const sendBtn = document.createElement('button');
-    sendBtn.className = 'vocab-chat-send-btn';
-    sendBtn.setAttribute('aria-label', 'Send message');
-    sendBtn.innerHTML = this.createSendIcon();
-    sendBtn.addEventListener('click', () => this.sendMessage());
-    
     inputArea.appendChild(inputField);
     inputArea.appendChild(sendBtn);
     inputArea.appendChild(deleteBtn);
@@ -3458,48 +3485,11 @@ const ChatDialog = {
   },
   
   /**
-   * Switch between tabs
-   * @param {string} tabName - Tab name ('original-text' or 'ask')
+   * Switch between tabs (no-op since tabs are removed)
+   * @param {string} tabName - Tab name (ignored)
    */
   switchTab(tabName) {
-    // Update tab buttons
-    const tabs = this.dialogContainer.querySelectorAll('.vocab-chat-tab');
-    tabs.forEach(tab => {
-      if (tab.getAttribute('data-tab') === tabName) {
-        tab.classList.add('active');
-      } else {
-        tab.classList.remove('active');
-      }
-    });
-    
-    // Update indicator position
-    this.updateIndicatorPosition();
-    
-    // Update content areas with sliding animation
-    const contents = this.dialogContainer.querySelectorAll('.vocab-chat-tab-content');
-    contents.forEach(content => {
-      if (content.getAttribute('data-content') === tabName) {
-        // Slide in the new content
-        content.style.display = 'flex';
-        content.classList.remove('slide-out-left', 'slide-out-right');
-        content.classList.add('active', 'slide-in');
-        
-        // Remove animation class after animation completes
-        setTimeout(() => {
-          content.classList.remove('slide-in');
-        }, 300);
-      } else {
-        // Slide out the old content
-        content.classList.remove('active', 'slide-in');
-        content.classList.add('slide-out-right');
-        
-        // Hide after animation completes
-        setTimeout(() => {
-          content.style.display = 'none';
-          content.classList.remove('slide-out-right');
-        }, 300);
-      }
-    });
+    // No-op since we removed the tab system
   },
   
   /**
@@ -3960,11 +3950,11 @@ const ChatDialog = {
     style.id = styleId;
     style.textContent = `
       /* Global button underline prevention */
-      button, .vocab-btn, .vocab-chat-tab, .vocab-chat-focus-btn, .vocab-chat-send-btn, .vocab-chat-delete-conversation-btn, .vocab-chat-collapse-btn, .vocab-chat-simplify-more-btn {
+      button, .vocab-btn, .vocab-chat-tab, .vocab-chat-focus-btn, .vocab-chat-send-btn, .vocab-chat-delete-conversation-btn, .vocab-chat-collapse-btn, .vocab-chat-simplify-more-btn, .vocab-chat-collapse-btn-small, .vocab-chat-delete-conversation-btn-small, .vocab-chat-focus-btn-top-right {
         text-decoration: none !important;
       }
       
-      button:hover, .vocab-btn:hover, .vocab-chat-tab:hover, .vocab-chat-focus-btn:hover, .vocab-chat-send-btn:hover, .vocab-chat-delete-conversation-btn:hover, .vocab-chat-collapse-btn:hover, .vocab-chat-simplify-more-btn:hover {
+      button:hover, .vocab-btn:hover, .vocab-chat-tab:hover, .vocab-chat-focus-btn:hover, .vocab-chat-send-btn:hover, .vocab-chat-delete-conversation-btn:hover, .vocab-chat-collapse-btn:hover, .vocab-chat-simplify-more-btn:hover, .vocab-chat-collapse-btn-small:hover, .vocab-chat-delete-conversation-btn-small:hover, .vocab-chat-focus-btn-top-right:hover {
         text-decoration: none !important;
       }
       
@@ -4026,11 +4016,139 @@ const ChatDialog = {
         text-decoration: none;
       }
       
-      /* Flip collapse icon when dialog is visible */
-      .vocab-chat-dialog.visible .vocab-chat-collapse-btn svg {
+      /* Horizontally flip collapse icon to left-pointing arrow */
+      .vocab-chat-collapse-btn-small svg {
         transform: scaleX(-1);
       }
       
+      /* Left Button Container */
+      .vocab-chat-left-buttons {
+        position: absolute;
+        top: 16px;
+        left: 16px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        z-index: 10;
+      }
+      
+      /* Small Collapse Button */
+      .vocab-chat-collapse-btn-small {
+        width: 24px;
+        height: 24px;
+        background: white;
+        border: 1px solid #e5e7eb;
+        border-radius: 6px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        text-decoration: none;
+      }
+      
+      .vocab-chat-collapse-btn-small:hover {
+        background: #f9fafb;
+        border-color: #9527F5;
+        text-decoration: none;
+      }
+      
+      .vocab-chat-collapse-btn-small svg {
+        width: 14px;
+        height: 14px;
+      }
+      
+      /* Small Delete Button */
+      .vocab-chat-delete-conversation-btn-small {
+        width: 24px;
+        height: 24px;
+        background: white;
+        border: 1px solid #ef4444;
+        border-radius: 6px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        text-decoration: none;
+      }
+      
+      .vocab-chat-delete-conversation-btn-small:hover {
+        background: #fef2f2;
+        border-color: #dc2626;
+        text-decoration: none;
+      }
+      
+      .vocab-chat-delete-conversation-btn-small svg {
+        width: 12px;
+        height: 12px;
+      }
+      
+      /* Circular Delete Button - Bottom Right */
+      .vocab-chat-delete-conversation-btn-circular {
+        width: 32px;
+        height: 32px;
+        background: white;
+        border: 2px solid #ef4444;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        text-decoration: none;
+        flex-shrink: 0;
+        margin-left: 8px;
+      }
+      
+      .vocab-chat-delete-conversation-btn-circular:hover {
+        background: #fef2f2;
+        border-color: #dc2626;
+        transform: translateY(-1px);
+        text-decoration: none;
+      }
+      
+      .vocab-chat-delete-conversation-btn-circular:active {
+        transform: translateY(0) scale(0.95);
+      }
+      
+      .vocab-chat-delete-conversation-btn-circular svg {
+        width: 14px;
+        height: 14px;
+      }
+      
+      
+      /* Focus Button - Top Right */
+      .vocab-chat-focus-btn-top-right {
+        position: absolute;
+        top: 16px;
+        right: 16px;
+        padding: 6px 12px;
+        background: white;
+        border: 1px solid #e5e7eb;
+        border-radius: 6px;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        cursor: pointer;
+        z-index: 10;
+        transition: all 0.2s ease;
+        font-size: 12px;
+        font-weight: 500;
+        color: #9527F5;
+        text-decoration: none;
+      }
+      
+      .vocab-chat-focus-btn-top-right:hover {
+        background: #f9fafb;
+        border-color: #9527F5;
+        text-decoration: none;
+      }
+      
+      .vocab-chat-focus-btn-top-right span {
+        font-size: 12px;
+        font-weight: 500;
+      }
       
       /* Tabs */
       .vocab-chat-tabs {
@@ -4097,6 +4215,7 @@ const ChatDialog = {
         overflow: hidden;
         display: flex;
         flex-direction: column;
+        padding-top: 50px; /* Add padding to account for focus button */
       }
       
       .vocab-chat-tab-content {
@@ -4668,7 +4787,7 @@ const ButtonPanel = {
     showRemoveMeanings: false,    // Controls visibility of "Remove meanings" button
     showDeselectAll: false,        // Controls visibility of "Deselect all" button
     isMagicMeaningEnabled: false,  // Controls enabled/disabled state of "Magic meaning" button
-    isAskEnabled: false            // Controls enabled/disabled state of "Ask" button
+    showAsk: false                 // Controls visibility of "Ask" button
   },
 
   /**
@@ -4825,7 +4944,7 @@ const ButtonPanel = {
         id: 'ask',
         className: 'vocab-btn vocab-btn-solid-purple',
         icon: this.createChatIcon(),
-        text: 'Ask',
+        text: 'Ask anything',
         type: 'solid-purple'
       }
     ];
@@ -5400,7 +5519,7 @@ const ButtonPanel = {
             message = 'Select a text first'; // Fallback
           }
         } else {
-          message = 'Ask about the selected passage';
+          message = 'Ask anything about the selected content';
         }
         console.log(`[ButtonPanel] Ask button message: "${message}" (textCount: ${TextSelector.selectedTexts.size})`);
       }
@@ -6318,10 +6437,8 @@ const ButtonPanel = {
       }
     }
 
-    // Update enabled/disabled state of lower buttons
+    // Update enabled/disabled state of magic meaning button
     const magicMeaningBtn = document.getElementById('magic-meaning');
-    const askBtn = document.getElementById('ask');
-
     if (magicMeaningBtn) {
       if (this.state.isMagicMeaningEnabled) {
         magicMeaningBtn.classList.remove('disabled');
@@ -6330,11 +6447,13 @@ const ButtonPanel = {
       }
     }
 
+    // Update visibility of Ask button
+    const askBtn = document.getElementById('ask');
     if (askBtn) {
-      if (this.state.isAskEnabled) {
-        askBtn.classList.remove('disabled');
+      if (this.state.showAsk) {
+        askBtn.classList.remove('hidden');
       } else {
-        askBtn.classList.add('disabled');
+        askBtn.classList.add('hidden');
       }
     }
   },
@@ -6378,8 +6497,8 @@ const ButtonPanel = {
     // Enable "Magic meaning" if there are any words or texts selected
     this.setMagicMeaningEnabled(hasWords || hasTexts);
     
-    // Enable "Ask" only if exactly one text is selected
-    this.setAskEnabled(hasExactlyOneText);
+    // Show "Ask" only if exactly one text is selected
+    this.setAskVisible(hasExactlyOneText);
   },
 
   /**
@@ -6407,11 +6526,11 @@ const ButtonPanel = {
   },
 
   /**
-   * Set enabled state of Ask button
-   * @param {boolean} enabled - Whether to enable the button
+   * Set visibility of Ask button
+   * @param {boolean} show - Whether to show the button
    */
-  setAskEnabled(enabled) {
-    this.updateState({ isAskEnabled: enabled });
+  setAskVisible(show) {
+    this.updateState({ showAsk: show });
   }
 };
 
