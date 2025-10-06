@@ -4781,13 +4781,15 @@ const ChatDialog = {
 const ButtonPanel = {
   panelContainer: null,
   upperButtonGroup: null,
+  verticalButtonGroup: null,
   
   // State variables for button visibility and enabled states
   state: {
     showRemoveMeanings: false,    // Controls visibility of "Remove meanings" button
     showDeselectAll: false,        // Controls visibility of "Deselect all" button
     isMagicMeaningEnabled: false,  // Controls enabled/disabled state of "Magic meaning" button
-    showAsk: false                 // Controls visibility of "Ask" button
+    showAsk: false,                // Controls visibility of "Ask" button
+    showVerticalGroup: false       // Controls visibility of vertical button group
   },
 
   /**
@@ -4928,7 +4930,7 @@ const ButtonPanel = {
       this.upperButtonGroup.appendChild(button);
     });
 
-    // Create lower button group (Magic meaning, Ask)
+    // Create lower button group (Magic meaning, Ask, Custom content)
     const lowerButtonGroup = document.createElement('div');
     lowerButtonGroup.className = 'vocab-button-group-lower';
 
@@ -4946,6 +4948,13 @@ const ButtonPanel = {
         icon: this.createChatIcon(),
         text: 'Ask anything',
         type: 'solid-purple'
+      },
+      {
+        id: 'custom-content',
+        className: 'vocab-btn vocab-btn-solid-purple',
+        icon: this.createContentIcon(),
+        text: 'Custom content',
+        type: 'solid-purple'
       }
     ];
 
@@ -4958,12 +4967,18 @@ const ButtonPanel = {
     mainButtonGroup.appendChild(this.upperButtonGroup);
     mainButtonGroup.appendChild(lowerButtonGroup);
 
+    // Create vertical button group
+    this.verticalButtonGroup = this.createVerticalButtonGroup();
+
     // Create drag handle (separate from button group)
     const dragHandle = this.createDragHandle();
 
     // Append button group and drag handle to wrapper
     wrapperContainer.appendChild(mainButtonGroup);
     wrapperContainer.appendChild(dragHandle);
+
+    // Append vertical button group to wrapper (positioned absolutely)
+    wrapperContainer.appendChild(this.verticalButtonGroup);
 
     // Append wrapper to panel
     this.panelContainer.appendChild(wrapperContainer);
@@ -5039,6 +5054,50 @@ const ButtonPanel = {
   },
 
   /**
+   * Create vertical button group
+   * @returns {HTMLElement} Vertical button group element
+   */
+  createVerticalButtonGroup() {
+    const group = document.createElement('div');
+    group.className = 'vocab-vertical-button-group';
+    group.id = 'vocab-vertical-button-group';
+
+    // Create PDF button
+    const pdfButton = document.createElement('button');
+    pdfButton.className = 'vocab-vertical-btn';
+    pdfButton.id = 'vocab-pdf-btn';
+    pdfButton.innerHTML = `
+      <div class="vocab-vertical-btn-icon">${this.createPDFIcon()}</div>
+      <div class="vocab-vertical-btn-text">PDF</div>
+    `;
+
+    // Create Image button
+    const imageButton = document.createElement('button');
+    imageButton.className = 'vocab-vertical-btn';
+    imageButton.id = 'vocab-image-btn';
+    imageButton.innerHTML = `
+      <div class="vocab-vertical-btn-icon">${this.createImageIcon()}</div>
+      <div class="vocab-vertical-btn-text">Image</div>
+    `;
+
+    // Create Topics button
+    const topicsButton = document.createElement('button');
+    topicsButton.className = 'vocab-vertical-btn';
+    topicsButton.id = 'vocab-topics-btn';
+    topicsButton.innerHTML = `
+      <div class="vocab-vertical-btn-icon">${this.createTopicsIcon()}</div>
+      <div class="vocab-vertical-btn-text">Topics</div>
+    `;
+
+    // Append buttons to group
+    group.appendChild(pdfButton);
+    group.appendChild(imageButton);
+    group.appendChild(topicsButton);
+
+    return group;
+  },
+
+  /**
    * Create trash icon SVG
    * @param {string} color - Icon color (green or purple)
    * @returns {string} SVG markup
@@ -5080,6 +5139,71 @@ const ButtonPanel = {
         <circle cx="5" cy="7.5" r="1" fill="#9527F5"/>
         <circle cx="8" cy="7.5" r="1" fill="#9527F5"/>
         <circle cx="11" cy="7.5" r="1" fill="#9527F5"/>
+      </svg>
+    `;
+  },
+
+  /**
+   * Create content icon SVG (solid white)
+   * @returns {string} SVG markup
+   */
+  createContentIcon() {
+    return `
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M3 2C3 1.448 3.448 1 4 1H12C12.552 1 13 1.448 13 2V14C13 14.552 12.552 15 12 15H4C3.448 15 3 14.552 3 14V2Z" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M5 5H11M5 7H11M5 9H9" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M6 12H10" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    `;
+  },
+
+  /**
+   * Create PDF icon SVG (white)
+   * @returns {string} SVG markup
+   */
+  createPDFIcon() {
+    return `
+      <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M4 2C4 1.448 4.448 1 5 1H12L16 5V18C16 18.552 15.552 19 15 19H5C4.448 19 4 18.552 4 18V2Z" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M12 1V5H16" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M6 8H14M6 10H12M6 12H10" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        <text x="7" y="16" font-family="Arial, sans-serif" font-size="6" font-weight="bold" fill="white">PDF</text>
+        <path d="M8 15L8 13M8 13L6 15M8 13L10 15" stroke="white" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    `;
+  },
+
+  /**
+   * Create Image icon SVG (white)
+   * @returns {string} SVG markup
+   */
+  createImageIcon() {
+    return `
+      <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M3 4C3 3.448 3.448 3 4 3H16C16.552 3 17 3.448 17 4V16C17 16.552 16.552 17 16 17H4C3.448 17 3 16.552 3 16V4Z" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M7 8L10 11L13 8L17 12V16H3V12L7 8Z" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        <circle cx="7" cy="8" r="1.5" fill="white"/>
+        <path d="M14 6H16M14 6V4M14 6V8" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    `;
+  },
+
+  /**
+   * Create Topics icon SVG (white)
+   * @returns {string} SVG markup
+   */
+  createTopicsIcon() {
+    return `
+      <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M3 3H7V7H3V3Z" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M10 3H14V7H10V3Z" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M17 3H21V7H17V3Z" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M3 10H7V14H3V10Z" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M10 10H14V14H10V10Z" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M17 10H21V14H17V10Z" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M3 17H7V21H3V17Z" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M10 17H14V21H10V17Z" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M17 17H21V21H17V17Z" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
       </svg>
     `;
   },
@@ -5410,6 +5534,105 @@ const ButtonPanel = {
           height: 16px;
         }
       }
+
+      /* Vertical Button Group Styles */
+      .vocab-vertical-button-group {
+        position: absolute;
+        right: 100%;
+        top: 50%;
+        transform: translateY(-50%) translateX(-20px);
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        background: transparent;
+        padding: 0;
+        border-radius: 0;
+        box-shadow: none;
+        opacity: 0;
+        visibility: hidden;
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        z-index: 1000000;
+        min-width: 120px;
+      }
+
+      .vocab-vertical-button-group.visible {
+        opacity: 1;
+        visibility: visible;
+        transform: translateY(-50%) translateX(-10px);
+      }
+
+
+      .vocab-vertical-btn {
+        display: flex;
+        flex-direction: row;
+        align-items: center;
+        justify-content: flex-start;
+        padding: 8px 12px;
+        background: #A24EFF;
+        border: none;
+        border-radius: 8px;
+        color: white;
+        font-size: 12px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        min-height: 40px;
+        width: 100%;
+        gap: 8px;
+      }
+
+      .vocab-vertical-btn:hover {
+        background: #8B3DE8;
+        transform: translateY(-1px);
+        box-shadow: 0 2px 8px rgba(162, 78, 255, 0.4);
+      }
+
+      .vocab-vertical-btn:active {
+        transform: translateY(0);
+        box-shadow: 0 1px 4px rgba(162, 78, 255, 0.3);
+      }
+
+      .vocab-vertical-btn-icon {
+        width: 16px;
+        height: 16px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+      }
+
+      .vocab-vertical-btn-text {
+        font-size: 12px;
+        font-weight: 600;
+        text-align: left;
+        line-height: 1.2;
+        flex: 1;
+      }
+
+      /* Responsive adjustments for vertical button group */
+      @media (max-width: 768px) {
+        .vocab-vertical-button-group {
+          right: 100%;
+          transform: translateY(-50%) translateX(-15px);
+          padding: 0;
+          min-width: 100px;
+        }
+
+        .vocab-vertical-btn {
+          padding: 6px 8px;
+          min-height: 36px;
+          font-size: 11px;
+        }
+
+        .vocab-vertical-btn-icon {
+          width: 14px;
+          height: 14px;
+        }
+
+        .vocab-vertical-btn-text {
+          font-size: 10px;
+        }
+      }
     `;
 
     document.head.appendChild(style);
@@ -5423,7 +5646,8 @@ const ButtonPanel = {
       removeAllMeanings: document.getElementById('remove-all-meanings'),
       deselectAll: document.getElementById('deselect-all'),
       magicMeaning: document.getElementById('magic-meaning'),
-      ask: document.getElementById('ask')
+      ask: document.getElementById('ask'),
+      customContent: document.getElementById('custom-content')
     };
 
     // Remove all meanings button
@@ -5458,6 +5682,55 @@ const ButtonPanel = {
       }
       console.log('Ask clicked');
       this.handleAsk();
+    });
+
+    // Custom content button
+    buttons.customContent?.addEventListener('click', (e) => {
+      console.log('Custom content clicked');
+      this.toggleVerticalButtonGroup();
+    });
+
+    // Add hover events for custom content button
+    buttons.customContent?.addEventListener('mouseenter', () => {
+      this.showVerticalButtonGroup();
+    });
+
+    buttons.customContent?.addEventListener('mouseleave', () => {
+      // Only hide if not clicking on the vertical group
+      setTimeout(() => {
+        if (!this.verticalButtonGroup?.matches(':hover')) {
+          this.hideVerticalButtonGroup();
+        }
+      }, 100);
+    });
+
+    // Add hover events for vertical button group
+    this.verticalButtonGroup?.addEventListener('mouseenter', () => {
+      this.showVerticalButtonGroup();
+    });
+
+    this.verticalButtonGroup?.addEventListener('mouseleave', () => {
+      this.hideVerticalButtonGroup();
+    });
+
+    // Add event listeners for vertical button group buttons
+    const pdfBtn = document.getElementById('vocab-pdf-btn');
+    const imageBtn = document.getElementById('vocab-image-btn');
+    const topicsBtn = document.getElementById('vocab-topics-btn');
+
+    pdfBtn?.addEventListener('click', () => {
+      console.log('PDF button clicked');
+      this.handlePDFButton();
+    });
+
+    imageBtn?.addEventListener('click', () => {
+      console.log('Image button clicked');
+      this.handleImageButton();
+    });
+
+    topicsBtn?.addEventListener('click', () => {
+      console.log('Topics button clicked');
+      this.handleTopicsButton();
     });
 
     // Add tooltip event listeners
@@ -5504,7 +5777,7 @@ const ButtonPanel = {
       // Determine tooltip message based on button type and state
       if (buttonType === 'magic-meaning') {
         message = isDisabled 
-          ? 'Select words or texts first' 
+          ? 'Select words or passages first' 
           : 'Get meanings and explanations';
         console.log(`[ButtonPanel] Magic-meaning button message: "${message}"`);
       } else if (buttonType === 'ask') {
@@ -6370,6 +6643,82 @@ const ButtonPanel = {
       // Open chat dialog
       ChatDialog.open(originalText, textKey);
     }
+  },
+
+  /**
+   * Handler for Custom content button
+   */
+  handleCustomContent() {
+    console.log('[ButtonPanel] Custom content button clicked');
+    
+    // For now, just show an alert - this can be expanded later
+    alert('Custom content feature coming soon!');
+  },
+
+  /**
+   * Show the vertical button group
+   */
+  showVerticalButtonGroup() {
+    if (this.verticalButtonGroup) {
+      this.verticalButtonGroup.classList.add('visible');
+      this.updateState({ showVerticalGroup: true });
+    }
+  },
+
+  /**
+   * Hide the vertical button group
+   */
+  hideVerticalButtonGroup() {
+    if (this.verticalButtonGroup) {
+      this.verticalButtonGroup.classList.remove('visible');
+      this.updateState({ showVerticalGroup: false });
+    }
+  },
+
+  /**
+   * Toggle the vertical button group
+   */
+  toggleVerticalButtonGroup() {
+    if (this.verticalButtonGroup) {
+      if (this.verticalButtonGroup.classList.contains('visible')) {
+        this.hideVerticalButtonGroup();
+      } else {
+        this.showVerticalButtonGroup();
+      }
+    }
+  },
+
+  /**
+   * Handler for PDF button
+   */
+  handlePDFButton() {
+    console.log('[ButtonPanel] PDF button clicked');
+    // Hide the vertical group after selection
+    this.hideVerticalButtonGroup();
+    // TODO: Implement PDF functionality
+    alert('PDF upload feature coming soon!');
+  },
+
+  /**
+   * Handler for Image button
+   */
+  handleImageButton() {
+    console.log('[ButtonPanel] Image button clicked');
+    // Hide the vertical group after selection
+    this.hideVerticalButtonGroup();
+    // TODO: Implement Image functionality
+    alert('Image upload feature coming soon!');
+  },
+
+  /**
+   * Handler for Topics button
+   */
+  handleTopicsButton() {
+    console.log('[ButtonPanel] Topics button clicked');
+    // Hide the vertical group after selection
+    this.hideVerticalButtonGroup();
+    // TODO: Implement Topics functionality
+    alert('Topics selection feature coming soon!');
   },
 
   /**
