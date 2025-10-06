@@ -5341,7 +5341,7 @@ const ButtonPanel = {
         cursor: pointer;
         transition: all 0.2s ease, opacity 0.3s ease, transform 0.3s ease, max-height 0.3s ease;
         outline: none;
-        width: 120px;
+        width: 100px;
         max-height: 100px;
         overflow: hidden;
         opacity: 1;
@@ -5522,7 +5522,7 @@ const ButtonPanel = {
         }
 
         .vocab-btn {
-          width: 110px;
+          width: 90px;
           padding: 6px 8px;
           font-size: 11px;
           grid-template-columns: 16px 1fr;
@@ -5631,6 +5631,522 @@ const ButtonPanel = {
 
         .vocab-vertical-btn-text {
           font-size: 10px;
+        }
+      }
+
+      /* Topics Modal Styles */
+      .vocab-topics-modal-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.5);
+        z-index: 1000000;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        opacity: 0;
+        visibility: hidden;
+        transition: opacity 0.3s ease, visibility 0.3s ease;
+        font-family: 'Inter', 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      }
+
+      .vocab-topics-modal-overlay.visible {
+        opacity: 1;
+        visibility: visible;
+      }
+
+      .vocab-topics-modal {
+        background: white;
+        border-radius: 20px;
+        box-shadow: 0 25px 50px rgba(162, 78, 255, 0.25), 0 0 0 1px rgba(162, 78, 255, 0.1);
+        padding: 40px;
+        max-width: 700px;
+        width: 90%;
+        max-height: 80vh;
+        overflow-y: auto;
+        transform: scale(0.9) translateY(20px);
+        transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+        position: relative;
+      }
+
+      .vocab-topics-content-container {
+        background: #F8F4FF;
+        border-radius: 16px;
+        padding: 30px;
+        margin-top: 20px;
+      }
+
+      .vocab-topics-modal.visible {
+        transform: scale(1) translateY(0);
+      }
+
+      .vocab-topics-modal-header {
+        position: relative;
+        margin-bottom: 30px;
+        text-align: center;
+      }
+
+      .vocab-topics-modal-title {
+        font-size: 28px;
+        font-weight: 400;
+        color: #A24EFF;
+        margin: 0;
+        text-align: center;
+      }
+
+      .vocab-topics-modal-close {
+        position: absolute;
+        top: 20px;
+        right: 20px;
+        background: none;
+        border: none;
+        color: #A24EFF;
+        font-size: 32px;
+        font-weight: 200;
+        cursor: pointer;
+        width: 40px;
+        height: 40px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: color 0.2s ease, transform 0.2s ease;
+      }
+
+      .vocab-topics-modal-close:hover {
+        color: #8B3AE8;
+        transform: scale(1.1);
+      }
+
+
+      /* First Container - Input */
+      .vocab-topics-first-container {
+        margin-bottom: 25px;
+      }
+
+      .vocab-topics-input-section {
+        width: 70%;
+        margin: 0 auto;
+      }
+
+      .vocab-topics-input-container {
+        position: relative;
+      }
+
+      .vocab-topics-generate-btn {
+        background: #A24EFF;
+        color: white;
+        border: none;
+        padding: 16px 32px;
+        border-radius: 20px;
+        font-size: 18px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: background-color 0.2s ease, transform 0.2s ease;
+        font-family: inherit;
+        white-space: nowrap;
+        min-width: 150px;
+        margin: 10px auto 0;
+        display: block;
+      }
+
+      .vocab-topics-generate-btn:hover {
+        background: #8B3AE8;
+        transform: translateY(-2px);
+      }
+
+      .vocab-topics-generate-btn:active {
+        transform: translateY(0);
+      }
+
+      /* Second Container - Topic Tags + Controls */
+      .vocab-topics-second-container {
+        display: flex;
+        gap: 20px;
+        align-items: stretch;
+      }
+
+      .vocab-topics-tags-section {
+        flex: 2;
+      }
+
+      .vocab-topics-controls-section {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        gap: 35px;
+        justify-content: center;
+      }
+
+      .vocab-topics-input {
+        width: 100%;
+        padding: 12px 45px 12px 16px;
+        border: 2px solid #E6D6FF;
+        border-radius: 25px;
+        font-size: 16px;
+        background: white;
+        color: #333;
+        transition: border-color 0.2s ease, box-shadow 0.2s ease;
+        box-sizing: border-box;
+        font-family: inherit;
+      }
+
+      .vocab-topics-input:focus {
+        outline: none;
+        border-color: #A24EFF;
+        box-shadow: 0 0 0 3px rgba(162, 78, 255, 0.1);
+      }
+
+      .vocab-topics-input::placeholder {
+        color: #B19CD9;
+        font-style: italic;
+        font-weight: 400;
+      }
+
+      .vocab-topics-search-icon {
+        position: absolute;
+        right: 12px;
+        top: 50%;
+        transform: translateY(-50%);
+        color: #A24EFF;
+        cursor: pointer;
+        transition: background-color 0.2s ease, opacity 0.2s ease;
+        background: #A24EFF;
+        width: 24px;
+        height: 24px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .vocab-topics-search-icon:hover:not(.disabled) {
+        background: #8B3AE8;
+      }
+
+      .vocab-topics-search-icon.disabled {
+        background: #c5aee3;
+        cursor: not-allowed;
+        opacity: 1;
+      }
+
+      .vocab-topics-tags-container {
+        margin-bottom: 15px;
+        height: 200px;
+        border: 2px solid #E6D6FF;
+        border-radius: 16px;
+        padding: 12px;
+        background: white;
+        flex: 2;
+        overflow-y: auto;
+      }
+
+
+      .vocab-topics-second-container {
+        transition: opacity 0.3s ease, transform 0.3s ease;
+        opacity: 1;
+        transform: translateY(0);
+      }
+
+      .vocab-topics-second-container.hidden {
+        opacity: 0;
+        transform: translateY(-10px);
+        pointer-events: none;
+      }
+
+      .vocab-topics-generate-btn {
+        transition: opacity 0.3s ease, transform 0.3s ease;
+        opacity: 1;
+        transform: translateY(0);
+      }
+
+      .vocab-topics-generate-btn.hidden {
+        opacity: 0;
+        transform: translateY(-10px);
+        pointer-events: none;
+      }
+
+      .vocab-topics-tags {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        min-height: 36px;
+      }
+
+      .vocab-topics-tag {
+        background: #E6D6FF;
+        color: #A24EFF;
+        padding: 3px 6px;
+        border-radius: 10px;
+        font-size: 13px;
+        font-weight: 500;
+        display: flex;
+        align-items: center;
+        gap: 3px;
+        animation: slideIn 0.3s ease;
+      }
+
+      @keyframes slideIn {
+        from {
+          opacity: 0;
+          transform: translateY(-10px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+
+      .vocab-topics-tag-remove {
+        background: none;
+        border: none;
+        color: #A24EFF;
+        cursor: pointer;
+        font-size: 16px;
+        font-weight: bold;
+        padding: 0;
+        width: 22px;
+        height: 22px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 50%;
+        transition: background-color 0.2s ease;
+      }
+
+      .vocab-topics-tag-remove:hover {
+        background-color: rgba(162, 78, 255, 0.1);
+      }
+
+      .vocab-topics-control-group {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        justify-content: center;
+      }
+
+      .vocab-topics-word-count-group {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        justify-content: center;
+        align-items: center;
+      }
+
+      .vocab-topics-difficulty-group {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        justify-content: center;
+        align-items: center;
+      }
+
+      .vocab-topics-control-label {
+        font-size: 20px;
+        font-weight: 500;
+        color: #A24EFF;
+        margin: 0;
+        font-family: inherit;
+      }
+
+      .vocab-topics-word-count-buttons {
+        display: flex;
+        background: white;
+        border: 1px solid #E6D6FF;
+        border-radius: 12px;
+        padding: 2px;
+        position: relative;
+        width: fit-content;
+        align-items: center;
+      }
+
+      .vocab-topics-word-count-slider {
+        position: absolute;
+        top: 2px;
+        left: 2px;
+        height: calc(100% - 4px);
+        background: #A24EFF;
+        border-radius: 10px;
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        z-index: 1;
+      }
+
+      .vocab-topics-word-count-btn {
+        padding: 6px 20px;
+        border: none;
+        border-radius: 10px;
+        font-size: 14px;
+        font-weight: 500;
+        color: #A24EFF;
+        cursor: pointer;
+        background: white;
+        font-family: inherit;
+        position: relative;
+        z-index: 2;
+        min-width: 70px;
+        text-align: center;
+        height: 28px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .vocab-topics-word-count-btn.selected {
+        color: white;
+        background: transparent;
+      }
+
+      .vocab-topics-difficulty-buttons {
+        display: flex;
+        background: white;
+        border: 1px solid #E6D6FF;
+        border-radius: 12px;
+        padding: 2px;
+        position: relative;
+        width: fit-content;
+        align-items: center;
+      }
+
+      .vocab-topics-difficulty-slider {
+        position: absolute;
+        top: 2px;
+        left: 2px;
+        height: calc(100% - 4px);
+        background: #F9D43F;
+        border-radius: 10px;
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        z-index: 1;
+      }
+
+      .vocab-topics-difficulty-btn {
+        padding: 6px 20px;
+        border: none;
+        border-radius: 10px;
+        font-size: 14px;
+        font-weight: 500;
+        cursor: pointer;
+        background: white;
+        font-family: inherit;
+        position: relative;
+        z-index: 2;
+        min-width: 70px;
+        text-align: center;
+        height: 28px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .vocab-topics-difficulty-btn.easy {
+        color: #36D86B;
+      }
+
+      .vocab-topics-difficulty-btn.medium {
+        color: #F9D43F;
+      }
+
+      .vocab-topics-difficulty-btn.hard {
+        color: #FF4D4D;
+      }
+
+      .vocab-topics-difficulty-btn.selected {
+        color: white;
+        background: transparent;
+      }
+
+      .vocab-topics-difficulty-btn.easy.selected ~ .vocab-topics-difficulty-slider {
+        background: #36D86B;
+      }
+
+      .vocab-topics-difficulty-btn.medium.selected ~ .vocab-topics-difficulty-slider {
+        background: #F9D43F;
+      }
+
+      .vocab-topics-difficulty-btn.hard.selected ~ .vocab-topics-difficulty-slider {
+        background: #FF4D4D;
+      }
+
+      /* Responsive Design */
+      @media (max-width: 768px) {
+        .vocab-topics-modal {
+          padding: 30px;
+          margin: 20px;
+          width: calc(100% - 40px);
+          max-width: 650px;
+        }
+
+        .vocab-topics-modal-title {
+          font-size: 24px;
+        }
+
+        .vocab-topics-first-container {
+          margin-bottom: 20px;
+        }
+
+        .vocab-topics-input-section {
+          width: 80%;
+        }
+
+        .vocab-topics-second-container {
+          flex-direction: column;
+          gap: 20px;
+        }
+
+        .vocab-topics-tags-container {
+          height: 150px;
+          margin-bottom: 15px;
+        }
+
+        .vocab-topics-input {
+          font-size: 16px;
+          padding: 14px 45px 14px 14px;
+        }
+
+        .vocab-topics-difficulty-buttons {
+          flex-direction: column;
+        }
+
+        .vocab-topics-difficulty-btn {
+          flex: none;
+        }
+
+        .vocab-topics-word-count-buttons {
+          width: 100%;
+        }
+
+        .vocab-topics-difficulty-buttons {
+          width: 100%;
+        }
+      }
+
+      @media (max-width: 480px) {
+        .vocab-topics-modal {
+          padding: 25px;
+          margin: 15px;
+          width: calc(100% - 30px);
+          max-width: 600px;
+        }
+
+        .vocab-topics-modal-title {
+          font-size: 22px;
+        }
+
+        .vocab-topics-generate-btn {
+          padding: 14px 24px;
+          font-size: 16px;
+          min-width: auto;
+          width: 100%;
+          margin: 10px auto 0;
+        }
+
+        .vocab-topics-input-section {
+          width: 85%;
+        }
+
+        .vocab-topics-tags-container {
+          height: 120px;
+          margin-bottom: 10px;
         }
       }
     `;
@@ -6715,10 +7231,8 @@ const ButtonPanel = {
    */
   handleTopicsButton() {
     console.log('[ButtonPanel] Topics button clicked');
-    // Hide the vertical group after selection
-    this.hideVerticalButtonGroup();
-    // TODO: Implement Topics functionality
-    alert('Topics selection feature coming soon!');
+    // Show the topics modal
+    this.showTopicsModal();
   },
 
   /**
@@ -6880,6 +7394,608 @@ const ButtonPanel = {
    */
   setAskVisible(show) {
     this.updateState({ showAsk: show });
-  }
+  },
+
+  // ===================================
+  // Topics Modal Functionality
+  // ===================================
+  
+  /**
+   * Topics modal state
+   */
+  topicsModal: {
+    overlay: null,
+    modal: null,
+    topics: [],
+    wordCount: 250,
+    difficulty: 'medium'
+  },
+
+  /**
+   * Create and show the topics modal
+   */
+  showTopicsModal() {
+    console.log('[ButtonPanel] Showing topics modal');
+    
+    // Hide the vertical button group
+    this.hideVerticalButtonGroup();
+    
+    // Create modal if it doesn't exist
+    if (!this.topicsModal.overlay) {
+      this.createTopicsModal();
+      
+      // Wait for DOM to be ready before showing modal using requestAnimationFrame
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          this.showModalWithAnimation();
+        });
+      });
+    } else {
+      // Modal already exists, show it immediately
+      this.showModalWithAnimation();
+    }
+  },
+
+  /**
+   * Show modal with animation and initialize everything
+   */
+  showModalWithAnimation() {
+    // Show modal with animation
+    this.topicsModal.overlay.classList.add('visible');
+    this.topicsModal.modal.classList.add('visible');
+    
+    // Focus on input field
+    const input = this.topicsModal.modal.querySelector('.vocab-topics-input');
+    if (input) {
+      setTimeout(() => input.focus(), 300);
+    }
+    
+    // Initialize plus icon state
+    setTimeout(() => {
+      if (this.updatePlusIconState) {
+        this.updatePlusIconState();
+      }
+    }, 300);
+    
+    // Initialize topics UI state
+    setTimeout(() => {
+      this.updateTopicsUIState();
+    }, 300);
+    
+    // Initialize slider positions
+    setTimeout(() => {
+      this.initializeSliders();
+    }, 200);
+  },
+
+  /**
+   * Hide the topics modal
+   */
+  hideTopicsModal() {
+    console.log('[ButtonPanel] Hiding topics modal');
+    
+    if (this.topicsModal.overlay) {
+      this.topicsModal.overlay.classList.remove('visible');
+      this.topicsModal.modal.classList.remove('visible');
+    }
+  },
+
+  /**
+   * Create the topics modal HTML structure
+   */
+  createTopicsModal() {
+    // Create overlay
+    const overlay = document.createElement('div');
+    overlay.className = 'vocab-topics-modal-overlay';
+    overlay.id = 'vocab-topics-modal-overlay';
+    
+    // Create modal
+    const modal = document.createElement('div');
+    modal.className = 'vocab-topics-modal';
+    
+    // Create header
+    const header = document.createElement('div');
+    header.className = 'vocab-topics-modal-header';
+    
+    const title = document.createElement('h2');
+    title.className = 'vocab-topics-modal-title';
+    title.textContent = 'Generate story from topics';
+    
+    const closeBtn = document.createElement('button');
+    closeBtn.className = 'vocab-topics-modal-close';
+    closeBtn.innerHTML = '×';
+    closeBtn.setAttribute('aria-label', 'Close modal');
+    
+    header.appendChild(title);
+    
+    // Create first container (input + generate button)
+    const firstContainer = document.createElement('div');
+    firstContainer.className = 'vocab-topics-first-container';
+    
+    // Input section (left side of first container)
+    const inputSection = document.createElement('div');
+    inputSection.className = 'vocab-topics-input-section';
+    
+    const inputContainer = document.createElement('div');
+    inputContainer.className = 'vocab-topics-input-container';
+    
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'vocab-topics-input';
+    input.placeholder = 'Type topic name here ...';
+    
+    const searchIcon = document.createElement('div');
+    searchIcon.className = 'vocab-topics-search-icon disabled';
+    searchIcon.innerHTML = this.createPlusIcon();
+    
+    inputContainer.appendChild(input);
+    inputContainer.appendChild(searchIcon);
+    inputSection.appendChild(inputContainer);
+    
+    // Generate button (right side of first container)
+    const generateBtn = document.createElement('button');
+    generateBtn.className = 'vocab-topics-generate-btn';
+    generateBtn.textContent = 'Generate story';
+    
+    firstContainer.appendChild(inputSection);
+    
+    // Create second container (topic tags + controls)
+    const secondContainer = document.createElement('div');
+    secondContainer.className = 'vocab-topics-second-container';
+    
+    // Topic tags section (left side of second container)
+    const tagsSection = document.createElement('div');
+    tagsSection.className = 'vocab-topics-tags-section';
+    
+    const tagsContainer = document.createElement('div');
+    tagsContainer.className = 'vocab-topics-tags-container';
+    
+    const tags = document.createElement('div');
+    tags.className = 'vocab-topics-tags';
+    tags.id = 'vocab-topics-tags';
+    
+    // Tags container starts empty
+    tagsContainer.appendChild(tags);
+    tagsSection.appendChild(tagsContainer);
+    
+    // Controls section (right side of second container)
+    const controlsSection = document.createElement('div');
+    controlsSection.className = 'vocab-topics-controls-section';
+    
+    // Word count control (top of controls section)
+    const wordCountGroup = document.createElement('div');
+    wordCountGroup.className = 'vocab-topics-word-count-group';
+    
+    const wordCountLabel = document.createElement('h3');
+    wordCountLabel.className = 'vocab-topics-control-label';
+    wordCountLabel.textContent = 'Total Word Count';
+    
+    const wordCountButtons = document.createElement('div');
+    wordCountButtons.className = 'vocab-topics-word-count-buttons';
+    
+    // Create sliding background
+    const wordCountSlider = document.createElement('div');
+    wordCountSlider.className = 'vocab-topics-word-count-slider';
+    wordCountSlider.id = 'word-count-slider';
+    
+    const btn100 = document.createElement('button');
+    btn100.className = 'vocab-topics-word-count-btn';
+    btn100.textContent = '100';
+    btn100.setAttribute('data-count', '100');
+    
+    const btn250 = document.createElement('button');
+    btn250.className = 'vocab-topics-word-count-btn selected';
+    btn250.textContent = '250';
+    btn250.setAttribute('data-count', '250');
+    
+    const btn500 = document.createElement('button');
+    btn500.className = 'vocab-topics-word-count-btn';
+    btn500.textContent = '500';
+    btn500.setAttribute('data-count', '500');
+    
+    wordCountButtons.appendChild(wordCountSlider);
+    wordCountButtons.appendChild(btn100);
+    wordCountButtons.appendChild(btn250);
+    wordCountButtons.appendChild(btn500);
+    
+    wordCountGroup.appendChild(wordCountLabel);
+    wordCountGroup.appendChild(wordCountButtons);
+    
+    // Difficulty control (bottom of controls section)
+    const difficultyGroup = document.createElement('div');
+    difficultyGroup.className = 'vocab-topics-difficulty-group';
+    
+    const difficultyLabel = document.createElement('h3');
+    difficultyLabel.className = 'vocab-topics-control-label';
+    difficultyLabel.textContent = 'Difficulty Level';
+    
+    const difficultyButtons = document.createElement('div');
+    difficultyButtons.className = 'vocab-topics-difficulty-buttons';
+    
+    // Create sliding background
+    const difficultySlider = document.createElement('div');
+    difficultySlider.className = 'vocab-topics-difficulty-slider';
+    difficultySlider.id = 'difficulty-slider';
+    
+    const easyBtn = document.createElement('button');
+    easyBtn.className = 'vocab-topics-difficulty-btn easy';
+    easyBtn.textContent = 'Easy';
+    easyBtn.setAttribute('data-difficulty', 'easy');
+    
+    const mediumBtn = document.createElement('button');
+    mediumBtn.className = 'vocab-topics-difficulty-btn medium selected';
+    mediumBtn.textContent = 'Medium';
+    mediumBtn.setAttribute('data-difficulty', 'medium');
+    
+    const hardBtn = document.createElement('button');
+    hardBtn.className = 'vocab-topics-difficulty-btn hard';
+    hardBtn.textContent = 'Hard';
+    hardBtn.setAttribute('data-difficulty', 'hard');
+    
+    difficultyButtons.appendChild(difficultySlider);
+    difficultyButtons.appendChild(easyBtn);
+    difficultyButtons.appendChild(mediumBtn);
+    difficultyButtons.appendChild(hardBtn);
+    
+    difficultyGroup.appendChild(difficultyLabel);
+    difficultyGroup.appendChild(difficultyButtons);
+    
+    // Assemble controls section
+    controlsSection.appendChild(wordCountGroup);
+    controlsSection.appendChild(difficultyGroup);
+    
+    // Assemble second container
+    secondContainer.appendChild(tagsSection);
+    secondContainer.appendChild(controlsSection);
+    
+    // Create content container for everything except header and generate button
+    const contentContainer = document.createElement('div');
+    contentContainer.className = 'vocab-topics-content-container';
+    
+    // Add content to the container (excluding generate button)
+    contentContainer.appendChild(firstContainer);
+    contentContainer.appendChild(secondContainer);
+    
+    // Assemble modal
+    modal.appendChild(header);
+    modal.appendChild(contentContainer);
+    modal.appendChild(generateBtn);
+    
+    overlay.appendChild(modal);
+    
+    // Add to document
+    document.body.appendChild(overlay);
+    
+    // Store references
+    this.topicsModal.overlay = overlay;
+    this.topicsModal.modal = modal;
+    
+    // Attach event listeners
+    this.attachTopicsModalListeners();
+  },
+
+  /**
+   * Attach event listeners to topics modal
+   */
+  attachTopicsModalListeners() {
+    const overlay = this.topicsModal.overlay;
+    const modal = this.topicsModal.modal;
+    const input = modal.querySelector('.vocab-topics-input');
+    const closeBtn = modal.querySelector('.vocab-topics-modal-close');
+    const generateBtn = modal.querySelector('.vocab-topics-generate-btn');
+    const wordCountButtons = modal.querySelectorAll('.vocab-topics-word-count-btn');
+    const difficultyButtons = modal.querySelectorAll('.vocab-topics-difficulty-btn');
+    const plusIcon = modal.querySelector('.vocab-topics-search-icon');
+    
+    // Close modal events
+    closeBtn.addEventListener('click', () => this.hideTopicsModal());
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) {
+        this.hideTopicsModal();
+      }
+    });
+    
+    // Function to add topic
+    const addTopicFromInput = () => {
+      const topic = input.value.trim();
+      console.log('[TopicsModal] Adding topic:', topic);
+      if (topic) {
+        this.addTopic(topic);
+        input.value = '';
+        updatePlusIconState();
+      }
+    };
+    
+    // Function to update plus icon state
+    const updatePlusIconState = () => {
+      console.log('[TopicsModal] Updating plus icon state');
+      if (plusIcon) {
+        if (input.value.trim()) {
+          plusIcon.classList.remove('disabled');
+          console.log('[TopicsModal] Plus icon enabled');
+        } else {
+          plusIcon.classList.add('disabled');
+          console.log('[TopicsModal] Plus icon disabled');
+        }
+      }
+    };
+    
+    // Store reference for external access
+    this.updatePlusIconState = updatePlusIconState;
+    
+    // Input events - add topic on Enter
+    input.addEventListener('keypress', (e) => {
+      console.log('[TopicsModal] Key pressed:', e.key);
+      if (e.key === 'Enter') {
+        console.log('[TopicsModal] Enter key pressed, calling addTopicFromInput');
+        addTopicFromInput();
+      }
+    });
+    
+    // Input change events - update plus icon state
+    input.addEventListener('input', () => {
+      console.log('[TopicsModal] Input changed');
+      updatePlusIconState();
+    });
+    
+    // Plus icon click event
+    plusIcon.addEventListener('click', () => {
+      console.log('[TopicsModal] Plus icon clicked, disabled:', plusIcon.classList.contains('disabled'));
+      if (!plusIcon.classList.contains('disabled')) {
+        console.log('[TopicsModal] Plus icon enabled, calling addTopicFromInput');
+        addTopicFromInput();
+      }
+    });
+    
+    // Generate button
+    generateBtn.addEventListener('click', () => this.handleGenerateStory());
+    
+    // Word count buttons
+    wordCountButtons.forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        // Don't remove selected class yet - animate first
+        // Animate slider to new position
+        this.animateSlider('word-count-slider', e.target);
+        
+        // Update word count
+        this.topicsModal.wordCount = parseInt(e.target.getAttribute('data-count'));
+        
+        // Remove selected class from all buttons after animation starts
+        wordCountButtons.forEach(b => b.classList.remove('selected'));
+        
+        // Add selected class to clicked button
+        e.target.classList.add('selected');
+      });
+    });
+    
+    // Difficulty buttons
+    difficultyButtons.forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        // Don't remove selected class yet - animate first
+        // Animate slider to new position and update color
+        this.animateSlider('difficulty-slider', e.target);
+        this.updateDifficultySliderColor(e.target);
+        
+        // Update difficulty
+        this.topicsModal.difficulty = e.target.getAttribute('data-difficulty');
+        
+        // Remove selected class from all buttons after animation starts
+        difficultyButtons.forEach(b => b.classList.remove('selected'));
+        
+        // Add selected class to clicked button
+        e.target.classList.add('selected');
+      });
+    });
+  },
+
+  /**
+   * Add a topic to the list
+   * @param {string} topic - The topic to add
+   */
+  addTopic(topic) {
+    if (!topic || this.topicsModal.topics.includes(topic)) {
+      return;
+    }
+    
+    console.log('[ButtonPanel] Adding topic:', topic);
+    
+    // Add to topics array
+    this.topicsModal.topics.push(topic);
+    
+    // Create and add tag element
+    const tag = this.createTopicTag(topic);
+    const tagsContainer = this.topicsModal.modal.querySelector('#vocab-topics-tags');
+    tagsContainer.appendChild(tag);
+    
+    // Update UI state
+    this.updateTopicsUIState();
+  },
+
+  /**
+   * Create a topic tag element
+   * @param {string} topic - The topic text
+   * @returns {HTMLElement} Topic tag element
+   */
+  createTopicTag(topic) {
+    const tag = document.createElement('div');
+    tag.className = 'vocab-topics-tag';
+    tag.setAttribute('data-topic', topic);
+    
+    const tagText = document.createElement('span');
+    tagText.textContent = topic;
+    
+    const removeBtn = document.createElement('button');
+    removeBtn.className = 'vocab-topics-tag-remove';
+    removeBtn.innerHTML = '×';
+    removeBtn.setAttribute('aria-label', `Remove ${topic}`);
+    
+    tag.appendChild(tagText);
+    tag.appendChild(removeBtn);
+    
+    // Add remove event listener
+    removeBtn.addEventListener('click', () => this.removeTopic(topic));
+    
+    return tag;
+  },
+
+  /**
+   * Remove a topic from the list
+   * @param {string} topic - The topic to remove
+   */
+  removeTopic(topic) {
+    console.log('[ButtonPanel] Removing topic:', topic);
+    
+    // Remove from topics array
+    const index = this.topicsModal.topics.indexOf(topic);
+    if (index > -1) {
+      this.topicsModal.topics.splice(index, 1);
+    }
+    
+    // Remove tag element
+    const tag = this.topicsModal.modal.querySelector(`[data-topic="${topic}"]`);
+    if (tag) {
+      tag.remove();
+    }
+    
+    // Update UI state
+    this.updateTopicsUIState();
+  },
+
+  /**
+   * Update UI state based on whether there are topics
+   */
+  updateTopicsUIState() {
+    const hasTopics = this.topicsModal.topics.length > 0;
+    const secondContainer = this.topicsModal.modal.querySelector('.vocab-topics-second-container');
+    const generateBtn = this.topicsModal.modal.querySelector('.vocab-topics-generate-btn');
+    const contentContainer = this.topicsModal.modal.querySelector('.vocab-topics-content-container');
+    
+    if (secondContainer) {
+      if (hasTopics) {
+        secondContainer.classList.remove('hidden');
+        // Ensure it's visible and interactive
+        secondContainer.style.display = 'flex';
+      } else {
+        secondContainer.classList.add('hidden');
+        // Hide after animation completes
+        setTimeout(() => {
+          if (secondContainer.classList.contains('hidden')) {
+            secondContainer.style.display = 'none';
+          }
+        }, 300);
+      }
+    }
+    
+    if (generateBtn) {
+      if (hasTopics) {
+        generateBtn.classList.remove('hidden');
+        // Ensure it's visible and interactive
+        generateBtn.style.display = 'block';
+      } else {
+        generateBtn.classList.add('hidden');
+        // Hide after animation completes
+        setTimeout(() => {
+          if (generateBtn.classList.contains('hidden')) {
+            generateBtn.style.display = 'none';
+          }
+        }, 300);
+      }
+    }
+  },
+
+  /**
+   * Handle generate story button click
+   */
+  handleGenerateStory() {
+    console.log('[ButtonPanel] Generating story with topics:', this.topicsModal.topics);
+    console.log('[ButtonPanel] Word count:', this.topicsModal.wordCount);
+    console.log('[ButtonPanel] Difficulty:', this.topicsModal.difficulty);
+    
+    if (this.topicsModal.topics.length === 0) {
+      alert('Please add at least one topic before generating a story.');
+      return;
+    }
+    
+    // TODO: Implement actual story generation logic
+    alert(`Story generation coming soon!\n\nTopics: ${this.topicsModal.topics.join(', ')}\nWord count: ${this.topicsModal.wordCount}\nDifficulty: ${this.topicsModal.difficulty}`);
+    
+    // Hide modal after generation
+    this.hideTopicsModal();
+  },
+
+  /**
+   * Initialize slider positions
+   */
+  initializeSliders() {
+    // Initialize word count slider
+    const wordCountSelected = this.topicsModal.modal.querySelector('.vocab-topics-word-count-btn.selected');
+    if (wordCountSelected) {
+      this.animateSlider('word-count-slider', wordCountSelected);
+    }
+    
+    // Initialize difficulty slider
+    const difficultySelected = this.topicsModal.modal.querySelector('.vocab-topics-difficulty-btn.selected');
+    if (difficultySelected) {
+      this.animateSlider('difficulty-slider', difficultySelected);
+      this.updateDifficultySliderColor(difficultySelected);
+    }
+  },
+
+  /**
+   * Animate slider to selected tab
+   * @param {string} sliderId - ID of the slider element
+   * @param {HTMLElement} selectedButton - The selected button element
+   */
+  animateSlider(sliderId, selectedButton) {
+    const slider = document.getElementById(sliderId);
+    if (!slider || !selectedButton) return;
+    
+    // Use requestAnimationFrame to ensure smooth animation
+    requestAnimationFrame(() => {
+      const buttonRect = selectedButton.getBoundingClientRect();
+      const containerRect = selectedButton.parentElement.getBoundingClientRect();
+      
+      const left = buttonRect.left - containerRect.left;
+      const width = buttonRect.width;
+      
+      slider.style.left = `${left}px`;
+      slider.style.width = `${width}px`;
+    });
+  },
+
+  /**
+   * Update difficulty slider color based on selected difficulty
+   * @param {HTMLElement} selectedButton - The selected difficulty button
+   */
+  updateDifficultySliderColor(selectedButton) {
+    const slider = document.getElementById('difficulty-slider');
+    if (!slider) return;
+    
+    const difficulty = selectedButton.getAttribute('data-difficulty');
+    switch (difficulty) {
+      case 'easy':
+        slider.style.background = '#36D86B';
+        break;
+      case 'medium':
+        slider.style.background = '#F9D43F';
+        break;
+      case 'hard':
+        slider.style.background = '#FF4D4D';
+        break;
+    }
+  },
+
+  /**
+   * Create plus icon SVG
+   * @returns {string} SVG markup
+   */
+  createPlusIcon() {
+    return `
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M8 3V13M3 8H13" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    `;
+  },
+
 };
 
