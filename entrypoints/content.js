@@ -6810,6 +6810,323 @@ const ButtonPanel = {
           margin-bottom: 10px;
         }
       }
+
+      /* Image Upload Modal Styles */
+      .vocab-image-upload-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.5);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 1000000;
+        opacity: 0;
+        visibility: hidden;
+        transition: opacity 0.3s ease, visibility 0.3s ease;
+        padding: 20px;
+        box-sizing: border-box;
+      }
+
+      .vocab-image-upload-overlay.visible {
+        opacity: 1;
+        visibility: visible;
+      }
+
+      .vocab-image-upload-overlay.drag-over {
+        background: rgba(149, 39, 245, 0.1);
+      }
+
+      .vocab-image-upload-modal {
+        background: white;
+        border-radius: 40px;
+        padding: 0;
+        width: 90%;
+        max-width: 800px;
+        max-height: 90vh;
+        overflow-y: auto;
+        box-shadow: 0 25px 50px rgba(149, 39, 245, 0.25), 0 0 0 1px rgba(149, 39, 245, 0.1);
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        animation: modalSlideIn 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        font-family: 'Inter', 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      }
+
+      @keyframes modalSlideIn {
+        0% {
+          opacity: 0;
+          transform: scale(0.9) translateY(-20px);
+        }
+        100% {
+          opacity: 1;
+          transform: scale(1) translateY(0);
+        }
+      }
+
+      .vocab-image-upload-header {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        padding: 20px 24px 5px 24px;
+        position: relative;
+      }
+
+      .vocab-image-upload-title {
+        font-size: 24px;
+        font-weight: 500;
+        color: #A24EFF;
+        margin: 0;
+        padding: 0;
+        line-height: 1.2;
+      }
+
+      .vocab-image-upload-close {
+        position: absolute;
+        right: 20px;
+        top: 20px;
+        background: none;
+        border: none;
+        color: #A24EFF;
+        cursor: pointer;
+        padding: 8px;
+        border-radius: 8px;
+        transition: all 0.2s ease;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .vocab-image-upload-close:hover {
+        transform: scale(1.2);
+      }
+
+      .vocab-image-upload-content {
+        padding: 32px 24px 24px 24px;
+        text-align: center;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 20px;
+      }
+
+      .vocab-image-upload-content-container {
+        background: #FCF8FF;
+        border: 2px dashed rgba(162, 78, 255, 0.4);
+        border-radius: 30px;
+        padding: 50px 32px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 24px;
+        width: calc(100% - 80px);
+        margin: 10px 40px 5px 40px;
+        cursor: pointer;
+        transition: all 0.2s ease;
+      }
+
+      .vocab-image-upload-content-container:hover {
+        border-color: rgba(162, 78, 255, 0.6);
+        transform: scale(1.02);
+      }
+
+      .vocab-image-upload-icon {
+        position: relative;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 80px;
+        height: 80px;
+        background: rgba(149, 39, 245, 0.1);
+        border-radius: 50%;
+        border: 2px dashed rgba(149, 39, 245, 0.3);
+        transition: all 0.3s ease;
+      }
+
+      .vocab-image-upload-icon:hover {
+        background: rgba(149, 39, 245, 0.15);
+        border-color: rgba(149, 39, 245, 0.5);
+        transform: scale(1.05);
+      }
+
+      .vocab-image-upload-plus {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        font-size: 24px;
+        font-weight: 700;
+        color: #9527F5;
+        pointer-events: none;
+      }
+
+      .vocab-image-upload-instructions {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        max-width: 400px;
+      }
+
+      .vocab-image-upload-main-text {
+        font-size: 18px;
+        font-weight: 600;
+        color: #666;
+        margin: 0;
+        line-height: 1.4;
+      }
+
+      .vocab-image-upload-format-text {
+        font-size: 16px;
+        font-weight: 400;
+        color: #888;
+        margin: 0;
+        line-height: 1.4;
+      }
+
+      .vocab-image-upload-secondary-text {
+        font-size: 14px;
+        color: #666;
+        margin: 0;
+        line-height: 1.5;
+      }
+
+      .vocab-image-upload-size-text {
+        font-size: 13px;
+        color: #999;
+        margin: 0;
+        font-weight: 500;
+      }
+
+      .vocab-image-upload-browse-btn {
+        background: #A24EFF;
+        color: white;
+        border: none;
+        border-radius: 15px;
+        padding: 12px 24px;
+        font-size: 16px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        min-width: 150px;
+        margin: 15px auto 0;
+        display: block;
+      }
+
+      .vocab-image-upload-browse-btn:hover {
+        background: #7A5BC7;
+        transform: scale(1.05);
+      }
+
+      .vocab-image-upload-browse-btn:active {
+        background: #7A5BC7;
+      }
+
+      /* Responsive Design */
+      @media (max-width: 768px) {
+        .vocab-image-upload-modal {
+          width: 95%;
+          margin: 20px;
+        }
+
+        .vocab-image-upload-title {
+          font-size: 20px;
+        }
+
+        .vocab-image-upload-content {
+          padding: 24px 20px 20px 20px;
+          gap: 16px;
+        }
+
+        .vocab-image-upload-content-container {
+          padding: 40px 24px;
+          gap: 20px;
+          width: calc(100% - 60px);
+          margin: 30px 30px 5px 30px;
+        }
+
+        .vocab-image-upload-icon {
+          width: 64px;
+          height: 64px;
+        }
+
+        .vocab-image-upload-plus {
+          font-size: 20px;
+        }
+
+        .vocab-image-upload-main-text {
+          font-size: 16px;
+        }
+
+        .vocab-image-upload-secondary-text {
+          font-size: 13px;
+        }
+
+        .vocab-image-upload-browse-btn {
+          padding: 12px 24px;
+          font-size: 15px;
+        }
+      }
+
+      @media (max-width: 480px) {
+        .vocab-image-upload-overlay {
+          padding: 10px;
+        }
+
+        .vocab-image-upload-modal {
+          width: 98%;
+          margin: 10px;
+        }
+
+        .vocab-image-upload-header {
+          padding: 20px 20px 12px 20px;
+        }
+
+        .vocab-image-upload-title {
+          font-size: 18px;
+        }
+
+        .vocab-image-upload-content {
+          padding: 20px 16px 16px 16px;
+          gap: 14px;
+        }
+
+        .vocab-image-upload-content-container {
+          padding: 32px 20px;
+          gap: 18px;
+          width: calc(100% - 40px);
+          margin: 20px 20px 5px 20px;
+        }
+
+        .vocab-image-upload-icon {
+          width: 56px;
+          height: 56px;
+        }
+
+        .vocab-image-upload-plus {
+          font-size: 18px;
+        }
+
+        .vocab-image-upload-main-text {
+          font-size: 15px;
+        }
+
+        .vocab-image-upload-secondary-text {
+          font-size: 12px;
+        }
+
+        .vocab-image-upload-size-text {
+          font-size: 11px;
+        }
+
+        .vocab-image-upload-browse-btn {
+          padding: 10px 20px;
+          font-size: 14px;
+          min-width: 100px;
+        }
+      }
     `;
 
     document.head.appendChild(style);
@@ -7964,12 +8281,8 @@ const ButtonPanel = {
     this.hideVerticalButtonGroup();
     // Hide the custom content button
     this.hideCustomContentButton();
-    // TODO: Implement Image functionality
-    alert('Image upload feature coming soon!');
-    // Show the custom content button again after alert
-    setTimeout(() => {
-      this.showCustomContentButton();
-    }, 100);
+    // Show the image upload modal
+    this.showImageUploadModal();
   },
 
   /**
@@ -8873,6 +9186,213 @@ const ButtonPanel = {
     
     // Show the custom content button again
     this.showCustomContentButton();
+  },
+
+  /**
+   * Show image upload modal
+   */
+  showImageUploadModal() {
+    console.log('[ButtonPanel] Showing image upload modal');
+    
+    // Create modal if it doesn't exist
+    if (!this.imageUploadModal) {
+      this.createImageUploadModal();
+    }
+    
+    // Show the modal
+    if (this.imageUploadModal.overlay) {
+      this.imageUploadModal.overlay.classList.add('visible');
+    }
+  },
+
+  /**
+   * Hide image upload modal
+   */
+  hideImageUploadModal() {
+    console.log('[ButtonPanel] Hiding image upload modal');
+    
+    if (this.imageUploadModal && this.imageUploadModal.overlay) {
+      this.imageUploadModal.overlay.classList.remove('visible');
+    }
+    
+    // Show the custom content button again
+    this.showCustomContentButton();
+  },
+
+  /**
+   * Create image upload modal HTML structure
+   */
+  createImageUploadModal() {
+    console.log('[ButtonPanel] Creating image upload modal...');
+    
+    // Create overlay
+    const overlay = document.createElement('div');
+    overlay.className = 'vocab-image-upload-overlay';
+    overlay.id = 'vocab-image-upload-overlay';
+    
+    // Create modal container
+    const modal = document.createElement('div');
+    modal.className = 'vocab-image-upload-modal';
+    
+    // Create modal content
+    modal.innerHTML = `
+      <div class="vocab-image-upload-header">
+        <h2 class="vocab-image-upload-title">Upload Image containing text</h2>
+        <button class="vocab-image-upload-close" id="vocab-image-upload-close">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M4 10H16" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M10 4V16" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
+      </div>
+      
+      <div class="vocab-image-upload-content">
+        <div class="vocab-image-upload-content-container">
+          <div class="vocab-image-upload-icon">
+            <svg width="64" height="64" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M21 19V5C21 3.9 20.1 3 19 3H5C3.9 3 3 3.9 3 5V19C3 20.1 3.9 21 5 21H19C20.1 21 21 20.1 21 19ZM8.5 13.5L11 16.51L14.5 12L19 18H5L8.5 13.5Z" fill="#9527F5"/>
+              <circle cx="16" cy="8" r="2" fill="#9527F5"/>
+              <path d="M12 6H12.01" stroke="#9527F5" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+            <div class="vocab-image-upload-plus">+</div>
+          </div>
+          
+          <div class="vocab-image-upload-instructions">
+            <p class="vocab-image-upload-main-text">Drop, Upload or Paste Image file</p>
+            <p class="vocab-image-upload-format-text">Supporting formats: JPG, PNG, JPEG, HEIC</p>
+            <p class="vocab-image-upload-secondary-text">use Ctrl+V (Windows) / Cmd+V (Mac) to paste from clipboard.</p>
+            <p class="vocab-image-upload-size-text">Maximum file size 5 MB.</p>
+          </div>
+          
+          <button class="vocab-image-upload-browse-btn" id="vocab-image-upload-browse">
+            Browse
+          </button>
+        </div>
+        
+        <input type="file" id="vocab-image-upload-input" accept="image/*" style="display: none;">
+      </div>
+    `;
+    
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
+    
+    // Store references
+    this.imageUploadModal = {
+      overlay: overlay,
+      modal: modal,
+      closeBtn: modal.querySelector('#vocab-image-upload-close'),
+      browseBtn: modal.querySelector('#vocab-image-upload-browse'),
+      fileInput: modal.querySelector('#vocab-image-upload-input')
+    };
+    
+    // Add event listeners
+    this.setupImageUploadModalEvents();
+    
+    console.log('[ButtonPanel] Image upload modal created successfully');
+  },
+
+  /**
+   * Setup event listeners for image upload modal
+   */
+  setupImageUploadModalEvents() {
+    const { overlay, closeBtn, browseBtn, fileInput } = this.imageUploadModal;
+    const container = overlay.querySelector('.vocab-image-upload-content-container');
+    
+    // Close modal events
+    closeBtn.addEventListener('click', () => this.hideImageUploadModal());
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) {
+        this.hideImageUploadModal();
+      }
+    });
+    
+    // Browse button click
+    browseBtn.addEventListener('click', () => {
+      fileInput.click();
+    });
+    
+    // Container click to open file dialog
+    container.addEventListener('click', () => {
+      fileInput.click();
+    });
+    
+    // File input change
+    fileInput.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (file) {
+        this.handleImageFile(file);
+      }
+    });
+    
+    // Drag and drop functionality
+    overlay.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      overlay.classList.add('drag-over');
+    });
+    
+    overlay.addEventListener('dragleave', (e) => {
+      e.preventDefault();
+      overlay.classList.remove('drag-over');
+    });
+    
+    overlay.addEventListener('drop', (e) => {
+      e.preventDefault();
+      overlay.classList.remove('drag-over');
+      
+      const files = e.dataTransfer.files;
+      if (files.length > 0) {
+        const file = files[0];
+        if (file.type.startsWith('image/')) {
+          this.handleImageFile(file);
+        } else {
+          alert('Please select an image file.');
+        }
+      }
+    });
+    
+    // Paste functionality
+    document.addEventListener('paste', (e) => {
+      if (overlay.classList.contains('visible')) {
+        const items = e.clipboardData.items;
+        for (let i = 0; i < items.length; i++) {
+          if (items[i].type.startsWith('image/')) {
+            const file = items[i].getAsFile();
+            this.handleImageFile(file);
+            break;
+          }
+        }
+      }
+    });
+  },
+
+  /**
+   * Handle uploaded image file
+   */
+  handleImageFile(file) {
+    console.log('[ButtonPanel] Handling image file:', file.name);
+    
+    // Check file size (5MB limit)
+    if (file.size > 5 * 1024 * 1024) {
+      alert('File size exceeds 5MB limit. Please select a smaller image.');
+      return;
+    }
+    
+    // Check file type
+    if (!file.type.startsWith('image/')) {
+      alert('Please select a valid image file.');
+      return;
+    }
+    
+    // TODO: Process the image file (OCR, text extraction, etc.)
+    console.log('[ButtonPanel] Image file validated:', {
+      name: file.name,
+      size: file.size,
+      type: file.type
+    });
+    
+    // For now, show success message and close modal
+    alert(`Image "${file.name}" uploaded successfully! Text extraction feature coming soon.`);
+    this.hideImageUploadModal();
   },
 
   /**
