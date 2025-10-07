@@ -5698,25 +5698,34 @@ const ButtonPanel = {
 
       .vocab-topics-modal-close {
         position: absolute;
-        top: 20px;
-        right: 20px;
+        top: 15px;
+        right: 15px;
         background: none;
         border: none;
         color: #A24EFF;
         font-size: 32px;
         font-weight: 200;
         cursor: pointer;
-        width: 40px;
-        height: 40px;
+        width: 48px;
+        height: 48px;
         display: flex;
         align-items: center;
         justify-content: center;
-        transition: color 0.2s ease, transform 0.2s ease;
+        transition: color 0.2s ease, transform 0.2s ease, background-color 0.2s ease;
+        border-radius: 50%;
+        padding: 0;
+        z-index: 10;
       }
 
       .vocab-topics-modal-close:hover {
         color: #8B3AE8;
+        background-color: rgba(162, 78, 255, 0.1);
         transform: scale(1.1);
+      }
+
+      .vocab-topics-modal-close svg {
+        width: 20px;
+        height: 20px;
       }
 
 
@@ -5827,8 +5836,8 @@ const ButtonPanel = {
 
       .vocab-topics-search-icon.disabled {
         background: #c5aee3;
-        cursor: not-allowed;
-        opacity: 1;
+        cursor: pointer;
+        opacity: 0.6;
       }
 
       .vocab-topics-tags-container {
@@ -6233,6 +6242,11 @@ const ButtonPanel = {
     const pdfBtn = document.getElementById('vocab-pdf-btn');
     const imageBtn = document.getElementById('vocab-image-btn');
     const topicsBtn = document.getElementById('vocab-topics-btn');
+    
+    console.log('Button elements found:');
+    console.log('PDF button:', pdfBtn);
+    console.log('Image button:', imageBtn);
+    console.log('Topics button:', topicsBtn);
 
     pdfBtn?.addEventListener('click', () => {
       console.log('PDF button clicked');
@@ -6244,7 +6258,7 @@ const ButtonPanel = {
       this.handleImageButton();
     });
 
-    topicsBtn?.addEventListener('click', () => {
+    topicsBtn?.addEventListener('click', (e) => {
       console.log('Topics button clicked');
       this.handleTopicsButton();
     });
@@ -7424,11 +7438,9 @@ const ButtonPanel = {
     if (!this.topicsModal.overlay) {
       this.createTopicsModal();
       
-      // Wait for DOM to be ready before showing modal using requestAnimationFrame
+      // Wait for DOM to be ready before showing modal using a single requestAnimationFrame
       requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          this.showModalWithAnimation();
-        });
+        this.showModalWithAnimation();
       });
     } else {
       // Modal already exists, show it immediately
@@ -7503,7 +7515,11 @@ const ButtonPanel = {
     
     const closeBtn = document.createElement('button');
     closeBtn.className = 'vocab-topics-modal-close';
-    closeBtn.innerHTML = '×';
+    closeBtn.innerHTML = `
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M12 4L4 12M4 4L12 12" stroke="#A24EFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    `;
     closeBtn.setAttribute('aria-label', 'Close modal');
     
     header.appendChild(title);
@@ -7660,6 +7676,7 @@ const ButtonPanel = {
     modal.appendChild(header);
     modal.appendChild(contentContainer);
     modal.appendChild(generateBtn);
+    modal.appendChild(closeBtn);
     
     overlay.appendChild(modal);
     
@@ -7680,12 +7697,19 @@ const ButtonPanel = {
   attachTopicsModalListeners() {
     const overlay = this.topicsModal.overlay;
     const modal = this.topicsModal.modal;
+    
     const input = modal.querySelector('.vocab-topics-input');
     const closeBtn = modal.querySelector('.vocab-topics-modal-close');
     const generateBtn = modal.querySelector('.vocab-topics-generate-btn');
     const wordCountButtons = modal.querySelectorAll('.vocab-topics-word-count-btn');
     const difficultyButtons = modal.querySelectorAll('.vocab-topics-difficulty-btn');
     const plusIcon = modal.querySelector('.vocab-topics-search-icon');
+    
+    // Check for null elements before adding listeners
+    if (!overlay || !modal || !closeBtn || !input || !generateBtn || !plusIcon) {
+      console.error('Topics modal: Missing required elements for event listeners');
+      return;
+    }
     
     // Close modal events
     closeBtn.addEventListener('click', () => this.hideTopicsModal());
@@ -7698,7 +7722,6 @@ const ButtonPanel = {
     // Function to add topic
     const addTopicFromInput = () => {
       const topic = input.value.trim();
-      console.log('[TopicsModal] Adding topic:', topic);
       if (topic) {
         this.addTopic(topic);
         input.value = '';
@@ -7708,14 +7731,11 @@ const ButtonPanel = {
     
     // Function to update plus icon state
     const updatePlusIconState = () => {
-      console.log('[TopicsModal] Updating plus icon state');
       if (plusIcon) {
         if (input.value.trim()) {
           plusIcon.classList.remove('disabled');
-          console.log('[TopicsModal] Plus icon enabled');
         } else {
           plusIcon.classList.add('disabled');
-          console.log('[TopicsModal] Plus icon disabled');
         }
       }
     };
@@ -7723,26 +7743,25 @@ const ButtonPanel = {
     // Store reference for external access
     this.updatePlusIconState = updatePlusIconState;
     
+    // Initialize plus icon state immediately
+    updatePlusIconState();
+    
     // Input events - add topic on Enter
-    input.addEventListener('keypress', (e) => {
-      console.log('[TopicsModal] Key pressed:', e.key);
+    input.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') {
-        console.log('[TopicsModal] Enter key pressed, calling addTopicFromInput');
+        e.preventDefault(); // Prevent form submission if this is in a form
         addTopicFromInput();
       }
     });
     
     // Input change events - update plus icon state
     input.addEventListener('input', () => {
-      console.log('[TopicsModal] Input changed');
       updatePlusIconState();
     });
     
     // Plus icon click event
     plusIcon.addEventListener('click', () => {
-      console.log('[TopicsModal] Plus icon clicked, disabled:', plusIcon.classList.contains('disabled'));
       if (!plusIcon.classList.contains('disabled')) {
-        console.log('[TopicsModal] Plus icon enabled, calling addTopicFromInput');
         addTopicFromInput();
       }
     });
