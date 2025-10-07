@@ -6848,12 +6848,17 @@ const ButtonPanel = {
         max-height: 90vh;
         overflow-y: auto;
         box-shadow: 0 25px 50px rgba(149, 39, 245, 0.25), 0 0 0 1px rgba(149, 39, 245, 0.1);
-        position: absolute;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%);
-        animation: modalSlideIn 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        transform: scale(0.9) translateY(20px);
+        opacity: 0;
+        visibility: hidden;
+        transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease, visibility 0.3s ease;
         font-family: 'Inter', 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      }
+
+      .vocab-image-upload-modal.visible {
+        transform: scale(1) translateY(0);
+        opacity: 1;
+        visibility: visible;
       }
 
       @keyframes modalSlideIn {
@@ -6871,14 +6876,14 @@ const ButtonPanel = {
         display: flex;
         justify-content: center;
         align-items: center;
-        padding: 20px 24px 5px 24px;
+        padding: 20px 24px 15px 24px;
         position: relative;
       }
 
       .vocab-image-upload-title {
         font-size: 24px;
         font-weight: 500;
-        color: #A24EFF;
+        color: #9B6EDA;
         margin: 0;
         padding: 0;
         line-height: 1.2;
@@ -6905,7 +6910,7 @@ const ButtonPanel = {
       }
 
       .vocab-image-upload-content {
-        padding: 32px 24px 24px 24px;
+        padding: 0 24px 24px 24px;
         text-align: center;
         display: flex;
         flex-direction: column;
@@ -6917,7 +6922,7 @@ const ButtonPanel = {
         background: #FCF8FF;
         border: 2px dashed rgba(162, 78, 255, 0.4);
         border-radius: 30px;
-        padding: 50px 32px;
+        padding: 30px 24px;
         display: flex;
         flex-direction: column;
         align-items: center;
@@ -6938,17 +6943,15 @@ const ButtonPanel = {
         display: flex;
         align-items: center;
         justify-content: center;
-        width: 80px;
-        height: 80px;
-        background: rgba(149, 39, 245, 0.1);
+        width: 100px;
+        height: 100px;
+        background: transparent;
         border-radius: 50%;
-        border: 2px dashed rgba(149, 39, 245, 0.3);
         transition: all 0.3s ease;
       }
 
       .vocab-image-upload-icon:hover {
-        background: rgba(149, 39, 245, 0.15);
-        border-color: rgba(149, 39, 245, 0.5);
+        background: transparent;
         transform: scale(1.05);
       }
 
@@ -7036,20 +7039,20 @@ const ButtonPanel = {
         }
 
         .vocab-image-upload-content {
-          padding: 24px 20px 20px 20px;
+          padding: 0 20px 20px 20px;
           gap: 16px;
         }
 
         .vocab-image-upload-content-container {
-          padding: 40px 24px;
+          padding: 24px 20px;
           gap: 20px;
           width: calc(100% - 60px);
           margin: 30px 30px 5px 30px;
         }
 
         .vocab-image-upload-icon {
-          width: 64px;
-          height: 64px;
+          width: 80px;
+          height: 80px;
         }
 
         .vocab-image-upload-plus {
@@ -7089,20 +7092,20 @@ const ButtonPanel = {
         }
 
         .vocab-image-upload-content {
-          padding: 20px 16px 16px 16px;
+          padding: 0 16px 16px 16px;
           gap: 14px;
         }
 
         .vocab-image-upload-content-container {
-          padding: 32px 20px;
+          padding: 20px 16px;
           gap: 18px;
           width: calc(100% - 40px);
           margin: 20px 20px 5px 20px;
         }
 
         .vocab-image-upload-icon {
-          width: 56px;
-          height: 56px;
+          width: 70px;
+          height: 70px;
         }
 
         .vocab-image-upload-plus {
@@ -7122,6 +7125,312 @@ const ButtonPanel = {
         }
 
         .vocab-image-upload-browse-btn {
+          padding: 10px 20px;
+          font-size: 14px;
+          min-width: 100px;
+        }
+      }
+
+      /* PDF Upload Modal Styles */
+      .vocab-pdf-upload-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.5);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 1000000;
+        opacity: 0;
+        visibility: hidden;
+        transition: opacity 0.3s ease, visibility 0.3s ease;
+        padding: 20px;
+        box-sizing: border-box;
+      }
+
+      .vocab-pdf-upload-overlay.visible {
+        opacity: 1;
+        visibility: visible;
+      }
+
+      .vocab-pdf-upload-overlay.drag-over {
+        background: rgba(149, 39, 245, 0.1);
+      }
+
+      .vocab-pdf-upload-modal {
+        background: white;
+        border-radius: 40px;
+        padding: 0;
+        width: 90%;
+        max-width: 800px;
+        max-height: 90vh;
+        overflow-y: auto;
+        box-shadow: 0 25px 50px rgba(149, 39, 245, 0.25), 0 0 0 1px rgba(149, 39, 245, 0.1);
+        transform: scale(0.9) translateY(20px);
+        opacity: 0;
+        visibility: hidden;
+        transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease, visibility 0.3s ease;
+        font-family: 'Inter', 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      }
+
+      .vocab-pdf-upload-modal.visible {
+        transform: scale(1) translateY(0);
+        opacity: 1;
+        visibility: visible;
+      }
+
+      .vocab-pdf-upload-header {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        padding: 20px 24px 15px 24px;
+        position: relative;
+      }
+
+      .vocab-pdf-upload-title {
+        font-size: 24px;
+        font-weight: 500;
+        color: #9B6EDA;
+        margin: 0;
+        padding: 0;
+        text-align: center;
+      }
+
+      .vocab-pdf-upload-close {
+        position: absolute;
+        right: 20px;
+        top: 20px;
+        background: none;
+        border: none;
+        color: #A24EFF;
+        cursor: pointer;
+        padding: 8px;
+        border-radius: 8px;
+        transition: all 0.2s ease;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .vocab-pdf-upload-close:hover {
+        transform: scale(1.2);
+      }
+
+      .vocab-pdf-upload-close svg {
+        width: 24px;
+        height: 24px;
+        stroke-width: 1.5;
+      }
+
+      .vocab-pdf-upload-content {
+        padding: 0 24px 24px 24px;
+        text-align: center;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 20px;
+      }
+
+      .vocab-pdf-upload-content-container {
+        background: #FCF8FF;
+        border: 2px dashed rgba(162, 78, 255, 0.4);
+        border-radius: 30px;
+        padding: 30px 24px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 24px;
+        width: calc(100% - 80px);
+        margin: 10px 40px 5px 40px;
+        cursor: pointer;
+        transition: all 0.2s ease;
+      }
+
+      .vocab-pdf-upload-content-container:hover {
+        border-color: rgba(162, 78, 255, 0.6);
+        transform: scale(1.02);
+      }
+
+      .vocab-pdf-upload-icon {
+        position: relative;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 120px;
+        height: 120px;
+        background: transparent;
+        border-radius: 50%;
+        transition: all 0.3s ease;
+      }
+
+      .vocab-pdf-upload-icon:hover {
+        background: transparent;
+        transform: scale(1.05);
+      }
+
+      .vocab-pdf-upload-plus {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        font-size: 24px;
+        color: #9527F5;
+        font-weight: bold;
+        pointer-events: none;
+      }
+
+      .vocab-pdf-upload-instructions {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        align-items: center;
+      }
+
+      .vocab-pdf-upload-main-text {
+        font-size: 18px;
+        color: #333;
+        margin: 0;
+        font-weight: 500;
+      }
+
+      .vocab-pdf-upload-secondary-text {
+        font-size: 14px;
+        color: #666;
+        margin: 0;
+        line-height: 1.5;
+      }
+
+      .vocab-pdf-upload-size-text {
+        font-size: 13px;
+        color: #999;
+        margin: 0;
+        font-weight: 500;
+      }
+
+      .vocab-pdf-upload-browse-btn {
+        background: #A24EFF;
+        color: white;
+        border: none;
+        border-radius: 15px;
+        padding: 12px 24px;
+        font-size: 16px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        min-width: 150px;
+        margin: 15px auto 0;
+        display: block;
+      }
+
+      .vocab-pdf-upload-browse-btn:hover {
+        background: #7A5BC7;
+        transform: scale(1.05);
+      }
+
+      .vocab-pdf-upload-browse-btn:active {
+        background: #7A5BC7;
+      }
+
+      /* Responsive styles for PDF upload modal */
+      @media (max-width: 768px) {
+        .vocab-pdf-upload-modal {
+          width: 95%;
+          margin: 20px;
+        }
+
+        .vocab-pdf-upload-title {
+          font-size: 20px;
+        }
+
+        .vocab-pdf-upload-content {
+          padding: 0 20px 20px 20px;
+          gap: 16px;
+        }
+
+        .vocab-pdf-upload-content-container {
+          padding: 24px 20px;
+          gap: 20px;
+          width: calc(100% - 60px);
+          margin: 30px 30px 5px 30px;
+        }
+
+        .vocab-pdf-upload-icon {
+          width: 100px;
+          height: 100px;
+        }
+
+        .vocab-pdf-upload-plus {
+          font-size: 20px;
+        }
+
+        .vocab-pdf-upload-main-text {
+          font-size: 16px;
+        }
+
+        .vocab-pdf-upload-secondary-text {
+          font-size: 13px;
+        }
+
+        .vocab-pdf-upload-size-text {
+          font-size: 11px;
+        }
+
+        .vocab-pdf-upload-browse-btn {
+          padding: 12px 24px;
+          font-size: 15px;
+        }
+      }
+
+      @media (max-width: 480px) {
+        .vocab-pdf-upload-modal {
+          width: 98%;
+          margin: 10px;
+        }
+
+        .vocab-pdf-upload-header {
+          padding: 20px 20px 12px 20px;
+        }
+
+        .vocab-pdf-upload-title {
+          font-size: 18px;
+        }
+
+        .vocab-pdf-upload-content {
+          padding: 0 16px 16px 16px;
+          gap: 14px;
+        }
+
+        .vocab-pdf-upload-content-container {
+          padding: 20px 16px;
+          gap: 18px;
+          width: calc(100% - 40px);
+          margin: 20px 20px 5px 20px;
+        }
+
+        .vocab-pdf-upload-icon {
+          width: 90px;
+          height: 90px;
+        }
+
+        .vocab-pdf-upload-plus {
+          font-size: 18px;
+        }
+
+        .vocab-pdf-upload-main-text {
+          font-size: 15px;
+        }
+
+        .vocab-pdf-upload-secondary-text {
+          font-size: 12px;
+        }
+
+        .vocab-pdf-upload-size-text {
+          font-size: 11px;
+        }
+
+        .vocab-pdf-upload-browse-btn {
           padding: 10px 20px;
           font-size: 14px;
           min-width: 100px;
@@ -8264,12 +8573,8 @@ const ButtonPanel = {
     this.hideVerticalButtonGroup();
     // Hide the custom content button
     this.hideCustomContentButton();
-    // TODO: Implement PDF functionality
-    alert('PDF upload feature coming soon!');
-    // Show the custom content button again after alert
-    setTimeout(() => {
-      this.showCustomContentButton();
-    }, 100);
+    // Show the PDF upload modal
+    this.showPDFUploadModal();
   },
 
   /**
@@ -9197,11 +9502,28 @@ const ButtonPanel = {
     // Create modal if it doesn't exist
     if (!this.imageUploadModal) {
       this.createImageUploadModal();
+      
+      // Wait for DOM to be ready before showing modal using double requestAnimationFrame
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          this.showImageModalWithAnimation();
+        });
+      });
+    } else {
+      // Modal already exists; show with animation
+      this.showImageModalWithAnimation();
     }
-    
-    // Show the modal
+  },
+
+  /**
+   * Show image modal with animation
+   */
+  showImageModalWithAnimation() {
     if (this.imageUploadModal.overlay) {
       this.imageUploadModal.overlay.classList.add('visible');
+    }
+    if (this.imageUploadModal.modal) {
+      this.imageUploadModal.modal.classList.add('visible');
     }
   },
 
@@ -9213,6 +9535,9 @@ const ButtonPanel = {
     
     if (this.imageUploadModal && this.imageUploadModal.overlay) {
       this.imageUploadModal.overlay.classList.remove('visible');
+    }
+    if (this.imageUploadModal && this.imageUploadModal.modal) {
+      this.imageUploadModal.modal.classList.remove('visible');
     }
     
     // Show the custom content button again
@@ -9240,8 +9565,7 @@ const ButtonPanel = {
         <h2 class="vocab-image-upload-title">Upload Image containing text</h2>
         <button class="vocab-image-upload-close" id="vocab-image-upload-close">
           <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M4 10H16" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-            <path d="M10 4V16" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M15 5L5 15M5 5L15 15" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
           </svg>
         </button>
       </div>
@@ -9393,6 +9717,237 @@ const ButtonPanel = {
     // For now, show success message and close modal
     alert(`Image "${file.name}" uploaded successfully! Text extraction feature coming soon.`);
     this.hideImageUploadModal();
+  },
+
+  /**
+   * Show PDF upload modal
+   */
+  showPDFUploadModal() {
+    console.log('[ButtonPanel] Showing PDF upload modal');
+    
+    // Create modal if it doesn't exist
+    if (!this.pdfUploadModal) {
+      this.createPDFUploadModal();
+      
+      // Wait for DOM to be ready before showing modal using double requestAnimationFrame
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          this.showPDFModalWithAnimation();
+        });
+      });
+    } else {
+      // Modal already exists; show with animation
+      this.showPDFModalWithAnimation();
+    }
+  },
+
+  /**
+   * Show PDF modal with animation
+   */
+  showPDFModalWithAnimation() {
+    if (this.pdfUploadModal.overlay) {
+      this.pdfUploadModal.overlay.classList.add('visible');
+    }
+    if (this.pdfUploadModal.modal) {
+      this.pdfUploadModal.modal.classList.add('visible');
+    }
+  },
+
+  /**
+   * Hide PDF upload modal
+   */
+  hidePDFUploadModal() {
+    console.log('[ButtonPanel] Hiding PDF upload modal');
+    
+    if (this.pdfUploadModal && this.pdfUploadModal.overlay) {
+      this.pdfUploadModal.overlay.classList.remove('visible');
+    }
+    if (this.pdfUploadModal && this.pdfUploadModal.modal) {
+      this.pdfUploadModal.modal.classList.remove('visible');
+    }
+    
+    // Show the custom content button again
+    setTimeout(() => {
+      this.showCustomContentButton();
+    }, 100);
+  },
+
+  /**
+   * Create PDF upload modal HTML structure
+   */
+  createPDFUploadModal() {
+    console.log('[ButtonPanel] Creating PDF upload modal...');
+    
+    // Create overlay
+    const overlay = document.createElement('div');
+    overlay.className = 'vocab-pdf-upload-overlay';
+    overlay.id = 'vocab-pdf-upload-overlay';
+    
+    // Create modal container
+    const modal = document.createElement('div');
+    modal.className = 'vocab-pdf-upload-modal';
+    
+    // Create modal content
+    modal.innerHTML = `
+      <div class="vocab-pdf-upload-header">
+        <h2 class="vocab-pdf-upload-title">Upload PDF containing text</h2>
+        <button class="vocab-pdf-upload-close" id="vocab-pdf-upload-close">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M15 5L5 15M5 5L15 15" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
+      </div>
+      
+      <div class="vocab-pdf-upload-content">
+        <div class="vocab-pdf-upload-content-container">
+          <div class="vocab-pdf-upload-icon">
+            <svg width="80" height="80" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <!-- Main document rectangle -->
+              <rect x="4" y="3" width="16" height="20" rx="2" fill="#9527F5"/>
+              <!-- Folded corner -->
+              <path d="M16 3L20 7V3H16Z" fill="#7A3FD1"/>
+              <!-- PDF text in the center -->
+              <text x="12" y="14" font-family="Arial, sans-serif" font-size="4" font-weight="bold" fill="white" text-anchor="middle">PDF</text>
+              <!-- Upload arrow in bottom right -->
+              <path d="M18 20L20 18M20 18L18 16M20 18H16" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </div>
+          
+          <div class="vocab-pdf-upload-instructions">
+            <p class="vocab-pdf-upload-main-text">Drop, Upload or Paste PDF file</p>
+            <p class="vocab-pdf-upload-secondary-text">use Ctrl+V (Windows) / Cmd+V (Mac) to paste from clipboard.</p>
+            <p class="vocab-pdf-upload-size-text">Maximum file size 5 MB.</p>
+          </div>
+          
+          <button class="vocab-pdf-upload-browse-btn" id="vocab-pdf-upload-browse">
+            Browse
+          </button>
+        </div>
+        
+        <input type="file" id="vocab-pdf-upload-input" accept=".pdf" style="display: none;">
+      </div>
+    `;
+    
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
+    
+    // Store references
+    this.pdfUploadModal = {
+      overlay: overlay,
+      modal: modal,
+      closeBtn: modal.querySelector('#vocab-pdf-upload-close'),
+      browseBtn: modal.querySelector('#vocab-pdf-upload-browse'),
+      fileInput: modal.querySelector('#vocab-pdf-upload-input')
+    };
+    
+    // Add event listeners
+    this.setupPDFUploadModalEvents();
+    
+    console.log('[ButtonPanel] PDF upload modal created successfully');
+  },
+
+  /**
+   * Setup event listeners for PDF upload modal
+   */
+  setupPDFUploadModalEvents() {
+    const { overlay, closeBtn, browseBtn, fileInput } = this.pdfUploadModal;
+    const container = overlay.querySelector('.vocab-pdf-upload-content-container');
+    
+    // Close modal events
+    closeBtn.addEventListener('click', () => this.hidePDFUploadModal());
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) {
+        this.hidePDFUploadModal();
+      }
+    });
+    
+    // Browse button click
+    browseBtn.addEventListener('click', () => {
+      fileInput.click();
+    });
+    
+    // Container click to open file dialog
+    container.addEventListener('click', () => {
+      fileInput.click();
+    });
+    
+    // File input change
+    fileInput.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (file) {
+        this.handlePDFFile(file);
+      }
+    });
+    
+    // Drag and drop functionality
+    overlay.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      overlay.classList.add('drag-over');
+    });
+    
+    overlay.addEventListener('dragleave', (e) => {
+      e.preventDefault();
+      overlay.classList.remove('drag-over');
+    });
+    
+    overlay.addEventListener('drop', (e) => {
+      e.preventDefault();
+      overlay.classList.remove('drag-over');
+      
+      const files = e.dataTransfer.files;
+      if (files.length > 0) {
+        const file = files[0];
+        if (file.type === 'application/pdf') {
+          this.handlePDFFile(file);
+        } else {
+          alert('Please select a PDF file.');
+        }
+      }
+    });
+    
+    // Paste functionality
+    document.addEventListener('paste', (e) => {
+      if (overlay.classList.contains('visible')) {
+        const items = e.clipboardData.items;
+        for (let i = 0; i < items.length; i++) {
+          if (items[i].type === 'application/pdf') {
+            const file = items[i].getAsFile();
+            this.handlePDFFile(file);
+            break;
+          }
+        }
+      }
+    });
+  },
+
+  /**
+   * Handle uploaded PDF file
+   */
+  handlePDFFile(file) {
+    console.log('[ButtonPanel] Handling PDF file:', file.name);
+    
+    // Check file size (5MB limit)
+    if (file.size > 5 * 1024 * 1024) {
+      alert('File size exceeds 5MB limit. Please select a smaller PDF.');
+      return;
+    }
+    
+    // Check file type
+    if (file.type !== 'application/pdf') {
+      alert('Please select a valid PDF file.');
+      return;
+    }
+    
+    // TODO: Process the PDF file (text extraction, etc.)
+    console.log('[ButtonPanel] PDF file validated:', {
+      name: file.name,
+      size: file.size,
+      type: file.type
+    });
+    
+    // For now, show success message and close modal
+    alert(`PDF "${file.name}" uploaded successfully! Text extraction feature coming soon.`);
+    this.hidePDFUploadModal();
   },
 
   /**
