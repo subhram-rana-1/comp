@@ -4771,6 +4771,328 @@ const ChatDialog = {
           display: none;
         }
       }
+
+      /* Processing Overlay Styles */
+      .vocab-processing-overlay {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(255, 255, 255, 0.8);
+        backdrop-filter: blur(4px);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 1000;
+        opacity: 0;
+        visibility: hidden;
+        transition: opacity 0.3s ease, visibility 0.3s ease;
+        border-radius: 20px;
+      }
+
+      .vocab-processing-overlay.visible {
+        opacity: 1;
+        visibility: visible;
+      }
+
+      .vocab-processing-content {
+        background: transparent;
+        border-radius: 20px;
+        padding: 40px;
+        box-shadow: none;
+        text-align: center;
+        max-width: 400px;
+        width: 90%;
+      }
+
+      .vocab-processing-text {
+        font-size: 18px;
+        font-weight: 500;
+        color: #A24EFF;
+        margin-bottom: 20px;
+        font-family: 'Inter', 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      }
+
+      .vocab-processing-icon {
+        width: 40px;
+        height: 40px;
+        margin: 0 auto;
+        position: relative;
+      }
+
+      .vocab-processing-icon::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: linear-gradient(45deg, #A24EFF, #8B3AE8);
+        border-radius: 50%;
+        animation: vocab-processing-pulse 1.5s ease-in-out infinite;
+      }
+
+      .vocab-processing-icon::after {
+        content: '';
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        width: 20px;
+        height: 20px;
+        background: white;
+        border-radius: 50%;
+        transform: translate(-50%, -50%);
+        animation: vocab-processing-bounce 1.5s ease-in-out infinite;
+      }
+
+      @keyframes vocab-processing-pulse {
+        0%, 100% {
+          transform: scale(1);
+          opacity: 1;
+        }
+        50% {
+          transform: scale(1.2);
+          opacity: 0.7;
+        }
+      }
+
+      @keyframes vocab-processing-bounce {
+        0%, 100% {
+          transform: translate(-50%, -50%) scale(1);
+        }
+        50% {
+          transform: translate(-50%, -50%) scale(1.3);
+        }
+      }
+
+      /* Custom Content Modal Styles */
+      .vocab-custom-content-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.5);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 10001;
+        opacity: 0;
+        visibility: hidden;
+        transition: opacity 0.3s ease, visibility 0.3s ease;
+      }
+
+      .vocab-custom-content-overlay.visible {
+        opacity: 1;
+        visibility: visible;
+      }
+
+      .vocab-custom-content-modal {
+        background: white;
+        border-radius: 30px;
+        box-shadow: 0 25px 50px rgba(162, 78, 255, 0.25), 0 0 0 1px rgba(162, 78, 255, 0.1);
+        width: 90%;
+        max-width: 800px;
+        max-height: 90vh;
+        display: flex;
+        flex-direction: column;
+        font-family: 'Inter', 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      }
+
+      .vocab-custom-content-header {
+        padding: 20px 30px;
+        border-bottom: 1px solid #E6D6FF;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+
+      .vocab-custom-content-title {
+        font-size: 24px;
+        font-weight: 500;
+        color: #A24EFF;
+        margin: 0;
+      }
+
+      .vocab-custom-content-close {
+        background: none;
+        border: none;
+        color: #A24EFF;
+        cursor: pointer;
+        padding: 8px;
+        border-radius: 8px;
+        transition: all 0.2s ease;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .vocab-custom-content-close:hover {
+        background-color: rgba(162, 78, 255, 0.1);
+        transform: scale(1.1);
+      }
+
+      .vocab-custom-content-search {
+        padding: 20px 30px;
+        border-bottom: 1px solid #E6D6FF;
+      }
+
+      .vocab-custom-content-search-input {
+        width: 100%;
+        padding: 12px 16px;
+        border: 1px solid #E6D6FF;
+        border-radius: 12px;
+        font-size: 16px;
+        font-family: inherit;
+        outline: none;
+        transition: border-color 0.2s ease;
+      }
+
+      .vocab-custom-content-search-input:focus {
+        border-color: #A24EFF;
+        box-shadow: 0 0 0 3px rgba(162, 78, 255, 0.1);
+      }
+
+      .vocab-custom-content-editor {
+        flex: 1;
+        padding: 30px;
+        overflow-y: auto;
+        min-height: 400px;
+        max-height: 60vh;
+      }
+
+      .vocab-custom-content-editor-content {
+        line-height: 1.6;
+        color: #333;
+        font-size: 16px;
+      }
+
+      .vocab-custom-content-editor-content h1,
+      .vocab-custom-content-editor-content h2,
+      .vocab-custom-content-editor-content h3,
+      .vocab-custom-content-editor-content h4,
+      .vocab-custom-content-editor-content h5,
+      .vocab-custom-content-editor-content h6 {
+        color: #A24EFF;
+        margin-top: 24px;
+        margin-bottom: 12px;
+      }
+
+      .vocab-custom-content-editor-content h1 {
+        font-size: 28px;
+        font-weight: 600;
+      }
+
+      .vocab-custom-content-editor-content h2 {
+        font-size: 24px;
+        font-weight: 600;
+      }
+
+      .vocab-custom-content-editor-content h3 {
+        font-size: 20px;
+        font-weight: 500;
+      }
+
+      .vocab-custom-content-editor-content p {
+        margin-bottom: 16px;
+      }
+
+      .vocab-custom-content-editor-content ul,
+      .vocab-custom-content-editor-content ol {
+        margin-bottom: 16px;
+        padding-left: 24px;
+      }
+
+      .vocab-custom-content-editor-content li {
+        margin-bottom: 8px;
+      }
+
+      .vocab-custom-content-editor-content blockquote {
+        border-left: 4px solid #A24EFF;
+        padding-left: 16px;
+        margin: 16px 0;
+        color: #666;
+        font-style: italic;
+      }
+
+      .vocab-custom-content-editor-content code {
+        background: #F5F5F5;
+        padding: 2px 6px;
+        border-radius: 4px;
+        font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+        font-size: 14px;
+      }
+
+      .vocab-custom-content-editor-content pre {
+        background: #F5F5F5;
+        padding: 16px;
+        border-radius: 8px;
+        overflow-x: auto;
+        margin: 16px 0;
+      }
+
+      .vocab-custom-content-editor-content pre code {
+        background: none;
+        padding: 0;
+      }
+
+      /* Search highlighting */
+      .vocab-search-highlight {
+        background-color: #FFE066;
+        padding: 2px 4px;
+        border-radius: 3px;
+        font-weight: 500;
+      }
+
+      /* Responsive Design for Custom Content Modal */
+      @media (max-width: 768px) {
+        .vocab-custom-content-modal {
+          width: 95%;
+          margin: 20px;
+        }
+
+        .vocab-custom-content-header {
+          padding: 15px 20px;
+        }
+
+        .vocab-custom-content-title {
+          font-size: 20px;
+        }
+
+        .vocab-custom-content-search {
+          padding: 15px 20px;
+        }
+
+        .vocab-custom-content-editor {
+          padding: 20px;
+          min-height: 300px;
+        }
+      }
+
+      @media (max-width: 480px) {
+        .vocab-custom-content-modal {
+          width: 98%;
+          margin: 10px;
+        }
+
+        .vocab-custom-content-header {
+          padding: 12px 15px;
+        }
+
+        .vocab-custom-content-title {
+          font-size: 18px;
+        }
+
+        .vocab-custom-content-search {
+          padding: 12px 15px;
+        }
+
+        .vocab-custom-content-editor {
+          padding: 15px;
+          min-height: 250px;
+        }
+      }
     `;
     
     document.head.appendChild(style);
@@ -5608,6 +5930,7 @@ const ButtonPanel = {
         line-height: 1.2;
         flex: 1;
       }
+
 
       /* Responsive adjustments for vertical button group */
       @media (max-width: 768px) {
@@ -7206,6 +7529,74 @@ const ButtonPanel = {
   },
 
   /**
+   * Hide the custom content button
+   */
+  hideCustomContentButton() {
+    const customContentBtn = document.getElementById('custom-content');
+    console.log('[ButtonPanel] Attempting to hide custom content button:', customContentBtn);
+    
+    if (customContentBtn) {
+      // Store the button's parent and next sibling for reinsertion
+      this.customContentButtonParent = customContentBtn.parentNode;
+      this.customContentButtonNextSibling = customContentBtn.nextSibling;
+      
+      console.log('[ButtonPanel] Stored parent:', this.customContentButtonParent);
+      console.log('[ButtonPanel] Stored next sibling:', this.customContentButtonNextSibling);
+      
+      // Simply remove from DOM - this will immediately fix the layout
+      customContentBtn.remove();
+      console.log('[ButtonPanel] Custom content button removed from DOM');
+    } else {
+      console.log('[ButtonPanel] Custom content button not found!');
+    }
+  },
+
+  /**
+   * Show the custom content button
+   */
+  showCustomContentButton() {
+    // Only recreate if we have the stored references
+    if (this.customContentButtonParent) {
+      // Recreate the button
+      const customContentBtn = this.createButton({
+        id: 'custom-content',
+        className: 'vocab-btn vocab-btn-solid-purple',
+        icon: this.createContentIcon(),
+        text: 'Custom content',
+        type: 'solid-purple'
+      });
+      
+      // Reattach event listeners
+      customContentBtn.addEventListener('click', (e) => {
+        console.log('Custom content clicked');
+        this.toggleVerticalButtonGroup();
+      });
+      
+      customContentBtn.addEventListener('mouseenter', () => {
+        this.showVerticalButtonGroup();
+      });
+      
+      customContentBtn.addEventListener('mouseleave', () => {
+        setTimeout(() => {
+          if (!this.verticalButtonGroup?.matches(':hover')) {
+            this.hideVerticalButtonGroup();
+          }
+        }, 100);
+      });
+      
+      // Insert back into the DOM
+      if (this.customContentButtonNextSibling) {
+        this.customContentButtonParent.insertBefore(customContentBtn, this.customContentButtonNextSibling);
+      } else {
+        this.customContentButtonParent.appendChild(customContentBtn);
+      }
+      
+      // Store reference for future removal
+      this.customContentButton = customContentBtn;
+    }
+  },
+
+  /**
    * Toggle the vertical button group
    */
   toggleVerticalButtonGroup() {
@@ -7225,8 +7616,14 @@ const ButtonPanel = {
     console.log('[ButtonPanel] PDF button clicked');
     // Hide the vertical group after selection
     this.hideVerticalButtonGroup();
+    // Hide the custom content button
+    this.hideCustomContentButton();
     // TODO: Implement PDF functionality
     alert('PDF upload feature coming soon!');
+    // Show the custom content button again after alert
+    setTimeout(() => {
+      this.showCustomContentButton();
+    }, 100);
   },
 
   /**
@@ -7236,8 +7633,14 @@ const ButtonPanel = {
     console.log('[ButtonPanel] Image button clicked');
     // Hide the vertical group after selection
     this.hideVerticalButtonGroup();
+    // Hide the custom content button
+    this.hideCustomContentButton();
     // TODO: Implement Image functionality
     alert('Image upload feature coming soon!');
+    // Show the custom content button again after alert
+    setTimeout(() => {
+      this.showCustomContentButton();
+    }, 100);
   },
 
   /**
@@ -7245,6 +7648,10 @@ const ButtonPanel = {
    */
   handleTopicsButton() {
     console.log('[ButtonPanel] Topics button clicked');
+    // Hide the vertical group after selection
+    this.hideVerticalButtonGroup();
+    // Hide the custom content button
+    this.hideCustomContentButton();
     // Show the topics modal
     this.showTopicsModal();
   },
@@ -7422,7 +7829,14 @@ const ButtonPanel = {
     modal: null,
     topics: [],
     wordCount: 250,
-    difficulty: 'medium'
+    difficulty: 'medium',
+    processingOverlay: null,
+    customContentModal: {
+      overlay: null,
+      modal: null,
+      content: '',
+      searchTerm: ''
+    }
   },
 
   /**
@@ -7489,6 +7903,14 @@ const ButtonPanel = {
     if (this.topicsModal.overlay) {
       this.topicsModal.overlay.classList.remove('visible');
       this.topicsModal.modal.classList.remove('visible');
+    }
+    
+    // Only show the custom content button if the CustomContent modal is not open
+    // AND if we're not in the process of showing it (check if overlay exists)
+    if ((!this.topicsModal.customContentModal.overlay || 
+         !this.topicsModal.customContentModal.overlay.classList.contains('visible')) &&
+        !this.customContentButtonParent) { // Don't show if button was just removed
+      this.showCustomContentButton();
     }
   },
 
@@ -7925,7 +8347,7 @@ const ButtonPanel = {
   /**
    * Handle generate story button click
    */
-  handleGenerateStory() {
+  async handleGenerateStory() {
     console.log('[ButtonPanel] Generating story with topics:', this.topicsModal.topics);
     console.log('[ButtonPanel] Word count:', this.topicsModal.wordCount);
     console.log('[ButtonPanel] Difficulty:', this.topicsModal.difficulty);
@@ -7935,11 +8357,297 @@ const ButtonPanel = {
       return;
     }
     
-    // TODO: Implement actual story generation logic
-    alert(`Story generation coming soon!\n\nTopics: ${this.topicsModal.topics.join(', ')}\nWord count: ${this.topicsModal.wordCount}\nDifficulty: ${this.topicsModal.difficulty}`);
+    // Show processing overlay
+    this.showProcessingOverlay();
     
-    // Hide modal after generation
+    try {
+      // Call the get-random-paragraph API
+      const response = await ApiService.getRandomParagraph({
+        topics: this.topicsModal.topics,
+        difficulty_level: this.topicsModal.difficulty,
+        word_count: this.topicsModal.wordCount
+      });
+      
+      if (response.success) {
+        // Hide processing overlay
+        this.hideProcessingOverlay();
+        
+        // Show custom content modal with the response
+        this.showCustomContentModal(response.data.text);
+      } else {
+        // Hide processing overlay
+        this.hideProcessingOverlay();
+        
+        // Show error message
+        alert(`Error generating story: ${response.error}`);
+      }
+    } catch (error) {
+      console.error('[ButtonPanel] Error generating story:', error);
+      
+      // Hide processing overlay
+      this.hideProcessingOverlay();
+      
+      // Show error message
+      alert(`Error generating story: ${error.message}`);
+    }
+  },
+
+  /**
+   * Show processing overlay
+   */
+  showProcessingOverlay() {
+    console.log('[ButtonPanel] Showing processing overlay');
+    
+    // Create processing overlay if it doesn't exist
+    if (!this.topicsModal.processingOverlay) {
+      this.createProcessingOverlay();
+    }
+    
+    // Show the overlay
+    this.topicsModal.processingOverlay.classList.add('visible');
+  },
+
+  /**
+   * Hide processing overlay
+   */
+  hideProcessingOverlay() {
+    console.log('[ButtonPanel] Hiding processing overlay');
+    
+    if (this.topicsModal.processingOverlay) {
+      this.topicsModal.processingOverlay.classList.remove('visible');
+    }
+  },
+
+  /**
+   * Create processing overlay HTML structure
+   */
+  createProcessingOverlay() {
+    const overlay = document.createElement('div');
+    overlay.className = 'vocab-processing-overlay';
+    overlay.id = 'vocab-processing-overlay';
+    
+    const content = document.createElement('div');
+    content.className = 'vocab-processing-content';
+    
+    const text = document.createElement('div');
+    text.className = 'vocab-processing-text';
+    text.textContent = 'Generating content from topics ...';
+    
+    const icon = document.createElement('div');
+    icon.className = 'vocab-processing-icon';
+    
+    content.appendChild(text);
+    content.appendChild(icon);
+    overlay.appendChild(content);
+    
+    // Add to topics modal instead of document body
+    this.topicsModal.modal.appendChild(overlay);
+    
+    // Store reference
+    this.topicsModal.processingOverlay = overlay;
+  },
+
+  /**
+   * Show custom content modal
+   * @param {string} content - The markdown content to display
+   */
+  showCustomContentModal(content) {
+    console.log('[ButtonPanel] Showing custom content modal');
+    console.log('[ButtonPanel] About to hide custom content button...');
+    
+    // Hide the custom content button when modal opens
+    this.hideCustomContentButton();
+    
+    // Hide topics modal first
     this.hideTopicsModal();
+    
+    // Create modal if it doesn't exist
+    if (!this.topicsModal.customContentModal.overlay) {
+      this.createCustomContentModal();
+    }
+    
+    // Set the content
+    this.topicsModal.customContentModal.content = content;
+    this.updateCustomContentEditor(content);
+    
+    // Show the modal with a slight delay for smooth transition
+    setTimeout(() => {
+      this.topicsModal.customContentModal.overlay.classList.add('visible');
+    }, 100);
+  },
+
+  /**
+   * Hide custom content modal
+   */
+  hideCustomContentModal() {
+    console.log('[ButtonPanel] Hiding custom content modal');
+    
+    if (this.topicsModal.customContentModal.overlay) {
+      this.topicsModal.customContentModal.overlay.classList.remove('visible');
+    }
+    
+    // Show the custom content button again
+    this.showCustomContentButton();
+  },
+
+  /**
+   * Create custom content modal HTML structure
+   */
+  createCustomContentModal() {
+    const overlay = document.createElement('div');
+    overlay.className = 'vocab-custom-content-overlay';
+    overlay.id = 'vocab-custom-content-overlay';
+    
+    const modal = document.createElement('div');
+    modal.className = 'vocab-custom-content-modal';
+    
+    // Header
+    const header = document.createElement('div');
+    header.className = 'vocab-custom-content-header';
+    
+    const title = document.createElement('h2');
+    title.className = 'vocab-custom-content-title';
+    title.textContent = 'Generated Content';
+    
+    const closeBtn = document.createElement('button');
+    closeBtn.className = 'vocab-custom-content-close';
+    closeBtn.innerHTML = `
+      <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M15 5L5 15M5 5L15 15" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    `;
+    closeBtn.setAttribute('aria-label', 'Close modal');
+    
+    header.appendChild(title);
+    header.appendChild(closeBtn);
+    
+    // Search section
+    const searchSection = document.createElement('div');
+    searchSection.className = 'vocab-custom-content-search';
+    
+    const searchInput = document.createElement('input');
+    searchInput.className = 'vocab-custom-content-search-input';
+    searchInput.type = 'text';
+    searchInput.placeholder = 'Search in content...';
+    
+    searchSection.appendChild(searchInput);
+    
+    // Editor section
+    const editorSection = document.createElement('div');
+    editorSection.className = 'vocab-custom-content-editor';
+    
+    const editorContent = document.createElement('div');
+    editorContent.className = 'vocab-custom-content-editor-content';
+    
+    editorSection.appendChild(editorContent);
+    
+    // Assemble modal
+    modal.appendChild(header);
+    modal.appendChild(searchSection);
+    modal.appendChild(editorSection);
+    overlay.appendChild(modal);
+    
+    // Add to document
+    document.body.appendChild(overlay);
+    
+    // Store references
+    this.topicsModal.customContentModal.overlay = overlay;
+    this.topicsModal.customContentModal.modal = modal;
+    this.topicsModal.customContentModal.editorContent = editorContent;
+    this.topicsModal.customContentModal.searchInput = searchInput;
+    
+    // Attach event listeners
+    this.attachCustomContentModalListeners();
+  },
+
+  /**
+   * Attach event listeners to custom content modal
+   */
+  attachCustomContentModalListeners() {
+    const overlay = this.topicsModal.customContentModal.overlay;
+    const modal = this.topicsModal.customContentModal.modal;
+    const closeBtn = modal.querySelector('.vocab-custom-content-close');
+    const searchInput = this.topicsModal.customContentModal.searchInput;
+    
+    // Close modal events
+    closeBtn.addEventListener('click', () => this.hideCustomContentModal());
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) {
+        this.hideCustomContentModal();
+      }
+    });
+    
+    // Search functionality
+    searchInput.addEventListener('input', (e) => {
+      this.topicsModal.customContentModal.searchTerm = e.target.value;
+      this.performSearch();
+    });
+  },
+
+  /**
+   * Update custom content editor with markdown content
+   * @param {string} content - The markdown content
+   */
+  updateCustomContentEditor(content) {
+    const editorContent = this.topicsModal.customContentModal.editorContent;
+    
+    // Simple markdown to HTML conversion (for basic formatting)
+    let htmlContent = content
+      .replace(/^# (.*$)/gim, '<h1>$1</h1>')
+      .replace(/^## (.*$)/gim, '<h2>$1</h2>')
+      .replace(/^### (.*$)/gim, '<h3>$1</h3>')
+      .replace(/^#### (.*$)/gim, '<h4>$1</h4>')
+      .replace(/^##### (.*$)/gim, '<h5>$1</h5>')
+      .replace(/^###### (.*$)/gim, '<h6>$1</h6>')
+      .replace(/\*\*(.*?)\*\*/gim, '<strong>$1</strong>')
+      .replace(/\*(.*?)\*/gim, '<em>$1</em>')
+      .replace(/`(.*?)`/gim, '<code>$1</code>')
+      .replace(/```([\s\S]*?)```/gim, '<pre><code>$1</code></pre>')
+      .replace(/^\* (.*$)/gim, '<li>$1</li>')
+      .replace(/^- (.*$)/gim, '<li>$1</li>')
+      .replace(/^\d+\. (.*$)/gim, '<li>$1</li>')
+      .replace(/\n\n/gim, '</p><p>')
+      .replace(/\n/gim, '<br>');
+    
+    // Wrap in paragraphs
+    htmlContent = '<p>' + htmlContent + '</p>';
+    
+    // Clean up empty paragraphs
+    htmlContent = htmlContent.replace(/<p><\/p>/gim, '');
+    htmlContent = htmlContent.replace(/<p><br><\/p>/gim, '');
+    
+    editorContent.innerHTML = htmlContent;
+  },
+
+  /**
+   * Perform search in the content
+   */
+  performSearch() {
+    const searchTerm = this.topicsModal.customContentModal.searchTerm;
+    const editorContent = this.topicsModal.customContentModal.editorContent;
+    
+    if (!searchTerm.trim()) {
+      // Remove all highlights
+      const highlights = editorContent.querySelectorAll('.vocab-search-highlight');
+      highlights.forEach(highlight => {
+        const parent = highlight.parentNode;
+        parent.replaceChild(document.createTextNode(highlight.textContent), highlight);
+        parent.normalize();
+      });
+      return;
+    }
+    
+    // Get the original content without highlights
+    let content = editorContent.innerHTML;
+    
+    // Remove existing highlights
+    content = content.replace(/<span class="vocab-search-highlight">(.*?)<\/span>/gim, '$1');
+    
+    // Add new highlights
+    const regex = new RegExp(`(${searchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gim');
+    content = content.replace(regex, '<span class="vocab-search-highlight">$1</span>');
+    
+    editorContent.innerHTML = content;
   },
 
   /**
