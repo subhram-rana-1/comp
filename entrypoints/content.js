@@ -8227,11 +8227,6 @@ const ButtonPanel = {
     setTimeout(() => {
       this.updateTopicsUIState();
     }, 300);
-    
-    // Initialize slider positions
-    setTimeout(() => {
-      this.initializeSliders();
-    }, 200);
   },
 
   /**
@@ -8663,6 +8658,11 @@ const ButtonPanel = {
         secondContainer.classList.remove('hidden');
         // Ensure it's visible and interactive
         secondContainer.style.display = 'flex';
+        
+        // Initialize sliders after container becomes visible
+        setTimeout(() => {
+          this.initializeSliders();
+        }, 100);
       } else {
         secondContainer.classList.add('hidden');
         // Hide after animation completes
