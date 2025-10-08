@@ -4866,21 +4866,57 @@ const ChatDialog = {
         }
       }
 
-      /* Custom Content Modal Styles */
+      /* Custom Content Modal Styles - Enhanced Modular Design */
+      
+      /* CSS Custom Properties for Theme System */
+      :root {
+        --vocab-primary-color: #A24EFF;
+        --vocab-primary-hover: #8B3FE8;
+        --vocab-primary-light: rgba(162, 78, 255, 0.1);
+        --vocab-primary-lighter: rgba(162, 78, 255, 0.05);
+        --vocab-secondary-color: #F8F9FA;
+        --vocab-border-color: #E6D6FF;
+        --vocab-border-light: rgba(162, 78, 255, 0.1);
+        --vocab-text-primary: #333;
+        --vocab-text-secondary: #666;
+        --vocab-text-muted: #999;
+        --vocab-background-white: #FFFFFF;
+        --vocab-background-light: #F8F9FA;
+        --vocab-shadow-light: 0 4px 12px rgba(162, 78, 255, 0.15);
+        --vocab-shadow-medium: 0 8px 24px rgba(162, 78, 255, 0.2);
+        --vocab-shadow-heavy: 0 25px 50px rgba(162, 78, 255, 0.25);
+        --vocab-border-radius-sm: 8px;
+        --vocab-border-radius-md: 12px;
+        --vocab-border-radius-lg: 20px;
+        --vocab-border-radius-xl: 40px;
+        --vocab-transition-fast: 0.15s ease;
+        --vocab-transition-normal: 0.2s ease;
+        --vocab-transition-slow: 0.3s ease;
+        --vocab-spacing-xs: 4px;
+        --vocab-spacing-sm: 8px;
+        --vocab-spacing-md: 16px;
+        --vocab-spacing-lg: 24px;
+        --vocab-spacing-xl: 32px;
+        --vocab-spacing-xxl: 48px;
+      }
+
+      /* Overlay Component */
       .vocab-custom-content-overlay {
         position: fixed;
         top: 0;
         left: 0;
         width: 100%;
         height: 100%;
-        background: rgba(0, 0, 0, 0.5);
+        background: rgba(0, 0, 0, 0.6);
+        backdrop-filter: blur(8px);
         display: flex;
         align-items: center;
         justify-content: center;
         z-index: 10001;
         opacity: 0;
         visibility: hidden;
-        transition: opacity 0.3s ease, visibility 0.3s ease;
+        transition: opacity var(--vocab-transition-slow), visibility var(--vocab-transition-slow);
+        animation: overlayFadeIn var(--vocab-transition-slow) ease-out;
       }
 
       .vocab-custom-content-overlay.visible {
@@ -4888,12 +4924,24 @@ const ChatDialog = {
         visibility: visible;
       }
 
+      @keyframes overlayFadeIn {
+        from {
+          opacity: 0;
+          backdrop-filter: blur(0px);
+        }
+        to {
+          opacity: 1;
+          backdrop-filter: blur(8px);
+        }
+      }
+
+      /* Modal Component */
       .vocab-custom-content-modal {
-        background: white;
-        border-radius: 40px;
-        box-shadow: 0 25px 50px rgba(162, 78, 255, 0.25), 0 0 0 1px rgba(162, 78, 255, 0.1);
+        background: var(--vocab-background-white);
+        border-radius: 20px;
+        box-shadow: var(--vocab-shadow-heavy), 0 0 0 1px var(--vocab-border-light);
         width: 90%;
-        max-width: 800px;
+        max-width: 900px;
         max-height: 90vh;
         display: flex;
         flex-direction: column;
@@ -4902,40 +4950,79 @@ const ChatDialog = {
         top: 50%;
         left: 50%;
         transform: translate(-50%, -50%);
+        animation: modalSlideIn var(--vocab-transition-slow) ease-out;
+        overflow: hidden;
       }
 
+      @keyframes modalSlideIn {
+        from {
+          opacity: 0;
+          transform: translate(-50%, -50%) scale(0.95) translateY(20px);
+        }
+        to {
+          opacity: 1;
+          transform: translate(-50%, -50%) scale(1) translateY(0);
+        }
+      }
+
+      /* Header Component */
       .vocab-custom-content-header {
-        padding: 20px 30px;
+        padding: var(--vocab-spacing-xl) var(--vocab-spacing-xxl);
+        margin: 0;
         display: flex;
         justify-content: center;
         align-items: center;
         position: relative;
         cursor: grab;
         user-select: none;
+        background: #EBE1F2;
+        border-bottom: 0.5px solid rgba(162, 78, 255, 0.3);
+        border-radius: 20px 20px 0 0;
+        transition: none;
+      }
+
+      .vocab-custom-content-header:hover {
+        background: #EBE1F2;
+        transform: none;
+        box-shadow: none;
       }
 
       .vocab-custom-content-header:active {
         cursor: grabbing;
+        transform: none;
       }
 
       .vocab-custom-content-title {
-        font-size: 24px;
-        font-weight: 500;
-        color: #A24EFF;
+        font-size: 28px;
+        font-weight: 600;
+        color: var(--vocab-primary-color);
         margin: 0;
         position: absolute;
         left: 50%;
         transform: translateX(-50%);
+        text-shadow: none;
+        letter-spacing: -0.5px;
+        text-align: center;
+        width: calc(100% - 120px);
+        padding: 0 var(--vocab-spacing-lg);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
       }
 
-      /* Tabs Styles */
+      /* Tabs Component */
       .vocab-custom-content-tabs {
         display: flex;
         align-items: center;
-        padding: 0 30px;
-        background: #F8F9FA;
-        border-bottom: 1px solid #E6D6FF;
-        min-height: 50px;
+        padding: 0 var(--vocab-spacing-xl);
+        background: var(--vocab-background-white);
+        border-bottom: none;
+        min-height: 60px;
+        position: relative;
+      }
+
+      .vocab-custom-content-tabs::before {
+        display: none;
       }
 
       .vocab-custom-content-tabs-container {
@@ -4944,65 +5031,98 @@ const ChatDialog = {
         overflow-x: auto;
         scrollbar-width: none;
         -ms-overflow-style: none;
+        gap: var(--vocab-spacing-xs);
+        padding: var(--vocab-spacing-sm) 0;
       }
 
       .vocab-custom-content-tabs-container::-webkit-scrollbar {
         display: none;
       }
 
+      /* Tab Navigation Arrows */
       .vocab-custom-content-tab-arrow {
-        background: none;
+        background: transparent;
         border: none;
-        color: #A24EFF;
+        color: rgba(162, 78, 255, 0.8);
         cursor: pointer;
-        padding: 8px;
-        border-radius: 4px;
-        transition: all 0.2s ease;
+        padding: var(--vocab-spacing-sm);
+        border-radius: var(--vocab-border-radius-sm);
+        transition: all var(--vocab-transition-normal);
         display: flex;
         align-items: center;
         justify-content: center;
-        opacity: 0.6;
+        opacity: 1;
+        box-shadow: none;
+        min-width: 36px;
+        height: 36px;
       }
 
       .vocab-custom-content-tab-arrow:hover {
         background: rgba(162, 78, 255, 0.1);
         opacity: 1;
+        transform: translateY(-1px);
+        box-shadow: none;
       }
 
       .vocab-custom-content-tab-arrow:disabled {
         opacity: 0.3;
         cursor: not-allowed;
+        transform: none;
+        box-shadow: none;
       }
 
       .vocab-custom-content-tab-arrow:disabled:hover {
-        background: none;
+        background: var(--vocab-background-white);
+        transform: none;
+        box-shadow: var(--vocab-shadow-light);
       }
 
+      /* Individual Tab Styling */
       .vocab-custom-content-tab {
         display: flex;
         align-items: center;
-        padding: 8px 16px;
-        background: white;
-        border: 1px solid #E6D6FF;
+        padding: var(--vocab-spacing-sm) var(--vocab-spacing-md);
+        background: var(--vocab-background-white);
+        border: 1px solid rgba(162, 78, 255, 0.2);
+        border-top: none;
         border-bottom: none;
-        border-radius: 8px 8px 0 0;
-        margin-right: 2px;
+        border-radius: 0;
         cursor: pointer;
-        transition: all 0.2s ease;
-        min-width: 120px;
-        max-width: 200px;
+        transition: all var(--vocab-transition-normal);
+        min-width: 140px;
+        max-width: 220px;
         position: relative;
+        box-shadow: none;
+        overflow: hidden;
+        color: rgba(162, 78, 255, 0.7);
+      }
+
+      .vocab-custom-content-tab::before {
+        display: none;
       }
 
       .vocab-custom-content-tab:hover {
-        background: #F8F9FA;
+        background: var(--vocab-background-white);
+        transform: none;
+        box-shadow: none;
+      }
+
+      .vocab-custom-content-tab:hover::before {
+        transform: none;
       }
 
       .vocab-custom-content-tab.active {
-        background: white;
-        border-color: #A24EFF;
-        color: #A24EFF;
+        background: rgba(162, 78, 255, 0.1);
+        border: none;
+        color: rgba(162, 78, 255, 0.9);
         z-index: 1;
+        transform: none;
+        box-shadow: none;
+        border-radius: 10px 10px 0 0;
+      }
+
+      .vocab-custom-content-tab.active::before {
+        transform: none;
       }
 
       .vocab-custom-content-tab-title {
@@ -5012,94 +5132,212 @@ const ChatDialog = {
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
-        margin-right: 8px;
+        margin-right: var(--vocab-spacing-sm);
+        color: inherit;
+        cursor: help;
+        transition: all var(--vocab-transition-fast);
+      }
+
+      .vocab-tab-title-truncated {
+        position: relative;
+      }
+
+      .vocab-tab-title-truncated:hover {
+        color: var(--vocab-primary-color);
+        transform: scale(1.02);
+      }
+
+      /* Enhanced tooltip styling */
+      .vocab-custom-content-tab-title[title]:hover::after {
+        content: attr(title);
+        position: absolute;
+        bottom: 100%;
+        left: 50%;
+        transform: translateX(-50%);
+        background: var(--vocab-text-primary);
+        color: var(--vocab-background-white);
+        padding: var(--vocab-spacing-xs) var(--vocab-spacing-sm);
+        border-radius: var(--vocab-border-radius-sm);
+        font-size: 12px;
+        white-space: nowrap;
+        z-index: 1000;
+        box-shadow: var(--vocab-shadow-medium);
+        pointer-events: none;
+        opacity: 0;
+        animation: tooltipFadeIn var(--vocab-transition-normal) ease-out forwards;
+      }
+
+      .vocab-custom-content-tab-title[title]:hover::before {
+        content: '';
+        position: absolute;
+        bottom: 100%;
+        left: 50%;
+        transform: translateX(-50%) translateY(100%);
+        border: 4px solid transparent;
+        border-top-color: var(--vocab-text-primary);
+        z-index: 1000;
+        opacity: 0;
+        animation: tooltipFadeIn var(--vocab-transition-normal) ease-out forwards;
+      }
+
+      @keyframes tooltipFadeIn {
+        from {
+          opacity: 0;
+          transform: translateX(-50%) translateY(4px);
+        }
+        to {
+          opacity: 1;
+          transform: translateX(-50%) translateY(0);
+        }
       }
 
       .vocab-custom-content-tab-close {
         background: none;
         border: none;
-        color: #999;
+        color: var(--vocab-text-muted);
         cursor: pointer;
-        padding: 2px;
-        border-radius: 3px;
-        transition: all 0.2s ease;
+        padding: var(--vocab-spacing-xs);
+        border-radius: var(--vocab-border-radius-sm);
+        transition: all var(--vocab-transition-fast);
         display: flex;
         align-items: center;
         justify-content: center;
-        width: 16px;
-        height: 16px;
+        width: 20px;
+        height: 20px;
+        opacity: 0.6;
       }
 
       .vocab-custom-content-tab-close:hover {
-        background: rgba(255, 0, 0, 0.1);
+        background: rgba(255, 77, 77, 0.1);
         color: #FF4D4D;
+        opacity: 1;
+        transform: scale(1.1);
       }
 
+      /* Add Tab Button */
       .vocab-custom-content-add-tab {
-        background: #A24EFF;
-        border: none;
-        color: white;
+        background: var(--vocab-background-white);
+        border: 1px solid rgba(162, 78, 255, 0.6);
+        color: rgba(162, 78, 255, 0.8);
         cursor: pointer;
-        padding: 8px 12px;
-        border-radius: 6px;
-        transition: all 0.2s ease;
+        padding: var(--vocab-spacing-sm);
+        border-radius: 50%;
+        transition: all var(--vocab-transition-normal);
         display: flex;
         align-items: center;
         justify-content: center;
-        margin-left: 8px;
+        margin-left: var(--vocab-spacing-sm);
+        box-shadow: none;
+        min-width: 36px;
+        height: 36px;
       }
 
       .vocab-custom-content-add-tab:hover {
-        background: #8B3FE8;
+        background: rgba(162, 78, 255, 0.1);
+        border-color: rgba(162, 78, 255, 0.8);
+        color: rgba(162, 78, 255, 1);
         transform: scale(1.05);
+        box-shadow: none;
       }
 
+      .vocab-custom-content-add-tab:active {
+        transform: scale(0.95);
+      }
+
+      /* Close Button Component */
       .vocab-custom-content-close {
         position: absolute;
-        right: 20px;
-        top: 20px;
-        background: none;
+        right: var(--vocab-spacing-sm);
+        top: var(--vocab-spacing-sm);
+        background: transparent;
         border: none;
-        color: #A24EFF;
+        color: var(--vocab-primary-color);
         cursor: pointer;
-        padding: 8px;
-        border-radius: 8px;
-        transition: all 0.2s ease;
+        padding: var(--vocab-spacing-sm);
+        border-radius: 10px;
+        transition: all var(--vocab-transition-normal);
         display: flex;
         align-items: center;
         justify-content: center;
+        box-shadow: none;
+        width: 40px;
+        height: 40px;
+        z-index: 10;
       }
 
       .vocab-custom-content-close:hover {
-        background-color: rgba(162, 78, 255, 0.1);
+        background: rgba(162, 78, 255, 0.08);
+        border: none;
+        transform: scale(1.2);
+        box-shadow: none;
+        color: var(--vocab-primary-hover);
+      }
+
+      .vocab-custom-content-close:active {
         transform: scale(1.1);
       }
 
+      .vocab-custom-content-close svg {
+        stroke-width: 3;
+      }
+
+      /* Search Component */
       .vocab-custom-content-search {
-        padding: 20px 30px;
+        padding: var(--vocab-spacing-lg) var(--vocab-spacing-xl);
         display: flex;
         justify-content: center;
         align-items: center;
+        background: var(--vocab-background-white);
+        position: relative;
+      }
+
+      .vocab-custom-content-search::before {
+        display: none;
       }
 
       .vocab-custom-content-search-input {
-        width: 60%;
-        padding: 12px 16px;
-        border: 1px solid #E6D6FF;
-        border-radius: 25px;
-        font-size: 16px;
+        width: 50%;
+        height: 28px;
+        padding: var(--vocab-spacing-xs) var(--vocab-spacing-md);
+        border: 1px solid rgba(162, 78, 255, 0.3);
+        border-radius: 20px;
+        font-size: 14px;
         font-family: inherit;
         outline: none;
-        transition: border-color 0.2s ease;
+        transition: all var(--vocab-transition-normal);
+        background: var(--vocab-background-white);
+        box-shadow: none;
+        position: relative;
+        text-align: center;
+        color: #666666;
       }
 
+      .vocab-custom-content-search-input::placeholder {
+        color: rgba(162, 78, 255, 0.5);
+        font-style: italic;
+        font-weight: 300;
+        text-align: center;
+      }
+
+      .vocab-custom-content-search-input:focus {
+        border: 1px solid rgba(162, 78, 255, 0.4);
+        box-shadow: 0 0 0 1px rgba(162, 78, 255, 0.4);
+        transform: none;
+      }
+
+      .vocab-custom-content-search-input:hover:not(:focus) {
+        border-color: rgba(162, 78, 255, 0.4);
+        box-shadow: none;
+      }
+
+      /* Settings Button Component */
       .vocab-custom-content-settings {
         position: absolute;
-        bottom: 30px;
-        right: 30px;
-        width: 40px;
-        height: 40px;
-        background: #A24EFF;
+        bottom: var(--vocab-spacing-xl);
+        right: var(--vocab-spacing-xl);
+        width: 48px;
+        height: 48px;
+        background: linear-gradient(135deg, var(--vocab-primary-color) 0%, var(--vocab-primary-hover) 100%);
         border: none;
         border-radius: 50%;
         color: white;
@@ -5107,257 +5345,185 @@ const ChatDialog = {
         align-items: center;
         justify-content: center;
         cursor: pointer;
-        transition: all 0.2s ease;
+        transition: all var(--vocab-transition-normal);
         z-index: 10;
+        box-shadow: var(--vocab-shadow-medium);
       }
       
       .vocab-custom-content-settings:hover {
-        background: #8B3FE8;
-        transform: scale(1.1);
+        background: linear-gradient(135deg, var(--vocab-primary-hover) 0%, var(--vocab-primary-color) 100%);
+        transform: scale(1.1) rotate(90deg);
+        box-shadow: var(--vocab-shadow-heavy);
+      }
+
+      .vocab-custom-content-settings:active {
+        transform: scale(0.95) rotate(90deg);
       }
       
       .vocab-custom-content-settings svg {
-        width: 20px;
-        height: 20px;
+        width: 22px;
+        height: 22px;
+        transition: transform var(--vocab-transition-normal);
       }
 
-      /* Resize Handles */
-      .vocab-custom-content-resize-handles {
-        position: absolute;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        pointer-events: none;
-        z-index: 20;
+      .vocab-custom-content-settings:hover svg {
+        transform: rotate(180deg);
       }
 
-      .vocab-custom-content-resize-handle {
-        position: absolute;
-        width: 20px;
-        height: 20px;
-        background: transparent;
-        border: none;
-        pointer-events: all;
-        cursor: pointer;
-        opacity: 0;
-        transition: opacity 0.2s ease;
-      }
-
-      .vocab-custom-content-resize-handle-top-left {
-        top: -10px;
-        left: -10px;
-        cursor: nw-resize;
-      }
-
-      .vocab-custom-content-resize-handle-top-left::before {
-        content: '';
-        position: absolute;
-        top: 0;
-        left: 0;
-        width: 20px;
-        height: 20px;
-        border: 3px solid #A24EFF;
-        border-radius: 50%;
-        border-right: none;
-        border-bottom: none;
-        transform: rotate(-45deg);
-      }
-
-      .vocab-custom-content-resize-handle-top-right {
-        top: -10px;
-        right: -10px;
-        cursor: ne-resize;
-      }
-
-      .vocab-custom-content-resize-handle-top-right::before {
-        content: '';
-        position: absolute;
-        top: 0;
-        right: 0;
-        width: 20px;
-        height: 20px;
-        border: 3px solid #A24EFF;
-        border-radius: 50%;
-        border-left: none;
-        border-bottom: none;
-        transform: rotate(45deg);
-      }
-
-      .vocab-custom-content-resize-handle-bottom-left {
-        bottom: -10px;
-        left: -10px;
-        cursor: sw-resize;
-      }
-
-      .vocab-custom-content-resize-handle-bottom-left::before {
-        content: '';
-        position: absolute;
-        bottom: 0;
-        left: 0;
-        width: 20px;
-        height: 20px;
-        border: 3px solid #A24EFF;
-        border-radius: 50%;
-        border-right: none;
-        border-top: none;
-        transform: rotate(45deg);
-      }
-
-      .vocab-custom-content-resize-handle-bottom-right {
-        bottom: -10px;
-        right: -10px;
-        cursor: se-resize;
-      }
-
-      .vocab-custom-content-resize-handle-bottom-right::before {
-        content: '';
-        position: absolute;
-        bottom: 0;
-        right: 0;
-        width: 20px;
-        height: 20px;
-        border: 3px solid #A24EFF;
-        border-radius: 50%;
-        border-left: none;
-        border-top: none;
-        transform: rotate(-45deg);
-      }
-
-      .vocab-custom-content-modal:hover .vocab-custom-content-resize-handle {
-        opacity: 1;
-      }
-
-      .vocab-custom-content-resize-handle:hover::before {
-        border-color: #8B3FE8;
-        transform: scale(1.2);
-      }
-
-      .vocab-custom-content-search-input::placeholder {
-        color: #999;
-        font-style: italic;
-      }
-
-      .vocab-custom-content-search-input:focus {
-        border-color: #A24EFF;
-        box-shadow: 0 0 0 3px rgba(162, 78, 255, 0.1);
-      }
-
+      /* Editor Component */
       .vocab-custom-content-editor {
         flex: 1;
-        padding: 30px;
+        padding: var(--vocab-spacing-xl);
         overflow-y: auto;
-        min-height: 400px;
-        max-height: 60vh;
+        min-height: 450px;
+        max-height: 65vh;
         border: 1px solid rgba(162, 78, 255, 0.3);
-        margin: 20px 15px 30px 15px;
+        margin: 0 var(--vocab-spacing-lg) var(--vocab-spacing-lg) var(--vocab-spacing-lg);
         position: relative;
+        border-radius: 10px;
+        background: var(--vocab-background-white);
+        box-shadow: none;
+      }
+
+      .vocab-custom-content-editor::before {
+        display: none;
       }
 
       .vocab-custom-content-editor-content {
-        line-height: 1.6;
-        color: #333;
+        line-height: 1.7;
+        color: var(--vocab-text-primary);
         font-size: 16px;
-        border-radius: 20px;
+        border-radius: var(--vocab-border-radius-md);
         overflow: auto;
         scrollbar-width: thin;
-        scrollbar-color: #E2B1FF #F9EFFF;
+        scrollbar-color: var(--vocab-primary-color) var(--vocab-primary-lighter);
+        padding: var(--vocab-spacing-md);
+        background: transparent;
       }
 
       .vocab-custom-content-editor-content::-webkit-scrollbar {
-        width: 8px;
+        width: 10px;
       }
 
       .vocab-custom-content-editor-content::-webkit-scrollbar-track {
-        background: #F9EFFF;
-        border-radius: 20px;
+        background: var(--vocab-primary-lighter);
+        border-radius: var(--vocab-border-radius-lg);
+        margin: var(--vocab-spacing-sm);
       }
 
       .vocab-custom-content-editor-content::-webkit-scrollbar-thumb {
-        background: #E2B1FF;
-        border-radius: 20px;
-        border: none;
+        background: linear-gradient(180deg, var(--vocab-primary-color) 0%, var(--vocab-primary-hover) 100%);
+        border-radius: var(--vocab-border-radius-lg);
+        border: 2px solid var(--vocab-background-white);
       }
 
       .vocab-custom-content-editor-content::-webkit-scrollbar-thumb:hover {
-        background: rgba(226, 177, 255, 0.8);
+        background: linear-gradient(180deg, var(--vocab-primary-hover) 0%, var(--vocab-primary-color) 100%);
       }
 
+      /* Content Typography */
       .vocab-custom-content-editor-content h1,
       .vocab-custom-content-editor-content h2,
       .vocab-custom-content-editor-content h3,
       .vocab-custom-content-editor-content h4,
       .vocab-custom-content-editor-content h5,
       .vocab-custom-content-editor-content h6 {
-        color: #A24EFF;
-        margin-top: 24px;
-        margin-bottom: 12px;
+        color: var(--vocab-primary-color);
+        margin-top: var(--vocab-spacing-lg);
+        margin-bottom: var(--vocab-spacing-md);
+        font-weight: 600;
+        letter-spacing: -0.5px;
       }
 
       .vocab-custom-content-editor-content h1 {
+        font-size: 32px;
+        font-weight: 700;
+        border-bottom: 2px solid var(--vocab-border-light);
+        padding-bottom: var(--vocab-spacing-sm);
+      }
+
+      .vocab-custom-content-editor-content h2 {
         font-size: 28px;
         font-weight: 600;
       }
 
-      .vocab-custom-content-editor-content h2 {
+      .vocab-custom-content-editor-content h3 {
         font-size: 24px;
         font-weight: 600;
       }
 
-      .vocab-custom-content-editor-content h3 {
+      .vocab-custom-content-editor-content h4 {
         font-size: 20px;
         font-weight: 500;
       }
 
       .vocab-custom-content-editor-content p {
-        margin-bottom: 16px;
+        margin-bottom: var(--vocab-spacing-md);
+        color: var(--vocab-text-primary);
       }
 
       .vocab-custom-content-editor-content ul,
       .vocab-custom-content-editor-content ol {
-        margin-bottom: 16px;
-        padding-left: 24px;
+        margin-bottom: var(--vocab-spacing-md);
+        padding-left: var(--vocab-spacing-lg);
       }
 
       .vocab-custom-content-editor-content li {
-        margin-bottom: 8px;
+        margin-bottom: var(--vocab-spacing-sm);
+        color: var(--vocab-text-primary);
       }
 
       .vocab-custom-content-editor-content blockquote {
-        border-left: 4px solid #A24EFF;
-        padding-left: 16px;
-        margin: 16px 0;
-        color: #666;
+        border-left: 4px solid var(--vocab-primary-color);
+        padding-left: var(--vocab-spacing-md);
+        margin: var(--vocab-spacing-md) 0;
+        color: var(--vocab-text-secondary);
         font-style: italic;
+        background: var(--vocab-primary-lighter);
+        padding: var(--vocab-spacing-md);
+        border-radius: var(--vocab-border-radius-sm);
       }
 
       .vocab-custom-content-editor-content code {
-        background: #F5F5F5;
-        padding: 2px 6px;
-        border-radius: 4px;
+        background: var(--vocab-background-light);
+        padding: var(--vocab-spacing-xs) var(--vocab-spacing-sm);
+        border-radius: var(--vocab-border-radius-sm);
         font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
         font-size: 14px;
+        color: var(--vocab-primary-color);
+        border: 1px solid var(--vocab-border-light);
       }
 
       .vocab-custom-content-editor-content pre {
-        background: #F5F5F5;
-        padding: 16px;
-        border-radius: 8px;
+        background: var(--vocab-background-light);
+        padding: var(--vocab-spacing-md);
+        border-radius: var(--vocab-border-radius-md);
         overflow-x: auto;
-        margin: 16px 0;
+        margin: var(--vocab-spacing-md) 0;
+        border: 1px solid var(--vocab-border-light);
+        box-shadow: var(--vocab-shadow-light);
       }
 
       .vocab-custom-content-editor-content pre code {
         background: none;
         padding: 0;
+        border: none;
+        color: var(--vocab-text-primary);
       }
 
       /* Search highlighting */
       .vocab-search-highlight {
-        background-color: #FFE066;
-        padding: 2px 4px;
-        border-radius: 3px;
-        font-weight: 500;
+        background: linear-gradient(120deg, #FFE066 0%, #FFD700 100%);
+        padding: var(--vocab-spacing-xs) var(--vocab-spacing-sm);
+        border-radius: var(--vocab-border-radius-sm);
+        font-weight: 600;
+        box-shadow: 0 2px 4px rgba(255, 224, 102, 0.3);
+        animation: highlightPulse 2s ease-in-out infinite;
+      }
+
+      @keyframes highlightPulse {
+        0%, 100% { transform: scale(1); }
+        50% { transform: scale(1.02); }
       }
 
       /* Responsive Design for Custom Content Modal */
@@ -5368,7 +5534,8 @@ const ChatDialog = {
         }
 
         .vocab-custom-content-header {
-          padding: 15px 20px;
+          padding: var(--vocab-spacing-lg) var(--vocab-spacing-xl);
+          margin: 0;
         }
 
         .vocab-custom-content-title {
@@ -5392,7 +5559,8 @@ const ChatDialog = {
         }
 
         .vocab-custom-content-header {
-          padding: 12px 15px;
+          padding: var(--vocab-spacing-md) var(--vocab-spacing-lg);
+          margin: 0;
         }
 
         .vocab-custom-content-title {
@@ -5406,6 +5574,175 @@ const ChatDialog = {
         .vocab-custom-content-editor {
           padding: 15px;
           min-height: 250px;
+        }
+      }
+
+      /* Resize Handles Component */
+      .vocab-custom-content-resize-handles {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        pointer-events: none;
+        z-index: 20;
+      }
+
+      .vocab-custom-content-resize-handle {
+        position: absolute;
+        width: 24px;
+        height: 24px;
+        background: transparent;
+        border: none;
+        pointer-events: all;
+        cursor: pointer;
+        opacity: 0;
+        transition: opacity var(--vocab-transition-normal);
+      }
+
+      .vocab-custom-content-resize-handle-top-left {
+        top: -12px;
+        left: -12px;
+        cursor: nw-resize;
+      }
+
+      .vocab-custom-content-resize-handle-top-left::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 24px;
+        height: 24px;
+        border: 3px solid var(--vocab-primary-color);
+        border-radius: 50%;
+        border-right: none;
+        border-bottom: none;
+        transform: rotate(-45deg);
+        transition: all var(--vocab-transition-normal);
+      }
+
+      .vocab-custom-content-resize-handle-top-right {
+        top: -12px;
+        right: -12px;
+        cursor: ne-resize;
+      }
+
+      .vocab-custom-content-resize-handle-top-right::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        right: 0;
+        width: 24px;
+        height: 24px;
+        border: 3px solid var(--vocab-primary-color);
+        border-radius: 50%;
+        border-left: none;
+        border-bottom: none;
+        transform: rotate(45deg);
+        transition: all var(--vocab-transition-normal);
+      }
+
+      .vocab-custom-content-resize-handle-bottom-left {
+        bottom: -12px;
+        left: -12px;
+        cursor: sw-resize;
+      }
+
+      .vocab-custom-content-resize-handle-bottom-left::before {
+        content: '';
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        width: 24px;
+        height: 24px;
+        border: 3px solid var(--vocab-primary-color);
+        border-radius: 50%;
+        border-right: none;
+        border-top: none;
+        transform: rotate(45deg);
+        transition: all var(--vocab-transition-normal);
+      }
+
+      .vocab-custom-content-resize-handle-bottom-right {
+        bottom: -12px;
+        right: -12px;
+        cursor: se-resize;
+      }
+
+      .vocab-custom-content-resize-handle-bottom-right::before {
+        content: '';
+        position: absolute;
+        bottom: 0;
+        right: 0;
+        width: 24px;
+        height: 24px;
+        border: 3px solid var(--vocab-primary-color);
+        border-radius: 50%;
+        border-left: none;
+        border-top: none;
+        transform: rotate(-45deg);
+        transition: all var(--vocab-transition-normal);
+      }
+
+      .vocab-custom-content-modal:hover .vocab-custom-content-resize-handle {
+        opacity: 1;
+      }
+
+      .vocab-custom-content-resize-handle:hover::before {
+        border-color: var(--vocab-primary-hover);
+        transform: scale(1.2) rotate(var(--rotation, 0deg));
+        box-shadow: 0 0 0 4px var(--vocab-primary-light);
+      }
+
+      /* Enhanced Responsive Design */
+      @media (max-width: 1200px) {
+        .vocab-custom-content-modal {
+          max-width: 95%;
+          width: 95%;
+        }
+      }
+
+      /* Accessibility Improvements */
+      .vocab-custom-content-modal:focus-within {
+        outline: none;
+      }
+
+      .vocab-custom-content-tab:focus,
+      .vocab-custom-content-tab-arrow:focus,
+      .vocab-custom-content-add-tab:focus,
+      .vocab-custom-content-close:focus,
+      .vocab-custom-content-settings:focus {
+        outline: 2px solid var(--vocab-primary-color);
+        outline-offset: 2px;
+      }
+
+      .vocab-custom-content-search-input:focus {
+        outline: none;
+      }
+
+      /* High contrast mode support */
+      @media (prefers-contrast: high) {
+        :root {
+          --vocab-primary-color: #0000FF;
+          --vocab-border-color: #000000;
+          --vocab-text-primary: #000000;
+          --vocab-background-white: #FFFFFF;
+        }
+      }
+
+      /* Reduced motion support */
+      @media (prefers-reduced-motion: reduce) {
+        .vocab-custom-content-overlay,
+        .vocab-custom-content-modal,
+        .vocab-custom-content-tab,
+        .vocab-custom-content-tab-arrow,
+        .vocab-custom-content-add-tab,
+        .vocab-custom-content-close,
+        .vocab-custom-content-settings,
+        .vocab-custom-content-search-input,
+        .vocab-custom-content-resize-handle {
+          transition: none;
+          animation: none;
         }
       }
     `;
@@ -8601,7 +8938,8 @@ const ButtonPanel = {
     this.hideCustomContentButton();
     
     // Check if there's already content in memory
-    if (this.topicsModal.customContentModal.tabs && this.topicsModal.customContentModal.tabs.length > 0) {
+    const allTabs = this.topicsModal.customContentModal.getAllTabs();
+    if (allTabs && allTabs.length > 0) {
       // Show custom content modal with existing tabs
       this.showCustomContentModalWithTabs();
     } else {
@@ -8788,11 +9126,117 @@ const ButtonPanel = {
     customContentModal: {
       overlay: null,
       modal: null,
-      content: '',
       searchTerm: '',
-      tabs: [],
       activeTabId: null,
-      tabCounter: 0
+      activeContentType: null, // 'pdf', 'image', 'topic'
+      
+      // Three separate content containers
+      contentContainers: {
+        pdf: {
+          tabs: [],
+          tabCounter: 0,
+          containerId: 'pdf-content-container'
+        },
+        image: {
+          tabs: [],
+          tabCounter: 0,
+          containerId: 'image-content-container'
+        },
+        topic: {
+          tabs: [],
+          tabCounter: 0,
+          containerId: 'topic-content-container'
+        }
+      },
+      
+      // Helper methods for content management
+      getCurrentContainer: function(contentType) {
+        return this.contentContainers[contentType] || null;
+      },
+      
+      getTabById: function(tabId) {
+        // Parse tabId to determine content type (e.g., 'pdf-1', 'image-3', 'topic-group-4')
+        const parts = tabId.split('-');
+        if (parts.length < 2) return null;
+        
+        const contentType = parts[0];
+        const container = this.contentContainers[contentType];
+        if (!container) return null;
+        
+        return container.tabs.find(tab => tab.id === tabId);
+      },
+      
+      getAllTabs: function() {
+        return [
+          ...this.contentContainers.pdf.tabs,
+          ...this.contentContainers.image.tabs,
+          ...this.contentContainers.topic.tabs
+        ];
+      },
+      
+      getTabsByType: function(contentType) {
+        const container = this.contentContainers[contentType];
+        return container ? container.tabs : [];
+      },
+      
+      addTab: function(contentType, tabName, content, metadata = {}) {
+        const container = this.contentContainers[contentType];
+        if (!container) return null;
+        
+        container.tabCounter++;
+        const tabId = `${contentType}-${container.tabCounter}`;
+        
+        const newTab = {
+          id: tabId,
+          name: tabName,
+          content: content,
+          searchTerm: '',
+          metadata: metadata,
+          createdAt: new Date().toISOString()
+        };
+        
+        container.tabs.push(newTab);
+        return newTab;
+      },
+      
+      removeTab: function(tabId) {
+        const parts = tabId.split('-');
+        if (parts.length < 2) return false;
+        
+        const contentType = parts[0];
+        const container = this.contentContainers[contentType];
+        if (!container) return false;
+        
+        const tabIndex = container.tabs.findIndex(tab => tab.id === tabId);
+        if (tabIndex === -1) return false;
+        
+        container.tabs.splice(tabIndex, 1);
+        return true;
+      },
+      
+      updateTabContent: function(tabId, content) {
+        const tab = this.getTabById(tabId);
+        if (!tab) return false;
+        
+        tab.content = content;
+        tab.updatedAt = new Date().toISOString();
+        return true;
+      },
+      
+      clearContainer: function(contentType) {
+        const container = this.contentContainers[contentType];
+        if (!container) return false;
+        
+        container.tabs = [];
+        container.tabCounter = 0;
+        return true;
+      },
+      
+      clearAllContainers: function() {
+        Object.keys(this.contentContainers).forEach(contentType => {
+          this.clearContainer(contentType);
+        });
+      }
     }
   },
 
@@ -9347,17 +9791,34 @@ const ButtonPanel = {
         
         if (isRegenerate && tabId) {
           console.log('[ButtonPanel] Regenerating content for tab:', tabId);
-          // Update existing tab content
-          const tab = this.topicsModal.customContentModal.tabs.find(t => t.id === tabId);
+          // Update existing tab content using new container system
+          const tab = this.topicsModal.customContentModal.getTabById(tabId);
           if (tab) {
             tab.content = response.data.text;
+            // Update topicName if available
+            if (response.data.topicName) {
+              tab.name = response.data.topicName;
+              // Update the tab title in DOM
+              const tabElement = this.topicsModal.customContentModal.modal.querySelector(`[data-tab-id="${tabId}"]`);
+              if (tabElement) {
+                const titleElement = tabElement.querySelector('.vocab-custom-content-tab-title');
+                if (titleElement) {
+                  this.setupTabTitleWithTooltip(titleElement, response.data.topicName);
+                }
+              }
+            }
             // Update the editor content
             this.updateCustomContentEditor(response.data.text);
           }
         } else {
           console.log('[ButtonPanel] Creating new tab with content');
           // Show custom content modal with the response (new tab)
-          this.showCustomContentModal(response.data.text, true);
+          this.showCustomContentModal(response.data.text, 'topic', {
+            topics: this.topicsModal.topics,
+            wordCount: this.topicsModal.wordCount,
+            difficulty: this.topicsModal.difficulty,
+            topicName: response.data.topicName // Add topicName from API response
+          });
         }
         
         // Reset generate button if it was regenerating
@@ -9443,15 +9904,15 @@ const ButtonPanel = {
   },
 
   /**
-   * Show custom content modal
+   * Show custom content modal with new content
    * @param {string} content - The markdown content to display
-   * @param {boolean} isFromTopics - Whether the content was generated from topics
+   * @param {string} contentType - The content type ('pdf', 'image', 'topic')
+   * @param {Object} metadata - Additional metadata for the tab
    */
-  showCustomContentModal(content, isFromTopics = false) {
+  showCustomContentModal(content, contentType = 'topic', metadata = {}) {
     console.log('[ButtonPanel] Showing custom content modal');
     console.log('[ButtonPanel] Content:', content ? 'Present' : 'Missing');
-    console.log('[ButtonPanel] isFromTopics:', isFromTopics);
-    console.log('[ButtonPanel] About to hide custom content button...');
+    console.log('[ButtonPanel] Content type:', contentType);
     
     // Hide the custom content button when modal opens
     this.hideCustomContentButton();
@@ -9470,13 +9931,53 @@ const ButtonPanel = {
     }
     
     // Create a new tab with the content
-    const tabTitle = isFromTopics ? 'Content from topics' : 'Generated Content';
-    const tabId = this.createTab(tabTitle, content, isFromTopics);
+    const tabTitle = this.generateTabTitle(contentType, metadata);
+    const tabId = this.createTab(tabTitle, content, contentType, metadata);
     
     // Show the modal with a slight delay for smooth transition
     setTimeout(() => {
       this.topicsModal.customContentModal.overlay.classList.add('visible');
     }, 100);
+  },
+
+  /**
+   * Generate tab title based on content type and metadata
+   * @param {string} contentType - The content type ('pdf', 'image', 'topic')
+   * @param {Object} metadata - Additional metadata for the tab
+   * @returns {string} Generated tab title
+   */
+  generateTabTitle(contentType, metadata = {}) {
+    const titleMap = {
+      'pdf': () => {
+        if (metadata.fileName) {
+          return `PDF: ${metadata.fileName}`;
+        }
+        return 'PDF Content';
+      },
+      'image': () => {
+        if (metadata.fileName) {
+          return `Image: ${metadata.fileName}`;
+        }
+        return 'Image Content';
+      },
+      'topic': () => {
+        // Prioritize topicName from API response
+        if (metadata.topicName) {
+          return metadata.topicName;
+        }
+        // Fallback to topics list if topicName not available
+        if (metadata.topics && metadata.topics.length > 0) {
+          const topicList = metadata.topics.slice(0, 3).join(', ');
+          const suffix = metadata.topics.length > 3 ? '...' : '';
+          return `Topics: ${topicList}${suffix}`;
+        }
+        return 'Topic Content';
+      },
+      'default': () => 'Generated Content'
+    };
+    
+    const generator = titleMap[contentType] || titleMap['default'];
+    return generator();
   },
 
   /**
@@ -10032,7 +10533,7 @@ const ButtonPanel = {
     const searchInput = document.createElement('input');
     searchInput.className = 'vocab-custom-content-search-input';
     searchInput.type = 'text';
-    searchInput.placeholder = 'Search in content...';
+    searchInput.placeholder = 'Type here to search...';
     
     searchSection.appendChild(searchInput);
     
@@ -10058,8 +10559,8 @@ const ButtonPanel = {
     
     // Assemble modal
     modal.appendChild(header);
-    modal.appendChild(tabsSection);
     modal.appendChild(searchSection);
+    modal.appendChild(tabsSection);
     modal.appendChild(editorSection);
     modal.appendChild(settingsBtn);
     
@@ -10109,7 +10610,7 @@ const ButtonPanel = {
     // Search functionality
     searchInput.addEventListener('input', (e) => {
       console.log('[ButtonPanel] Search input changed:', e.target.value);
-      const activeTab = this.topicsModal.customContentModal.tabs.find(tab => tab.id === this.topicsModal.customContentModal.activeTabId);
+      const activeTab = this.topicsModal.customContentModal.getTabById(this.topicsModal.customContentModal.activeTabId);
       if (activeTab) {
         activeTab.searchTerm = e.target.value;
         console.log('[ButtonPanel] Updated active tab search term:', activeTab.searchTerm);
@@ -10235,16 +10736,27 @@ const ButtonPanel = {
       this.topicsModal.customContentModal.overlay.style.filter = 'blur(2px)';
     }
     
-    // Get current active tab data
-    const activeTab = this.topicsModal.customContentModal.tabs.find(tab => tab.id === this.topicsModal.customContentModal.activeTabId);
-    if (!activeTab || !activeTab.isFromTopics) {
-      console.log('[ButtonPanel] No active tab or tab is not from topics, cannot regenerate');
+    // Get current active tab data using new container system
+    const activeTab = this.topicsModal.customContentModal.getTabById(this.topicsModal.customContentModal.activeTabId);
+    if (!activeTab) {
+      console.log('[ButtonPanel] No active tab found, cannot regenerate');
       return;
     }
     
-    // Load the topics data from the active tab (we'll need to store this)
-    // For now, we'll show the modal with current settings
-    // TODO: Store topics data in tab object for regeneration
+    // Check if this is a topic tab (can be regenerated)
+    const contentType = this.topicsModal.customContentModal.activeTabId.split('-')[0];
+    if (contentType !== 'topic') {
+      console.log('[ButtonPanel] Only topic tabs can be regenerated, current type:', contentType);
+      return;
+    }
+    
+    // Load the topics data from the active tab metadata
+    if (activeTab.metadata) {
+      // Restore the topics and settings from the tab metadata
+      this.topicsModal.topics = activeTab.metadata.topics || [];
+      this.topicsModal.wordCount = activeTab.metadata.wordCount || 100;
+      this.topicsModal.difficulty = activeTab.metadata.difficulty || 'hard';
+    }
     
     // Show the topics modal
     this.showTopicsModal();
@@ -10263,19 +10775,33 @@ const ButtonPanel = {
   /**
    * Show custom content modal with existing tabs
    */
-  showCustomContentModalWithTabs() {
+  showCustomContentModalWithTabs(contentType = null) {
     console.log('[ButtonPanel] Showing custom content modal with existing tabs');
+    console.log('[ButtonPanel] Content type:', contentType);
     
     // Create modal if it doesn't exist
     if (!this.topicsModal.customContentModal.overlay) {
       this.createCustomContentModal();
     }
     
+    // Determine which tabs to show
+    let tabsToShow = [];
+    if (contentType) {
+      // Show tabs for specific content type
+      tabsToShow = this.topicsModal.customContentModal.getTabsByType(contentType);
+      this.topicsModal.customContentModal.activeContentType = contentType;
+    } else {
+      // Show all tabs from all containers
+      tabsToShow = this.topicsModal.customContentModal.getAllTabs();
+    }
+    
+    console.log('[ButtonPanel] Tabs to show:', tabsToShow);
+    
     // Only render tabs if they don't already exist in DOM
     const existingTabs = this.topicsModal.customContentModal.modal.querySelectorAll('.vocab-custom-content-tab');
     if (existingTabs.length === 0) {
-      // Render all existing tabs
-      this.topicsModal.customContentModal.tabs.forEach(tab => {
+      // Render all tabs to show
+      tabsToShow.forEach(tab => {
         this.renderTab(tab);
       });
     }
@@ -10283,8 +10809,8 @@ const ButtonPanel = {
     // Switch to the active tab or first tab
     if (this.topicsModal.customContentModal.activeTabId) {
       this.switchToTab(this.topicsModal.customContentModal.activeTabId);
-    } else if (this.topicsModal.customContentModal.tabs.length > 0) {
-      this.switchToTab(this.topicsModal.customContentModal.tabs[0].id);
+    } else if (tabsToShow.length > 0) {
+      this.switchToTab(tabsToShow[0].id);
     }
     
     // Show the modal
@@ -10297,36 +10823,36 @@ const ButtonPanel = {
    * Create a new tab
    * @param {string} title - The tab title
    * @param {string} content - The tab content
-   * @param {boolean} isFromTopics - Whether content is from topics
+   * @param {string} contentType - The content type ('pdf', 'image', 'topic')
+   * @param {Object} metadata - Additional metadata for the tab
    * @returns {string} Tab ID
    */
-  createTab(title, content, isFromTopics = false) {
-    console.log('[ButtonPanel] Creating new tab:', title);
+  createTab(title, content, contentType = 'topic', metadata = {}) {
+    console.log('[ButtonPanel] Creating new tab:', title, 'for content type:', contentType);
     console.log('[ButtonPanel] tabsContainer before renderTab:', this.topicsModal.customContentModal.tabsContainer);
     
-    const tabId = `tab-${++this.topicsModal.customContentModal.tabCounter}`;
-    const tab = {
-      id: tabId,
-      title: title,
-      content: content,
-      isFromTopics: isFromTopics,
-      searchTerm: ''
-    };
+    // Use the new container system to add tab
+    const newTab = this.topicsModal.customContentModal.addTab(contentType, title, content, metadata);
     
-    this.topicsModal.customContentModal.tabs.push(tab);
+    if (!newTab) {
+      console.error('[ButtonPanel] Failed to create tab for content type:', contentType);
+      return null;
+    }
+    
     try {
-      this.renderTab(tab);
+      this.renderTab(newTab);
     } catch (error) {
       console.error('[ButtonPanel] Error in renderTab:', error);
       console.error('[ButtonPanel] Error stack:', error.stack);
     }
     
-    // Set as active tab if it's the first one
-    if (this.topicsModal.customContentModal.tabs.length === 1) {
-      this.switchToTab(tabId);
+    // Set as active tab if it's the first one for this content type
+    const containerTabs = this.topicsModal.customContentModal.getTabsByType(contentType);
+    if (containerTabs.length === 1) {
+      this.switchToTab(newTab.id);
     }
     
-    return tabId;
+    return newTab.id;
   },
 
   /**
@@ -10344,9 +10870,18 @@ const ButtonPanel = {
     tabElement.className = 'vocab-custom-content-tab';
     tabElement.setAttribute('data-tab-id', tab.id);
     
+    // Add content type indicator
+    const contentType = tab.id.split('-')[0];
+    tabElement.setAttribute('data-content-type', contentType);
+    
     const titleElement = document.createElement('div');
     titleElement.className = 'vocab-custom-content-tab-title';
-    titleElement.textContent = tab.title;
+    
+    // Get the full title
+    const fullTitle = tab.name || tab.title; // Support both new and old structure
+    
+    // Set up truncation and tooltip
+    this.setupTabTitleWithTooltip(titleElement, fullTitle);
     
     const closeBtn = document.createElement('button');
     closeBtn.className = 'vocab-custom-content-tab-close';
@@ -10380,6 +10915,32 @@ const ButtonPanel = {
   },
 
   /**
+   * Set up tab title with truncation and hover tooltip
+   * @param {HTMLElement} titleElement - The title element to configure
+   * @param {string} fullTitle - The complete title text
+   */
+  setupTabTitleWithTooltip(titleElement, fullTitle) {
+    const maxLength = 25; // Maximum characters to show before truncation
+    
+    if (fullTitle.length <= maxLength) {
+      // Title is short enough, just set it directly
+      titleElement.textContent = fullTitle;
+      return;
+    }
+    
+    // Title is too long, truncate it
+    const truncatedTitle = fullTitle.substring(0, maxLength - 3) + '...';
+    titleElement.textContent = truncatedTitle;
+    
+    // Add tooltip functionality
+    titleElement.setAttribute('title', fullTitle); // Native browser tooltip
+    titleElement.setAttribute('data-full-title', fullTitle); // Store for custom tooltip if needed
+    
+    // Add CSS class for styling
+    titleElement.classList.add('vocab-tab-title-truncated');
+  },
+
+  /**
    * Switch to a specific tab
    * @param {string} tabId - The tab ID to switch to
    */
@@ -10396,11 +10957,14 @@ const ButtonPanel = {
       }
     });
     
-    // Update content
-    const activeTab = this.topicsModal.customContentModal.tabs.find(tab => tab.id === tabId);
+    // Update content using new container system
+    const activeTab = this.topicsModal.customContentModal.getTabById(tabId);
     if (activeTab) {
       this.updateCustomContentEditor(activeTab.content);
-      this.updateCustomContentHeading(activeTab.isFromTopics);
+      
+      // Update heading based on content type
+      const contentType = tabId.split('-')[0];
+      this.updateCustomContentHeading(contentType);
       
       // Update search input
       const searchInput = this.topicsModal.customContentModal.searchInput;
@@ -10416,13 +10980,11 @@ const ButtonPanel = {
    * @param {string} tabId - The tab ID to close
    */
   closeTab(tabId) {
-    const tabIndex = this.topicsModal.customContentModal.tabs.findIndex(tab => tab.id === tabId);
-    if (tabIndex === -1) return;
+    // Use new container system to remove tab
+    const removed = this.topicsModal.customContentModal.removeTab(tabId);
+    if (!removed) return;
     
-    // Remove tab from array
-    this.topicsModal.customContentModal.tabs.splice(tabIndex, 1);
-    
-    // Remove tab element
+    // Remove tab element from DOM
     const tabElement = this.topicsModal.customContentModal.modal.querySelector(`[data-tab-id="${tabId}"]`);
     if (tabElement) {
       tabElement.remove();
@@ -10430,16 +10992,21 @@ const ButtonPanel = {
     
     // If this was the active tab, switch to another tab
     if (this.topicsModal.customContentModal.activeTabId === tabId) {
-      if (this.topicsModal.customContentModal.tabs.length > 0) {
-        // Switch to the next tab or the previous one
-        const newActiveIndex = Math.min(tabIndex, this.topicsModal.customContentModal.tabs.length - 1);
-        this.switchToTab(this.topicsModal.customContentModal.tabs[newActiveIndex].id);
+      const allTabs = this.topicsModal.customContentModal.getAllTabs();
+      if (allTabs.length > 0) {
+        // Switch to the first available tab
+        this.switchToTab(allTabs[0].id);
       } else {
         // No tabs left, clear topics and close the modal
         this.clearTopicsModalInputs();
         this.hideCustomContentModal();
       }
     }
+    
+    // Update arrow states after removing tab
+    setTimeout(() => {
+      this.updateTabArrowStates();
+    }, 100);
   },
 
   /**
@@ -10752,13 +11319,20 @@ const ButtonPanel = {
   },
 
   /**
-   * Update custom content heading based on content source
-   * @param {boolean} isFromTopics - Whether the content was generated from topics
+   * Update custom content heading based on content type
+   * @param {string} contentType - The content type ('pdf', 'image', 'topic')
    */
-  updateCustomContentHeading(isFromTopics) {
+  updateCustomContentHeading(contentType) {
     const title = this.topicsModal.customContentModal.modal?.querySelector('.vocab-custom-content-title');
     if (title) {
-      title.textContent = isFromTopics ? 'Content from topics' : 'Generated Content';
+      const headingMap = {
+        'pdf': 'Content from PDF',
+        'image': 'Content from Image', 
+        'topic': 'Topic contents',
+        'default': 'Generated Content'
+      };
+      
+      title.textContent = headingMap[contentType] || headingMap['default'];
     }
   },
 
@@ -10802,7 +11376,7 @@ const ButtonPanel = {
    */
   performSearch() {
     console.log('[ButtonPanel] performSearch called');
-    const activeTab = this.topicsModal.customContentModal.tabs.find(tab => tab.id === this.topicsModal.customContentModal.activeTabId);
+    const activeTab = this.topicsModal.customContentModal.getTabById(this.topicsModal.customContentModal.activeTabId);
     if (!activeTab) {
       console.log('[ButtonPanel] No active tab found in performSearch');
       return;
