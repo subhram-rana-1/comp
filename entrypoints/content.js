@@ -1510,12 +1510,12 @@ const WordSelector = {
       }
       
       .vocab-word-popup-examples-container::-webkit-scrollbar-track {
-        background: #f3f4f6;
+        background: #F8F2FC;
         border-radius: 2px;
       }
       
       .vocab-word-popup-examples-container::-webkit-scrollbar-thumb {
-        background: #D097FF;
+        background: #D8C1E8;
         border-radius: 2px;
       }
       
@@ -4379,12 +4379,12 @@ const ChatDialog = {
       }
       
       .vocab-chat-messages::-webkit-scrollbar-track {
-        background: #f3f4f6;
+        background: #F8F2FC;
         border-radius: 3px;
       }
       
       .vocab-chat-messages::-webkit-scrollbar-thumb {
-        background: #D097FF;
+        background: #D8C1E8;
         border-radius: 3px;
       }
       
@@ -4975,14 +4975,13 @@ const ChatDialog = {
         position: relative;
         cursor: grab;
         user-select: none;
-        background: #EBE1F2;
+        background: #F4F0F5;
         border-bottom: 0.5px solid rgba(162, 78, 255, 0.3);
         border-radius: 20px 20px 0 0;
         transition: none;
       }
 
       .vocab-custom-content-header:hover {
-        background: #EBE1F2;
         transform: none;
         box-shadow: none;
       }
@@ -4995,7 +4994,7 @@ const ChatDialog = {
       .vocab-custom-content-title {
         font-size: 28px;
         font-weight: 600;
-        color: var(--vocab-primary-color);
+        color: #9F7BDB;
         margin: 0;
         position: absolute;
         left: 50%;
@@ -5014,11 +5013,14 @@ const ChatDialog = {
       .vocab-custom-content-tabs {
         display: flex;
         align-items: center;
-        padding: 0 var(--vocab-spacing-xl);
+        padding: 0;
+        padding-top: 0;
+        padding-bottom: 0;
         background: var(--vocab-background-white);
         border-bottom: none;
         min-height: 60px;
         position: relative;
+        margin: 0 var(--vocab-spacing-lg) 0 var(--vocab-spacing-lg);
       }
 
       .vocab-custom-content-tabs::before {
@@ -5031,8 +5033,11 @@ const ChatDialog = {
         overflow-x: auto;
         scrollbar-width: none;
         -ms-overflow-style: none;
-        gap: var(--vocab-spacing-xs);
-        padding: var(--vocab-spacing-sm) 0;
+        gap: 0;
+        padding: 0;
+        border: 1px solid rgba(162, 78, 255, 0.2);
+        border-top: none;
+        border-bottom: none;
       }
 
       .vocab-custom-content-tabs-container::-webkit-scrollbar {
@@ -5083,9 +5088,7 @@ const ChatDialog = {
         align-items: center;
         padding: var(--vocab-spacing-sm) var(--vocab-spacing-md);
         background: var(--vocab-background-white);
-        border: 1px solid rgba(162, 78, 255, 0.2);
-        border-top: none;
-        border-bottom: none;
+        border: none;
         border-radius: 0;
         cursor: pointer;
         transition: all var(--vocab-transition-normal);
@@ -5097,12 +5100,39 @@ const ChatDialog = {
         color: rgba(162, 78, 255, 0.7);
       }
 
+      /* Add vertical separators between tabs */
+      .vocab-custom-content-tab:not(:last-child)::after {
+        content: '';
+        position: absolute;
+        right: 0;
+        top: 20%;
+        bottom: 20%;
+        width: 1px;
+        background: rgba(162, 78, 255, 0.2);
+        z-index: 1;
+      }
+
+      /* Remove separator after active tab */
+      .vocab-custom-content-tab.active::after {
+        display: none;
+      }
+
+      /* Remove separator before active tab */
+      .vocab-custom-content-tab.active + .vocab-custom-content-tab::after {
+        display: none;
+      }
+
+      /* Remove separator after tab that comes before active tab */
+      .vocab-custom-content-tab:has(+ .vocab-custom-content-tab.active)::after {
+        display: none;
+      }
+
       .vocab-custom-content-tab::before {
         display: none;
       }
 
       .vocab-custom-content-tab:hover {
-        background: var(--vocab-background-white);
+        background: #f5f5f5;
         transform: none;
         box-shadow: none;
       }
@@ -5123,6 +5153,22 @@ const ChatDialog = {
 
       .vocab-custom-content-tab.active::before {
         transform: none;
+      }
+
+      /* Remove borders between active tab and adjacent tabs */
+      .vocab-custom-content-tab.active {
+        border-left: none;
+        border-right: none;
+      }
+
+      /* Remove right border of tab that comes before active tab */
+      .vocab-custom-content-tab.active + .vocab-custom-content-tab {
+        border-left: none;
+      }
+
+      /* Remove left border of tab that comes after active tab */
+      .vocab-custom-content-tab:has(+ .vocab-custom-content-tab.active) {
+        border-right: none;
       }
 
       .vocab-custom-content-tab-title {
@@ -5148,7 +5194,7 @@ const ChatDialog = {
       }
 
       /* Enhanced tooltip styling */
-      .vocab-custom-content-tab-title[title]:hover::after {
+      .vocab-custom-content-tab-title:hover::after {
         content: attr(title);
         position: absolute;
         bottom: 100%;
@@ -5167,7 +5213,7 @@ const ChatDialog = {
         animation: tooltipFadeIn var(--vocab-transition-normal) ease-out forwards;
       }
 
-      .vocab-custom-content-tab-title[title]:hover::before {
+      .vocab-custom-content-tab-title:hover::before {
         content: '';
         position: absolute;
         bottom: 100%;
@@ -5217,7 +5263,7 @@ const ChatDialog = {
       /* Add Tab Button */
       .vocab-custom-content-add-tab {
         background: var(--vocab-background-white);
-        border: 1px solid rgba(162, 78, 255, 0.6);
+        border: none;
         color: rgba(162, 78, 255, 0.8);
         cursor: pointer;
         padding: var(--vocab-spacing-sm);
@@ -5226,22 +5272,28 @@ const ChatDialog = {
         display: flex;
         align-items: center;
         justify-content: center;
-        margin-left: var(--vocab-spacing-sm);
         box-shadow: none;
         min-width: 36px;
         height: 36px;
+        flex-shrink: 0;
+        position: sticky;
+        right: 0;
+        z-index: 10;
+        margin-left: auto;
+        outline: none;
       }
 
       .vocab-custom-content-add-tab:hover {
-        background: rgba(162, 78, 255, 0.1);
-        border-color: rgba(162, 78, 255, 0.8);
-        color: rgba(162, 78, 255, 1);
-        transform: scale(1.05);
+        background: var(--vocab-background-white);
+        color: rgba(162, 78, 255, 0.8);
+        transform: none;
         box-shadow: none;
       }
 
       .vocab-custom-content-add-tab:active {
-        transform: scale(0.95);
+        transform: scale(1.1);
+        outline: none;
+        border: none;
       }
 
       /* Close Button Component */
@@ -5283,12 +5335,13 @@ const ChatDialog = {
 
       /* Search Component */
       .vocab-custom-content-search {
-        padding: var(--vocab-spacing-lg) var(--vocab-spacing-xl);
+        padding: var(--vocab-spacing-md) var(--vocab-spacing-xl);
         display: flex;
         justify-content: center;
         align-items: center;
         background: var(--vocab-background-white);
         position: relative;
+        margin-bottom: var(--vocab-spacing-xs);
       }
 
       .vocab-custom-content-search::before {
@@ -5332,28 +5385,32 @@ const ChatDialog = {
 
       /* Settings Button Component */
       .vocab-custom-content-settings {
-        position: absolute;
-        bottom: var(--vocab-spacing-xl);
-        right: var(--vocab-spacing-xl);
-        width: 48px;
-        height: 48px;
-        background: linear-gradient(135deg, var(--vocab-primary-color) 0%, var(--vocab-primary-hover) 100%);
+        position: sticky;
+        top: var(--vocab-spacing-md);
+        right: var(--vocab-spacing-md);
+        width: 40px;
+        height: 40px;
+        background: transparent;
         border: none;
         border-radius: 50%;
-        color: white;
+        color: var(--vocab-primary-color);
         display: flex;
         align-items: center;
         justify-content: center;
         cursor: pointer;
         transition: all var(--vocab-transition-normal);
-        z-index: 10;
-        box-shadow: var(--vocab-shadow-medium);
+        z-index: 1000;
+        box-shadow: none;
+        float: right;
+        margin-top: var(--vocab-spacing-md);
+        margin-right: var(--vocab-spacing-md);
       }
       
       .vocab-custom-content-settings:hover {
-        background: linear-gradient(135deg, var(--vocab-primary-hover) 0%, var(--vocab-primary-color) 100%);
+        background: transparent;
         transform: scale(1.1) rotate(90deg);
-        box-shadow: var(--vocab-shadow-heavy);
+        box-shadow: none;
+        color: var(--vocab-primary-hover);
       }
 
       .vocab-custom-content-settings:active {
@@ -5361,9 +5418,10 @@ const ChatDialog = {
       }
       
       .vocab-custom-content-settings svg {
-        width: 22px;
-        height: 22px;
+        width: 24px;
+        height: 24px;
         transition: transform var(--vocab-transition-normal);
+        stroke-width: 2.5;
       }
 
       .vocab-custom-content-settings:hover svg {
@@ -5373,17 +5431,47 @@ const ChatDialog = {
       /* Editor Component */
       .vocab-custom-content-editor {
         flex: 1;
-        padding: var(--vocab-spacing-xl);
+        padding: 0;
         overflow-y: auto;
-        min-height: 450px;
-        max-height: 65vh;
+        height: 450px;
         border: 1px solid rgba(162, 78, 255, 0.3);
         margin: 0 var(--vocab-spacing-lg) var(--vocab-spacing-lg) var(--vocab-spacing-lg);
+        margin-top: 0;
         position: relative;
-        border-radius: 10px;
+        border-radius: 20px 0 0 20px;
         background: var(--vocab-background-white);
         box-shadow: none;
+        /* Add fade effect at top and bottom */
+        background: linear-gradient(to bottom, 
+          rgba(255, 255, 255, 1) 0px,
+          rgba(255, 255, 255, 1) 20px,
+          rgba(255, 255, 255, 0.95) 30px,
+          rgba(255, 255, 255, 1) calc(100% - 30px),
+          rgba(255, 255, 255, 1) calc(100% - 20px),
+          rgba(255, 255, 255, 1) 100%
+        );
       }
+
+      /* Scrollbar styling */
+      .vocab-custom-content-editor::-webkit-scrollbar {
+        width: 8px;
+      }
+
+      .vocab-custom-content-editor::-webkit-scrollbar-thumb {
+        background: #D8C1E8;
+        border-radius: 4px;
+      }
+
+      .vocab-custom-content-editor::-webkit-scrollbar-track {
+        background: #F8F2FC;
+        border-radius: 4px;
+      }
+
+      /* When scrollbar is visible, adjust corner radius */
+      .vocab-custom-content-editor.has-scrollbar {
+        border-radius: 20px 20px 20px 20px;
+      }
+
 
       .vocab-custom-content-editor::before {
         display: none;
@@ -5397,7 +5485,7 @@ const ChatDialog = {
         overflow: auto;
         scrollbar-width: thin;
         scrollbar-color: var(--vocab-primary-color) var(--vocab-primary-lighter);
-        padding: var(--vocab-spacing-md);
+        padding: var(--vocab-spacing-xl);
         background: transparent;
       }
 
@@ -5406,19 +5494,20 @@ const ChatDialog = {
       }
 
       .vocab-custom-content-editor-content::-webkit-scrollbar-track {
-        background: var(--vocab-primary-lighter);
+        background: #F8F2FC;
         border-radius: var(--vocab-border-radius-lg);
         margin: var(--vocab-spacing-sm);
       }
 
       .vocab-custom-content-editor-content::-webkit-scrollbar-thumb {
-        background: linear-gradient(180deg, var(--vocab-primary-color) 0%, var(--vocab-primary-hover) 100%);
+        background: #D8C1E8;
         border-radius: var(--vocab-border-radius-lg);
         border: 2px solid var(--vocab-background-white);
       }
 
       .vocab-custom-content-editor-content::-webkit-scrollbar-thumb:hover {
-        background: linear-gradient(180deg, var(--vocab-primary-hover) 0%, var(--vocab-primary-color) 100%);
+        background: #D8C1E8;
+        opacity: 0.8;
       }
 
       /* Content Typography */
@@ -5590,8 +5679,6 @@ const ChatDialog = {
 
       .vocab-custom-content-resize-handle {
         position: absolute;
-        width: 24px;
-        height: 24px;
         background: transparent;
         border: none;
         pointer-events: all;
@@ -5599,10 +5686,52 @@ const ChatDialog = {
         opacity: 0;
         transition: opacity var(--vocab-transition-normal);
       }
+      
+      /* Edge handles */
+      .vocab-custom-content-resize-handle-top,
+      .vocab-custom-content-resize-handle-bottom {
+        left: 20px;
+        right: 20px;
+        height: 8px;
+        cursor: ns-resize;
+      }
+      
+      .vocab-custom-content-resize-handle-top {
+        top: -4px;
+      }
+      
+      .vocab-custom-content-resize-handle-bottom {
+        bottom: -4px;
+      }
+      
+      .vocab-custom-content-resize-handle-left,
+      .vocab-custom-content-resize-handle-right {
+        top: 20px;
+        bottom: 20px;
+        width: 8px;
+        cursor: ew-resize;
+      }
+      
+      .vocab-custom-content-resize-handle-left {
+        left: -4px;
+      }
+      
+      .vocab-custom-content-resize-handle-right {
+        right: -4px;
+      }
+      
+      /* Corner handles */
+      .vocab-custom-content-resize-handle-top-left,
+      .vocab-custom-content-resize-handle-top-right,
+      .vocab-custom-content-resize-handle-bottom-left,
+      .vocab-custom-content-resize-handle-bottom-right {
+        width: 20px;
+        height: 20px;
+      }
 
       .vocab-custom-content-resize-handle-top-left {
-        top: -12px;
-        left: -12px;
+        top: -10px;
+        left: -10px;
         cursor: nw-resize;
       }
 
@@ -5611,10 +5740,10 @@ const ChatDialog = {
         position: absolute;
         top: 0;
         left: 0;
-        width: 24px;
-        height: 24px;
-        border: 3px solid var(--vocab-primary-color);
-        border-radius: 50%;
+        width: 20px;
+        height: 20px;
+        border: 4px solid #9F7BDB;
+        border-radius: 20px;
         border-right: none;
         border-bottom: none;
         transform: rotate(-45deg);
@@ -5622,8 +5751,8 @@ const ChatDialog = {
       }
 
       .vocab-custom-content-resize-handle-top-right {
-        top: -12px;
-        right: -12px;
+        top: -10px;
+        right: -10px;
         cursor: ne-resize;
       }
 
@@ -5632,10 +5761,10 @@ const ChatDialog = {
         position: absolute;
         top: 0;
         right: 0;
-        width: 24px;
-        height: 24px;
-        border: 3px solid var(--vocab-primary-color);
-        border-radius: 50%;
+        width: 20px;
+        height: 20px;
+        border: 4px solid #9F7BDB;
+        border-radius: 20px;
         border-left: none;
         border-bottom: none;
         transform: rotate(45deg);
@@ -5643,8 +5772,8 @@ const ChatDialog = {
       }
 
       .vocab-custom-content-resize-handle-bottom-left {
-        bottom: -12px;
-        left: -12px;
+        bottom: -10px;
+        left: -10px;
         cursor: sw-resize;
       }
 
@@ -5653,10 +5782,10 @@ const ChatDialog = {
         position: absolute;
         bottom: 0;
         left: 0;
-        width: 24px;
-        height: 24px;
-        border: 3px solid var(--vocab-primary-color);
-        border-radius: 50%;
+        width: 20px;
+        height: 20px;
+        border: 4px solid #9F7BDB;
+        border-radius: 20px;
         border-right: none;
         border-top: none;
         transform: rotate(45deg);
@@ -5664,8 +5793,8 @@ const ChatDialog = {
       }
 
       .vocab-custom-content-resize-handle-bottom-right {
-        bottom: -12px;
-        right: -12px;
+        bottom: -10px;
+        right: -10px;
         cursor: se-resize;
       }
 
@@ -5674,10 +5803,10 @@ const ChatDialog = {
         position: absolute;
         bottom: 0;
         right: 0;
-        width: 24px;
-        height: 24px;
-        border: 3px solid var(--vocab-primary-color);
-        border-radius: 50%;
+        width: 20px;
+        height: 20px;
+        border: 4px solid #9F7BDB;
+        border-radius: 20px;
         border-left: none;
         border-top: none;
         transform: rotate(-45deg);
@@ -5689,9 +5818,9 @@ const ChatDialog = {
       }
 
       .vocab-custom-content-resize-handle:hover::before {
-        border-color: var(--vocab-primary-hover);
-        transform: scale(1.2) rotate(var(--rotation, 0deg));
-        box-shadow: 0 0 0 4px var(--vocab-primary-light);
+        border-color: #8B5FBF;
+        transform: scale(1.1) rotate(var(--rotation, 0deg));
+        box-shadow: 0 0 0 2px rgba(159, 123, 219, 0.3);
       }
 
       /* Enhanced Responsive Design */
@@ -10524,7 +10653,9 @@ const ButtonPanel = {
     tabsSection.appendChild(leftArrow);
     tabsSection.appendChild(tabsContainer);
     tabsSection.appendChild(rightArrow);
-    tabsSection.appendChild(addTabBtn);
+    
+    // Add the plus button inside the tabs container
+    tabsContainer.appendChild(addTabBtn);
     
     // Search section
     const searchSection = document.createElement('div');
@@ -10544,9 +10675,7 @@ const ButtonPanel = {
     const editorContent = document.createElement('div');
     editorContent.className = 'vocab-custom-content-editor-content';
     
-    editorSection.appendChild(editorContent);
-    
-    // Settings button (positioned outside editor to avoid scrolling)
+    // Settings button (positioned inside editor at top right)
     const settingsBtn = document.createElement('button');
     settingsBtn.className = 'vocab-custom-content-settings';
     settingsBtn.innerHTML = `
@@ -10557,12 +10686,31 @@ const ButtonPanel = {
     `;
     settingsBtn.setAttribute('title', 'Regenerate content');
     
+    editorSection.appendChild(editorContent);
+    editorSection.appendChild(settingsBtn);
+    
+    // Function to check and update scrollbar visibility
+    const updateScrollbarVisibility = () => {
+      const hasScrollbar = editorSection.scrollHeight > editorSection.clientHeight;
+      if (hasScrollbar) {
+        editorSection.classList.add('has-scrollbar');
+      } else {
+        editorSection.classList.remove('has-scrollbar');
+      }
+    };
+    
+    // Check scrollbar visibility after content is loaded
+    setTimeout(updateScrollbarVisibility, 100);
+    
+    // Monitor content changes to update scrollbar visibility
+    const observer = new MutationObserver(updateScrollbarVisibility);
+    observer.observe(editorContent, { childList: true, subtree: true });
+    
     // Assemble modal
     modal.appendChild(header);
     modal.appendChild(searchSection);
     modal.appendChild(tabsSection);
     modal.appendChild(editorSection);
-    modal.appendChild(settingsBtn);
     
     // Add resize handles
     const resizeHandles = this.createResizeHandles();
@@ -10896,6 +11044,12 @@ const ButtonPanel = {
     tabElement.appendChild(closeBtn);
     tabsContainer.appendChild(tabElement);
     
+    // Ensure plus icon is always at the end
+    const addTabBtn = tabsContainer.querySelector('.vocab-custom-content-add-tab');
+    if (addTabBtn) {
+      tabsContainer.appendChild(addTabBtn);
+    }
+    
     // Add event listeners
     tabElement.addEventListener('click', (e) => {
       if (e.target !== closeBtn && !closeBtn.contains(e.target)) {
@@ -10932,8 +11086,8 @@ const ButtonPanel = {
     const truncatedTitle = fullTitle.substring(0, maxLength - 3) + '...';
     titleElement.textContent = truncatedTitle;
     
-    // Add tooltip functionality
-    titleElement.setAttribute('title', fullTitle); // Native browser tooltip
+    // Add tooltip functionality - use custom CSS tooltip only
+    titleElement.setAttribute('title', fullTitle); // This enables the CSS tooltip
     titleElement.setAttribute('data-full-title', fullTitle); // Store for custom tooltip if needed
     
     // Add CSS class for styling
@@ -11018,9 +11172,19 @@ const ButtonPanel = {
     container.className = 'vocab-custom-content-resize-handles';
     
     // Create handles for all four corners
-    const positions = ['top-left', 'top-right', 'bottom-left', 'bottom-right'];
+    const cornerPositions = ['top-left', 'top-right', 'bottom-left', 'bottom-right'];
     
-    positions.forEach(position => {
+    cornerPositions.forEach(position => {
+      const handle = document.createElement('div');
+      handle.className = `vocab-custom-content-resize-handle vocab-custom-content-resize-handle-${position}`;
+      handle.setAttribute('data-position', position);
+      container.appendChild(handle);
+    });
+    
+    // Create handles for all four edges
+    const edgePositions = ['top', 'bottom', 'left', 'right'];
+    
+    edgePositions.forEach(position => {
       const handle = document.createElement('div');
       handle.className = `vocab-custom-content-resize-handle vocab-custom-content-resize-handle-${position}`;
       handle.setAttribute('data-position', position);
@@ -11094,6 +11258,20 @@ const ButtonPanel = {
           case 'bottom-right':
             newWidth = startWidth + deltaX;
             newHeight = startHeight + deltaY;
+            break;
+          case 'top':
+            newHeight = startHeight - deltaY;
+            newTop = startTop + deltaY;
+            break;
+          case 'bottom':
+            newHeight = startHeight + deltaY;
+            break;
+          case 'left':
+            newWidth = startWidth - deltaX;
+            newLeft = startLeft + deltaX;
+            break;
+          case 'right':
+            newWidth = startWidth + deltaX;
             break;
         }
         
@@ -11412,6 +11590,58 @@ const ButtonPanel = {
     
     console.log('[ButtonPanel] Updated content with highlights');
     editorContent.innerHTML = content;
+    
+    // Auto-scroll to first match if it's outside visible area
+    this.scrollToFirstMatch(editorContent, searchTerm);
+  },
+
+  /**
+   * Scroll to the first search match if it's outside the visible area
+   * @param {HTMLElement} editorContent - The editor content element
+   * @param {string} searchTerm - The search term
+   */
+  scrollToFirstMatch(editorContent, searchTerm) {
+    const firstHighlight = editorContent.querySelector('.vocab-search-highlight');
+    if (!firstHighlight) {
+      console.log('[ButtonPanel] No search highlights found');
+      return;
+    }
+    
+    // Get the editor container (the scrollable element)
+    const editorContainer = editorContent.closest('.vocab-custom-content-editor');
+    if (!editorContainer) {
+      console.log('[ButtonPanel] Editor container not found');
+      return;
+    }
+    
+    // Get the bounding rectangles
+    const highlightRect = firstHighlight.getBoundingClientRect();
+    const containerRect = editorContainer.getBoundingClientRect();
+    
+    // Check if the highlight is outside the visible area
+    const isAboveVisible = highlightRect.top < containerRect.top;
+    const isBelowVisible = highlightRect.bottom > containerRect.bottom;
+    
+    if (isAboveVisible || isBelowVisible) {
+      console.log('[ButtonPanel] First match is outside visible area, scrolling to it');
+      
+      // Calculate the scroll position to center the highlight
+      const containerScrollTop = editorContainer.scrollTop;
+      const highlightOffsetTop = firstHighlight.offsetTop;
+      const containerHeight = editorContainer.clientHeight;
+      const highlightHeight = firstHighlight.offsetHeight;
+      
+      // Center the highlight in the visible area
+      const targetScrollTop = highlightOffsetTop - (containerHeight / 2) + (highlightHeight / 2);
+      
+      // Smooth scroll to the target position
+      editorContainer.scrollTo({
+        top: Math.max(0, targetScrollTop),
+        behavior: 'smooth'
+      });
+    } else {
+      console.log('[ButtonPanel] First match is already visible');
+    }
   },
 
   /**
