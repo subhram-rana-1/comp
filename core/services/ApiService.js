@@ -38,8 +38,10 @@ class ApiService {
       const response = await fetch(url, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
         },
+        mode: 'cors',
         // No credentials needed since we're not using cookies/sessions
         body: JSON.stringify(requestBody)
       });
@@ -92,8 +94,10 @@ class ApiService {
       const response = await fetch(url, {
         method: 'POST',
         headers: {
+          'Accept': 'application/json'
           // Don't set Content-Type header - let browser set it with boundary for multipart/form-data
         },
+        mode: 'cors',
         body: formData
       });
       
@@ -152,8 +156,10 @@ class ApiService {
       const response = await fetch(fullUrl, {
         method: 'GET',
         headers: {
-          'User-Agent': 'vocab-extension/1.0.0'
-        }
+          'User-Agent': 'vocab-extension/1.0.0',
+          'Accept': 'application/json'
+        },
+        mode: 'cors'
       });
       
       if (!response.ok) {

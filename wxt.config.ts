@@ -20,6 +20,9 @@ export default defineConfig({
       'tabs',
       'activeTab'
     ],
+    host_permissions: [
+      'https://caten-production.up.railway.app/*'
+    ],
   },
 });
 
