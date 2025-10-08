@@ -9808,8 +9808,8 @@ const ButtonPanel = {
               <path d="M16 3L20 7V3H16Z" fill="#7A3FD1"/>
               <!-- PDF text in the center -->
               <text x="12" y="14" font-family="Arial, sans-serif" font-size="4" font-weight="bold" fill="white" text-anchor="middle">PDF</text>
-              <!-- Upload arrow in bottom right -->
-              <path d="M18 20L20 18M20 18L18 16M20 18H16" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+              <!-- Upload arrow on the right side pointing upward -->
+              <path d="M18 16L16 18M18 16L20 18M18 16V20" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
             </svg>
           </div>
           
