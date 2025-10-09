@@ -1516,7 +1516,7 @@ const WordSelector = {
       
       .vocab-word-popup-examples-container::-webkit-scrollbar-thumb {
         background: #D8C1E8;
-        border-radius: 2px;
+        border-radius: 0;
       }
       
       .vocab-word-popup-examples {
@@ -4385,7 +4385,7 @@ const ChatDialog = {
       
       .vocab-chat-messages::-webkit-scrollbar-thumb {
         background: #D8C1E8;
-        border-radius: 3px;
+        border-radius: 0;
       }
       
       /* No Messages State */
@@ -5035,13 +5035,16 @@ const ChatDialog = {
         -ms-overflow-style: none;
         gap: 0;
         padding: 0;
-        border: 1px solid rgba(162, 78, 255, 0.2);
-        border-top: none;
-        border-bottom: none;
+        border: none;
       }
 
       .vocab-custom-content-tabs-container::-webkit-scrollbar {
         display: none;
+      }
+
+      /* Tab transition animation */
+      .vocab-custom-content-tabs-container.tab-transitioning .vocab-custom-content-tab {
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
       }
 
       /* Tab Navigation Arrows */
@@ -5125,6 +5128,11 @@ const ChatDialog = {
       /* Remove separator after tab that comes before active tab */
       .vocab-custom-content-tab:has(+ .vocab-custom-content-tab.active)::after {
         display: none;
+      }
+
+      /* Ensure separators show between non-active tabs */
+      .vocab-custom-content-tab:not(.active):not(:last-child)::after {
+        display: block;
       }
 
       .vocab-custom-content-tab::before {
@@ -5284,16 +5292,19 @@ const ChatDialog = {
       }
 
       .vocab-custom-content-add-tab:hover {
-        background: var(--vocab-background-white);
+        background: rgba(162, 78, 255, 0.1);
         color: rgba(162, 78, 255, 0.8);
         transform: none;
         box-shadow: none;
+        border-radius: 10px;
       }
 
       .vocab-custom-content-add-tab:active {
         transform: scale(1.1);
         outline: none;
         border: none;
+        background: rgba(162, 78, 255, 0.1);
+        border-radius: 10px;
       }
 
       /* Close Button Component */
@@ -5408,24 +5419,24 @@ const ChatDialog = {
       
       .vocab-custom-content-settings:hover {
         background: transparent;
-        transform: scale(1.1) rotate(90deg);
+        transform: none;
         box-shadow: none;
         color: var(--vocab-primary-hover);
       }
-
+      
       .vocab-custom-content-settings:active {
-        transform: scale(0.95) rotate(90deg);
+        transform: scale(1.1);
       }
       
       .vocab-custom-content-settings svg {
         width: 24px;
         height: 24px;
         transition: transform var(--vocab-transition-normal);
-        stroke-width: 2.5;
+        fill: #A24EFF;
       }
 
       .vocab-custom-content-settings:hover svg {
-        transform: rotate(180deg);
+        transform: rotate(15deg);
       }
 
       /* Editor Component */
@@ -5438,7 +5449,7 @@ const ChatDialog = {
         margin: 0 var(--vocab-spacing-lg) var(--vocab-spacing-lg) var(--vocab-spacing-lg);
         margin-top: 0;
         position: relative;
-        border-radius: 20px 0 0 20px;
+        border-radius: 20px 20px 20px 20px;
         background: var(--vocab-background-white);
         box-shadow: none;
         /* Add fade effect at top and bottom */
@@ -5459,7 +5470,7 @@ const ChatDialog = {
 
       .vocab-custom-content-editor::-webkit-scrollbar-thumb {
         background: #D8C1E8;
-        border-radius: 4px;
+        border-radius: 0;
       }
 
       .vocab-custom-content-editor::-webkit-scrollbar-track {
@@ -5467,9 +5478,9 @@ const ChatDialog = {
         border-radius: 4px;
       }
 
-      /* When scrollbar is visible, adjust corner radius */
+      /* When scrollbar is visible, remove right corner radius */
       .vocab-custom-content-editor.has-scrollbar {
-        border-radius: 20px 20px 20px 20px;
+        border-radius: 20px 0 0 20px;
       }
 
 
@@ -5501,7 +5512,7 @@ const ChatDialog = {
 
       .vocab-custom-content-editor-content::-webkit-scrollbar-thumb {
         background: #D8C1E8;
-        border-radius: var(--vocab-border-radius-lg);
+        border-radius: 0;
         border: 2px solid var(--vocab-background-white);
       }
 
@@ -5666,162 +5677,7 @@ const ChatDialog = {
         }
       }
 
-      /* Resize Handles Component */
-      .vocab-custom-content-resize-handles {
-        position: absolute;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        pointer-events: none;
-        z-index: 20;
-      }
-
-      .vocab-custom-content-resize-handle {
-        position: absolute;
-        background: transparent;
-        border: none;
-        pointer-events: all;
-        cursor: pointer;
-        opacity: 0;
-        transition: opacity var(--vocab-transition-normal);
-      }
-      
-      /* Edge handles */
-      .vocab-custom-content-resize-handle-top,
-      .vocab-custom-content-resize-handle-bottom {
-        left: 20px;
-        right: 20px;
-        height: 8px;
-        cursor: ns-resize;
-      }
-      
-      .vocab-custom-content-resize-handle-top {
-        top: -4px;
-      }
-      
-      .vocab-custom-content-resize-handle-bottom {
-        bottom: -4px;
-      }
-      
-      .vocab-custom-content-resize-handle-left,
-      .vocab-custom-content-resize-handle-right {
-        top: 20px;
-        bottom: 20px;
-        width: 8px;
-        cursor: ew-resize;
-      }
-      
-      .vocab-custom-content-resize-handle-left {
-        left: -4px;
-      }
-      
-      .vocab-custom-content-resize-handle-right {
-        right: -4px;
-      }
-      
-      /* Corner handles */
-      .vocab-custom-content-resize-handle-top-left,
-      .vocab-custom-content-resize-handle-top-right,
-      .vocab-custom-content-resize-handle-bottom-left,
-      .vocab-custom-content-resize-handle-bottom-right {
-        width: 20px;
-        height: 20px;
-      }
-
-      .vocab-custom-content-resize-handle-top-left {
-        top: -10px;
-        left: -10px;
-        cursor: nw-resize;
-      }
-
-      .vocab-custom-content-resize-handle-top-left::before {
-        content: '';
-        position: absolute;
-        top: 0;
-        left: 0;
-        width: 20px;
-        height: 20px;
-        border: 4px solid #9F7BDB;
-        border-radius: 20px;
-        border-right: none;
-        border-bottom: none;
-        transform: rotate(-45deg);
-        transition: all var(--vocab-transition-normal);
-      }
-
-      .vocab-custom-content-resize-handle-top-right {
-        top: -10px;
-        right: -10px;
-        cursor: ne-resize;
-      }
-
-      .vocab-custom-content-resize-handle-top-right::before {
-        content: '';
-        position: absolute;
-        top: 0;
-        right: 0;
-        width: 20px;
-        height: 20px;
-        border: 4px solid #9F7BDB;
-        border-radius: 20px;
-        border-left: none;
-        border-bottom: none;
-        transform: rotate(45deg);
-        transition: all var(--vocab-transition-normal);
-      }
-
-      .vocab-custom-content-resize-handle-bottom-left {
-        bottom: -10px;
-        left: -10px;
-        cursor: sw-resize;
-      }
-
-      .vocab-custom-content-resize-handle-bottom-left::before {
-        content: '';
-        position: absolute;
-        bottom: 0;
-        left: 0;
-        width: 20px;
-        height: 20px;
-        border: 4px solid #9F7BDB;
-        border-radius: 20px;
-        border-right: none;
-        border-top: none;
-        transform: rotate(45deg);
-        transition: all var(--vocab-transition-normal);
-      }
-
-      .vocab-custom-content-resize-handle-bottom-right {
-        bottom: -10px;
-        right: -10px;
-        cursor: se-resize;
-      }
-
-      .vocab-custom-content-resize-handle-bottom-right::before {
-        content: '';
-        position: absolute;
-        bottom: 0;
-        right: 0;
-        width: 20px;
-        height: 20px;
-        border: 4px solid #9F7BDB;
-        border-radius: 20px;
-        border-left: none;
-        border-top: none;
-        transform: rotate(-45deg);
-        transition: all var(--vocab-transition-normal);
-      }
-
-      .vocab-custom-content-modal:hover .vocab-custom-content-resize-handle {
-        opacity: 1;
-      }
-
-      .vocab-custom-content-resize-handle:hover::before {
-        border-color: #8B5FBF;
-        transform: scale(1.1) rotate(var(--rotation, 0deg));
-        box-shadow: 0 0 0 2px rgba(159, 123, 219, 0.3);
-      }
+      /* Resize handles removed */
 
       /* Enhanced Responsive Design */
       @media (max-width: 1200px) {
@@ -5868,8 +5724,7 @@ const ChatDialog = {
         .vocab-custom-content-add-tab,
         .vocab-custom-content-close,
         .vocab-custom-content-settings,
-        .vocab-custom-content-search-input,
-        .vocab-custom-content-resize-handle {
+        .vocab-custom-content-search-input {
           transition: none;
           animation: none;
         }
@@ -9371,9 +9226,10 @@ const ButtonPanel = {
 
   /**
    * Create and show the topics modal
+   * @param {boolean} clearInputs - Whether to clear inputs (true for new content, false for regeneration)
    */
-  showTopicsModal() {
-    console.log('[ButtonPanel] Showing topics modal');
+  showTopicsModal(clearInputs = true) {
+    console.log('[ButtonPanel] Showing topics modal, clearInputs:', clearInputs);
     
   
     // Create modal if it doesn't exist
@@ -9388,7 +9244,11 @@ const ButtonPanel = {
       // Hide the vertical button group
       this.hideVerticalButtonGroup();
     } else {
-      // Modal already exists; show without clearing previous inputs
+      // Modal already exists
+      if (clearInputs) {
+        // Clear inputs for new content
+        this.clearTopicsModalInputs();
+      }
       this.showModalWithAnimation();
     }
   },
@@ -9927,6 +9787,9 @@ const ButtonPanel = {
             // Update topicName if available
             if (response.data.topicName) {
               tab.name = response.data.topicName;
+              // Store topicName in metadata for tooltip purposes
+              if (!tab.metadata) tab.metadata = {};
+              tab.metadata.topicName = response.data.topicName;
               // Update the tab title in DOM
               const tabElement = this.topicsModal.customContentModal.modal.querySelector(`[data-tab-id="${tabId}"]`);
               if (tabElement) {
@@ -10680,8 +10543,22 @@ const ButtonPanel = {
     settingsBtn.className = 'vocab-custom-content-settings';
     settingsBtn.innerHTML = `
       <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <circle cx="10" cy="10" r="3" stroke="currentColor" stroke-width="1.5"/>
-        <path d="M10 1.5V3M10 17V18.5M18.5 10H17M3 10H1.5M15.364 4.636L14.243 5.757M5.757 14.243L4.636 15.364M15.364 15.364L14.243 14.243M5.757 5.757L4.636 4.636" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+        <path d="M10 2C10.5523 2 11 2.44772 11 3C11 3.55228 10.5523 4 10 4C9.44772 4 9 3.55228 9 3C9 2.44772 9.44772 2 10 2Z" fill="#A24EFF"/>
+        <path d="M10 6C10.5523 6 11 6.44772 11 7C11 7.55228 10.5523 8 10 8C9.44772 8 9 7.55228 9 7C9 6.44772 9.44772 6 10 6Z" fill="#A24EFF"/>
+        <path d="M10 10C10.5523 10 11 10.4477 11 11C11 11.5523 10.5523 12 10 12C9.44772 12 9 11.5523 9 11C9 10.4477 9.44772 10 10 10Z" fill="#A24EFF"/>
+        <path d="M10 14C10.5523 14 11 14.4477 11 15C11 15.5523 10.5523 16 10 16C9.44772 16 9 15.5523 9 15C9 14.4477 9.44772 14 10 14Z" fill="#A24EFF"/>
+        <path d="M10 18C10.5523 18 11 18.4477 11 19C11 19.5523 10.5523 20 10 20C9.44772 20 9 19.5523 9 19C9 18.4477 9.44772 18 10 18Z" fill="#A24EFF"/>
+        <path d="M14 2C14.5523 2 15 2.44772 15 3C15 3.55228 14.5523 4 14 4C13.4477 4 13 3.55228 13 3C13 2.44772 13.4477 2 14 2Z" fill="#A24EFF"/>
+        <path d="M14 6C14.5523 6 15 6.44772 15 7C15 7.55228 14.5523 8 14 8C13.4477 8 13 7.55228 13 7C13 6.44772 13.4477 6 14 6Z" fill="#A24EFF"/>
+        <path d="M14 10C14.5523 10 15 10.4477 15 11C15 11.5523 14.5523 12 14 12C13.4477 12 13 11.5523 13 11C13 10.4477 13.4477 10 14 10Z" fill="#A24EFF"/>
+        <path d="M14 14C14.5523 14 15 14.4477 15 15C15 15.5523 14.5523 16 14 16C13.4477 16 13 15.5523 13 15C13 14.4477 13.4477 14 14 14Z" fill="#A24EFF"/>
+        <path d="M14 18C14.5523 18 15 18.4477 15 19C15 19.5523 14.5523 20 14 20C13.4477 20 13 19.5523 13 19C13 18.4477 13.4477 18 14 18Z" fill="#A24EFF"/>
+        <path d="M6 2C6.55228 2 7 2.44772 7 3C7 3.55228 6.55228 4 6 4C5.44772 4 5 3.55228 5 3C5 2.44772 5.44772 2 6 2Z" fill="#A24EFF"/>
+        <path d="M6 6C6.55228 6 7 6.44772 7 7C7 7.55228 6.55228 8 6 8C5.44772 8 5 7.55228 5 7C5 6.44772 5.44772 6 6 6Z" fill="#A24EFF"/>
+        <path d="M6 10C6.55228 10 7 10.4477 7 11C7 11.5523 6.55228 12 6 12C5.44772 12 5 11.5523 5 11C5 10.4477 5.44772 10 6 10Z" fill="#A24EFF"/>
+        <path d="M6 14C6.55228 14 7 14.4477 7 15C7 15.5523 6.55228 16 6 16C5.44772 16 5 15.5523 5 15C5 14.4477 5.44772 14 6 14Z" fill="#A24EFF"/>
+        <path d="M6 18C6.55228 18 7 18.4477 7 19C7 19.5523 6.55228 20 6 20C5.44772 20 5 19.5523 5 19C5 18.4477 5.44772 18 6 18Z" fill="#A24EFF"/>
+        <circle cx="10" cy="10" r="3" fill="#A24EFF"/>
       </svg>
     `;
     settingsBtn.setAttribute('title', 'Regenerate content');
@@ -10712,9 +10589,7 @@ const ButtonPanel = {
     modal.appendChild(tabsSection);
     modal.appendChild(editorSection);
     
-    // Add resize handles
-    const resizeHandles = this.createResizeHandles();
-    modal.appendChild(resizeHandles);
+    // Resize handles removed
     
     overlay.appendChild(modal);
     
@@ -10907,10 +10782,13 @@ const ButtonPanel = {
     }
     
     // Show the topics modal
-    this.showTopicsModal();
+    this.showTopicsModal(false);
     
-    // Change the generate button text to "Re-generate content"
+    // Populate form fields with stored metadata
     setTimeout(() => {
+      this.populateTopicsFormFields();
+      
+      // Change the generate button text to "Re-generate content"
       const generateBtn = this.topicsModal.modal.querySelector('.vocab-topics-generate-btn');
       if (generateBtn) {
         generateBtn.textContent = 'Re-generate content';
@@ -10918,6 +10796,54 @@ const ButtonPanel = {
         generateBtn.setAttribute('data-tab-id', activeTab.id);
       }
     }, 100);
+  },
+
+  /**
+   * Populate topics form fields with stored metadata
+   */
+  populateTopicsFormFields() {
+    console.log('[ButtonPanel] Populating topics form fields');
+    
+    // Clear existing topic tags
+    const tagsContainer = this.topicsModal.modal.querySelector('#vocab-topics-tags');
+    if (tagsContainer) {
+      tagsContainer.innerHTML = '';
+    }
+    
+    // Add topic tags from stored metadata
+    this.topicsModal.topics.forEach(topic => {
+      const tag = this.createTopicTag(topic);
+      const tagsContainer = this.topicsModal.modal.querySelector('#vocab-topics-tags');
+      if (tagsContainer) {
+        tagsContainer.appendChild(tag);
+      }
+    });
+    
+    // Set word count buttons
+    const wordCountButtons = this.topicsModal.modal.querySelectorAll('.vocab-topics-word-count-btn');
+    wordCountButtons.forEach(btn => {
+      btn.classList.remove('selected');
+      if (btn.getAttribute('data-count') === this.topicsModal.wordCount.toString()) {
+        btn.classList.add('selected');
+      }
+    });
+    
+    // Set difficulty buttons
+    const difficultyButtons = this.topicsModal.modal.querySelectorAll('.vocab-topics-difficulty-btn');
+    difficultyButtons.forEach(btn => {
+      btn.classList.remove('selected');
+      if (btn.getAttribute('data-difficulty') === this.topicsModal.difficulty) {
+        btn.classList.add('selected');
+      }
+    });
+    
+    // Initialize sliders to show the selected options
+    setTimeout(() => {
+      this.initializeSliders();
+    }, 50);
+    
+    // Update UI state
+    this.updateTopicsUIState();
   },
 
   /**
@@ -11025,8 +10951,13 @@ const ButtonPanel = {
     const titleElement = document.createElement('div');
     titleElement.className = 'vocab-custom-content-tab-title';
     
-    // Get the full title
-    const fullTitle = tab.name || tab.title; // Support both new and old structure
+    // Get the full title - prioritize topicName from metadata for topic tabs
+    let fullTitle = tab.name || tab.title; // Support both new and old structure
+    
+    // For topic tabs, use topicName from metadata if available
+    if (contentType === 'topic' && tab.metadata && tab.metadata.topicName) {
+      fullTitle = tab.metadata.topicName;
+    }
     
     // Set up truncation and tooltip
     this.setupTabTitleWithTooltip(titleElement, fullTitle);
@@ -11102,6 +11033,12 @@ const ButtonPanel = {
     // Update active tab
     this.topicsModal.customContentModal.activeTabId = tabId;
     
+    // Add smooth transition class to tabs container
+    const tabsContainer = this.topicsModal.customContentModal.tabsContainer;
+    if (tabsContainer) {
+      tabsContainer.classList.add('tab-transitioning');
+    }
+    
     // Update tab visual states
     const tabs = this.topicsModal.customContentModal.modal.querySelectorAll('.vocab-custom-content-tab');
     tabs.forEach(tab => {
@@ -11127,6 +11064,13 @@ const ButtonPanel = {
       // Perform search to highlight search term
       this.performSearch();
     }
+    
+    // Remove transition class after animation
+    setTimeout(() => {
+      if (tabsContainer) {
+        tabsContainer.classList.remove('tab-transitioning');
+      }
+    }, 300);
   },
 
   /**
@@ -11164,35 +11108,8 @@ const ButtonPanel = {
   },
 
   /**
-   * Create resize handles for the modal
-   * @returns {HTMLElement} Container with resize handles
+   * Resize handles functionality removed
    */
-  createResizeHandles() {
-    const container = document.createElement('div');
-    container.className = 'vocab-custom-content-resize-handles';
-    
-    // Create handles for all four corners
-    const cornerPositions = ['top-left', 'top-right', 'bottom-left', 'bottom-right'];
-    
-    cornerPositions.forEach(position => {
-      const handle = document.createElement('div');
-      handle.className = `vocab-custom-content-resize-handle vocab-custom-content-resize-handle-${position}`;
-      handle.setAttribute('data-position', position);
-      container.appendChild(handle);
-    });
-    
-    // Create handles for all four edges
-    const edgePositions = ['top', 'bottom', 'left', 'right'];
-    
-    edgePositions.forEach(position => {
-      const handle = document.createElement('div');
-      handle.className = `vocab-custom-content-resize-handle vocab-custom-content-resize-handle-${position}`;
-      handle.setAttribute('data-position', position);
-      container.appendChild(handle);
-    });
-    
-    return container;
-  },
 
   /**
    * Initialize resize functionality for modal
