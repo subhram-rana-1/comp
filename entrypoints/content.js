@@ -9358,12 +9358,85 @@ const ButtonPanel = {
   },
 
   /**
+   * Check if the custom content modal is currently open
+   * @returns {boolean} True if the modal is open, false otherwise
+   */
+  isCustomContentModalOpen() {
+    return this.topicsModal.customContentModal.overlay && 
+           this.topicsModal.customContentModal.overlay.classList.contains('visible');
+  },
+
+  /**
+   * Get the currently active content type from the custom content modal
+   * @returns {string|null} The active content type ('pdf', 'image', 'topic', 'text') or null if no modal is open
+   */
+  getCurrentContentType() {
+    if (!this.isCustomContentModalOpen()) {
+      return null;
+    }
+    
+    // Check which content type is currently active
+    return this.topicsModal.currentContentType || null;
+  },
+
+  /**
    * Show the vertical button group
    */
   showVerticalButtonGroup() {
     if (this.verticalButtonGroup) {
+      // Show all buttons first
+      this.showAllVerticalButtons();
+      
+      // If custom content modal is open, hide the button for the current content type
+      const currentContentType = this.getCurrentContentType();
+      if (currentContentType) {
+        this.hideVerticalButtonForContentType(currentContentType);
+        console.log(`[ButtonPanel] Hiding ${currentContentType} button because modal is open`);
+      }
+      
       this.verticalButtonGroup.classList.add('visible');
       this.updateState({ showVerticalGroup: true });
+    }
+  },
+
+  /**
+   * Show all vertical buttons (make them visible)
+   */
+  showAllVerticalButtons() {
+    const buttons = [
+      document.getElementById('vocab-pdf-btn'),
+      document.getElementById('vocab-image-btn'),
+      document.getElementById('vocab-topics-btn'),
+      document.getElementById('vocab-text-btn')
+    ];
+    
+    buttons.forEach(button => {
+      if (button) {
+        button.style.display = 'flex';
+        button.style.visibility = 'visible';
+      }
+    });
+  },
+
+  /**
+   * Hide a specific vertical button based on content type
+   * @param {string} contentType - The content type ('pdf', 'image', 'topic', 'text')
+   */
+  hideVerticalButtonForContentType(contentType) {
+    const buttonIdMap = {
+      'pdf': 'vocab-pdf-btn',
+      'image': 'vocab-image-btn',
+      'topic': 'vocab-topics-btn',
+      'text': 'vocab-text-btn'
+    };
+    
+    const buttonId = buttonIdMap[contentType];
+    if (buttonId) {
+      const button = document.getElementById(buttonId);
+      if (button) {
+        button.style.display = 'none';
+        button.style.visibility = 'hidden';
+      }
     }
   },
 
@@ -9372,6 +9445,9 @@ const ButtonPanel = {
    */
   hideVerticalButtonGroup() {
     if (this.verticalButtonGroup) {
+      // Restore all buttons to visible state when hiding the group
+      this.showAllVerticalButtons();
+      
       this.verticalButtonGroup.classList.remove('visible');
       this.updateState({ showVerticalGroup: false });
     }
@@ -9465,8 +9541,6 @@ const ButtonPanel = {
     console.log('[ButtonPanel] PDF button clicked');
     // Hide the vertical group after selection
     this.hideVerticalButtonGroup();
-    // Hide the custom content button
-    this.hideCustomContentButton();
     
     // Check if there's already PDF content in memory
     const pdfContents = this.topicsModal.customContentModal.getContentByType('pdf');
@@ -9487,8 +9561,6 @@ const ButtonPanel = {
     console.log('[ButtonPanel] Image button clicked');
     // Hide the vertical group after selection
     this.hideVerticalButtonGroup();
-    // Hide the custom content button
-    this.hideCustomContentButton();
     
     // Check if there's already image content in memory
     const imageContents = this.topicsModal.customContentModal.getContentByType('image');
@@ -9509,8 +9581,6 @@ const ButtonPanel = {
     console.log('[ButtonPanel] Topics button clicked');
     // Hide the vertical group after selection
     this.hideVerticalButtonGroup();
-    // Hide the custom content button
-    this.hideCustomContentButton();
     
     // Check if there's already topic content in memory
     const topicContents = this.topicsModal.customContentModal.getContentByType('topic');
@@ -9531,8 +9601,6 @@ const ButtonPanel = {
     console.log('[ButtonPanel] Text button clicked');
     // Hide the vertical group after selection
     this.hideVerticalButtonGroup();
-    // Hide the custom content button
-    this.hideCustomContentButton();
     
     // Check if there's already text content in memory
     const textContents = this.topicsModal.customContentModal.getContentByType('text');
@@ -11260,9 +11328,6 @@ const ButtonPanel = {
     console.log('[ButtonPanel] Content:', content ? 'Present' : 'Missing');
     console.log('[ButtonPanel] Content type:', contentType);
     
-    // Hide the custom content button when modal opens
-    this.hideCustomContentButton();
-    
     // Hide topics modal first
     this.hideTopicsModal();
     
@@ -11357,9 +11422,6 @@ const ButtonPanel = {
       console.log('[ButtonPanel] Overlay is now visible:', this.topicsModal.customContentModal.overlay.classList.contains('visible'));
     }
     
-    // Show the custom content button again
-    console.log('[ButtonPanel] Calling showCustomContentButton()');
-    this.showCustomContentButton();
     console.log('[ButtonPanel] ===== END HIDE CUSTOM CONTENT MODAL DEBUG =====');
   },
 
@@ -12549,9 +12611,6 @@ const ButtonPanel = {
     if (contents.length > 0) {
       this.switchToTab(contents[0].tabId.toString());
     }
-    
-    // Show the custom content button
-    this.showCustomContentButton();
     
     // Show the modal
     setTimeout(() => {
