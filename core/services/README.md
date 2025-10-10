@@ -3,30 +3,41 @@
 ## Overview
 This directory contains API service classes for communicating with backend servers.
 
-## ApiService Class
+## Centralized Configuration
 
-### Configuration
-
-The base URL for all API calls is configured in a single location:
+All API base URLs and endpoints are now managed through a centralized configuration system:
 
 ```javascript
-// In ApiService.js
-static BASE_URL = 'https://caten-production.up.railway.app';
+// In core/config/apiConfig.js
+class ApiConfig {
+  static get BASE_URL() {
+    // Automatically detects development vs production
+    if (window.location.hostname === 'localhost') {
+      return 'http://localhost:8000';
+    }
+    return 'https://caten-production.up.railway.app';
+  }
+}
 ```
 
 ### Changing the Base URL
 
-To update the API base URL, you have two options:
+To update the API base URL, you have several options:
 
-1. **Edit the default value** in `ApiService.js`:
+1. **Edit the configuration** in `core/config/apiConfig.js`:
 ```javascript
-static BASE_URL = 'https://your-production-server.com';
+static get BASE_URL() {
+  return 'https://your-production-server.com';
+}
 ```
 
 2. **Update at runtime**:
 ```javascript
-ApiService.setBaseUrl('https://your-production-server.com');
+ApiConfig.setBaseUrl('https://your-production-server.com');
 ```
+
+3. **Use environment-based detection** (recommended):
+The config automatically detects if you're running locally and uses the appropriate URL.
 
 ### Available Methods
 
