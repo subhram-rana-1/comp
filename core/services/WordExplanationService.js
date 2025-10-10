@@ -3,12 +3,16 @@
  * Modular service for the /api/v2/words-explanation endpoint
  */
 
+import ApiConfig from '../config/apiConfig.js';
+
 class WordExplanationService {
-  // Configurable base URL - uses same base as ApiService
-  static BASE_URL = 'https://caten-production.up.railway.app';
+  // Use centralized config for base URL
+  static get BASE_URL() {
+    return ApiConfig.getCurrentBaseUrl();
+  }
   
-  // API endpoint
-  static ENDPOINT = '/api/v2/words-explanation';
+  // API endpoint - use centralized config
+  static ENDPOINT = ApiConfig.ENDPOINTS.WORDS_EXPLANATION;
   
   /**
    * Get word explanations for multiple text segments using SSE

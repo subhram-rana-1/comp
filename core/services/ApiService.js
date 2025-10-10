@@ -3,16 +3,16 @@
  * Handles all API calls to the backend server
  */
 
+import ApiConfig from '../config/apiConfig.js';
+
 class ApiService {
-  // Configurable base URL - change this single place to update for all API calls
-  static BASE_URL = 'https://caten-production.up.railway.app';
+  // Use centralized config for base URL
+  static get BASE_URL() {
+    return ApiConfig.getCurrentBaseUrl();
+  }
   
-  // API endpoints
-  static ENDPOINTS = {
-    ASK: '/api/v2/ask',
-    PDF_TO_TEXT: '/api/v1/pdf-to-text',
-    GET_RANDOM_PARAGRAPH: '/api/v1/get-random-paragraph'
-  };
+  // API endpoints - use centralized config
+  static ENDPOINTS = ApiConfig.ENDPOINTS;
   
   /**
    * Ask a question with context and chat history
@@ -197,7 +197,7 @@ class ApiService {
    * @param {string} newBaseUrl - New base URL
    */
   static setBaseUrl(newBaseUrl) {
-    this.BASE_URL = newBaseUrl;
+    ApiConfig.setBaseUrl(newBaseUrl);
     console.log('[ApiService] Base URL updated to:', newBaseUrl);
   }
   

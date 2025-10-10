@@ -1,6 +1,7 @@
 import ApiService from '../core/services/ApiService.js';
 import SimplifyService from '../core/services/SimplifyService.js';
 import WordExplanationService from '../core/services/WordExplanationService.js';
+import ApiConfig from '../core/config/apiConfig.js';
 
 export default defineContentScript({
   matches: ['<all_urls>'],
@@ -9174,8 +9175,17 @@ const ButtonPanel = {
     this.hideVerticalButtonGroup();
     // Hide the custom content button
     this.hideCustomContentButton();
-    // Show the PDF upload modal
-    this.showPDFUploadModal();
+    
+    // Check if there's already PDF content in memory
+    const pdfContents = this.topicsModal.customContentModal.getContentByType('pdf');
+    if (pdfContents && pdfContents.length > 0) {
+      // Show custom content modal with only PDF contents
+      this.topicsModal.currentContentType = 'pdf';
+      this.showCustomContentModalWithContents('pdf');
+    } else {
+      // Show the PDF upload modal for new content
+      this.showPDFUploadModal();
+    }
   },
 
   /**
@@ -9187,8 +9197,17 @@ const ButtonPanel = {
     this.hideVerticalButtonGroup();
     // Hide the custom content button
     this.hideCustomContentButton();
-    // Show the image upload modal
-    this.showImageUploadModal();
+    
+    // Check if there's already image content in memory
+    const imageContents = this.topicsModal.customContentModal.getContentByType('image');
+    if (imageContents && imageContents.length > 0) {
+      // Show custom content modal with only image contents
+      this.topicsModal.currentContentType = 'image';
+      this.showCustomContentModalWithContents('image');
+    } else {
+      // Show the image upload modal for new content
+      this.showImageUploadModal();
+    }
   },
 
   /**
@@ -9201,11 +9220,12 @@ const ButtonPanel = {
     // Hide the custom content button
     this.hideCustomContentButton();
     
-    // Check if there's already content in memory
-    const allTabs = this.topicsModal.customContentModal.getAllTabs();
-    if (allTabs && allTabs.length > 0) {
-      // Show custom content modal with existing tabs
-      this.showCustomContentModalWithTabs();
+    // Check if there's already topic content in memory
+    const topicContents = this.topicsModal.customContentModal.getContentByType('topic');
+    if (topicContents && topicContents.length > 0) {
+      // Show custom content modal with only topic contents
+      this.topicsModal.currentContentType = 'topic';
+      this.showCustomContentModalWithContents('topic');
     } else {
       // Show the topics modal for new content
       this.showTopicsModal();
@@ -9455,9 +9475,9 @@ const ButtonPanel = {
       const formData = new FormData();
       formData.append('file', file);
       
-      console.log('[ButtonPanel] Making API call to:', 'https://caten-blush.vercel.app/api/v1/pdf-to-text');
+      console.log('[ButtonPanel] Making API call to:', ApiConfig.getUrl(ApiConfig.ENDPOINTS.PDF_TO_TEXT));
       // Make API call to process PDF
-      const response = await fetch('https://caten-blush.vercel.app/api/v1/pdf-to-text', {
+      const response = await fetch(ApiConfig.getUrl(ApiConfig.ENDPOINTS.PDF_TO_TEXT), {
         method: 'POST',
         body: formData,
         headers: {
@@ -9545,26 +9565,28 @@ const ButtonPanel = {
     console.log('[ButtonPanel] File name:', fileName);
     console.log('[ButtonPanel] Content length:', content ? content.length : 'No content');
     
-    // Create PDF tab using the correct addTab method
-    const tabName = fileName.replace('.pdf', '');
-    console.log('[ButtonPanel] Creating tab with name:', tabName);
+    // Set current content type
+    this.topicsModal.currentContentType = 'pdf';
     
-    const newTab = this.topicsModal.customContentModal.addTab('pdf', tabName, content, {
+    // Create PDF content using the new data structure
+    const tabName = fileName.replace('.pdf', '');
+    console.log('[ButtonPanel] Creating content with name:', tabName);
+    
+    const newContent = this.topicsModal.customContentModal.addContent('pdf', tabName, content, {
       fileName: fileName,
       uploadedAt: new Date().toISOString()
     });
     
-    if (!newTab) {
-      console.error('[ButtonPanel] ===== FAILED TO CREATE PDF TAB =====');
-      this.showNotification('Failed to create PDF tab. Please try again.', 'error');
+    if (!newContent) {
+      console.error('[ButtonPanel] ===== FAILED TO CREATE PDF CONTENT =====');
+      this.showNotification('Failed to create PDF content. Please try again.', 'error');
       return;
     }
+
+    console.log('[ButtonPanel] PDF content created successfully');
     
-    console.log('[ButtonPanel] PDF tab created successfully:', newTab.id);
-    
-    // Switch to the new PDF tab
-    console.log('[ButtonPanel] Switching to PDF tab:', newTab.id);
-    this.switchToTab(newTab.id);
+    // Show modal with only PDF contents
+    this.showCustomContentModalWithContents('pdf');
     
     // Ensure custom content modal is visible
     console.log('[ButtonPanel] Ensuring custom content modal is visible...');
@@ -9601,6 +9623,7 @@ const ButtonPanel = {
     wordCount: 100,
     difficulty: 'hard',
     processingOverlay: null,
+    currentContentType: 'topic', // Track which content type is currently active
     customContentModal: {
       overlay: null,
       modal: null,
@@ -9608,112 +9631,108 @@ const ButtonPanel = {
       activeTabId: null,
       activeContentType: null, // 'pdf', 'image', 'topic'
       
-      // Three separate content containers
-      contentContainers: {
-        pdf: {
-          tabs: [],
-          tabCounter: 0,
-          containerId: 'pdf-content-container'
-        },
-        image: {
-          tabs: [],
-          tabCounter: 0,
-          containerId: 'image-content-container'
-        },
-        topic: {
-          tabs: [],
-          tabCounter: 0,
-          containerId: 'topic-content-container'
+      // New simplified data structure
+      topicContents: [],
+      imageContents: [],
+      pdfContents: [],
+      nextTabId: 1, // Global counter for unique tab IDs
+      
+      // Helper methods for content management
+      getContentByType: function(contentType) {
+        switch(contentType) {
+          case 'topic': return this.topicContents;
+          case 'image': return this.imageContents;
+          case 'pdf': return this.pdfContents;
+          default: return [];
         }
       },
       
-      // Helper methods for content management
-      getCurrentContainer: function(contentType) {
-        return this.contentContainers[contentType] || null;
-      },
-      
-      getTabById: function(tabId) {
-        // Parse tabId to determine content type (e.g., 'pdf-1', 'image-3', 'topic-group-4')
-        const parts = tabId.split('-');
-        if (parts.length < 2) return null;
-        
-        const contentType = parts[0];
-        const container = this.contentContainers[contentType];
-        if (!container) return null;
-        
-        return container.tabs.find(tab => tab.id === tabId);
-      },
-      
-      getAllTabs: function() {
-        return [
-          ...this.contentContainers.pdf.tabs,
-          ...this.contentContainers.image.tabs,
-          ...this.contentContainers.topic.tabs
+      getContentByTabId: function(tabId) {
+        // Search through all content types to find the content with matching tabId
+        const allContents = [
+          ...this.topicContents.map(item => ({...item, contentType: 'topic'})),
+          ...this.imageContents.map(item => ({...item, contentType: 'image'})),
+          ...this.pdfContents.map(item => ({...item, contentType: 'pdf'}))
         ];
+        
+        return allContents.find(item => item.tabId === tabId);
       },
       
-      getTabsByType: function(contentType) {
-        const container = this.contentContainers[contentType];
-        return container ? container.tabs : [];
+      removeContentByTabId: function(tabId) {
+        // Find and remove content by tabId
+        const content = this.getContentByTabId(tabId);
+        if (!content) return false;
+        
+        const contentType = content.contentType;
+        const contents = this.getContentByType(contentType);
+        const index = contents.findIndex(item => item.tabId === tabId);
+        
+        if (index !== -1) {
+          contents.splice(index, 1);
+          return true;
+        }
+        return false;
       },
       
-      addTab: function(contentType, tabName, content, metadata = {}) {
-        const container = this.contentContainers[contentType];
-        if (!container) return null;
-        
-        container.tabCounter++;
-        const tabId = `${contentType}-${container.tabCounter}`;
-        
-        const newTab = {
-          id: tabId,
-          name: tabName,
+      addContent: function(contentType, tabName, content, metadata = {}) {
+        const newContent = {
+          tabId: this.nextTabId++,
+          tabName: tabName,
           content: content,
-          searchTerm: '',
+          input: {
+            topics: metadata.topics || [],
+            wordCount: metadata.wordCount || 100,
+            difficultyLevel: metadata.difficulty || 'HARD'
+          },
           metadata: metadata,
+          searchTerm: '',
           createdAt: new Date().toISOString()
         };
         
-        container.tabs.push(newTab);
-        return newTab;
+        switch(contentType) {
+          case 'topic':
+            this.topicContents.push(newContent);
+            break;
+          case 'image':
+            this.imageContents.push(newContent);
+            break;
+          case 'pdf':
+            this.pdfContents.push(newContent);
+            break;
+          default:
+            return null;
+        }
+        
+        return newContent;
       },
       
-      removeTab: function(tabId) {
-        const parts = tabId.split('-');
-        if (parts.length < 2) return false;
-        
-        const contentType = parts[0];
-        const container = this.contentContainers[contentType];
-        if (!container) return false;
-        
-        const tabIndex = container.tabs.findIndex(tab => tab.id === tabId);
-        if (tabIndex === -1) return false;
-        
-        container.tabs.splice(tabIndex, 1);
-        return true;
+      removeContent: function(contentType, index) {
+        const contents = this.getContentByType(contentType);
+        if (index >= 0 && index < contents.length) {
+          contents.splice(index, 1);
+          return true;
+        }
+        return false;
       },
       
-      updateTabContent: function(tabId, content) {
-        const tab = this.getTabById(tabId);
-        if (!tab) return false;
-        
-        tab.content = content;
-        tab.updatedAt = new Date().toISOString();
-        return true;
+      clearContentType: function(contentType) {
+        switch(contentType) {
+          case 'topic':
+            this.topicContents = [];
+            break;
+          case 'image':
+            this.imageContents = [];
+            break;
+          case 'pdf':
+            this.pdfContents = [];
+            break;
+        }
       },
       
-      clearContainer: function(contentType) {
-        const container = this.contentContainers[contentType];
-        if (!container) return false;
-        
-        container.tabs = [];
-        container.tabCounter = 0;
-        return true;
-      },
-      
-      clearAllContainers: function() {
-        Object.keys(this.contentContainers).forEach(contentType => {
-          this.clearContainer(contentType);
-        });
+      clearAllContents: function() {
+        this.topicContents = [];
+        this.imageContents = [];
+        this.pdfContents = [];
       }
     }
   },
@@ -10274,16 +10293,32 @@ const ButtonPanel = {
         
         if (isRegenerate && tabId) {
           console.log('[ButtonPanel] Regenerating content for tab:', tabId);
-          // Update existing tab content using new container system
-          const tab = this.topicsModal.customContentModal.getTabById(tabId);
-          if (tab) {
-            tab.content = response.data.text;
+          // Update existing content using new data structure
+          const content = this.topicsModal.customContentModal.getContentByTabId(parseInt(tabId));
+          if (content) {
+            // Update content
+            content.content = response.data.text;
+            
+            // Update input data with current settings
+            content.input = {
+              topics: this.topicsModal.topics || [],
+              wordCount: this.topicsModal.wordCount || 100,
+              difficultyLevel: this.topicsModal.difficulty || 'HARD'
+            };
+            
+            // Update metadata with current settings
+            content.metadata = {
+              ...content.metadata,
+              topics: this.topicsModal.topics || [],
+              wordCount: this.topicsModal.wordCount || 100,
+              difficulty: this.topicsModal.difficulty || 'hard'
+            };
+            
             // Update topicName if available
             if (response.data.topicName) {
-              tab.name = response.data.topicName;
-              // Store topicName in metadata for tooltip purposes
-              if (!tab.metadata) tab.metadata = {};
-              tab.metadata.topicName = response.data.topicName;
+              content.tabName = response.data.topicName;
+              content.metadata.topicName = response.data.topicName;
+              
               // Update the tab title in DOM
               const tabElement = this.topicsModal.customContentModal.modal.querySelector(`[data-tab-id="${tabId}"]`);
               if (tabElement) {
@@ -10293,8 +10328,11 @@ const ButtonPanel = {
                 }
               }
             }
+            
             // Update the editor content
             this.updateCustomContentEditor(response.data.text);
+            
+            console.log('[ButtonPanel] Content regenerated and stored:', content);
           }
         } else {
           console.log('[ButtonPanel] Creating new tab with content');
@@ -10416,9 +10454,18 @@ const ButtonPanel = {
       this.createCustomContentModal();
     }
     
-    // Create a new tab with the content
+    // Create new content using the new data structure
     const tabTitle = this.generateTabTitle(contentType, metadata);
-    const tabId = this.createTab(tabTitle, content, contentType, metadata);
+    const newContent = this.topicsModal.customContentModal.addContent(contentType, tabTitle, content, metadata);
+    
+    if (!newContent) {
+      console.error('[ButtonPanel] Failed to create content');
+      this.showNotification('Failed to create content. Please try again.', 'error');
+      return;
+    }
+    
+    // Show modal with only the specified content type
+    this.showCustomContentModalWithContents(contentType);
     
     // Show the modal with a slight delay for smooth transition
     setTimeout(() => {
@@ -10717,7 +10764,7 @@ const ButtonPanel = {
       formData.append('file', file);
       
       console.log('[ButtonPanel] Making API call to image-to-text endpoint...');
-      const response = await fetch('https://caten-blush.vercel.app/api/v1/image-to-text', {
+      const response = await fetch(ApiConfig.getUrl(ApiConfig.ENDPOINTS.IMAGE_TO_TEXT), {
         method: 'POST',
         body: formData
       });
@@ -10756,12 +10803,37 @@ const ButtonPanel = {
     console.log('[ButtonPanel] Topic name:', topicName);
     console.log('[ButtonPanel] Content length:', content.length);
     
-    // Create new tab for image content
-    const newTab = this.topicsModal.customContentModal.addTab(topicName, 'image');
-    console.log('[ButtonPanel] New tab created:', newTab.id);
+    // Ensure modal is initialized
+    if (!this.topicsModal || !this.topicsModal.customContentModal) {
+      console.error('[ButtonPanel] Topics modal not initialized');
+      this.showNotification('Modal not initialized. Please try again.', 'error');
+      return;
+    }
     
-    // Switch to the new tab
-    this.switchToTab(newTab.id);
+    // Set current content type
+    this.topicsModal.currentContentType = 'image';
+    
+    // Create modal if it doesn't exist
+    if (!this.topicsModal.customContentModal.overlay) {
+      console.log('[ButtonPanel] Creating custom content modal...');
+      this.createCustomContentModal();
+    }
+    
+    // Create new content for image
+    const newContent = this.topicsModal.customContentModal.addContent('image', topicName, content);
+    console.log('[ButtonPanel] New content created:', newContent);
+    
+    // Check if content was created successfully
+    if (!newContent) {
+      console.error('[ButtonPanel] Failed to create image content - addContent returned null');
+      this.showNotification('Failed to create image content. Please try again.', 'error');
+      return;
+    }
+    
+    console.log('[ButtonPanel] New content created successfully');
+    
+    // Show modal with only image contents
+    this.showCustomContentModalWithContents('image');
     
     // Ensure custom content modal is visible
     if (!this.topicsModal.customContentModal.overlay.classList.contains('visible')) {
@@ -11362,14 +11434,18 @@ const ButtonPanel = {
     // Search functionality
     searchInput.addEventListener('input', (e) => {
       console.log('[ButtonPanel] Search input changed:', e.target.value);
-      const activeTab = this.topicsModal.customContentModal.getTabById(this.topicsModal.customContentModal.activeTabId);
-      if (activeTab) {
-        activeTab.searchTerm = e.target.value;
-        console.log('[ButtonPanel] Updated active tab search term:', activeTab.searchTerm);
-      this.performSearch();
-      } else {
-        console.log('[ButtonPanel] No active tab found for search');
+      const searchTerm = e.target.value;
+      
+      // Store search term for the current active tab
+      if (this.topicsModal.customContentModal.activeTabId) {
+        const tabId = parseInt(this.topicsModal.customContentModal.activeTabId);
+        const activeContent = this.topicsModal.customContentModal.getContentByTabId(tabId);
+        if (activeContent) {
+          activeContent.searchTerm = searchTerm;
+        }
       }
+      
+      this.performSearch();
     });
     
     // Add tab functionality
@@ -11497,26 +11573,31 @@ const ButtonPanel = {
       this.topicsModal.customContentModal.overlay.style.filter = 'blur(2px)';
     }
     
-    // Get current active tab data using new container system
-    const activeTab = this.topicsModal.customContentModal.getTabById(this.topicsModal.customContentModal.activeTabId);
-    if (!activeTab) {
-      console.log('[ButtonPanel] No active tab found, cannot regenerate');
+    // Get current active tab data using new data structure
+    const activeTabId = parseInt(this.topicsModal.customContentModal.activeTabId);
+    const activeContent = this.topicsModal.customContentModal.getContentByTabId(activeTabId);
+    if (!activeContent) {
+      console.log('[ButtonPanel] No active content found, cannot regenerate');
       return;
     }
     
     // Check if this is a topic tab (can be regenerated)
-    const contentType = this.topicsModal.customContentModal.activeTabId.split('-')[0];
-    if (contentType !== 'topic') {
-      console.log('[ButtonPanel] Only topic tabs can be regenerated, current type:', contentType);
+    if (activeContent.contentType !== 'topic') {
+      console.log('[ButtonPanel] Only topic tabs can be regenerated, current type:', activeContent.contentType);
       return;
     }
     
-    // Load the topics data from the active tab metadata
-    if (activeTab.metadata) {
-      // Restore the topics and settings from the tab metadata
-      this.topicsModal.topics = activeTab.metadata.topics || [];
-      this.topicsModal.wordCount = activeTab.metadata.wordCount || 100;
-      this.topicsModal.difficulty = activeTab.metadata.difficulty || 'hard';
+    // Load the topics data from the active content metadata
+    if (activeContent.input) {
+      // Restore the topics and settings from the content input data
+      this.topicsModal.topics = activeContent.input.topics || [];
+      this.topicsModal.wordCount = activeContent.input.wordCount || 100;
+      this.topicsModal.difficulty = activeContent.input.difficultyLevel || 'hard';
+    } else if (activeContent.metadata) {
+      // Fallback to metadata for backward compatibility
+      this.topicsModal.topics = activeContent.metadata.topics || [];
+      this.topicsModal.wordCount = activeContent.metadata.wordCount || 100;
+      this.topicsModal.difficulty = activeContent.metadata.difficulty || 'hard';
     }
     
     // Show the topics modal
@@ -11531,7 +11612,7 @@ const ButtonPanel = {
       if (generateBtn) {
         generateBtn.textContent = 'Re-generate content';
         generateBtn.setAttribute('data-regenerate', 'true');
-        generateBtn.setAttribute('data-tab-id', activeTab.id);
+        generateBtn.setAttribute('data-tab-id', activeTabId.toString());
       }
     }, 100);
   },
@@ -11585,11 +11666,59 @@ const ButtonPanel = {
   },
 
   /**
+   * Show custom content modal with contents of specific type
+   */
+  showCustomContentModalWithContents(contentType) {
+    console.log('[ButtonPanel] Showing custom content modal with', contentType, 'contents');
+    
+    // Create modal if it doesn't exist
+    if (!this.topicsModal.customContentModal.overlay) {
+      this.createCustomContentModal();
+    }
+    
+    // Get contents for the specified type
+    const contents = this.topicsModal.customContentModal.getContentByType(contentType);
+    console.log('[ButtonPanel] Contents to show:', contents);
+    
+    // Update modal title
+    this.updateCustomContentModalTitle(contentType);
+    
+    // Clear existing tabs and render new ones using original tab system
+    const existingTabs = this.topicsModal.customContentModal.modal.querySelectorAll('.vocab-custom-content-tab');
+    existingTabs.forEach(tab => tab.remove());
+    
+    // Convert contents to tab format and render using original system
+    contents.forEach((contentItem) => {
+      const tabId = contentItem.tabId.toString();
+      const tab = {
+        id: tabId,
+        name: contentItem.tabName,
+        content: contentItem.content,
+        searchTerm: contentItem.searchTerm || '',
+        metadata: contentItem.metadata,
+        createdAt: contentItem.createdAt
+      };
+      this.renderTab(tab);
+    });
+    
+    // Switch to the first tab if available
+    if (contents.length > 0) {
+      this.switchToTab(contents[0].tabId.toString());
+    }
+    
+    // Show the modal
+    setTimeout(() => {
+      this.topicsModal.customContentModal.overlay.classList.add('visible');
+    }, 100);
+  },
+
+  /**
    * Show custom content modal with existing tabs
    */
-  showCustomContentModalWithTabs(contentType = null) {
+  showCustomContentModalWithTabs(contentType = null, shouldFilter = false) {
     console.log('[ButtonPanel] Showing custom content modal with existing tabs');
     console.log('[ButtonPanel] Content type:', contentType);
+    console.log('[ButtonPanel] Should filter:', shouldFilter);
     
     // Create modal if it doesn't exist
     if (!this.topicsModal.customContentModal.overlay) {
@@ -11598,25 +11727,36 @@ const ButtonPanel = {
     
     // Determine which tabs to show
     let tabsToShow = [];
-    if (contentType) {
-      // Show tabs for specific content type
+    let filteredContentType = contentType;
+    
+    if (shouldFilter && contentType) {
+      // Filter tabs for specific content type (used when creating new content)
       tabsToShow = this.topicsModal.customContentModal.getTabsByType(contentType);
       this.topicsModal.customContentModal.activeContentType = contentType;
+      this.updateCustomContentModalTitle(contentType);
+      console.log('[ButtonPanel] Filtering tabs for content type:', contentType);
+    } else if (!shouldFilter && contentType) {
+      // Show ALL tabs but set the specified content type as active (used by button handlers)
+      tabsToShow = this.topicsModal.customContentModal.getAllTabs();
+      this.topicsModal.customContentModal.activeContentType = contentType;
+      this.updateCustomContentModalTitle(contentType);
+      console.log('[ButtonPanel] Showing all tabs with', contentType, 'as active content type');
     } else {
       // Show all tabs from all containers
       tabsToShow = this.topicsModal.customContentModal.getAllTabs();
+      console.log('[ButtonPanel] Showing all tabs');
     }
     
     console.log('[ButtonPanel] Tabs to show:', tabsToShow);
     
-    // Only render tabs if they don't already exist in DOM
+    // Clear existing tabs and render new ones
     const existingTabs = this.topicsModal.customContentModal.modal.querySelectorAll('.vocab-custom-content-tab');
-    if (existingTabs.length === 0) {
-      // Render all tabs to show
-      tabsToShow.forEach(tab => {
-        this.renderTab(tab);
-      });
-    }
+    existingTabs.forEach(tab => tab.remove());
+    
+    // Render all tabs to show
+    tabsToShow.forEach(tab => {
+      this.renderTab(tab);
+    });
     
     // Switch to the active tab or first tab
     if (this.topicsModal.customContentModal.activeTabId) {
@@ -11632,6 +11772,32 @@ const ButtonPanel = {
   },
 
   /**
+   * Filter tabs to show only the specified content type
+   * @param {string} contentType - The content type to filter by ('pdf', 'image', 'topic')
+   */
+  filterTabsByContentType(contentType) {
+    console.log('[ButtonPanel] Filtering tabs by content type:', contentType);
+    
+    // Get tabs for the specified content type
+    const tabsToShow = this.topicsModal.customContentModal.getTabsByType(contentType);
+    console.log('[ButtonPanel] Tabs to show for', contentType + ':', tabsToShow);
+    
+    // Clear existing tabs from the UI
+    const existingTabs = this.topicsModal.customContentModal.modal.querySelectorAll('.vocab-custom-content-tab');
+    existingTabs.forEach(tab => tab.remove());
+    
+    // Render only the filtered tabs
+    tabsToShow.forEach(tab => {
+      this.renderTab(tab);
+    });
+    
+    // Update active content type
+    this.topicsModal.customContentModal.activeContentType = contentType;
+    
+    console.log('[ButtonPanel] Filtered tabs successfully for content type:', contentType);
+  },
+
+  /**
    * Create a new tab
    * @param {string} title - The tab title
    * @param {string} content - The tab content
@@ -11642,6 +11808,9 @@ const ButtonPanel = {
   createTab(title, content, contentType = 'topic', metadata = {}) {
     console.log('[ButtonPanel] Creating new tab:', title, 'for content type:', contentType);
     console.log('[ButtonPanel] tabsContainer before renderTab:', this.topicsModal.customContentModal.tabsContainer);
+    
+    // Set current content type
+    this.topicsModal.currentContentType = contentType;
     
     // Use the new container system to add tab
     const newTab = this.topicsModal.customContentModal.addTab(contentType, title, content, metadata);
@@ -11768,6 +11937,12 @@ const ButtonPanel = {
    * @param {string} tabId - The tab ID to switch to
    */
   switchToTab(tabId) {
+    // Check if modal and required elements exist
+    if (!this.topicsModal || !this.topicsModal.customContentModal || !this.topicsModal.customContentModal.modal) {
+      console.error('[ButtonPanel] Cannot switch tab - modal not initialized');
+      return;
+    }
+    
     // Update active tab
     this.topicsModal.customContentModal.activeTabId = tabId;
     
@@ -11787,10 +11962,15 @@ const ButtonPanel = {
       }
     });
     
+    // Get content from new data structure using tabId
+    const activeContent = this.topicsModal.customContentModal.getContentByTabId(parseInt(tabId));
+    const contentType = activeContent ? activeContent.contentType : null;
+    
     // Update modal content type for settings button visibility
-    const contentType = tabId.split('-')[0];
-    this.topicsModal.customContentModal.modal.setAttribute('data-content-type', contentType);
-    this.topicsModal.customContentModal.activeContentType = contentType;
+    if (contentType) {
+      this.topicsModal.customContentModal.modal.setAttribute('data-content-type', contentType);
+      this.topicsModal.customContentModal.activeContentType = contentType;
+    }
     
     // Update sliding background position
     const activeTabElement = tabsContainer.querySelector(`[data-tab-id="${tabId}"]`);
@@ -11805,22 +11985,21 @@ const ButtonPanel = {
     
     // Update content with fade transition
     const editorContent = this.topicsModal.customContentModal.modal.querySelector('.vocab-custom-content-editor-content');
-    const activeTab = this.topicsModal.customContentModal.getTabById(tabId);
-    if (activeTab && editorContent) {
+    
+    if (activeContent && editorContent) {
       // Fade out current content
       editorContent.classList.add('fade-out');
       
       setTimeout(() => {
         // Update content
-        editorContent.innerHTML = activeTab.content;
+        this.updateCustomContentEditor(activeContent.content);
       
       // Update heading based on content type
-      const contentType = tabId.split('-')[0];
       this.updateCustomContentHeading(contentType);
       
       // Update search input
       const searchInput = this.topicsModal.customContentModal.searchInput;
-      searchInput.value = activeTab.searchTerm || '';
+      searchInput.value = '';
       
         // Fade in new content
         editorContent.classList.remove('fade-out');
@@ -11828,8 +12007,6 @@ const ButtonPanel = {
         
         setTimeout(() => {
           editorContent.classList.remove('fade-in');
-      // Perform search to highlight search term
-      this.performSearch();
         }, 300);
       }, 150);
     }
@@ -11847,8 +12024,8 @@ const ButtonPanel = {
    * @param {string} tabId - The tab ID to close
    */
   closeTab(tabId) {
-    // Use new container system to remove tab
-    const removed = this.topicsModal.customContentModal.removeTab(tabId);
+    // Remove content from new data structure using tabId
+    const removed = this.topicsModal.customContentModal.removeContentByTabId(parseInt(tabId));
     if (!removed) return;
     
     // Remove tab element from DOM
@@ -11859,14 +12036,17 @@ const ButtonPanel = {
     
     // If this was the active tab, switch to another tab
     if (this.topicsModal.customContentModal.activeTabId === tabId) {
-      const allTabs = this.topicsModal.customContentModal.getAllTabs();
-      if (allTabs.length > 0) {
-        // Switch to the first available tab
-        this.switchToTab(allTabs[0].id);
-      } else {
-        // No tabs left, clear topics and close the modal
-        this.clearTopicsModalInputs();
-        this.hideCustomContentModal();
+      const activeContent = this.topicsModal.customContentModal.getContentByTabId(parseInt(tabId));
+      if (activeContent) {
+        const contents = this.topicsModal.customContentModal.getContentByType(activeContent.contentType);
+        if (contents.length > 0) {
+          // Switch to the first available tab
+          this.switchToTab(contents[0].tabId.toString());
+        } else {
+          // No tabs left, clear topics and close the modal
+          this.clearTopicsModalInputs();
+          this.hideCustomContentModal();
+        }
       }
     }
     
@@ -12265,17 +12445,50 @@ const ButtonPanel = {
   },
 
   /**
+   * Update custom content modal title based on content type
+   * @param {string} contentType - The type of content (pdf, image, etc.)
+   */
+  updateCustomContentModalTitle(contentType) {
+    console.log('[ButtonPanel] ===== UPDATING CUSTOM CONTENT MODAL TITLE =====');
+    console.log('[ButtonPanel] Content type:', contentType);
+    
+    const titleElement = this.topicsModal.customContentModal.modal.querySelector('.vocab-custom-content-title');
+    
+    if (!titleElement) {
+      console.error('[ButtonPanel] Title element not found');
+      return;
+    }
+    
+    // Set heading based on content type
+    const headingMap = {
+      'pdf': 'Content from PDF',
+      'image': 'Content from Image', 
+      'topic': 'Topic contents',
+      'default': 'Generated Content'
+    };
+    
+    titleElement.textContent = headingMap[contentType] || headingMap['default'];
+    console.log('[ButtonPanel] Title updated to:', titleElement.textContent);
+    
+    console.log('[ButtonPanel] ===== MODAL TITLE UPDATED SUCCESSFULLY =====');
+  },
+
+  /**
    * Perform search in the content
    */
   performSearch() {
     console.log('[ButtonPanel] performSearch called');
-    const activeTab = this.topicsModal.customContentModal.getTabById(this.topicsModal.customContentModal.activeTabId);
-    if (!activeTab) {
-      console.log('[ButtonPanel] No active tab found in performSearch');
-      return;
+    
+    // Get search term from current active tab
+    let searchTerm = '';
+    if (this.topicsModal.customContentModal.activeTabId) {
+      const tabId = parseInt(this.topicsModal.customContentModal.activeTabId);
+      const activeContent = this.topicsModal.customContentModal.getContentByTabId(tabId);
+      if (activeContent) {
+        searchTerm = activeContent.searchTerm || '';
+      }
     }
     
-    const searchTerm = activeTab.searchTerm;
     const editorContent = this.topicsModal.customContentModal.editorContent;
     
     console.log('[ButtonPanel] Search term:', searchTerm);
