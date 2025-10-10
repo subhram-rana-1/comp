@@ -8090,10 +8090,10 @@ const ButtonPanel = {
 
       .vocab-text-input-modal {
         background: white;
-        border-radius: 40px;
+        border-radius: 20px;
         padding: 0;
         width: 90%;
-        max-width: 600px;
+        max-width: 800px;
         max-height: 80vh;
         transform: scale(0.9) translateY(20px);
         opacity: 0;
@@ -8156,8 +8156,31 @@ const ButtonPanel = {
         height: 20px;
       }
 
+      .vocab-text-input-search {
+        display: flex;
+        justify-content: center;
+        padding: 20px 40px;
+      }
+
+      .vocab-text-input-search-input {
+        width: 400px;
+        padding: 8px 20px;
+        border: 1px solid #D1B3FF;
+        border-radius: 25px;
+        font-size: 16px;
+        font-family: 'Inter', 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        outline: none;
+        transition: border-color 0.2s ease;
+        box-sizing: border-box;
+        text-align: center;
+      }
+
+      .vocab-text-input-search-input:focus {
+        border-color: #A24EFF;
+      }
+
       .vocab-text-input-content {
-        padding: 30px 40px;
+        padding: 20px 40px 10px 40px;
         flex: 1;
         display: flex;
         flex-direction: column;
@@ -8167,12 +8190,12 @@ const ButtonPanel = {
         width: 100%;
         min-height: 200px;
         padding: 20px;
-        border: 2px solid #e0e0e0;
-        border-radius: 16px;
+        border: 1px solid #D1B3FF;
+        border-radius: 20px;
         font-size: 16px;
         font-family: 'Inter', 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
         line-height: 1.5;
-        resize: vertical;
+        resize: none;
         outline: none;
         transition: border-color 0.2s ease;
         box-sizing: border-box;
@@ -8186,18 +8209,23 @@ const ButtonPanel = {
         color: #999;
       }
 
+      .vocab-text-input-textarea-container {
+        position: relative;
+        width: 100%;
+      }
+
       .vocab-text-input-proceed-btn {
         background: #A24EFF;
         color: white;
         border: none;
-        border-radius: 16px;
+        border-radius: 20px;
         padding: 16px 32px;
         font-size: 16px;
         font-weight: 700;
         cursor: pointer;
         transition: all 0.2s ease;
         align-self: center;
-        margin: 20px 0 40px 0;
+        margin: 10px 0 20px 0;
         min-width: 120px;
       }
 
@@ -8226,8 +8254,18 @@ const ButtonPanel = {
           padding: 20px 30px 15px 30px;
         }
 
+        .vocab-text-input-search {
+          padding: 15px 30px;
+        }
+
+        .vocab-text-input-search-input {
+          width: 350px;
+          padding: 6px 16px;
+          font-size: 15px;
+        }
+
         .vocab-text-input-content {
-          padding: 20px 30px;
+          padding: 15px 30px 5px 30px;
         }
 
         .vocab-text-input-textarea {
@@ -8238,7 +8276,7 @@ const ButtonPanel = {
         .vocab-text-input-proceed-btn {
           padding: 14px 28px;
           font-size: 15px;
-          margin: 20px 0 30px 0;
+          margin: 10px 0 20px 0;
         }
       }
 
@@ -8260,8 +8298,18 @@ const ButtonPanel = {
           font-size: 18px;
         }
 
+        .vocab-text-input-search {
+          padding: 10px 20px;
+        }
+
+        .vocab-text-input-search-input {
+          width: 280px;
+          padding: 6px 14px;
+          font-size: 14px;
+        }
+
         .vocab-text-input-content {
-          padding: 15px 20px;
+          padding: 10px 20px 5px 20px;
         }
 
         .vocab-text-input-textarea {
@@ -8272,7 +8320,7 @@ const ButtonPanel = {
         .vocab-text-input-proceed-btn {
           padding: 12px 24px;
           font-size: 14px;
-          margin: 20px 0 25px 0;
+          margin: 10px 0 15px 0;
         }
       }
     `;
@@ -9555,6 +9603,17 @@ const ButtonPanel = {
     header.appendChild(title);
     header.appendChild(closeBtn);
     
+    // Create search bar
+    const searchBar = document.createElement('div');
+    searchBar.className = 'vocab-text-input-search';
+    
+    const searchInput = document.createElement('input');
+    searchInput.className = 'vocab-text-input-search-input';
+    searchInput.type = 'text';
+    searchInput.placeholder = 'Search in text...';
+    
+    searchBar.appendChild(searchInput);
+    
     // Create content container
     const contentContainer = document.createElement('div');
     contentContainer.className = 'vocab-text-input-content';
@@ -9574,6 +9633,7 @@ const ButtonPanel = {
     
     // Assemble modal
     modal.appendChild(header);
+    modal.appendChild(searchBar);
     modal.appendChild(contentContainer);
     modal.appendChild(proceedBtn);
     
@@ -9587,6 +9647,7 @@ const ButtonPanel = {
       overlay: overlay,
       modal: modal,
       textarea: textarea,
+      searchInput: searchInput,
       proceedBtn: proceedBtn,
       closeBtn: closeBtn
     };
@@ -9605,10 +9666,11 @@ const ButtonPanel = {
       this.textInputModal.overlay.classList.add('visible');
       this.textInputModal.modal.classList.add('visible');
       
-      // Focus on textarea
+      // Focus on textarea and check border radius
       setTimeout(() => {
         if (this.textInputModal.textarea) {
           this.textInputModal.textarea.focus();
+          this.updateTextareaBorderRadius(this.textInputModal.textarea);
         }
       }, 300);
     }
@@ -9645,8 +9707,9 @@ const ButtonPanel = {
     const closeBtn = this.textInputModal.closeBtn;
     const proceedBtn = this.textInputModal.proceedBtn;
     const textarea = this.textInputModal.textarea;
+    const searchInput = this.textInputModal.searchInput;
     
-    if (!overlay || !modal || !closeBtn || !proceedBtn || !textarea) {
+    if (!overlay || !modal || !closeBtn || !proceedBtn || !textarea || !searchInput) {
       console.error('Text input modal: Missing required elements for event listeners');
       return;
     }
@@ -9658,6 +9721,27 @@ const ButtonPanel = {
         this.hideTextInputModal();
       }
     });
+    
+    // Search functionality
+    searchInput.addEventListener('input', (e) => {
+      const searchTerm = e.target.value;
+      this.performTextSearchInModal(textarea, searchTerm);
+    });
+    
+    // Update border radius when content changes
+    textarea.addEventListener('input', () => {
+      this.updateTextareaBorderRadius(textarea);
+    });
+    
+    // Update border radius on resize
+    textarea.addEventListener('resize', () => {
+      this.updateTextareaBorderRadius(textarea);
+    });
+    
+    // Initial border radius check
+    setTimeout(() => {
+      this.updateTextareaBorderRadius(textarea);
+    }, 100);
     
     // Proceed button event
     proceedBtn.addEventListener('click', () => {
@@ -9677,6 +9761,53 @@ const ButtonPanel = {
         }
       }
     });
+  },
+
+  /**
+   * Perform search in text input modal
+   */
+  performTextSearchInModal(textarea, searchTerm) {
+    if (!searchTerm || !searchTerm.trim()) {
+      // Remove highlights if any
+      textarea.style.backgroundColor = '';
+      textarea.style.boxShadow = '';
+      return;
+    }
+    
+    // Get the text content
+    const text = textarea.value;
+    const regex = new RegExp(`(${searchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gim');
+    
+    if (regex.test(text)) {
+      // Found matches - highlight the textarea with a subtle effect
+      textarea.style.backgroundColor = 'rgba(255, 224, 102, 0.05)';
+      textarea.style.boxShadow = 'inset 0 0 0 2px rgba(255, 224, 102, 0.3)';
+      
+      // Scroll to first match
+      this.scrollToTextMatch(textarea, searchTerm);
+    } else {
+      // No matches found
+      textarea.style.backgroundColor = '';
+      textarea.style.boxShadow = '';
+    }
+  },
+
+  /**
+   * Update textarea border radius based on scrollbar presence
+   */
+  updateTextareaBorderRadius(textarea) {
+    if (!textarea) return;
+    
+    // Check if scrollbar is present
+    const hasScrollbar = textarea.scrollHeight > textarea.clientHeight;
+    
+    if (hasScrollbar) {
+      // Scrollbar present - make top-right and bottom-right corners square
+      textarea.style.borderRadius = '20px 0 0 20px';
+    } else {
+      // No scrollbar - keep all corners rounded
+      textarea.style.borderRadius = '20px';
+    }
   },
 
   /**
@@ -10181,18 +10312,33 @@ const ButtonPanel = {
       },
       
       removeContentByTabId: function(tabId) {
+        console.log('[ButtonPanel] removeContentByTabId called with tabId:', tabId);
+        
         // Find and remove content by tabId
         const content = this.getContentByTabId(tabId);
-        if (!content) return false;
+        console.log('[ButtonPanel] Found content:', content);
+        
+        if (!content) {
+          console.log('[ButtonPanel] No content found for tabId:', tabId);
+          return false;
+        }
         
         const contentType = content.contentType;
+        console.log('[ButtonPanel] Content type:', contentType);
+        
         const contents = this.getContentByType(contentType);
+        console.log('[ButtonPanel] Contents array:', contents);
+        
         const index = contents.findIndex(item => item.tabId === tabId);
+        console.log('[ButtonPanel] Index to remove:', index);
         
         if (index !== -1) {
           contents.splice(index, 1);
+          console.log('[ButtonPanel] Content removed successfully');
           return true;
         }
+        
+        console.log('[ButtonPanel] Content not found in array');
         return false;
       },
       
@@ -12571,29 +12717,51 @@ const ButtonPanel = {
    * @param {string} tabId - The tab ID to close
    */
   closeTab(tabId) {
+    console.log('[ButtonPanel] Closing tab:', tabId);
+    
+    // Get the content type of the tab being closed BEFORE removing it
+    const contentToClose = this.topicsModal.customContentModal.getContentByTabId(parseInt(tabId));
+    if (!contentToClose) {
+      console.log('[ButtonPanel] Content not found for tabId:', tabId);
+      return;
+    }
+    
+    const contentTypeToClose = contentToClose.contentType;
+    console.log('[ButtonPanel] Closing tab of content type:', contentTypeToClose);
+    
     // Remove content from new data structure using tabId
     const removed = this.topicsModal.customContentModal.removeContentByTabId(parseInt(tabId));
+    console.log('[ButtonPanel] Content removed:', removed);
+    
     if (!removed) return;
     
     // Remove tab element from DOM
     const tabElement = this.topicsModal.customContentModal.modal.querySelector(`[data-tab-id="${tabId}"]`);
     if (tabElement) {
       tabElement.remove();
+      console.log('[ButtonPanel] Tab element removed from DOM');
     }
     
-    // If this was the active tab, switch to another tab
+    // Check if there are any tabs left of the SAME content type that was just closed
+    const remainingTabsOfSameType = this.topicsModal.customContentModal.getContentByType(contentTypeToClose).length;
+    console.log('[ButtonPanel] Remaining tabs of same type:', remainingTabsOfSameType);
+    
+    // If this was the active tab, switch to another tab or close modal
     if (this.topicsModal.customContentModal.activeTabId === tabId) {
-      const activeContent = this.topicsModal.customContentModal.getContentByTabId(parseInt(tabId));
-      if (activeContent) {
-        const contents = this.topicsModal.customContentModal.getContentByType(activeContent.contentType);
+      console.log('[ButtonPanel] Closing active tab');
+      
+      if (remainingTabsOfSameType > 0) {
+        console.log('[ButtonPanel] Switching to another tab of same type');
+        // There are still tabs left of the same type, switch to the first available tab
+        const contents = this.topicsModal.customContentModal.getContentByType(contentTypeToClose);
         if (contents.length > 0) {
-          // Switch to the first available tab
           this.switchToTab(contents[0].tabId.toString());
-        } else {
-          // No tabs left, clear topics and close the modal
-          this.clearTopicsModalInputs();
-          this.hideCustomContentModal();
         }
+      } else {
+        console.log('[ButtonPanel] No tabs left of this content type, closing modal');
+        // No tabs left of this content type, close the modal
+        this.clearTopicsModalInputs();
+        this.hideCustomContentModal();
       }
     }
     
