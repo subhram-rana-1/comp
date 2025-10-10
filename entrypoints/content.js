@@ -2945,9 +2945,9 @@ const ChatDialog = {
             behavior: 'smooth',
             block: 'center'
           });
-          // Then move to asked texts and pulsate
+          // Then pulsate without changing state or creating new icons
           setTimeout(() => {
-            TextSelector.moveToAskedTexts(this.currentTextKey);
+            TextSelector.pulsateText(highlight, true);
           }, 300); // Small delay to let scroll complete
         }
       }
