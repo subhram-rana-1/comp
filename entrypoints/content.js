@@ -9682,6 +9682,9 @@ const ButtonPanel = {
   hideTextInputModal() {
     console.log('[ButtonPanel] Hiding text input modal');
     
+    // Hide search preview if visible
+    this.hideTextSearchPreview();
+    
     if (this.textInputModal && this.textInputModal.overlay) {
       this.textInputModal.overlay.classList.remove('visible');
       this.textInputModal.modal.classList.remove('visible');
@@ -9771,6 +9774,7 @@ const ButtonPanel = {
       // Remove highlights if any
       textarea.style.backgroundColor = '';
       textarea.style.boxShadow = '';
+      this.hideTextSearchPreview();
       return;
     }
     
@@ -9783,12 +9787,109 @@ const ButtonPanel = {
       textarea.style.backgroundColor = 'rgba(255, 224, 102, 0.05)';
       textarea.style.boxShadow = 'inset 0 0 0 2px rgba(255, 224, 102, 0.3)';
       
+      // Show search preview with highlighted matches
+      this.showTextSearchPreview(textarea, text, searchTerm);
+      
       // Scroll to first match
       this.scrollToTextMatch(textarea, searchTerm);
     } else {
       // No matches found
       textarea.style.backgroundColor = '';
       textarea.style.boxShadow = '';
+      this.hideTextSearchPreview();
+    }
+  },
+
+  /**
+   * Show search preview with highlighted matches for textarea
+   */
+  showTextSearchPreview(textarea, text, searchTerm) {
+    // Remove existing preview if any
+    this.hideTextSearchPreview();
+    
+    // Create preview overlay
+    const preview = document.createElement('div');
+    preview.className = 'vocab-text-search-preview';
+    preview.style.cssText = `
+      position: fixed;
+      background: white;
+      border: 2px solid #FFE066;
+      border-radius: 8px;
+      padding: 12px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+      z-index: 10000;
+      max-width: 400px;
+      max-height: 200px;
+      overflow-y: auto;
+      font-size: 14px;
+      line-height: 1.4;
+      font-family: inherit;
+    `;
+    
+    // Create highlighted content
+    const regex = new RegExp(`(${searchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gim');
+    const highlightedContent = text.replace(regex, '<span style="background: linear-gradient(120deg, #FFE066 0%, #FFD700 100%); padding: 2px 4px; border-radius: 3px; font-weight: 600; color: #333;">$1</span>');
+    
+    // Count matches
+    const matches = text.match(regex);
+    const matchCount = matches ? matches.length : 0;
+    
+    preview.innerHTML = `
+      <div style="font-weight: 600; margin-bottom: 8px; color: #333; border-bottom: 1px solid #eee; padding-bottom: 4px;">
+        Search Results: ${matchCount} match${matchCount !== 1 ? 'es' : ''} found
+      </div>
+      <div style="white-space: pre-wrap;">${highlightedContent}</div>
+    `;
+    
+    // Position relative to textarea
+    const rect = textarea.getBoundingClientRect();
+    preview.style.top = (rect.top + rect.height + 10) + 'px';
+    preview.style.left = Math.max(10, rect.left) + 'px';
+    
+    document.body.appendChild(preview);
+    
+    // Store reference for cleanup
+    this.textSearchPreview = preview;
+    
+    // Auto-hide after 5 seconds
+    setTimeout(() => {
+      this.hideTextSearchPreview();
+    }, 5000);
+  },
+
+  /**
+   * Hide text search preview overlay
+   */
+  hideTextSearchPreview() {
+    if (this.textSearchPreview) {
+      this.textSearchPreview.remove();
+      this.textSearchPreview = null;
+    }
+  },
+
+  /**
+   * Scroll to the first text match in textarea
+   */
+  scrollToTextMatch(textarea, searchTerm) {
+    const text = textarea.value;
+    const regex = new RegExp(`(${searchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gim');
+    const match = regex.exec(text);
+    
+    if (match) {
+      const matchIndex = match.index;
+      
+      // Calculate line number and position
+      const textBeforeMatch = text.substring(0, matchIndex);
+      const lines = textBeforeMatch.split('\n');
+      const lineNumber = lines.length - 1;
+      
+      // Scroll to the line containing the match
+      const lineHeight = parseInt(getComputedStyle(textarea).lineHeight) || 20;
+      const scrollTop = lineNumber * lineHeight;
+      
+      textarea.scrollTop = Math.max(0, scrollTop - textarea.clientHeight / 2);
+      
+      // Don't focus the textarea - this causes cursor to jump from search input
     }
   },
 
@@ -10312,7 +10413,12 @@ const ButtonPanel = {
       },
       
       removeContentByTabId: function(tabId) {
+        console.log('[ButtonPanel] ===== REMOVE CONTENT BY TAB ID DEBUG =====');
         console.log('[ButtonPanel] removeContentByTabId called with tabId:', tabId);
+        console.log('[ButtonPanel] Before removal - Topic contents:', this.topicContents);
+        console.log('[ButtonPanel] Before removal - Image contents:', this.imageContents);
+        console.log('[ButtonPanel] Before removal - PDF contents:', this.pdfContents);
+        console.log('[ButtonPanel] Before removal - Text contents:', this.textContents);
         
         // Find and remove content by tabId
         const content = this.getContentByTabId(tabId);
@@ -10320,6 +10426,7 @@ const ButtonPanel = {
         
         if (!content) {
           console.log('[ButtonPanel] No content found for tabId:', tabId);
+          console.log('[ButtonPanel] ===== END REMOVE CONTENT DEBUG (NO CONTENT FOUND) =====');
           return false;
         }
         
@@ -10327,7 +10434,7 @@ const ButtonPanel = {
         console.log('[ButtonPanel] Content type:', contentType);
         
         const contents = this.getContentByType(contentType);
-        console.log('[ButtonPanel] Contents array:', contents);
+        console.log('[ButtonPanel] Contents array before removal:', contents);
         
         const index = contents.findIndex(item => item.tabId === tabId);
         console.log('[ButtonPanel] Index to remove:', index);
@@ -10335,10 +10442,16 @@ const ButtonPanel = {
         if (index !== -1) {
           contents.splice(index, 1);
           console.log('[ButtonPanel] Content removed successfully');
+          console.log('[ButtonPanel] After removal - Topic contents:', this.topicContents);
+          console.log('[ButtonPanel] After removal - Image contents:', this.imageContents);
+          console.log('[ButtonPanel] After removal - PDF contents:', this.pdfContents);
+          console.log('[ButtonPanel] After removal - Text contents:', this.textContents);
+          console.log('[ButtonPanel] ===== END REMOVE CONTENT DEBUG (SUCCESS) =====');
           return true;
         }
         
         console.log('[ButtonPanel] Content not found in array');
+        console.log('[ButtonPanel] ===== END REMOVE CONTENT DEBUG (NOT FOUND) =====');
         return false;
       },
       
@@ -10408,6 +10521,34 @@ const ButtonPanel = {
         this.imageContents = [];
         this.pdfContents = [];
         this.textContents = [];
+      },
+      
+      getAllTabs: function() {
+        console.log('[ButtonPanel] ===== GET ALL TABS DEBUG =====');
+        console.log('[ButtonPanel] Topic contents length:', this.topicContents.length);
+        console.log('[ButtonPanel] Image contents length:', this.imageContents.length);
+        console.log('[ButtonPanel] PDF contents length:', this.pdfContents.length);
+        console.log('[ButtonPanel] Text contents length:', this.textContents.length);
+        
+        // Return all tabs from all content types
+        const allTabs = [
+          ...this.topicContents.map(content => ({ ...content, id: content.tabId.toString() })),
+          ...this.imageContents.map(content => ({ ...content, id: content.tabId.toString() })),
+          ...this.pdfContents.map(content => ({ ...content, id: content.tabId.toString() })),
+          ...this.textContents.map(content => ({ ...content, id: content.tabId.toString() }))
+        ];
+        
+        console.log('[ButtonPanel] All tabs result:', allTabs);
+        console.log('[ButtonPanel] All tabs length:', allTabs.length);
+        console.log('[ButtonPanel] ===== END GET ALL TABS DEBUG =====');
+        
+        return allTabs;
+      },
+      
+      getTabsByType: function(contentType) {
+        // Return tabs for a specific content type
+        const contents = this.getContentByType(contentType);
+        return contents.map(content => ({ ...content, id: content.tabId.toString() }));
       }
     }
   },
@@ -10887,6 +11028,12 @@ const ButtonPanel = {
    * Update UI state based on whether there are topics
    */
   updateTopicsUIState() {
+    // Check if topics modal exists before trying to access it
+    if (!this.topicsModal.modal) {
+      console.log('[ButtonPanel] Topics modal does not exist, skipping updateTopicsUIState');
+      return;
+    }
+    
     const hasTopics = this.topicsModal.topics.length > 0;
     const secondContainer = this.topicsModal.modal.querySelector('.vocab-topics-second-container');
     const generateBtn = this.topicsModal.modal.querySelector('.vocab-topics-generate-btn');
@@ -11199,14 +11346,21 @@ const ButtonPanel = {
    * Hide custom content modal
    */
   hideCustomContentModal() {
+    console.log('[ButtonPanel] ===== HIDE CUSTOM CONTENT MODAL DEBUG =====');
     console.log('[ButtonPanel] Hiding custom content modal');
+    console.log('[ButtonPanel] Modal overlay exists:', !!this.topicsModal.customContentModal.overlay);
     
     if (this.topicsModal.customContentModal.overlay) {
+      console.log('[ButtonPanel] Overlay classes before removal:', this.topicsModal.customContentModal.overlay.classList.toString());
       this.topicsModal.customContentModal.overlay.classList.remove('visible');
+      console.log('[ButtonPanel] Overlay classes after removal:', this.topicsModal.customContentModal.overlay.classList.toString());
+      console.log('[ButtonPanel] Overlay is now visible:', this.topicsModal.customContentModal.overlay.classList.contains('visible'));
     }
     
     // Show the custom content button again
+    console.log('[ButtonPanel] Calling showCustomContentButton()');
     this.showCustomContentButton();
+    console.log('[ButtonPanel] ===== END HIDE CUSTOM CONTENT MODAL DEBUG =====');
   },
 
   /**
@@ -12742,28 +12896,48 @@ const ButtonPanel = {
       console.log('[ButtonPanel] Tab element removed from DOM');
     }
     
-    // Check if there are any tabs left of the SAME content type that was just closed
-    const remainingTabsOfSameType = this.topicsModal.customContentModal.getContentByType(contentTypeToClose).length;
-    console.log('[ButtonPanel] Remaining tabs of same type:', remainingTabsOfSameType);
+    // Check if there are any tabs left at all (across all content types)
+    const allTabs = this.topicsModal.customContentModal.getAllTabs();
+    console.log('[ButtonPanel] ===== TAB CLOSING DEBUG INFO =====');
+    console.log('[ButtonPanel] Tab being closed ID:', tabId);
+    console.log('[ButtonPanel] Active tab ID:', this.topicsModal.customContentModal.activeTabId);
+    console.log('[ButtonPanel] Total remaining tabs:', allTabs.length);
+    console.log('[ButtonPanel] All remaining tabs:', allTabs);
+    console.log('[ButtonPanel] Topic contents:', this.topicsModal.customContentModal.topicContents);
+    console.log('[ButtonPanel] Image contents:', this.topicsModal.customContentModal.imageContents);
+    console.log('[ButtonPanel] PDF contents:', this.topicsModal.customContentModal.pdfContents);
+    console.log('[ButtonPanel] Text contents:', this.topicsModal.customContentModal.textContents);
+    
+    // Check if this is the last tab
+    if (allTabs.length === 0) {
+      console.log('-------- I am last tab getting closed -------');
+      console.log('[ButtonPanel] LAST TAB DETECTED - Should close modal');
+    }
     
     // If this was the active tab, switch to another tab or close modal
     if (this.topicsModal.customContentModal.activeTabId === tabId) {
       console.log('[ButtonPanel] Closing active tab');
       
-      if (remainingTabsOfSameType > 0) {
-        console.log('[ButtonPanel] Switching to another tab of same type');
-        // There are still tabs left of the same type, switch to the first available tab
-        const contents = this.topicsModal.customContentModal.getContentByType(contentTypeToClose);
-        if (contents.length > 0) {
-          this.switchToTab(contents[0].tabId.toString());
+      if (allTabs.length > 0) {
+        console.log('[ButtonPanel] Switching to another available tab');
+        console.log('[ButtonPanel] Switching to tab ID:', allTabs[0].id);
+        // There are still tabs left, switch to the first available tab
+        if (allTabs.length > 0) {
+          this.switchToTab(allTabs[0].id);
         }
       } else {
-        console.log('[ButtonPanel] No tabs left of this content type, closing modal');
-        // No tabs left of this content type, close the modal
+        console.log('[ButtonPanel] ===== NO TABS LEFT - CLOSING MODAL =====');
+        console.log('[ButtonPanel] Calling clearTopicsModalInputs()');
         this.clearTopicsModalInputs();
+        console.log('[ButtonPanel] Calling hideCustomContentModal()');
         this.hideCustomContentModal();
+        console.log('[ButtonPanel] Modal close sequence completed');
       }
+    } else {
+      console.log('[ButtonPanel] Tab being closed was not active, no action needed');
     }
+    
+    console.log('[ButtonPanel] ===== END TAB CLOSING DEBUG =====');
     
     // Update arrow states after removing tab
     setTimeout(() => {
@@ -12913,6 +13087,12 @@ const ButtonPanel = {
    */
   clearTopicsModalInputs() {
     console.log('[ButtonPanel] Clearing topics modal inputs');
+    
+    // Check if topics modal exists before trying to clear it
+    if (!this.topicsModal.modal) {
+      console.log('[ButtonPanel] Topics modal does not exist, skipping clearTopicsModalInputs');
+      return;
+    }
     
     // Clear topics array
     this.topicsModal.topics = [];
