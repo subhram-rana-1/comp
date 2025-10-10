@@ -4827,8 +4827,8 @@ const ChatDialog = {
       }
 
       .vocab-processing-text {
-        font-size: 18px;
-        font-weight: 500;
+        font-size: 20px;
+        font-weight: 600;
         color: #A24EFF;
         margin-bottom: 20px;
         font-family: 'Inter', 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
@@ -4837,7 +4837,7 @@ const ChatDialog = {
       .vocab-processing-icon {
         width: 40px;
         height: 40px;
-        margin: 0 auto;
+        margin: 20px auto 0 auto;
         position: relative;
       }
 
@@ -4876,12 +4876,12 @@ const ChatDialog = {
       }
 
       .vocab-image-processing-text {
-        margin-bottom: 20px;
+        margin-bottom: 0;
       }
 
       .vocab-image-processing-main {
-        font-size: 18px;
-        font-weight: 500;
+        font-size: 20px;
+        font-weight: 600;
         color: #A24EFF;
         margin-bottom: 8px;
         font-family: 'Inter', 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
@@ -8386,7 +8386,7 @@ const ButtonPanel = {
     });
 
     buttons.customContent?.addEventListener('mouseleave', () => {
-      // Only hide if not clicking on the vertical group
+      // Only hide if not hovering over the vertical group
       setTimeout(() => {
         if (!this.verticalButtonGroup?.matches(':hover')) {
           this.hideVerticalButtonGroup();
@@ -8395,10 +8395,12 @@ const ButtonPanel = {
     });
 
     // Add hover events for vertical button group
+    // Keep buttons visible when hovering over them
     this.verticalButtonGroup?.addEventListener('mouseenter', () => {
       this.showVerticalButtonGroup();
     });
 
+    // Hide buttons when moving away from the group
     this.verticalButtonGroup?.addEventListener('mouseleave', () => {
       this.hideVerticalButtonGroup();
     });
@@ -9502,6 +9504,7 @@ const ButtonPanel = {
       });
       
       customContentBtn.addEventListener('mouseleave', () => {
+        // Only hide if not hovering over the vertical group
         setTimeout(() => {
           if (!this.verticalButtonGroup?.matches(':hover')) {
             this.hideVerticalButtonGroup();
@@ -10333,7 +10336,7 @@ const ButtonPanel = {
     // Update the processing text for PDF
     const processingText = this.topicsModal.processingOverlay.querySelector('.vocab-processing-text');
     if (processingText) {
-      processingText.textContent = 'PDF processing activity...';
+      processingText.textContent = 'Reading PDF file';
     }
     
     // Show the overlay
@@ -11301,7 +11304,7 @@ const ButtonPanel = {
     
     const text = document.createElement('div');
     text.className = 'vocab-processing-text';
-    text.textContent = 'Generating content from topics ...';
+    text.textContent = 'Generating contents on topics...';
     
     const icon = document.createElement('div');
     icon.className = 'vocab-processing-icon';
@@ -11801,13 +11804,11 @@ const ButtonPanel = {
     // Create processing content
     overlay.innerHTML = `
       <div class="vocab-image-processing-content">
-        <div class="vocab-image-processing-spinner">
-          <div class="vocab-image-processing-spinner-circle"></div>
-        </div>
         <div class="vocab-image-processing-text">
-          <p class="vocab-image-processing-main">Reading image file...</p>
+          <p class="vocab-image-processing-main">Reading image file</p>
           <p class="vocab-image-processing-sub">Extracting text from image</p>
         </div>
+        <div class="vocab-processing-icon"></div>
       </div>
     `;
     
@@ -11884,7 +11885,7 @@ const ButtonPanel = {
     // Update the processing text for PDF
     const processingText = this.pdfUploadModal.processingOverlay.querySelector('.vocab-processing-text');
     if (processingText) {
-      processingText.textContent = 'Reading PDF file...';
+      processingText.textContent = 'Reading PDF file';
     }
     
     // Show the overlay on top of PDF modal
@@ -11919,7 +11920,7 @@ const ButtonPanel = {
     
     const text = document.createElement('div');
     text.className = 'vocab-processing-text';
-    text.textContent = 'Reading PDF file...';
+    text.textContent = 'Reading PDF file';
     
     const icon = document.createElement('div');
     icon.className = 'vocab-processing-icon';
@@ -12957,40 +12958,48 @@ const ButtonPanel = {
     
     // Check if there are any tabs left at all (across all content types)
     const allTabs = this.topicsModal.customContentModal.getAllTabs();
+    
+    // Check if there are any tabs left for the specific content type being closed
+    const tabsOfSameType = this.topicsModal.customContentModal.getTabsByType(contentTypeToClose);
+    
     console.log('[ButtonPanel] ===== TAB CLOSING DEBUG INFO =====');
     console.log('[ButtonPanel] Tab being closed ID:', tabId);
+    console.log('[ButtonPanel] Content type being closed:', contentTypeToClose);
     console.log('[ButtonPanel] Active tab ID:', this.topicsModal.customContentModal.activeTabId);
     console.log('[ButtonPanel] Total remaining tabs:', allTabs.length);
+    console.log('[ButtonPanel] Remaining tabs of same type:', tabsOfSameType.length);
     console.log('[ButtonPanel] All remaining tabs:', allTabs);
     console.log('[ButtonPanel] Topic contents:', this.topicsModal.customContentModal.topicContents);
     console.log('[ButtonPanel] Image contents:', this.topicsModal.customContentModal.imageContents);
     console.log('[ButtonPanel] PDF contents:', this.topicsModal.customContentModal.pdfContents);
     console.log('[ButtonPanel] Text contents:', this.topicsModal.customContentModal.textContents);
     
-    // Check if this is the last tab
-    if (allTabs.length === 0) {
-      console.log('-------- I am last tab getting closed -------');
+    // Check if this is the last tab globally OR the last tab of this specific content type
+    const isLastTabGlobally = allTabs.length === 0;
+    const isLastTabOfType = tabsOfSameType.length === 0;
+    
+    if (isLastTabGlobally) {
+      console.log('-------- I am last tab getting closed globally -------');
       console.log('[ButtonPanel] LAST TAB DETECTED - Should close modal');
+    } else if (isLastTabOfType) {
+      console.log(`-------- I am last tab of my current content type ${contentTypeToClose} -------`);
+      console.log('[ButtonPanel] LAST TAB OF TYPE DETECTED - Should close modal');
     }
     
-    // If this was the active tab, switch to another tab or close modal
-    if (this.topicsModal.customContentModal.activeTabId === tabId) {
-      console.log('[ButtonPanel] Closing active tab');
-      
+    // Check if we should close the modal (either last tab globally or last tab of this content type)
+    if (isLastTabGlobally || isLastTabOfType) {
+      console.log('[ButtonPanel] ===== CLOSING MODAL - Last tab of type or globally =====');
+      console.log('[ButtonPanel] Calling clearTopicsModalInputs()');
+      this.clearTopicsModalInputs();
+      console.log('[ButtonPanel] Calling hideCustomContentModal()');
+      this.hideCustomContentModal();
+      console.log('[ButtonPanel] Modal close sequence completed');
+    } else if (this.topicsModal.customContentModal.activeTabId === tabId) {
+      // Only handle active tab switching if we're not closing the modal
+      console.log('[ButtonPanel] Closing active tab - switching to another tab');
+      console.log('[ButtonPanel] Switching to tab ID:', allTabs[0].id);
       if (allTabs.length > 0) {
-        console.log('[ButtonPanel] Switching to another available tab');
-        console.log('[ButtonPanel] Switching to tab ID:', allTabs[0].id);
-        // There are still tabs left, switch to the first available tab
-        if (allTabs.length > 0) {
-          this.switchToTab(allTabs[0].id);
-        }
-      } else {
-        console.log('[ButtonPanel] ===== NO TABS LEFT - CLOSING MODAL =====');
-        console.log('[ButtonPanel] Calling clearTopicsModalInputs()');
-        this.clearTopicsModalInputs();
-        console.log('[ButtonPanel] Calling hideCustomContentModal()');
-        this.hideCustomContentModal();
-        console.log('[ButtonPanel] Modal close sequence completed');
+        this.switchToTab(allTabs[0].id);
       }
     } else {
       console.log('[ButtonPanel] Tab being closed was not active, no action needed');
