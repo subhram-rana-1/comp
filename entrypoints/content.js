@@ -6328,10 +6328,20 @@ const ButtonPanel = {
       <div class="vocab-vertical-btn-text">Topics</div>
     `;
 
+    // Create Text button
+    const textButton = document.createElement('button');
+    textButton.className = 'vocab-vertical-btn';
+    textButton.id = 'vocab-text-btn';
+    textButton.innerHTML = `
+      <div class="vocab-vertical-btn-icon">${this.createTextIcon()}</div>
+      <div class="vocab-vertical-btn-text">Text</div>
+    `;
+
     // Append buttons to group
     group.appendChild(pdfButton);
     group.appendChild(imageButton);
     group.appendChild(topicsButton);
+    group.appendChild(textButton);
 
     return group;
   },
@@ -6444,6 +6454,21 @@ const ButtonPanel = {
         <path d="M3 17H7V21H3V17Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
         <path d="M10 17H14V21H10V17Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
         <path d="M17 17H21V21H17V17Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    `;
+  },
+
+  /**
+   * Create Text icon SVG (white)
+   * @returns {string} SVG markup
+   */
+  createTextIcon() {
+    return `
+      <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M3 4C3 3.448 3.448 3 4 3H16C16.552 3 17 3.448 17 4V16C17 16.552 16.552 17 16 17H4C3.448 17 3 16.552 3 16V4Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M6 7H14M6 9H12M6 11H10M6 13H14" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M10 15L10 13M10 13L8 15M10 13L12 15" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M10 13L10 11" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
       </svg>
     `;
   },
@@ -8038,6 +8063,218 @@ const ButtonPanel = {
           min-width: 100px;
         }
       }
+
+      /* Text Input Modal Styles */
+      .vocab-text-input-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.5);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 1000001;
+        opacity: 0;
+        visibility: hidden;
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        padding: 20px;
+        box-sizing: border-box;
+      }
+
+      .vocab-text-input-overlay.visible {
+        opacity: 1;
+        visibility: visible;
+      }
+
+      .vocab-text-input-modal {
+        background: white;
+        border-radius: 40px;
+        padding: 0;
+        width: 90%;
+        max-width: 600px;
+        max-height: 80vh;
+        transform: scale(0.9) translateY(20px);
+        opacity: 0;
+        visibility: hidden;
+        transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease, visibility 0.3s ease;
+        font-family: 'Inter', 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+      }
+
+      .vocab-text-input-modal.visible {
+        transform: scale(1) translateY(0);
+        opacity: 1;
+        visibility: visible;
+      }
+
+      .vocab-text-input-header {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        padding: 30px 40px 20px 40px;
+        position: relative;
+        border-bottom: 1px solid #f0f0f0;
+      }
+
+      .vocab-text-input-title {
+        font-size: 28px;
+        font-weight: 400;
+        color: #9B6EDA;
+        margin: 0;
+        text-align: center;
+      }
+
+      .vocab-text-input-close {
+        position: absolute;
+        right: 20px;
+        top: 50%;
+        transform: translateY(-50%);
+        background: none;
+        border: none;
+        cursor: pointer;
+        padding: 8px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #A24EFF;
+        transition: all 0.2s ease;
+      }
+
+      .vocab-text-input-close:hover {
+        background: #f5f5f5;
+        color: #7A5BC7;
+        transform: translateY(-50%) scale(1.2);
+      }
+
+      .vocab-text-input-close svg {
+        width: 20px;
+        height: 20px;
+      }
+
+      .vocab-text-input-content {
+        padding: 30px 40px;
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+      }
+
+      .vocab-text-input-textarea {
+        width: 100%;
+        min-height: 200px;
+        padding: 20px;
+        border: 2px solid #e0e0e0;
+        border-radius: 16px;
+        font-size: 16px;
+        font-family: 'Inter', 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        line-height: 1.5;
+        resize: vertical;
+        outline: none;
+        transition: border-color 0.2s ease;
+        box-sizing: border-box;
+      }
+
+      .vocab-text-input-textarea:focus {
+        border-color: #A24EFF;
+      }
+
+      .vocab-text-input-textarea::placeholder {
+        color: #999;
+      }
+
+      .vocab-text-input-proceed-btn {
+        background: #A24EFF;
+        color: white;
+        border: none;
+        border-radius: 16px;
+        padding: 16px 32px;
+        font-size: 16px;
+        font-weight: 700;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        align-self: center;
+        margin: 20px 0 40px 0;
+        min-width: 120px;
+      }
+
+      .vocab-text-input-proceed-btn:hover {
+        background: #7A5BC7;
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(162, 78, 255, 0.3);
+      }
+
+      .vocab-text-input-proceed-btn:active {
+        transform: translateY(0);
+      }
+
+      /* Responsive Design for Text Input Modal */
+      @media (max-width: 768px) {
+        .vocab-text-input-modal {
+          width: 95%;
+          margin: 20px;
+        }
+
+        .vocab-text-input-title {
+          font-size: 20px;
+        }
+
+        .vocab-text-input-header {
+          padding: 20px 30px 15px 30px;
+        }
+
+        .vocab-text-input-content {
+          padding: 20px 30px;
+        }
+
+        .vocab-text-input-textarea {
+          min-height: 150px;
+          font-size: 15px;
+        }
+
+        .vocab-text-input-proceed-btn {
+          padding: 14px 28px;
+          font-size: 15px;
+          margin: 20px 0 30px 0;
+        }
+      }
+
+      @media (max-width: 480px) {
+        .vocab-text-input-overlay {
+          padding: 10px;
+        }
+
+        .vocab-text-input-modal {
+          width: 98%;
+          margin: 10px;
+        }
+
+        .vocab-text-input-header {
+          padding: 15px 20px 10px 20px;
+        }
+
+        .vocab-text-input-title {
+          font-size: 18px;
+        }
+
+        .vocab-text-input-content {
+          padding: 15px 20px;
+        }
+
+        .vocab-text-input-textarea {
+          min-height: 120px;
+          font-size: 14px;
+        }
+
+        .vocab-text-input-proceed-btn {
+          padding: 12px 24px;
+          font-size: 14px;
+          margin: 20px 0 25px 0;
+        }
+      }
     `;
 
     document.head.appendChild(style);
@@ -8122,11 +8359,13 @@ const ButtonPanel = {
     const pdfBtn = document.getElementById('vocab-pdf-btn');
     const imageBtn = document.getElementById('vocab-image-btn');
     const topicsBtn = document.getElementById('vocab-topics-btn');
+    const textBtn = document.getElementById('vocab-text-btn');
     
     console.log('Button elements found:');
     console.log('PDF button:', pdfBtn);
     console.log('Image button:', imageBtn);
     console.log('Topics button:', topicsBtn);
+    console.log('Text button:', textBtn);
 
     pdfBtn?.addEventListener('click', () => {
       console.log('PDF button clicked');
@@ -8141,6 +8380,11 @@ const ButtonPanel = {
     topicsBtn?.addEventListener('click', (e) => {
       console.log('Topics button clicked');
       this.handleTopicsButton();
+    });
+
+    textBtn?.addEventListener('click', (e) => {
+      console.log('Text button clicked');
+      this.handleTextButton();
     });
 
     // Add tooltip event listeners
@@ -9233,6 +9477,258 @@ const ButtonPanel = {
   },
 
   /**
+   * Handler for Text button
+   */
+  handleTextButton() {
+    console.log('[ButtonPanel] Text button clicked');
+    // Hide the vertical group after selection
+    this.hideVerticalButtonGroup();
+    // Hide the custom content button
+    this.hideCustomContentButton();
+    
+    // Check if there's already text content in memory
+    const textContents = this.topicsModal.customContentModal.getContentByType('text');
+    if (textContents && textContents.length > 0) {
+      // Show custom content modal with only text contents
+      this.topicsModal.currentContentType = 'text';
+      this.showCustomContentModalWithContents('text');
+    } else {
+      // Show the text input modal for new content
+      this.showTextInputModal();
+    }
+  },
+
+  /**
+   * Show text input modal
+   */
+  showTextInputModal() {
+    console.log('[ButtonPanel] Showing text input modal');
+    
+    // Create modal if it doesn't exist
+    if (!this.textInputModal) {
+      this.createTextInputModal();
+      
+      // Wait for DOM to be ready before showing modal using double requestAnimationFrame
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          this.showTextModalWithAnimation();
+        });
+      });
+    } else {
+      // Modal already exists, just show it
+      this.showTextModalWithAnimation();
+    }
+  },
+
+  /**
+   * Create text input modal HTML structure
+   */
+  createTextInputModal() {
+    console.log('[ButtonPanel] Creating text input modal...');
+    
+    // Create overlay
+    const overlay = document.createElement('div');
+    overlay.className = 'vocab-text-input-overlay';
+    overlay.id = 'vocab-text-input-overlay';
+    
+    // Create modal
+    const modal = document.createElement('div');
+    modal.className = 'vocab-text-input-modal';
+    
+    // Create header
+    const header = document.createElement('div');
+    header.className = 'vocab-text-input-header';
+    
+    const title = document.createElement('h2');
+    title.className = 'vocab-text-input-title';
+    title.textContent = 'Paste your text';
+    
+    const closeBtn = document.createElement('button');
+    closeBtn.className = 'vocab-text-input-close';
+    closeBtn.innerHTML = `
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M18 6L6 18M6 6L18 18" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    `;
+    closeBtn.setAttribute('aria-label', 'Close modal');
+    
+    header.appendChild(title);
+    header.appendChild(closeBtn);
+    
+    // Create content container
+    const contentContainer = document.createElement('div');
+    contentContainer.className = 'vocab-text-input-content';
+    
+    // Create textarea
+    const textarea = document.createElement('textarea');
+    textarea.className = 'vocab-text-input-textarea';
+    textarea.placeholder = 'Enter your text content here...';
+    textarea.rows = 10;
+    
+    contentContainer.appendChild(textarea);
+    
+    // Create proceed button
+    const proceedBtn = document.createElement('button');
+    proceedBtn.className = 'vocab-text-input-proceed-btn';
+    proceedBtn.textContent = 'Proceed';
+    
+    // Assemble modal
+    modal.appendChild(header);
+    modal.appendChild(contentContainer);
+    modal.appendChild(proceedBtn);
+    
+    overlay.appendChild(modal);
+    
+    // Append to body
+    document.body.appendChild(overlay);
+    
+    // Store references
+    this.textInputModal = {
+      overlay: overlay,
+      modal: modal,
+      textarea: textarea,
+      proceedBtn: proceedBtn,
+      closeBtn: closeBtn
+    };
+    
+    // Attach event listeners
+    this.attachTextInputModalListeners();
+  },
+
+  /**
+   * Show text modal with animation
+   */
+  showTextModalWithAnimation() {
+    console.log('[ButtonPanel] Showing text modal with animation');
+    
+    if (this.textInputModal && this.textInputModal.overlay) {
+      this.textInputModal.overlay.classList.add('visible');
+      this.textInputModal.modal.classList.add('visible');
+      
+      // Focus on textarea
+      setTimeout(() => {
+        if (this.textInputModal.textarea) {
+          this.textInputModal.textarea.focus();
+        }
+      }, 300);
+    }
+  },
+
+  /**
+   * Hide text input modal
+   */
+  hideTextInputModal() {
+    console.log('[ButtonPanel] Hiding text input modal');
+    
+    if (this.textInputModal && this.textInputModal.overlay) {
+      this.textInputModal.overlay.classList.remove('visible');
+      this.textInputModal.modal.classList.remove('visible');
+      
+      // Clear textarea after animation
+      setTimeout(() => {
+        if (this.textInputModal.textarea) {
+          this.textInputModal.textarea.value = '';
+        }
+      }, 300);
+    }
+    
+    // Show the custom content button again
+    this.showCustomContentButton();
+  },
+
+  /**
+   * Attach event listeners to text input modal
+   */
+  attachTextInputModalListeners() {
+    const overlay = this.textInputModal.overlay;
+    const modal = this.textInputModal.modal;
+    const closeBtn = this.textInputModal.closeBtn;
+    const proceedBtn = this.textInputModal.proceedBtn;
+    const textarea = this.textInputModal.textarea;
+    
+    if (!overlay || !modal || !closeBtn || !proceedBtn || !textarea) {
+      console.error('Text input modal: Missing required elements for event listeners');
+      return;
+    }
+    
+    // Close modal events
+    closeBtn.addEventListener('click', () => this.hideTextInputModal());
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) {
+        this.hideTextInputModal();
+      }
+    });
+    
+    // Proceed button event
+    proceedBtn.addEventListener('click', () => {
+      const textContent = textarea.value.trim();
+      if (textContent) {
+        this.handleTextProceed(textContent);
+      }
+    });
+    
+    // Enter key to proceed
+    textarea.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && e.ctrlKey) {
+        e.preventDefault();
+        const textContent = textarea.value.trim();
+        if (textContent) {
+          this.handleTextProceed(textContent);
+        }
+      }
+    });
+  },
+
+  /**
+   * Handle text proceed button click
+   */
+  handleTextProceed(textContent) {
+    console.log('[ButtonPanel] Processing text content, length:', textContent.length);
+    
+    // Hide the text input modal
+    this.hideTextInputModal();
+    
+    // Set current content type
+    this.topicsModal.currentContentType = 'text';
+    
+    // Create tab name from first 3 words
+    const words = textContent.trim().split(/\s+/);
+    const tabName = words.slice(0, 3).join(' ');
+    
+    console.log('[ButtonPanel] Creating text content with name:', tabName);
+    
+    // Create text content using the new data structure
+    const newContent = this.topicsModal.customContentModal.addContent('text', tabName, textContent, {
+      inputText: textContent,
+      createdAt: new Date().toISOString()
+    });
+    
+    if (!newContent) {
+      console.error('[ButtonPanel] ===== FAILED TO CREATE TEXT CONTENT =====');
+      this.showNotification('Failed to create text content. Please try again.', 'error');
+      return;
+    }
+
+    console.log('[ButtonPanel] Text content created successfully');
+    
+    // Show modal with only text contents
+    this.showCustomContentModalWithContents('text');
+    
+    // Ensure custom content modal is visible
+    console.log('[ButtonPanel] Ensuring custom content modal is visible...');
+    if (!this.topicsModal.customContentModal.overlay.classList.contains('visible')) {
+      this.topicsModal.customContentModal.overlay.classList.add('visible');
+      console.log('[ButtonPanel] Custom content modal is now visible');
+    } else {
+      console.log('[ButtonPanel] Custom content modal was already visible');
+    }
+    
+    // Update modal title
+    console.log('[ButtonPanel] Updating modal title to Text...');
+    this.updateCustomContentModalTitle('text');
+  },
+
+  /**
    * Show the button panel
    */
   show() {
@@ -9623,18 +10119,20 @@ const ButtonPanel = {
     wordCount: 100,
     difficulty: 'hard',
     processingOverlay: null,
-    currentContentType: 'topic', // Track which content type is currently active
+    currentContentType: 'topic', // Track which content type is currently active ('pdf', 'image', 'topic', 'text')
+    textInputModal: null, // Text input modal
     customContentModal: {
       overlay: null,
       modal: null,
       searchTerm: '',
       activeTabId: null,
-      activeContentType: null, // 'pdf', 'image', 'topic'
+      activeContentType: null, // 'pdf', 'image', 'topic', 'text'
       
       // New simplified data structure
       topicContents: [],
       imageContents: [],
       pdfContents: [],
+      textContents: [],
       nextTabId: 1, // Global counter for unique tab IDs
       
       // Helper methods for content management
@@ -9643,19 +10141,43 @@ const ButtonPanel = {
           case 'topic': return this.topicContents;
           case 'image': return this.imageContents;
           case 'pdf': return this.pdfContents;
+          case 'text': return this.textContents;
           default: return [];
         }
       },
       
       getContentByTabId: function(tabId) {
         // Search through all content types to find the content with matching tabId
-        const allContents = [
-          ...this.topicContents.map(item => ({...item, contentType: 'topic'})),
-          ...this.imageContents.map(item => ({...item, contentType: 'image'})),
-          ...this.pdfContents.map(item => ({...item, contentType: 'pdf'}))
-        ];
+        // Return reference to original object, not a copy
+        for (let i = 0; i < this.topicContents.length; i++) {
+          if (this.topicContents[i].tabId === tabId) {
+            this.topicContents[i].contentType = 'topic';
+            return this.topicContents[i];
+          }
+        }
         
-        return allContents.find(item => item.tabId === tabId);
+        for (let i = 0; i < this.imageContents.length; i++) {
+          if (this.imageContents[i].tabId === tabId) {
+            this.imageContents[i].contentType = 'image';
+            return this.imageContents[i];
+          }
+        }
+        
+        for (let i = 0; i < this.pdfContents.length; i++) {
+          if (this.pdfContents[i].tabId === tabId) {
+            this.pdfContents[i].contentType = 'pdf';
+            return this.pdfContents[i];
+          }
+        }
+        
+        for (let i = 0; i < this.textContents.length; i++) {
+          if (this.textContents[i].tabId === tabId) {
+            this.textContents[i].contentType = 'text';
+            return this.textContents[i];
+          }
+        }
+        
+        return null;
       },
       
       removeContentByTabId: function(tabId) {
@@ -9699,6 +10221,9 @@ const ButtonPanel = {
           case 'pdf':
             this.pdfContents.push(newContent);
             break;
+          case 'text':
+            this.textContents.push(newContent);
+            break;
           default:
             return null;
         }
@@ -9726,6 +10251,9 @@ const ButtonPanel = {
           case 'pdf':
             this.pdfContents = [];
             break;
+          case 'text':
+            this.textContents = [];
+            break;
         }
       },
       
@@ -9733,6 +10261,7 @@ const ButtonPanel = {
         this.topicContents = [];
         this.imageContents = [];
         this.pdfContents = [];
+        this.textContents = [];
       }
     }
   },
@@ -10505,6 +11034,13 @@ const ButtonPanel = {
           return `Topics: ${topicList}${suffix}`;
         }
         return 'Topic Content';
+      },
+      'text': () => {
+        if (metadata.inputText) {
+          const words = metadata.inputText.trim().split(/\s+/);
+          return words.slice(0, 3).join(' ');
+        }
+        return 'Text Content';
       },
       'default': () => 'Generated Content'
     };
@@ -11427,26 +11963,32 @@ const ButtonPanel = {
     const addTabBtn = this.topicsModal.customContentModal.addTabBtn;
     const tabsContainer = this.topicsModal.customContentModal.tabsContainer;
     console.log('[ButtonPanel] tabsContainer in attachCustomContentModalListeners:', tabsContainer);
+    console.log('[ButtonPanel] searchInput in attachCustomContentModalListeners:', searchInput);
     
     // Close modal events
     closeBtn.addEventListener('click', () => this.hideCustomContentModal());
     
     // Search functionality
-    searchInput.addEventListener('input', (e) => {
-      console.log('[ButtonPanel] Search input changed:', e.target.value);
-      const searchTerm = e.target.value;
-      
-      // Store search term for the current active tab
-      if (this.topicsModal.customContentModal.activeTabId) {
-        const tabId = parseInt(this.topicsModal.customContentModal.activeTabId);
-        const activeContent = this.topicsModal.customContentModal.getContentByTabId(tabId);
-        if (activeContent) {
-          activeContent.searchTerm = searchTerm;
+    if (searchInput) {
+      searchInput.addEventListener('input', (e) => {
+        console.log('[ButtonPanel] Search input changed:', e.target.value);
+        const searchTerm = e.target.value;
+        
+        // Store search term for the current active tab
+        if (this.topicsModal.customContentModal.activeTabId) {
+          const tabId = parseInt(this.topicsModal.customContentModal.activeTabId);
+          const activeContent = this.topicsModal.customContentModal.getContentByTabId(tabId);
+          if (activeContent) {
+            activeContent.searchTerm = searchTerm;
+            console.log('[ButtonPanel] Stored search term:', searchTerm, 'for tab:', tabId);
+          }
         }
-      }
-      
-      this.performSearch();
-    });
+        
+        this.performSearch();
+      });
+    } else {
+      console.error('[ButtonPanel] Search input not found!');
+    }
     
     // Add tab functionality
     addTabBtn.addEventListener('click', () => {
@@ -11457,6 +11999,8 @@ const ButtonPanel = {
         this.showPDFUploadModal();
       } else if (currentContentType === 'image') {
         this.showImageUploadModal();
+      } else if (currentContentType === 'text') {
+        this.showTextInputModal();
       } else {
         this.showTopicsModalForNewTab();
       }
@@ -11705,6 +12249,9 @@ const ButtonPanel = {
     if (contents.length > 0) {
       this.switchToTab(contents[0].tabId.toString());
     }
+    
+    // Show the custom content button
+    this.showCustomContentButton();
     
     // Show the modal
     setTimeout(() => {
@@ -12384,9 +12931,10 @@ const ButtonPanel = {
     const title = this.topicsModal.customContentModal.modal?.querySelector('.vocab-custom-content-title');
     if (title) {
       const headingMap = {
-        'pdf': 'Content from PDF',
-        'image': 'Content from Image', 
-        'topic': 'Topic contents',
+        'pdf': 'PDF Content',
+        'image': 'Image content', 
+        'topic': 'Topic content',
+        'text': 'Text content',
         'default': 'Generated Content'
       };
       
@@ -12461,9 +13009,10 @@ const ButtonPanel = {
     
     // Set heading based on content type
     const headingMap = {
-      'pdf': 'Content from PDF',
-      'image': 'Content from Image', 
-      'topic': 'Topic contents',
+      'pdf': 'PDF Content',
+      'image': 'Image content', 
+      'topic': 'Topic content',
+      'text': 'Text content',
       'default': 'Generated Content'
     };
     
@@ -12491,8 +13040,14 @@ const ButtonPanel = {
     
     const editorContent = this.topicsModal.customContentModal.editorContent;
     
-    console.log('[ButtonPanel] Search term:', searchTerm);
-    console.log('[ButtonPanel] Editor content:', editorContent);
+    console.log('[ButtonPanel] Search term:', JSON.stringify(searchTerm));
+    console.log('[ButtonPanel] Editor content element:', editorContent);
+    console.log('[ButtonPanel] Active tab ID:', this.topicsModal.customContentModal.activeTabId);
+    
+    if (!editorContent) {
+      console.error('[ButtonPanel] Editor content element not found!');
+      return;
+    }
     
     if (!searchTerm || !searchTerm.trim()) {
       console.log('[ButtonPanel] No search term, removing highlights');
@@ -12508,12 +13063,17 @@ const ButtonPanel = {
     
     // Get the original content without highlights
     let content = editorContent.innerHTML;
+    console.log('[ButtonPanel] Original content length:', content.length);
+    console.log('[ButtonPanel] Content preview:', content.substring(0, 200));
     
     // Remove existing highlights
     content = content.replace(/<span class="vocab-search-highlight">(.*?)<\/span>/gim, '$1');
     
     // Add new highlights
     const regex = new RegExp(`(${searchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gim');
+    const matches = content.match(regex);
+    console.log('[ButtonPanel] Found matches:', matches ? matches.length : 0);
+    
     content = content.replace(regex, '<span class="vocab-search-highlight">$1</span>');
     
     console.log('[ButtonPanel] Updated content with highlights');
