@@ -1516,7 +1516,7 @@ const WordSelector = {
       
       .vocab-word-popup-examples-container::-webkit-scrollbar-thumb {
         background: #D8C1E8;
-        border-radius: 0;
+        border-radius: 4px;
       }
       
       .vocab-word-popup-examples {
@@ -2570,6 +2570,25 @@ const TextSelector = {
       /* Notification message text */
       .vocab-notification-message {
         margin-left: 24px;
+      }
+      
+      /* Notification types */
+      .vocab-notification-error {
+        background: #ffebee;
+        color: #c62828;
+        border-left: 4px solid #c62828;
+      }
+      
+      .vocab-notification-success {
+        background: #e8f5e8;
+        color: #2e7d32;
+        border-left: 4px solid #2e7d32;
+      }
+      
+      .vocab-notification-info {
+        background: #e3f2fd;
+        color: #1565c0;
+        border-left: 4px solid #1565c0;
       }
     `;
     
@@ -4385,7 +4404,7 @@ const ChatDialog = {
       
       .vocab-chat-messages::-webkit-scrollbar-thumb {
         background: #D8C1E8;
-        border-radius: 0;
+        border-radius: 4px;
       }
       
       /* No Messages State */
@@ -4821,6 +4840,81 @@ const ChatDialog = {
         position: relative;
       }
 
+      /* Image Processing Overlay Styles */
+      .vocab-image-processing-overlay {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(255, 255, 255, 0.8);
+        backdrop-filter: blur(4px);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 1000;
+        opacity: 0;
+        visibility: hidden;
+        transition: opacity 0.3s ease, visibility 0.3s ease;
+        border-radius: 20px;
+      }
+
+      .vocab-image-processing-overlay.visible {
+        opacity: 1;
+        visibility: visible;
+      }
+
+      .vocab-image-processing-content {
+        background: transparent;
+        border-radius: 20px;
+        padding: 40px;
+        box-shadow: none;
+        text-align: center;
+        max-width: 400px;
+        width: 90%;
+      }
+
+      .vocab-image-processing-text {
+        margin-bottom: 20px;
+      }
+
+      .vocab-image-processing-main {
+        font-size: 18px;
+        font-weight: 500;
+        color: #A24EFF;
+        margin-bottom: 8px;
+        font-family: 'Inter', 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      }
+
+      .vocab-image-processing-sub {
+        font-size: 14px;
+        font-weight: 400;
+        color: #666;
+        margin: 0;
+        font-family: 'Inter', 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      }
+
+      .vocab-image-processing-spinner {
+        width: 40px;
+        height: 40px;
+        margin: 0 auto 20px;
+        position: relative;
+      }
+
+      .vocab-image-processing-spinner-circle {
+        width: 100%;
+        height: 100%;
+        border: 3px solid #f3f3f3;
+        border-top: 3px solid #A24EFF;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+      }
+
+      @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+      }
+
       .vocab-processing-icon::before {
         content: '';
         position: absolute;
@@ -5018,9 +5112,10 @@ const ChatDialog = {
         padding-bottom: 0;
         background: var(--vocab-background-white);
         border-bottom: none;
-        min-height: 60px;
+        min-height: 40px;
         position: relative;
         margin: 0 var(--vocab-spacing-lg) 0 var(--vocab-spacing-lg);
+        margin-bottom: 0;
       }
 
       .vocab-custom-content-tabs::before {
@@ -5036,10 +5131,32 @@ const ChatDialog = {
         gap: 0;
         padding: 0;
         border: none;
+        margin: 0;
+        position: relative;
       }
 
       .vocab-custom-content-tabs-container::-webkit-scrollbar {
         display: none;
+      }
+
+      /* Sliding tab background */
+      .vocab-custom-content-tabs-container::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: var(--sliding-bg-left, 0);
+        width: var(--sliding-bg-width, 0);
+        height: 100%;
+        background: rgba(162, 78, 255, 0.1);
+        border-radius: 10px;
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        z-index: 0;
+        pointer-events: none;
+        opacity: 0;
+      }
+
+      .vocab-custom-content-tabs-container.has-active-tab::before {
+        opacity: 1;
       }
 
       /* Tab transition animation */
@@ -5053,7 +5170,7 @@ const ChatDialog = {
         border: none;
         color: rgba(162, 78, 255, 0.8);
         cursor: pointer;
-        padding: var(--vocab-spacing-sm);
+        padding: var(--vocab-spacing-xs);
         border-radius: var(--vocab-border-radius-sm);
         transition: all var(--vocab-transition-normal);
         display: flex;
@@ -5061,8 +5178,8 @@ const ChatDialog = {
         justify-content: center;
         opacity: 1;
         box-shadow: none;
-        min-width: 36px;
-        height: 36px;
+        min-width: 32px;
+        height: 32px;
       }
 
       .vocab-custom-content-tab-arrow:hover {
@@ -5089,8 +5206,8 @@ const ChatDialog = {
       .vocab-custom-content-tab {
         display: flex;
         align-items: center;
-        padding: var(--vocab-spacing-sm) var(--vocab-spacing-md);
-        background: var(--vocab-background-white);
+        padding: var(--vocab-spacing-xs) var(--vocab-spacing-sm);
+        background: transparent;
         border: none;
         border-radius: 0;
         cursor: pointer;
@@ -5101,6 +5218,7 @@ const ChatDialog = {
         box-shadow: none;
         overflow: hidden;
         color: rgba(162, 78, 255, 0.7);
+        z-index: 1;
       }
 
       /* Add vertical separators between tabs */
@@ -5150,13 +5268,13 @@ const ChatDialog = {
       }
 
       .vocab-custom-content-tab.active {
-        background: rgba(162, 78, 255, 0.1);
+        background: transparent;
         border: none;
         color: rgba(162, 78, 255, 0.9);
         z-index: 1;
         transform: none;
         box-shadow: none;
-        border-radius: 10px 10px 0 0;
+        border-radius: 0;
       }
 
       .vocab-custom-content-tab.active::before {
@@ -5188,7 +5306,7 @@ const ChatDialog = {
         text-overflow: ellipsis;
         margin-right: var(--vocab-spacing-sm);
         color: inherit;
-        cursor: help;
+        cursor: pointer;
         transition: all var(--vocab-transition-fast);
       }
 
@@ -5201,49 +5319,6 @@ const ChatDialog = {
         transform: scale(1.02);
       }
 
-      /* Enhanced tooltip styling */
-      .vocab-custom-content-tab-title:hover::after {
-        content: attr(title);
-        position: absolute;
-        bottom: 100%;
-        left: 50%;
-        transform: translateX(-50%);
-        background: var(--vocab-text-primary);
-        color: var(--vocab-background-white);
-        padding: var(--vocab-spacing-xs) var(--vocab-spacing-sm);
-        border-radius: var(--vocab-border-radius-sm);
-        font-size: 12px;
-        white-space: nowrap;
-        z-index: 1000;
-        box-shadow: var(--vocab-shadow-medium);
-        pointer-events: none;
-        opacity: 0;
-        animation: tooltipFadeIn var(--vocab-transition-normal) ease-out forwards;
-      }
-
-      .vocab-custom-content-tab-title:hover::before {
-        content: '';
-        position: absolute;
-        bottom: 100%;
-        left: 50%;
-        transform: translateX(-50%) translateY(100%);
-        border: 4px solid transparent;
-        border-top-color: var(--vocab-text-primary);
-        z-index: 1000;
-        opacity: 0;
-        animation: tooltipFadeIn var(--vocab-transition-normal) ease-out forwards;
-      }
-
-      @keyframes tooltipFadeIn {
-        from {
-          opacity: 0;
-          transform: translateX(-50%) translateY(4px);
-        }
-        to {
-          opacity: 1;
-          transform: translateX(-50%) translateY(0);
-        }
-      }
 
       .vocab-custom-content-tab-close {
         background: none;
@@ -5274,15 +5349,15 @@ const ChatDialog = {
         border: none;
         color: rgba(162, 78, 255, 0.8);
         cursor: pointer;
-        padding: var(--vocab-spacing-sm);
+        padding: var(--vocab-spacing-xs);
         border-radius: 50%;
         transition: all var(--vocab-transition-normal);
         display: flex;
         align-items: center;
         justify-content: center;
         box-shadow: none;
-        min-width: 36px;
-        height: 36px;
+        min-width: 32px;
+        height: 32px;
         flex-shrink: 0;
         position: sticky;
         right: 0;
@@ -5352,7 +5427,7 @@ const ChatDialog = {
         align-items: center;
         background: var(--vocab-background-white);
         position: relative;
-        margin-bottom: var(--vocab-spacing-xs);
+        margin-bottom: 0;
       }
 
       .vocab-custom-content-search::before {
@@ -5396,43 +5471,46 @@ const ChatDialog = {
 
       /* Settings Button Component */
       .vocab-custom-content-settings {
-        position: sticky;
-        top: var(--vocab-spacing-md);
+        position: absolute;
+        top: 50%;
         right: var(--vocab-spacing-md);
+        transform: translateY(-50%);
         width: 40px;
         height: 40px;
         background: transparent;
         border: none;
         border-radius: 50%;
         color: var(--vocab-primary-color);
-        display: flex;
+        display: none;
         align-items: center;
         justify-content: center;
         cursor: pointer;
         transition: all var(--vocab-transition-normal);
         z-index: 1000;
         box-shadow: none;
-        float: right;
-        margin-top: var(--vocab-spacing-md);
-        margin-right: var(--vocab-spacing-md);
+      }
+
+      /* Show settings button only for topics */
+      .vocab-custom-content-modal[data-content-type="topic"] .vocab-custom-content-settings {
+        display: flex;
       }
       
       .vocab-custom-content-settings:hover {
         background: transparent;
-        transform: none;
+        transform: translateY(-50%) scale(1.05);
         box-shadow: none;
         color: var(--vocab-primary-hover);
       }
-      
+
       .vocab-custom-content-settings:active {
-        transform: scale(1.1);
+        transform: translateY(-50%) scale(0.95);
       }
       
       .vocab-custom-content-settings svg {
         width: 24px;
         height: 24px;
         transition: transform var(--vocab-transition-normal);
-        fill: #A24EFF;
+        fill: #9527F5;
       }
 
       .vocab-custom-content-settings:hover svg {
@@ -5470,7 +5548,7 @@ const ChatDialog = {
 
       .vocab-custom-content-editor::-webkit-scrollbar-thumb {
         background: #D8C1E8;
-        border-radius: 0;
+        border-radius: 4px;
       }
 
       .vocab-custom-content-editor::-webkit-scrollbar-track {
@@ -5483,6 +5561,10 @@ const ChatDialog = {
         border-radius: 20px 0 0 20px;
       }
 
+      /* Add extra padding when scrollbar is visible */
+      .vocab-custom-content-editor.has-scrollbar .vocab-custom-content-editor-content {
+        padding: calc(var(--vocab-spacing-xl) + var(--vocab-spacing-md)) var(--vocab-spacing-xl) calc(var(--vocab-spacing-xl) + var(--vocab-spacing-md)) var(--vocab-spacing-xl);
+      }
 
       .vocab-custom-content-editor::before {
         display: none;
@@ -5496,8 +5578,18 @@ const ChatDialog = {
         overflow: auto;
         scrollbar-width: thin;
         scrollbar-color: var(--vocab-primary-color) var(--vocab-primary-lighter);
-        padding: var(--vocab-spacing-xl);
+        padding: var(--vocab-spacing-xl) var(--vocab-spacing-xl) var(--vocab-spacing-xl) var(--vocab-spacing-xl);
         background: transparent;
+        opacity: 1;
+        transition: opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      }
+
+      .vocab-custom-content-editor-content.fade-out {
+        opacity: 0;
+      }
+
+      .vocab-custom-content-editor-content.fade-in {
+        opacity: 1;
       }
 
       .vocab-custom-content-editor-content::-webkit-scrollbar {
@@ -5512,7 +5604,7 @@ const ChatDialog = {
 
       .vocab-custom-content-editor-content::-webkit-scrollbar-thumb {
         background: #D8C1E8;
-        border-radius: 0;
+        border-radius: 4px;
         border: 2px solid var(--vocab-background-white);
       }
 
@@ -5677,7 +5769,195 @@ const ChatDialog = {
         }
       }
 
-      /* Resize handles removed */
+      /* Resize Handles Component */
+      .vocab-custom-content-resize-handles {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        pointer-events: none;
+        z-index: 20;
+      }
+
+      .vocab-custom-content-resize-handle {
+        position: absolute;
+        background: transparent;
+        border: none;
+        pointer-events: all;
+        cursor: pointer;
+        opacity: 1;
+        transition: opacity var(--vocab-transition-normal);
+      }
+      
+      /* Edge handles */
+      .vocab-custom-content-resize-handle-top,
+      .vocab-custom-content-resize-handle-bottom {
+        left: 20px;
+        right: 20px;
+        height: 8px;
+        cursor: ns-resize;
+      }
+      
+      .vocab-custom-content-resize-handle-top {
+        top: -4px;
+      }
+      
+      .vocab-custom-content-resize-handle-bottom {
+        bottom: -4px;
+      }
+      
+      .vocab-custom-content-resize-handle-left,
+      .vocab-custom-content-resize-handle-right {
+        top: 20px;
+        bottom: 20px;
+        width: 8px;
+        cursor: ew-resize;
+      }
+      
+      .vocab-custom-content-resize-handle-left {
+        left: -4px;
+      }
+      
+      .vocab-custom-content-resize-handle-right {
+        right: -4px;
+      }
+      
+      /* Corner handles - positioned on rounded border */
+      .vocab-custom-content-resize-handle-top-left,
+      .vocab-custom-content-resize-handle-top-right,
+      .vocab-custom-content-resize-handle-bottom-left,
+      .vocab-custom-content-resize-handle-bottom-right {
+        width: 20px;
+        height: 20px;
+      }
+
+      .vocab-custom-content-resize-handle-top-left {
+        top: 0px;
+        left: 0px;
+        cursor: nw-resize;
+      }
+
+      .vocab-custom-content-resize-handle-top-right {
+        top: 0px;
+        right: 0px;
+        cursor: ne-resize;
+      }
+
+      .vocab-custom-content-resize-handle-bottom-left {
+        bottom: 0px;
+        left: 0px;
+        cursor: sw-resize;
+      }
+
+      .vocab-custom-content-resize-handle-bottom-right {
+        bottom: 0px;
+        right: 0px;
+        cursor: se-resize;
+      }
+
+      /* Gripper icons - purple strips always visible */
+      .vocab-custom-content-resize-handle::before {
+        content: '';
+        position: absolute;
+        background: #9527F5;
+        transition: all var(--vocab-transition-normal);
+        box-shadow: 0 0 8px rgba(149, 39, 245, 0.3);
+      }
+
+      /* Top and bottom edge grippers */
+      .vocab-custom-content-resize-handle-top::before,
+      .vocab-custom-content-resize-handle-bottom::before {
+        left: 50%;
+        top: 50%;
+        transform: translate(-50%, -50%);
+        width: 40px;
+        height: 4px;
+        border-radius: 2px;
+      }
+
+      /* Left and right edge grippers */
+      .vocab-custom-content-resize-handle-left::before,
+      .vocab-custom-content-resize-handle-right::before {
+        left: 50%;
+        top: 50%;
+        transform: translate(-50%, -50%);
+        width: 4px;
+        height: 40px;
+        border-radius: 2px;
+      }
+
+      /* Corner grippers - curved arcs following rounded corners */
+      .vocab-custom-content-resize-handle-top-left::before,
+      .vocab-custom-content-resize-handle-top-right::before,
+      .vocab-custom-content-resize-handle-bottom-left::before,
+      .vocab-custom-content-resize-handle-bottom-right::before {
+        left: 50%;
+        top: 50%;
+        transform: translate(-50%, -50%);
+        width: 20px;
+        height: 20px;
+        background: transparent;
+        box-shadow: none;
+      }
+
+      /* Top-left corner arc */
+      .vocab-custom-content-resize-handle-top-left::before {
+        border-top: 4px solid #9527F5;
+        border-left: 4px solid #9527F5;
+        border-right: none;
+        border-bottom: none;
+        border-radius: 20px 0 0 0;
+        background: transparent;
+      }
+
+      /* Top-right corner arc */
+      .vocab-custom-content-resize-handle-top-right::before {
+        border-top: 4px solid #9527F5;
+        border-right: 4px solid #9527F5;
+        border-left: none;
+        border-bottom: none;
+        border-radius: 0 20px 0 0;
+        background: transparent;
+      }
+
+      /* Bottom-left corner arc */
+      .vocab-custom-content-resize-handle-bottom-left::before {
+        border-bottom: 4px solid #9527F5;
+        border-left: 4px solid #9527F5;
+        border-right: none;
+        border-top: none;
+        border-radius: 0 0 0 20px;
+        background: transparent;
+      }
+
+      /* Bottom-right corner arc */
+      .vocab-custom-content-resize-handle-bottom-right::before {
+        border-bottom: 4px solid #9527F5;
+        border-right: 4px solid #9527F5;
+        border-left: none;
+        border-top: none;
+        border-radius: 0 0 20px 0;
+        background: transparent;
+      }
+
+      /* Handles are always visible */
+
+      /* Enhanced purple strips on handle hover */
+      .vocab-custom-content-resize-handle:hover::before {
+        background: #9527F5;
+        box-shadow: 0 0 12px rgba(149, 39, 245, 0.5);
+        transform: translate(-50%, -50%) scale(1.1);
+      }
+
+      /* Corner strips maintain arc styling on hover - no color change */
+      .vocab-custom-content-resize-handle-top-left:hover::before,
+      .vocab-custom-content-resize-handle-top-right:hover::before,
+      .vocab-custom-content-resize-handle-bottom-left:hover::before,
+      .vocab-custom-content-resize-handle-bottom-right:hover::before {
+        transform: translate(-50%, -50%) scale(1.1);
+        box-shadow: none;
+      }
 
       /* Enhanced Responsive Design */
       @media (max-width: 1200px) {
@@ -9093,6 +9373,220 @@ const ButtonPanel = {
     this.updateState({ showAsk: show });
   },
 
+  /**
+   * Show notification banner at top right corner
+   * @param {string} message - Message to display
+   * @param {string} type - Type of notification ('success', 'error', 'info')
+   */
+  showNotification(message, type = 'info') {
+    console.log('[ButtonPanel] ===== SHOWING NOTIFICATION =====');
+    console.log('[ButtonPanel] Message:', message);
+    console.log('[ButtonPanel] Type:', type);
+    
+    // Check if notification already exists
+    const existingNotification = document.getElementById('vocab-button-panel-notification');
+    if (existingNotification) {
+      existingNotification.remove();
+    }
+    
+    // Create notification element
+    const notification = document.createElement('div');
+    notification.id = 'vocab-button-panel-notification';
+    notification.className = `vocab-notification vocab-notification-${type}`;
+    
+    // Create close button
+    const closeBtn = document.createElement('button');
+    closeBtn.className = 'vocab-notification-close';
+    closeBtn.innerHTML = `
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M9 3L3 9M3 3l6 6" stroke="#9527F5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    `;
+    
+    // Close button click handler
+    closeBtn.addEventListener('click', () => {
+      notification.classList.remove('visible');
+      setTimeout(() => {
+        notification.remove();
+      }, 300);
+    });
+    
+    // Create message text
+    const messageText = document.createElement('span');
+    messageText.className = 'vocab-notification-message';
+    messageText.textContent = message;
+    
+    // Assemble notification
+    notification.appendChild(closeBtn);
+    notification.appendChild(messageText);
+    
+    // Add to document
+    document.body.appendChild(notification);
+    
+    // Show with animation
+    setTimeout(() => {
+      notification.classList.add('visible');
+    }, 100);
+    
+    // Auto-hide after 5 seconds
+    setTimeout(() => {
+      if (notification.parentNode) {
+        notification.classList.remove('visible');
+        setTimeout(() => {
+          notification.remove();
+        }, 300);
+      }
+    }, 5000);
+    
+    console.log('[ButtonPanel] Notification displayed successfully');
+  },
+
+  /**
+   * Handle PDF file upload and processing
+   * @param {File} file - The PDF file to process
+   */
+  async handlePDFUpload(file) {
+    console.log('[ButtonPanel] ===== PDF UPLOAD PROCESSING STARTED =====');
+    console.log('[ButtonPanel] Processing file:', file.name);
+    
+    try {
+      console.log('[ButtonPanel] Creating FormData for API call...');
+      // Create FormData for file upload
+      const formData = new FormData();
+      formData.append('file', file);
+      
+      console.log('[ButtonPanel] Making API call to:', 'https://caten-blush.vercel.app/api/v1/pdf-to-text');
+      // Make API call to process PDF
+      const response = await fetch('https://caten-blush.vercel.app/api/v1/pdf-to-text', {
+        method: 'POST',
+        body: formData,
+        headers: {
+          'Accept': 'application/json'
+        }
+      });
+      
+      console.log('[ButtonPanel] API response received, status:', response.status);
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      console.log('[ButtonPanel] ===== API SUCCESS =====');
+      console.log('[ButtonPanel] Response data:', data);
+      console.log('[ButtonPanel] Text content length:', data.text ? data.text.length : 'No text');
+      
+      // API SUCCESS: Close both processing overlay and PDF modal, then open custom content modal
+      console.log('[ButtonPanel] Hiding processing overlay...');
+      this.hidePDFProcessingOverlayFromModal();
+      
+      console.log('[ButtonPanel] Closing PDF upload modal...');
+      this.hidePDFUploadModal();
+      
+      console.log('[ButtonPanel] Creating PDF tab and loading content...');
+      await this.createPDFTabAndLoadContent(file.name, data.text);
+      
+      console.log('[ButtonPanel] ===== PDF UPLOAD PROCESSING COMPLETED SUCCESSFULLY =====');
+      
+    } catch (error) {
+      console.error('[ButtonPanel] ===== API ERROR =====');
+      console.error('[ButtonPanel] Error details:', error);
+      
+      // API ERROR: Close processing overlay, keep PDF modal open, show error banner
+      console.log('[ButtonPanel] Hiding processing overlay due to error...');
+      this.hidePDFProcessingOverlayFromModal();
+      
+      console.log('[ButtonPanel] Keeping PDF modal open and showing error notification...');
+      this.showNotification('Failed to process PDF file. Please try again.', 'error');
+      
+      console.log('[ButtonPanel] ===== PDF UPLOAD PROCESSING FAILED =====');
+    }
+  },
+
+  /**
+   * Show PDF processing loading state
+   */
+  showPDFProcessingState() {
+    console.log('[ButtonPanel] Showing PDF processing overlay');
+    
+    // Create processing overlay if it doesn't exist
+    if (!this.topicsModal.processingOverlay) {
+      this.createProcessingOverlay();
+    }
+    
+    // Update the processing text for PDF
+    const processingText = this.topicsModal.processingOverlay.querySelector('.vocab-processing-text');
+    if (processingText) {
+      processingText.textContent = 'PDF processing activity...';
+    }
+    
+    // Show the overlay
+    this.topicsModal.processingOverlay.classList.add('visible');
+  },
+
+  /**
+   * Hide PDF processing loading state
+   */
+  hidePDFProcessingState() {
+    console.log('[ButtonPanel] Hiding PDF processing overlay');
+    
+    if (this.topicsModal.processingOverlay) {
+      this.topicsModal.processingOverlay.classList.remove('visible');
+    }
+  },
+
+  /**
+   * Create PDF tab and load generated content
+   * @param {string} fileName - Name of the PDF file
+   * @param {string} content - Generated markdown content
+   */
+  async createPDFTabAndLoadContent(fileName, content) {
+    console.log('[ButtonPanel] ===== CREATING PDF TAB AND LOADING CONTENT =====');
+    console.log('[ButtonPanel] File name:', fileName);
+    console.log('[ButtonPanel] Content length:', content ? content.length : 'No content');
+    
+    // Create PDF tab using the correct addTab method
+    const tabName = fileName.replace('.pdf', '');
+    console.log('[ButtonPanel] Creating tab with name:', tabName);
+    
+    const newTab = this.topicsModal.customContentModal.addTab('pdf', tabName, content, {
+      fileName: fileName,
+      uploadedAt: new Date().toISOString()
+    });
+    
+    if (!newTab) {
+      console.error('[ButtonPanel] ===== FAILED TO CREATE PDF TAB =====');
+      this.showNotification('Failed to create PDF tab. Please try again.', 'error');
+      return;
+    }
+    
+    console.log('[ButtonPanel] PDF tab created successfully:', newTab.id);
+    
+    // Switch to the new PDF tab
+    console.log('[ButtonPanel] Switching to PDF tab:', newTab.id);
+    this.switchToTab(newTab.id);
+    
+    // Ensure custom content modal is visible
+    console.log('[ButtonPanel] Ensuring custom content modal is visible...');
+    if (!this.topicsModal.customContentModal.overlay.classList.contains('visible')) {
+      this.topicsModal.customContentModal.overlay.classList.add('visible');
+      console.log('[ButtonPanel] Custom content modal is now visible');
+    } else {
+      console.log('[ButtonPanel] Custom content modal was already visible');
+    }
+    
+    // Update modal title
+    console.log('[ButtonPanel] Updating modal title to PDF...');
+    this.updateCustomContentModalTitle('pdf');
+    
+    // Load content in editor
+    console.log('[ButtonPanel] Loading content in editor...');
+    console.log('[ButtonPanel] Content preview:', content.substring(0, 200) + '...');
+    this.updateCustomContentEditor(content);
+    
+    console.log('[ButtonPanel] ===== PDF TAB CREATED AND CONTENT LOADED SUCCESSFULLY =====');
+  },
+
   // ===================================
   // Topics Modal Functionality
   // ===================================
@@ -10186,30 +10680,190 @@ const ButtonPanel = {
    * Handle uploaded image file
    */
   handleImageFile(file) {
-    console.log('[ButtonPanel] Handling image file:', file.name);
-    
-    // Check file size (5MB limit)
-    if (file.size > 5 * 1024 * 1024) {
-      alert('File size exceeds 5MB limit. Please select a smaller image.');
-      return;
-    }
-    
-    // Check file type
-    if (!file.type.startsWith('image/')) {
-      alert('Please select a valid image file.');
-      return;
-    }
-    
-    // TODO: Process the image file (OCR, text extraction, etc.)
-    console.log('[ButtonPanel] Image file validated:', {
+    console.log('[ButtonPanel] ===== IMAGE FILE UPLOAD STARTED =====');
+    console.log('[ButtonPanel] File details:', {
       name: file.name,
       size: file.size,
       type: file.type
     });
     
-    // For now, show success message and close modal
-    alert(`Image "${file.name}" uploaded successfully! Text extraction feature coming soon.`);
-    this.hideImageUploadModal();
+    // Check file size (5MB limit)
+    if (file.size > 5 * 1024 * 1024) {
+      this.showNotification('File size exceeds 5MB limit. Please select a smaller image.', 'error');
+      return;
+    }
+    
+    // Check file type - support JPG, PNG, JPEG, HEIC
+    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/heic'];
+    if (!allowedTypes.includes(file.type.toLowerCase())) {
+      this.showNotification('Please select a valid image file (JPG, PNG, JPEG, HEIC).', 'error');
+      return;
+    }
+    
+    console.log('[ButtonPanel] File validation passed, starting processing...');
+    this.showImageProcessingOverlayOnModal(); // Keep image modal open and show processing overlay on top
+    this.handleImageUpload(file);
+  },
+
+  /**
+   * Handle image upload API call
+   */
+  async handleImageUpload(file) {
+    console.log('[ButtonPanel] ===== IMAGE UPLOAD PROCESSING STARTED =====');
+    console.log('[ButtonPanel] Uploading file:', file.name);
+    
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      
+      console.log('[ButtonPanel] Making API call to image-to-text endpoint...');
+      const response = await fetch('https://caten-blush.vercel.app/api/v1/image-to-text', {
+        method: 'POST',
+        body: formData
+      });
+      
+      console.log('[ButtonPanel] API response received:', response.status);
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      console.log('[ButtonPanel] ===== API SUCCESS =====');
+      console.log('[ButtonPanel] Response data:', data);
+      
+      this.hideImageProcessingOverlayFromModal();
+      this.hideImageUploadModal(); // Close image upload modal on success
+      await this.createImageTabAndLoadContent(data.topicName, data.text);
+      
+      console.log('[ButtonPanel] ===== IMAGE UPLOAD PROCESSING COMPLETED SUCCESSFULLY =====');
+      
+    } catch (error) {
+      console.error('[ButtonPanel] ===== API ERROR =====');
+      console.error('[ButtonPanel] Error details:', error);
+      
+      this.hideImageProcessingOverlayFromModal();
+      // Image modal remains open
+      this.showNotification('Failed to process image file. Please try again.', 'error');
+    }
+  },
+
+  /**
+   * Create image tab and load content
+   */
+  async createImageTabAndLoadContent(topicName, content) {
+    console.log('[ButtonPanel] ===== CREATING IMAGE TAB AND LOADING CONTENT =====');
+    console.log('[ButtonPanel] Topic name:', topicName);
+    console.log('[ButtonPanel] Content length:', content.length);
+    
+    // Create new tab for image content
+    const newTab = this.topicsModal.customContentModal.addTab(topicName, 'image');
+    console.log('[ButtonPanel] New tab created:', newTab.id);
+    
+    // Switch to the new tab
+    this.switchToTab(newTab.id);
+    
+    // Ensure custom content modal is visible
+    if (!this.topicsModal.customContentModal.overlay.classList.contains('visible')) {
+      this.topicsModal.customContentModal.overlay.classList.add('visible');
+    }
+    
+    // Update modal title
+    this.updateCustomContentModalTitle('image');
+    
+    // Load content into editor
+    this.updateCustomContentEditor(content);
+    
+    console.log('[ButtonPanel] ===== IMAGE TAB AND CONTENT LOADED SUCCESSFULLY =====');
+  },
+
+  /**
+   * Show image processing overlay on modal
+   */
+  showImageProcessingOverlayOnModal() {
+    console.log('[ButtonPanel] ===== SHOWING IMAGE PROCESSING OVERLAY =====');
+    
+    if (!this.imageUploadModal || !this.imageUploadModal.modal) {
+      console.error('[ButtonPanel] Image upload modal not found');
+      return;
+    }
+    
+    // Create processing overlay if it doesn't exist
+    if (!this.imageProcessingOverlay) {
+      this.createImageProcessingOverlay();
+    }
+    
+    // Show the overlay
+    if (this.imageProcessingOverlay) {
+      this.imageProcessingOverlay.classList.add('visible');
+      console.log('[ButtonPanel] Image processing overlay shown');
+    }
+  },
+
+  /**
+   * Hide image processing overlay from modal
+   */
+  hideImageProcessingOverlayFromModal() {
+    console.log('[ButtonPanel] ===== HIDING IMAGE PROCESSING OVERLAY =====');
+    
+    if (this.imageProcessingOverlay) {
+      this.imageProcessingOverlay.classList.remove('visible');
+      console.log('[ButtonPanel] Image processing overlay hidden');
+    }
+  },
+
+  /**
+   * Create image processing overlay
+   */
+  createImageProcessingOverlay() {
+    console.log('[ButtonPanel] ===== CREATING IMAGE PROCESSING OVERLAY =====');
+    
+    if (!this.imageUploadModal || !this.imageUploadModal.modal) {
+      console.error('[ButtonPanel] Image upload modal not found for overlay creation');
+      return;
+    }
+    
+    // Create overlay element
+    const overlay = document.createElement('div');
+    overlay.className = 'vocab-image-processing-overlay';
+    overlay.id = 'vocab-image-processing-overlay';
+    
+    // Create processing content
+    overlay.innerHTML = `
+      <div class="vocab-image-processing-content">
+        <div class="vocab-image-processing-spinner">
+          <div class="vocab-image-processing-spinner-circle"></div>
+        </div>
+        <div class="vocab-image-processing-text">
+          <p class="vocab-image-processing-main">Reading image file...</p>
+          <p class="vocab-image-processing-sub">Extracting text from image</p>
+        </div>
+      </div>
+    `;
+    
+    // Append to image upload modal
+    this.imageUploadModal.modal.appendChild(overlay);
+    
+    // Store reference
+    this.imageProcessingOverlay = overlay;
+    
+    console.log('[ButtonPanel] Image processing overlay created successfully');
+  },
+
+  /**
+   * Hide image upload modal for processing (without showing custom content button)
+   */
+  hideImageUploadModalForProcessing() {
+    console.log('[ButtonPanel] Hiding image upload modal for processing');
+    
+    if (this.imageUploadModal && this.imageUploadModal.overlay) {
+      this.imageUploadModal.overlay.classList.remove('visible');
+    }
+    if (this.imageUploadModal && this.imageUploadModal.modal) {
+      this.imageUploadModal.modal.classList.remove('visible');
+    }
+    
+    // Don't show the custom content button - we want to keep the custom content modal visible
   },
 
   /**
@@ -10244,6 +10898,89 @@ const ButtonPanel = {
     if (this.pdfUploadModal.modal) {
       this.pdfUploadModal.modal.classList.add('visible');
     }
+  },
+
+  /**
+   * Show processing overlay on top of PDF modal
+   */
+  showPDFProcessingOverlayOnModal() {
+    console.log('[ButtonPanel] ===== SHOWING PDF PROCESSING OVERLAY =====');
+    
+    // Create processing overlay if it doesn't exist
+    if (!this.pdfUploadModal.processingOverlay) {
+      this.createPDFProcessingOverlay();
+    }
+    
+    // Update the processing text for PDF
+    const processingText = this.pdfUploadModal.processingOverlay.querySelector('.vocab-processing-text');
+    if (processingText) {
+      processingText.textContent = 'Reading PDF file...';
+    }
+    
+    // Show the overlay on top of PDF modal
+    this.pdfUploadModal.processingOverlay.classList.add('visible');
+    console.log('[ButtonPanel] PDF processing overlay is now visible');
+  },
+
+  /**
+   * Hide processing overlay from PDF modal
+   */
+  hidePDFProcessingOverlayFromModal() {
+    console.log('[ButtonPanel] ===== HIDING PDF PROCESSING OVERLAY =====');
+    
+    if (this.pdfUploadModal.processingOverlay) {
+      this.pdfUploadModal.processingOverlay.classList.remove('visible');
+      console.log('[ButtonPanel] PDF processing overlay hidden');
+    }
+  },
+
+  /**
+   * Create processing overlay for PDF modal
+   */
+  createPDFProcessingOverlay() {
+    console.log('[ButtonPanel] ===== CREATING PDF PROCESSING OVERLAY =====');
+    
+    const overlay = document.createElement('div');
+    overlay.className = 'vocab-processing-overlay';
+    overlay.id = 'vocab-pdf-processing-overlay';
+    
+    const content = document.createElement('div');
+    content.className = 'vocab-processing-content';
+    
+    const text = document.createElement('div');
+    text.className = 'vocab-processing-text';
+    text.textContent = 'Reading PDF file...';
+    
+    const icon = document.createElement('div');
+    icon.className = 'vocab-processing-icon';
+    
+    content.appendChild(text);
+    content.appendChild(icon);
+    overlay.appendChild(content);
+    
+    // Add to PDF modal instead of document body
+    this.pdfUploadModal.modal.appendChild(overlay);
+    
+    // Store reference
+    this.pdfUploadModal.processingOverlay = overlay;
+    
+    console.log('[ButtonPanel] PDF processing overlay created and added to PDF modal');
+  },
+
+  /**
+   * Hide PDF upload modal for processing (without showing custom content button)
+   */
+  hidePDFUploadModalForProcessing() {
+    console.log('[ButtonPanel] Hiding PDF upload modal for processing');
+    
+    if (this.pdfUploadModal && this.pdfUploadModal.overlay) {
+      this.pdfUploadModal.overlay.classList.remove('visible');
+    }
+    if (this.pdfUploadModal && this.pdfUploadModal.modal) {
+      this.pdfUploadModal.modal.classList.remove('visible');
+    }
+    
+    // Don't show the custom content button - we want to keep the custom content modal visible
   },
 
   /**
@@ -10417,30 +11154,34 @@ const ButtonPanel = {
    * Handle uploaded PDF file
    */
   handlePDFFile(file) {
-    console.log('[ButtonPanel] Handling PDF file:', file.name);
+    console.log('[ButtonPanel] ===== PDF FILE UPLOAD STARTED =====');
+    console.log('[ButtonPanel] File details:', {
+      name: file.name,
+      size: file.size,
+      type: file.type
+    });
     
     // Check file size (5MB limit)
     if (file.size > 5 * 1024 * 1024) {
+      console.log('[ButtonPanel] File size exceeds limit:', file.size);
       alert('File size exceeds 5MB limit. Please select a smaller PDF.');
       return;
     }
     
     // Check file type
     if (file.type !== 'application/pdf') {
+      console.log('[ButtonPanel] Invalid file type:', file.type);
       alert('Please select a valid PDF file.');
       return;
     }
     
-    // TODO: Process the PDF file (text extraction, etc.)
-    console.log('[ButtonPanel] PDF file validated:', {
-      name: file.name,
-      size: file.size,
-      type: file.type
-    });
+    console.log('[ButtonPanel] File validation passed, starting processing...');
     
-    // For now, show success message and close modal
-    alert(`PDF "${file.name}" uploaded successfully! Text extraction feature coming soon.`);
-    this.hidePDFUploadModal();
+    // Keep PDF modal open and show processing overlay on top
+    this.showPDFProcessingOverlayOnModal();
+    
+    // Process the PDF file using the existing handlePDFUpload method
+    this.handlePDFUpload(file);
   },
 
   /**
@@ -10531,6 +11272,18 @@ const ButtonPanel = {
     
     searchSection.appendChild(searchInput);
     
+    // Settings button (positioned at rightmost end of search bar)
+    const settingsBtn = document.createElement('button');
+    settingsBtn.className = 'vocab-custom-content-settings';
+    settingsBtn.innerHTML = `
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="24" height="24" fill="#9527F5">
+        <path d="M487.4 315.7l-42.3-24.4c2.3-12.6 3.5-25.5 3.5-38.3s-1.2-25.8-3.5-38.3l42.3-24.4c8.2-4.7 11.4-15 7.3-23.6l-28.3-56.1c-4.1-8.1-13.2-12.1-22-9.5l-49.7 14.3c-19.6-17-41.6-30.7-65.4-40.1l-7.5-50.2c-1.4-9.4-9.2-16.2-18.6-16.2h-56.6c-9.4 0-17.2 6.8-18.6 16.2l-7.5 50.2c-23.8 9.4-45.8 23.1-65.4 40.1l-49.7-14.3c-8.8-2.6-17.9 1.4-22 9.5l-28.3 56.1c-4.1 8.6-.9 18.9 7.3 23.6l42.3 24.4c-2.3 12.6-3.5 25.5-3.5 38.3s1.2 25.8 3.5 38.3l-42.3 24.4c-8.2 4.7-11.4 15-7.3 23.6l28.3 56.1c4.1 8.1 13.2 12.1 22 9.5l49.7-14.3c19.6 17 41.6 30.7 65.4 40.1l7.5 50.2c1.4 9.4 9.2 16.2 18.6 16.2h56.6c9.4 0 17.2-6.8 18.6-16.2l7.5-50.2c23.8-9.4 45.8-23.1 65.4-40.1l49.7 14.3c8.8 2.6 17.9-1.4 22-9.5l28.3-56.1c4.1-8.6.9-18.9-7.3-23.6zM256 336c-44.1 0-80-35.9-80-80s35.9-80 80-80 80 35.9 80 80-35.9 80-80 80z"/>
+      </svg>
+    `;
+    settingsBtn.setAttribute('title', 'Regenerate content');
+    
+    searchSection.appendChild(settingsBtn);
+    
     // Editor section
     const editorSection = document.createElement('div');
     editorSection.className = 'vocab-custom-content-editor';
@@ -10538,33 +11291,7 @@ const ButtonPanel = {
     const editorContent = document.createElement('div');
     editorContent.className = 'vocab-custom-content-editor-content';
     
-    // Settings button (positioned inside editor at top right)
-    const settingsBtn = document.createElement('button');
-    settingsBtn.className = 'vocab-custom-content-settings';
-    settingsBtn.innerHTML = `
-      <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M10 2C10.5523 2 11 2.44772 11 3C11 3.55228 10.5523 4 10 4C9.44772 4 9 3.55228 9 3C9 2.44772 9.44772 2 10 2Z" fill="#A24EFF"/>
-        <path d="M10 6C10.5523 6 11 6.44772 11 7C11 7.55228 10.5523 8 10 8C9.44772 8 9 7.55228 9 7C9 6.44772 9.44772 6 10 6Z" fill="#A24EFF"/>
-        <path d="M10 10C10.5523 10 11 10.4477 11 11C11 11.5523 10.5523 12 10 12C9.44772 12 9 11.5523 9 11C9 10.4477 9.44772 10 10 10Z" fill="#A24EFF"/>
-        <path d="M10 14C10.5523 14 11 14.4477 11 15C11 15.5523 10.5523 16 10 16C9.44772 16 9 15.5523 9 15C9 14.4477 9.44772 14 10 14Z" fill="#A24EFF"/>
-        <path d="M10 18C10.5523 18 11 18.4477 11 19C11 19.5523 10.5523 20 10 20C9.44772 20 9 19.5523 9 19C9 18.4477 9.44772 18 10 18Z" fill="#A24EFF"/>
-        <path d="M14 2C14.5523 2 15 2.44772 15 3C15 3.55228 14.5523 4 14 4C13.4477 4 13 3.55228 13 3C13 2.44772 13.4477 2 14 2Z" fill="#A24EFF"/>
-        <path d="M14 6C14.5523 6 15 6.44772 15 7C15 7.55228 14.5523 8 14 8C13.4477 8 13 7.55228 13 7C13 6.44772 13.4477 6 14 6Z" fill="#A24EFF"/>
-        <path d="M14 10C14.5523 10 15 10.4477 15 11C15 11.5523 14.5523 12 14 12C13.4477 12 13 11.5523 13 11C13 10.4477 13.4477 10 14 10Z" fill="#A24EFF"/>
-        <path d="M14 14C14.5523 14 15 14.4477 15 15C15 15.5523 14.5523 16 14 16C13.4477 16 13 15.5523 13 15C13 14.4477 13.4477 14 14 14Z" fill="#A24EFF"/>
-        <path d="M14 18C14.5523 18 15 18.4477 15 19C15 19.5523 14.5523 20 14 20C13.4477 20 13 19.5523 13 19C13 18.4477 13.4477 18 14 18Z" fill="#A24EFF"/>
-        <path d="M6 2C6.55228 2 7 2.44772 7 3C7 3.55228 6.55228 4 6 4C5.44772 4 5 3.55228 5 3C5 2.44772 5.44772 2 6 2Z" fill="#A24EFF"/>
-        <path d="M6 6C6.55228 6 7 6.44772 7 7C7 7.55228 6.55228 8 6 8C5.44772 8 5 7.55228 5 7C5 6.44772 5.44772 6 6 6Z" fill="#A24EFF"/>
-        <path d="M6 10C6.55228 10 7 10.4477 7 11C7 11.5523 6.55228 12 6 12C5.44772 12 5 11.5523 5 11C5 10.4477 5.44772 10 6 10Z" fill="#A24EFF"/>
-        <path d="M6 14C6.55228 14 7 14.4477 7 15C7 15.5523 6.55228 16 6 16C5.44772 16 5 15.5523 5 15C5 14.4477 5.44772 14 6 14Z" fill="#A24EFF"/>
-        <path d="M6 18C6.55228 18 7 18.4477 7 19C7 19.5523 6.55228 20 6 20C5.44772 20 5 19.5523 5 19C5 18.4477 5.44772 18 6 18Z" fill="#A24EFF"/>
-        <circle cx="10" cy="10" r="3" fill="#A24EFF"/>
-      </svg>
-    `;
-    settingsBtn.setAttribute('title', 'Regenerate content');
-    
     editorSection.appendChild(editorContent);
-    editorSection.appendChild(settingsBtn);
     
     // Function to check and update scrollbar visibility
     const updateScrollbarVisibility = () => {
@@ -10589,7 +11316,9 @@ const ButtonPanel = {
     modal.appendChild(tabsSection);
     modal.appendChild(editorSection);
     
-    // Resize handles removed
+    // Add resize handles
+    const resizeHandles = this.createResizeHandles();
+    modal.appendChild(resizeHandles);
     
     overlay.appendChild(modal);
     
@@ -10645,7 +11374,16 @@ const ButtonPanel = {
     
     // Add tab functionality
     addTabBtn.addEventListener('click', () => {
-      this.showTopicsModalForNewTab();
+      // Check current content type to determine which modal to show
+      const currentContentType = this.topicsModal.customContentModal.activeContentType;
+      
+      if (currentContentType === 'pdf') {
+        this.showPDFUploadModal();
+      } else if (currentContentType === 'image') {
+        this.showImageUploadModal();
+      } else {
+        this.showTopicsModalForNewTab();
+      }
     });
     
     // Settings button functionality
@@ -11037,6 +11775,7 @@ const ButtonPanel = {
     const tabsContainer = this.topicsModal.customContentModal.tabsContainer;
     if (tabsContainer) {
       tabsContainer.classList.add('tab-transitioning');
+      tabsContainer.classList.add('has-active-tab');
     }
     
     // Update tab visual states
@@ -11048,10 +11787,32 @@ const ButtonPanel = {
       }
     });
     
-    // Update content using new container system
+    // Update modal content type for settings button visibility
+    const contentType = tabId.split('-')[0];
+    this.topicsModal.customContentModal.modal.setAttribute('data-content-type', contentType);
+    this.topicsModal.customContentModal.activeContentType = contentType;
+    
+    // Update sliding background position
+    const activeTabElement = tabsContainer.querySelector(`[data-tab-id="${tabId}"]`);
+    if (activeTabElement) {
+      const tabRect = activeTabElement.getBoundingClientRect();
+      const containerRect = tabsContainer.getBoundingClientRect();
+      const left = tabRect.left - containerRect.left;
+      const width = tabRect.width;
+      tabsContainer.style.setProperty('--sliding-bg-left', `${left}px`);
+      tabsContainer.style.setProperty('--sliding-bg-width', `${width}px`);
+    }
+    
+    // Update content with fade transition
+    const editorContent = this.topicsModal.customContentModal.modal.querySelector('.vocab-custom-content-editor-content');
     const activeTab = this.topicsModal.customContentModal.getTabById(tabId);
-    if (activeTab) {
-      this.updateCustomContentEditor(activeTab.content);
+    if (activeTab && editorContent) {
+      // Fade out current content
+      editorContent.classList.add('fade-out');
+      
+      setTimeout(() => {
+        // Update content
+        editorContent.innerHTML = activeTab.content;
       
       // Update heading based on content type
       const contentType = tabId.split('-')[0];
@@ -11061,8 +11822,16 @@ const ButtonPanel = {
       const searchInput = this.topicsModal.customContentModal.searchInput;
       searchInput.value = activeTab.searchTerm || '';
       
+        // Fade in new content
+        editorContent.classList.remove('fade-out');
+        editorContent.classList.add('fade-in');
+        
+        setTimeout(() => {
+          editorContent.classList.remove('fade-in');
       // Perform search to highlight search term
       this.performSearch();
+        }, 300);
+      }, 150);
     }
     
     // Remove transition class after animation
@@ -11108,8 +11877,35 @@ const ButtonPanel = {
   },
 
   /**
-   * Resize handles functionality removed
+   * Create resize handles for the modal
+   * @returns {HTMLElement} Container with resize handles
    */
+  createResizeHandles() {
+    const container = document.createElement('div');
+    container.className = 'vocab-custom-content-resize-handles';
+    
+    // Create handles for all four edges
+    const edgePositions = ['top', 'bottom', 'left', 'right'];
+    
+    edgePositions.forEach(position => {
+      const handle = document.createElement('div');
+      handle.className = `vocab-custom-content-resize-handle vocab-custom-content-resize-handle-${position}`;
+      handle.setAttribute('data-position', position);
+      container.appendChild(handle);
+    });
+    
+    // Create handles for all four corners
+    const cornerPositions = ['top-left', 'top-right', 'bottom-left', 'bottom-right'];
+    
+    cornerPositions.forEach(position => {
+      const handle = document.createElement('div');
+      handle.className = `vocab-custom-content-resize-handle vocab-custom-content-resize-handle-${position}`;
+      handle.setAttribute('data-position', position);
+      container.appendChild(handle);
+    });
+    
+    return container;
+  },
 
   /**
    * Initialize resize functionality for modal
@@ -11119,114 +11915,101 @@ const ButtonPanel = {
     const handles = modal.querySelectorAll('.vocab-custom-content-resize-handle');
     
     handles.forEach(handle => {
-      let isResizing = false;
-      let startX = 0;
-      let startY = 0;
-      let startWidth = 0;
-      let startHeight = 0;
-      let startLeft = 0;
-      let startTop = 0;
-      
-      const handleMouseDown = (e) => {
-        isResizing = true;
-        startX = e.clientX;
-        startY = e.clientY;
-        
-        const rect = modal.getBoundingClientRect();
-        startWidth = rect.width;
-        startHeight = rect.height;
-        startLeft = rect.left;
-        startTop = rect.top;
-        
+      handle.addEventListener('mousedown', (e) => {
         e.preventDefault();
         e.stopPropagation();
-      };
-      
-      const handleMouseMove = (e) => {
-        if (!isResizing) return;
         
+        const position = handle.getAttribute('data-position');
+        const startX = e.clientX;
+        const startY = e.clientY;
+        const startWidth = modal.offsetWidth;
+        const startHeight = modal.offsetHeight;
+        const startLeft = modal.offsetLeft;
+        const startTop = modal.offsetTop;
+        
+        const handleMouseMove = (e) => {
         const deltaX = e.clientX - startX;
         const deltaY = e.clientY - startY;
-        const position = handle.getAttribute('data-position');
         
         let newWidth = startWidth;
         let newHeight = startHeight;
         let newLeft = startLeft;
         let newTop = startTop;
         
-        // Calculate new dimensions based on handle position
+          // Calculate new dimensions based on position
         switch (position) {
-          case 'top-left':
-            newWidth = startWidth - deltaX;
-            newHeight = startHeight - deltaY;
+            case 'right':
+              newWidth = Math.max(400, startWidth + deltaX);
+              break;
+            case 'left':
+              newWidth = Math.max(400, startWidth - deltaX);
             newLeft = startLeft + deltaX;
+              break;
+            case 'bottom':
+              newHeight = Math.max(300, startHeight + deltaY);
+              break;
+            case 'top':
+              newHeight = Math.max(300, startHeight - deltaY);
             newTop = startTop + deltaY;
             break;
           case 'top-right':
-            newWidth = startWidth + deltaX;
-            newHeight = startHeight - deltaY;
+              newWidth = Math.max(400, startWidth + deltaX);
+              newHeight = Math.max(300, startHeight - deltaY);
             newTop = startTop + deltaY;
             break;
-          case 'bottom-left':
-            newWidth = startWidth - deltaX;
-            newHeight = startHeight + deltaY;
+            case 'top-left':
+              newWidth = Math.max(400, startWidth - deltaX);
+              newHeight = Math.max(300, startHeight - deltaY);
             newLeft = startLeft + deltaX;
+              newTop = startTop + deltaY;
             break;
           case 'bottom-right':
-            newWidth = startWidth + deltaX;
-            newHeight = startHeight + deltaY;
-            break;
-          case 'top':
-            newHeight = startHeight - deltaY;
-            newTop = startTop + deltaY;
-            break;
-          case 'bottom':
-            newHeight = startHeight + deltaY;
-            break;
-          case 'left':
-            newWidth = startWidth - deltaX;
-            newLeft = startLeft + deltaX;
-            break;
-          case 'right':
-            newWidth = startWidth + deltaX;
+              newWidth = Math.max(400, startWidth + deltaX);
+              newHeight = Math.max(300, startHeight + deltaY);
+              break;
+            case 'bottom-left':
+              newWidth = Math.max(400, startWidth - deltaX);
+              newHeight = Math.max(300, startHeight + deltaY);
+              newLeft = startLeft + deltaX;
             break;
         }
         
-        // Apply constraints
+          // Apply viewport constraints
         const minWidth = 400;
         const minHeight = 300;
-        const maxWidth = window.innerWidth - 100;
-        const maxHeight = window.innerHeight - 100;
+          const maxWidth = window.innerWidth - 20; // Leave 20px margin from viewport edge
+          const maxHeight = window.innerHeight - 20; // Leave 20px margin from viewport edge
         
+          // Constrain dimensions
         newWidth = Math.max(minWidth, Math.min(maxWidth, newWidth));
         newHeight = Math.max(minHeight, Math.min(maxHeight, newHeight));
         
-        // Update modal dimensions
+          // Constrain position to keep modal within viewport
+          const maxLeft = window.innerWidth - newWidth;
+          const maxTop = window.innerHeight - newHeight;
+          
+          newLeft = Math.max(0, Math.min(maxLeft, newLeft));
+          newTop = Math.max(0, Math.min(maxTop, newTop));
+          
+          // Apply new dimensions
         modal.style.width = `${newWidth}px`;
         modal.style.height = `${newHeight}px`;
         modal.style.left = `${newLeft}px`;
         modal.style.top = `${newTop}px`;
-        
-        // Update editor height to fit within modal
-        const editor = modal.querySelector('.vocab-custom-content-editor');
-        if (editor) {
-          const headerHeight = modal.querySelector('.vocab-custom-content-header')?.offsetHeight || 0;
-          const tabsHeight = modal.querySelector('.vocab-custom-content-tabs')?.offsetHeight || 0;
-          const searchHeight = modal.querySelector('.vocab-custom-content-search')?.offsetHeight || 0;
-          const padding = 60; // Account for margins and padding
-          
-          const availableHeight = newHeight - headerHeight - tabsHeight - searchHeight - padding;
-          editor.style.maxHeight = `${Math.max(200, availableHeight)}px`;
-        }
       };
       
       const handleMouseUp = () => {
-        isResizing = false;
+          document.removeEventListener('mousemove', handleMouseMove);
+          document.removeEventListener('mouseup', handleMouseUp);
+          document.body.style.cursor = '';
+          document.body.style.userSelect = '';
       };
       
-      handle.addEventListener('mousedown', handleMouseDown);
       document.addEventListener('mousemove', handleMouseMove);
       document.addEventListener('mouseup', handleMouseUp);
+        document.body.style.cursor = handle.style.cursor;
+        document.body.style.userSelect = 'none';
+      });
     });
   },
 
@@ -11436,7 +12219,17 @@ const ButtonPanel = {
    * @param {string} content - The markdown content
    */
   updateCustomContentEditor(content) {
+    console.log('[ButtonPanel] ===== UPDATING CUSTOM CONTENT EDITOR =====');
+    
     const editorContent = this.topicsModal.customContentModal.editorContent;
+    
+    if (!editorContent) {
+      console.error('[ButtonPanel] ===== EDITOR CONTENT ELEMENT NOT FOUND =====');
+      return;
+    }
+    
+    console.log('[ButtonPanel] Editor content element found:', !!editorContent);
+    console.log('[ButtonPanel] Content to load:', content.substring(0, 100) + '...');
     
     // Simple markdown to HTML conversion (for basic formatting)
     let htmlContent = content
@@ -11463,7 +12256,12 @@ const ButtonPanel = {
     htmlContent = htmlContent.replace(/<p><\/p>/gim, '');
     htmlContent = htmlContent.replace(/<p><br><\/p>/gim, '');
     
+    console.log('[ButtonPanel] HTML content generated, length:', htmlContent.length);
+    console.log('[ButtonPanel] HTML preview:', htmlContent.substring(0, 200) + '...');
+    
     editorContent.innerHTML = htmlContent;
+    
+    console.log('[ButtonPanel] ===== EDITOR CONTENT UPDATED SUCCESSFULLY =====');
   },
 
   /**
