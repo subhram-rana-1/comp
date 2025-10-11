@@ -11262,8 +11262,9 @@ const ButtonPanel = {
     // Enable "Magic meaning" if there are any words or texts selected
     this.setMagicMeaningEnabled(hasWords || hasTexts);
     
-    // Show "Ask" only if exactly one text is selected
-    this.setAskVisible(hasExactlyOneText);
+    // Show "Ask" only if exactly one text is selected AND custom content modal is not open
+    const isCustomModalOpen = this.isCustomContentModalOpen();
+    this.setAskVisible(hasExactlyOneText && !isCustomModalOpen);
   },
 
   /**
@@ -12630,6 +12631,9 @@ const ButtonPanel = {
       
       console.log('[ButtonPanel] Overlay classes after removal:', this.topicsModal.customContentModal.overlay.classList.toString());
       console.log('[ButtonPanel] Overlay is now visible:', this.topicsModal.customContentModal.overlay.classList.contains('visible'));
+      
+      // Update button states after modal closes
+      this.updateButtonStatesFromSelections();
     }
     
     console.log('[ButtonPanel] ===== END HIDE CUSTOM CONTENT MODAL DEBUG =====');
