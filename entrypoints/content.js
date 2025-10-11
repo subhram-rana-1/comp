@@ -2943,6 +2943,9 @@ const ChatDialog = {
       console.log('[ChatDialog] Saved', this.chatHistory.length, 'chat messages for', this.currentTextKey);
     }
     
+    // Save current dimensions before closing
+    this.saveDimensions();
+    
     console.log('[ChatDialog] Hiding dialog...');
     this.hide();
     
@@ -3056,6 +3059,9 @@ const ChatDialog = {
     
     // Initialize resize functionality
     this.initResize();
+    
+    // Load saved dimensions after dialog is created
+    this.loadSavedDimensions();
   },
   
   /**
@@ -3115,22 +3121,33 @@ const ChatDialog = {
       
       if (resizeType === 'left' || resizeType === 'bottom-left' || resizeType === 'top-left') {
         const newWidth = Math.max(300, Math.min(800, startWidth + deltaX));
-        this.dialogContainer.style.width = `${newWidth}px`;
+        this.dialogContainer.style.setProperty('width', `${newWidth}px`, 'important');
+        console.log('[ChatDialog] DEBUG: Resizing width to:', newWidth);
       }
       
       if (resizeType === 'bottom' || resizeType === 'bottom-left') {
         const newHeight = Math.max(400, Math.min(window.innerHeight * 0.9, startHeight + deltaY));
-        this.dialogContainer.style.height = `${newHeight}px`;
+        this.dialogContainer.style.setProperty('height', `${newHeight}px`, 'important');
+        console.log('[ChatDialog] DEBUG: Resizing height to:', newHeight);
       }
       
       if (resizeType === 'top-left') {
         const newHeight = Math.max(400, Math.min(window.innerHeight * 0.9, startHeight - deltaY));
-        this.dialogContainer.style.height = `${newHeight}px`;
+        this.dialogContainer.style.setProperty('height', `${newHeight}px`, 'important');
+        console.log('[ChatDialog] DEBUG: Resizing height (top-left) to:', newHeight);
       }
     };
     
     const stopResize = () => {
       if (!isResizing) return;
+      
+      console.log('[ChatDialog] DEBUG: Stopping resize, current dimensions:', {
+        width: this.dialogContainer.style.width,
+        height: this.dialogContainer.style.height
+      });
+      
+      // Save current dimensions to session storage
+      this.saveDimensions();
       
       isResizing = false;
       resizeType = null;
@@ -3150,6 +3167,60 @@ const ChatDialog = {
     
     document.addEventListener('mousemove', resize);
     document.addEventListener('mouseup', stopResize);
+  },
+  
+  /**
+   * Save current dialog dimensions to localStorage
+   */
+  saveDimensions() {
+    if (!this.dialogContainer) {
+      console.log('[ChatDialog] ERROR: No dialog container to save dimensions');
+      return;
+    }
+    
+    // Get computed dimensions to ensure we capture the actual size
+    const computedStyle = window.getComputedStyle(this.dialogContainer);
+    const dimensions = {
+      width: computedStyle.width || this.dialogContainer.style.width || '400px',
+      height: computedStyle.height || this.dialogContainer.style.height || '600px'
+    };
+    
+    console.log('[ChatDialog] DEBUG: Saving dimensions:', dimensions);
+    
+    try {
+      localStorage.setItem('chatDialogDimensions', JSON.stringify(dimensions));
+      console.log('[ChatDialog] SUCCESS: Dimensions saved to localStorage:', dimensions);
+    } catch (error) {
+      console.log('[ChatDialog] ERROR saving dimensions:', error);
+    }
+  },
+  
+  /**
+   * Load saved dimensions from localStorage and apply them
+   */
+  loadSavedDimensions() {
+    console.log('[ChatDialog] DEBUG: Attempting to load saved dimensions...');
+    
+    try {
+      const savedDimensions = localStorage.getItem('chatDialogDimensions');
+      console.log('[ChatDialog] DEBUG: localStorage result:', savedDimensions);
+      
+      if (savedDimensions && this.dialogContainer) {
+        const dimensions = JSON.parse(savedDimensions);
+        const { width, height } = dimensions;
+        console.log('[ChatDialog] DEBUG: Found saved dimensions:', { width, height });
+        
+        // Apply dimensions with !important to override CSS
+        this.dialogContainer.style.setProperty('width', width, 'important');
+        this.dialogContainer.style.setProperty('height', height, 'important');
+        
+        console.log('[ChatDialog] SUCCESS: Applied dimensions:', { width, height });
+      } else {
+        console.log('[ChatDialog] DEBUG: No saved dimensions found or no dialog container');
+      }
+    } catch (error) {
+      console.log('[ChatDialog] ERROR loading dimensions:', error);
+    }
   },
   
   /**
@@ -3487,13 +3558,13 @@ const ChatDialog = {
         chatContainer.scrollTop = chatContainer.scrollHeight;
       }, 10);
     } else {
-      // Show "Ask your doubt" message
+      // Show "Ask anything about the content" message
       const noChatsMsg = document.createElement('div');
       noChatsMsg.className = 'vocab-chat-no-messages';
       noChatsMsg.innerHTML = `
         <div class="vocab-chat-no-messages-content">
           ${this.createChatEmptyIcon()}
-          <span>Ask your doubt</span>
+          <span>Ask anything about the content</span>
         </div>
       `;
       chatContainer.appendChild(noChatsMsg);
@@ -3787,7 +3858,7 @@ const ChatDialog = {
   addMessageToChat(type, message) {
     const chatContainer = document.getElementById('vocab-chat-messages');
     
-    // Remove "Ask your doubt" message if exists
+    // Remove "Ask anything about the content" message if exists
     const noChatsMsg = chatContainer.querySelector('.vocab-chat-no-messages');
     if (noChatsMsg) {
       noChatsMsg.remove();
@@ -3948,7 +4019,7 @@ const ChatDialog = {
     noChatsMsg.innerHTML = `
       <div class="vocab-chat-no-messages-content">
         ${this.createChatEmptyIcon()}
-        <span>Ask your doubt</span>
+        <span>Ask anything about the content</span>
       </div>
     `;
     chatContainer.appendChild(noChatsMsg);
