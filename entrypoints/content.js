@@ -1,6 +1,7 @@
 import ApiService from '../core/services/ApiService.js';
 import SimplifyService from '../core/services/SimplifyService.js';
 import WordExplanationService from '../core/services/WordExplanationService.js';
+import ApiConfig from '../core/config/apiConfig.js';
 
 export default defineContentScript({
   matches: ['<all_urls>'],
@@ -1300,6 +1301,9 @@ const WordSelector = {
     // Remove from wordToHighlights Map
     this.wordToHighlights.delete(normalizedWord);
     
+    // Also remove from analysis data structure for current tab
+    ButtonPanel.removeWordFromAnalysisData(normalizedWord);
+    
     // Hide any open popups for this word
     this.hideAllPopups();
     
@@ -2186,9 +2190,9 @@ const TextSelector = {
         // Use green pulsate if it's a green icon (from askedTexts)
         this.pulsateText(highlight, isGreen);
         
-        // Open chat dialog
+        // Open chat dialog with selected context
         const originalText = highlight.textContent.replace(/\s+/g, ' ').trim();
-        ChatDialog.open(originalText, textKey);
+        ChatDialog.open(originalText, textKey, 'ask', null, 'selected');
       }
     });
     
@@ -2240,8 +2244,8 @@ const TextSelector = {
           this.pulsateText(highlight, true);
         }
         
-        // Open ChatDialog in simplified mode
-        ChatDialog.open(simplifiedData.text, textKey, 'simplified', simplifiedData);
+        // Open ChatDialog in simplified mode with selected context
+        ChatDialog.open(simplifiedData.text, textKey, 'simplified', simplifiedData, 'selected');
       }
     });
     
@@ -2797,6 +2801,7 @@ const ChatDialog = {
   mode: 'ask', // 'ask' or 'simplified'
   simplifiedData: null, // For simplified mode
   isSimplifying: false, // Track if currently simplifying more
+  chatContext: 'general', // 'general' for content chat, 'selected' for selected text chat
   
   /**
    * Initialize chat dialog
@@ -2812,10 +2817,68 @@ const ChatDialog = {
    * @param {string} textKey - The text key for identification
    * @param {string} mode - The dialog mode: 'ask' or 'simplified'
    * @param {Object} simplifiedData - Simplified text data (for simplified mode)
+   * @param {string} chatContext - The chat context: 'general' or 'selected'
    */
-  open(text, textKey, mode = 'ask', simplifiedData = null) {
-    // If dialog is already open for the same text
-    if (this.isOpen && this.currentTextKey === textKey) {
+  open(text, textKey, mode = 'ask', simplifiedData = null, chatContext = 'general') {
+    console.log('[ChatDialog] ===== OPEN FUNCTION CALLED =====');
+    console.log('[ChatDialog] open() called with:', {
+      textLength: text ? text.length : 0,
+      textKey: textKey,
+      mode: mode,
+      chatContext: chatContext,
+      isOpen: this.isOpen,
+      currentTextKey: this.currentTextKey
+    });
+    console.log('[ChatDialog] ChatHistories Map contents:', Array.from(this.chatHistories.keys()));
+    
+    // Set the chat context
+    this.chatContext = chatContext;
+    
+    // Generate proper contextual textKey based on chat context
+    let contextualTextKey;
+    if (chatContext === 'general') {
+      // For general chat: <content type>-<tab id>-generic
+      // Extract content type and tab ID from textKey
+      const parts = textKey.split('-');
+      if (parts.length >= 3) {
+        const contentType = parts[0]; // e.g., "pdf"
+        const tabId = parts[1]; // e.g., "tabId2"
+        contextualTextKey = `${contentType}-${tabId}-generic`;
+      } else {
+        // Fallback for custom content
+        contextualTextKey = `${textKey}-generic`;
+      }
+    } else if (chatContext === 'selected') {
+      // For selected text chat: <content type>-<tab id>-<start index>-<selected text length>
+      // Extract content type and tab ID from textKey
+      const parts = textKey.split('-');
+      if (parts.length >= 3) {
+        const contentType = parts[0]; // e.g., "pdf"
+        const tabId = parts[1]; // e.g., "tabId2"
+        // For selected text, we need start index and length from simplifiedData or textKey
+        if (simplifiedData && simplifiedData.textStartIndex !== undefined && simplifiedData.textLength !== undefined) {
+          contextualTextKey = `${contentType}-${tabId}-${simplifiedData.textStartIndex}-${simplifiedData.textLength}`;
+        } else if (parts.length >= 5) {
+          // textKey already contains start index and length
+          contextualTextKey = textKey;
+        } else {
+          // Fallback - use simplified format
+          contextualTextKey = `${contentType}-${tabId}-selected`;
+        }
+      } else {
+        // Fallback for custom content
+        contextualTextKey = `${textKey}-selected`;
+      }
+    } else {
+      // Fallback to old format
+      contextualTextKey = `${textKey}-${chatContext}`;
+    }
+    
+    console.log('[ChatDialog] Generated contextualTextKey:', contextualTextKey, 'for chatContext:', chatContext);
+    
+    // If dialog is already open for the same text and context
+    if (this.isOpen && this.currentTextKey === contextualTextKey) {
+      console.log('[ChatDialog] Dialog already open for same textKey and context:', contextualTextKey);
       // If opening in simplified mode and already open for same text
       if (mode === 'simplified') {
         // Do nothing - popup is already open for this text
@@ -2824,6 +2887,7 @@ const ChatDialog = {
       }
       // If opening in 'ask' mode, just switch to ask tab
       else {
+        console.log('[ChatDialog] Switching to ask tab');
         this.switchTab('ask');
       }
       return; // Don't re-create the dialog
@@ -2831,69 +2895,150 @@ const ChatDialog = {
     
     // If dialog is open for different text, close it first
     if (this.isOpen) {
+      console.log('[ChatDialog] Dialog open for different text, closing first');
       this.close();
-      // Wait for close animation to complete
+      // Wait for close animation to complete and ensure cleanup
       setTimeout(() => {
-        this.openDialog(text, textKey, mode, simplifiedData);
-      }, 350);
+        console.log('[ChatDialog] Opening dialog after close delay');
+        this.openDialog(text, contextualTextKey, mode, simplifiedData);
+      }, 400); // Increased delay to ensure proper cleanup
     } else {
       // Dialog is not open, open it
-      this.openDialog(text, textKey, mode, simplifiedData);
+      console.log('[ChatDialog] Dialog not open, opening directly');
+      this.openDialog(text, contextualTextKey, mode, simplifiedData);
     }
   },
   
   /**
    * Internal method to open dialog
    * @param {string} text - The selected text
-   * @param {string} textKey - The text key for identification
+   * @param {string} contextualTextKey - The contextual text key for identification
    * @param {string} mode - The dialog mode: 'ask' or 'simplified'
    * @param {Object} simplifiedData - Simplified text data (for simplified mode)
    */
-  openDialog(text, textKey, mode = 'ask', simplifiedData = null) {
+  openDialog(text, contextualTextKey, mode = 'ask', simplifiedData = null) {
+    console.log('[ChatDialog] ===== OPEN DIALOG FUNCTION CALLED =====');
+    console.log('[ChatDialog] openDialog() called with:', {
+      textLength: text ? text.length : 0,
+      contextualTextKey: contextualTextKey,
+      mode: mode,
+      hasSimplifiedData: !!simplifiedData
+    });
+    
     this.currentText = text;
-    this.currentTextKey = textKey;
+    this.currentTextKey = contextualTextKey;
     
     // Load existing chat history for this text, or create new empty array
-    this.chatHistory = this.chatHistories.get(textKey) || [];
+    console.log('[ChatDialog] ===== LOADING CHAT HISTORY =====');
+    console.log('[ChatDialog] Looking for contextualTextKey:', contextualTextKey);
+    console.log('[ChatDialog] Available keys in chatHistories:', Array.from(this.chatHistories.keys()));
+    console.log('[ChatDialog] ChatHistories Map size:', this.chatHistories.size);
+    
+    this.chatHistory = this.chatHistories.get(contextualTextKey) || [];
+    console.log('[ChatDialog] Loaded chat history:', this.chatHistory.length, 'messages');
+    console.log('[ChatDialog] Chat history for contextualTextKey', contextualTextKey, ':', this.chatHistory);
     
     this.mode = mode;
     this.simplifiedData = simplifiedData;
     
+    console.log('[ChatDialog] Creating dialog...');
     this.createDialog();
+    console.log('[ChatDialog] Showing dialog...');
     this.show();
+    
+    // Hide Focus buttons for custom content (pdf, text, topics, image)
+    this.hideFocusButtonsForCustomContent(textKey);
     
     console.log('[ChatDialog] Opened in', mode, 'mode for text:', text.substring(0, 50) + '...');
     console.log('[ChatDialog] Loaded', this.chatHistory.length, 'chat messages');
   },
   
   /**
+   * Hide Focus buttons for custom content types (pdf, text, topics, image)
+   * @param {string} textKey - The text key to check if it's custom content
+   */
+  hideFocusButtonsForCustomContent(textKey) {
+    // Hide focus buttons for general chat (chat icon), show for selected text chat (book icon)
+    const shouldHideFocus = this.chatContext === 'general';
+    
+    if (shouldHideFocus) {
+      console.log('[ChatDialog] Hiding Focus buttons for general chat:', textKey);
+      
+      // Hide the top-right Focus button
+      const topRightFocusBtn = this.dialogContainer.querySelector('.vocab-chat-focus-btn-top-right');
+      if (topRightFocusBtn) {
+        topRightFocusBtn.style.display = 'none';
+      }
+      
+      // Hide Focus button containers in tab contents
+      const focusBtnContainers = this.dialogContainer.querySelectorAll('.vocab-chat-focus-btn-container');
+      focusBtnContainers.forEach(container => {
+        container.style.display = 'none';
+      });
+      
+      console.log('[ChatDialog] Focus buttons hidden for general chat');
+    } else {
+      console.log('[ChatDialog] Showing Focus buttons for selected text chat:', textKey);
+      
+      // Show the top-right Focus button
+      const topRightFocusBtn = this.dialogContainer.querySelector('.vocab-chat-focus-btn-top-right');
+      if (topRightFocusBtn) {
+        topRightFocusBtn.style.display = 'block';
+      }
+      
+      // Show Focus button containers in tab contents
+      const focusBtnContainers = this.dialogContainer.querySelectorAll('.vocab-chat-focus-btn-container');
+      focusBtnContainers.forEach(container => {
+        container.style.display = 'block';
+      });
+      
+      console.log('[ChatDialog] Focus buttons shown for selected text chat');
+    }
+  },
+  
+  /**
    * Close chat dialog
    */
   close() {
-    if (!this.isOpen) return;
+    console.log('[ChatDialog] ===== CLOSE FUNCTION CALLED =====');
+    console.log('[ChatDialog] Current state - isOpen:', this.isOpen, 'currentTextKey:', this.currentTextKey);
+    
+    if (!this.isOpen) {
+      console.log('[ChatDialog] Dialog not open, nothing to close');
+      return;
+    }
     
     // Save chat history before closing
     if (this.currentTextKey && this.chatHistory.length > 0) {
       this.chatHistories.set(this.currentTextKey, [...this.chatHistory]);
       console.log('[ChatDialog] Saved', this.chatHistory.length, 'chat messages for', this.currentTextKey);
+      
+      // Also save to analysis data for persistence
+      this.saveChatHistoryToAnalysisData();
     }
     
+    // Save current dimensions before closing
+    this.saveDimensions();
+    
+    console.log('[ChatDialog] Hiding dialog...');
     this.hide();
     
     // Keep the chat icon on the text (don't remove it)
     // The text should remain in askedTexts container
     
     setTimeout(() => {
+      console.log('[ChatDialog] Removing dialog container...');
       if (this.dialogContainer) {
         this.dialogContainer.remove();
         this.dialogContainer = null;
+        console.log('[ChatDialog] Dialog container removed');
       }
+      // Reset state
+      this.isOpen = false;
+      this.currentText = null;
+      this.currentTextKey = null;
+      console.log('[ChatDialog] Dialog state reset');
     }, 300); // Wait for slide-out animation
-    
-    this.isOpen = false;
-    this.currentText = null;
-    this.currentTextKey = null;
-    this.chatHistory = [];
     
     console.log('[ChatDialog] Closed');
   },
@@ -2902,10 +3047,15 @@ const ChatDialog = {
    * Create dialog DOM structure
    */
   createDialog() {
+    console.log('[ChatDialog] ===== CREATE DIALOG FUNCTION CALLED =====');
+    console.log('[ChatDialog] Creating dialog container...');
+    
     // Create main container
     this.dialogContainer = document.createElement('div');
     this.dialogContainer.id = 'vocab-chat-dialog';
     this.dialogContainer.className = 'vocab-chat-dialog';
+    
+    console.log('[ChatDialog] Dialog container created:', this.dialogContainer.id);
     
     // Create dialog content
     const dialogContent = document.createElement('div');
@@ -2937,16 +3087,18 @@ const ChatDialog = {
     // Add click handler for focus button
     focusButton.addEventListener('click', () => {
       if (this.currentTextKey) {
-        const highlight = TextSelector.textToHighlights.get(this.currentTextKey);
+        // For selected text chat, use original textKey to find highlight
+        const originalTextKey = this.currentTextKey.replace(/-selected$/, '').replace(/-generic$/, '');
+        const highlight = TextSelector.textToHighlights.get(originalTextKey);
         if (highlight) {
           // First scroll to the element
           highlight.scrollIntoView({
             behavior: 'smooth',
             block: 'center'
           });
-          // Then move to asked texts and pulsate
+          // Then pulsate without changing state or creating new icons
           setTimeout(() => {
-            TextSelector.moveToAskedTexts(this.currentTextKey);
+            TextSelector.pulsateText(highlight, true);
           }, 300); // Small delay to let scroll complete
         }
       }
@@ -2976,11 +3128,16 @@ const ChatDialog = {
     this.dialogContainer.appendChild(resizeHandles.left);
     this.dialogContainer.appendChild(resizeHandles.bottom);
     this.dialogContainer.appendChild(resizeHandles.bottomLeft);
+    this.dialogContainer.appendChild(resizeHandles.topLeft);
     
     document.body.appendChild(this.dialogContainer);
+    console.log('[ChatDialog] Dialog container appended to body');
     
     // Initialize resize functionality
     this.initResize();
+    
+    // Load saved dimensions after dialog is created
+    this.loadSavedDimensions();
   },
   
   /**
@@ -2996,10 +3153,14 @@ const ChatDialog = {
     const bottomLeftHandle = document.createElement('div');
     bottomLeftHandle.className = 'vocab-chat-resize-handle vocab-chat-resize-bottom-left';
     
+    const topLeftHandle = document.createElement('div');
+    topLeftHandle.className = 'vocab-chat-resize-handle vocab-chat-resize-top-left';
+    
     return {
       left: leftHandle,
       bottom: bottomHandle,
-      bottomLeft: bottomLeftHandle
+      bottomLeft: bottomLeftHandle,
+      topLeft: topLeftHandle
     };
   },
   
@@ -3034,19 +3195,35 @@ const ChatDialog = {
       const deltaX = startX - e.clientX; // Inverted for right-side panel
       const deltaY = e.clientY - startY;
       
-      if (resizeType === 'left' || resizeType === 'bottom-left') {
+      if (resizeType === 'left' || resizeType === 'bottom-left' || resizeType === 'top-left') {
         const newWidth = Math.max(300, Math.min(800, startWidth + deltaX));
-        this.dialogContainer.style.width = `${newWidth}px`;
+        this.dialogContainer.style.setProperty('width', `${newWidth}px`, 'important');
+        console.log('[ChatDialog] DEBUG: Resizing width to:', newWidth);
       }
       
       if (resizeType === 'bottom' || resizeType === 'bottom-left') {
         const newHeight = Math.max(400, Math.min(window.innerHeight * 0.9, startHeight + deltaY));
-        this.dialogContainer.style.height = `${newHeight}px`;
+        this.dialogContainer.style.setProperty('height', `${newHeight}px`, 'important');
+        console.log('[ChatDialog] DEBUG: Resizing height to:', newHeight);
+      }
+      
+      if (resizeType === 'top-left') {
+        const newHeight = Math.max(400, Math.min(window.innerHeight * 0.9, startHeight - deltaY));
+        this.dialogContainer.style.setProperty('height', `${newHeight}px`, 'important');
+        console.log('[ChatDialog] DEBUG: Resizing height (top-left) to:', newHeight);
       }
     };
     
     const stopResize = () => {
       if (!isResizing) return;
+      
+      console.log('[ChatDialog] DEBUG: Stopping resize, current dimensions:', {
+        width: this.dialogContainer.style.width,
+        height: this.dialogContainer.style.height
+      });
+      
+      // Save current dimensions to session storage
+      this.saveDimensions();
       
       isResizing = false;
       resizeType = null;
@@ -3057,13 +3234,69 @@ const ChatDialog = {
     const leftHandle = this.dialogContainer.querySelector('.vocab-chat-resize-left');
     const bottomHandle = this.dialogContainer.querySelector('.vocab-chat-resize-bottom');
     const bottomLeftHandle = this.dialogContainer.querySelector('.vocab-chat-resize-bottom-left');
+    const topLeftHandle = this.dialogContainer.querySelector('.vocab-chat-resize-top-left');
     
     leftHandle.addEventListener('mousedown', (e) => startResize(e, 'left'));
     bottomHandle.addEventListener('mousedown', (e) => startResize(e, 'bottom'));
     bottomLeftHandle.addEventListener('mousedown', (e) => startResize(e, 'bottom-left'));
+    topLeftHandle.addEventListener('mousedown', (e) => startResize(e, 'top-left'));
     
     document.addEventListener('mousemove', resize);
     document.addEventListener('mouseup', stopResize);
+  },
+  
+  /**
+   * Save current dialog dimensions to localStorage
+   */
+  saveDimensions() {
+    if (!this.dialogContainer) {
+      console.log('[ChatDialog] ERROR: No dialog container to save dimensions');
+      return;
+    }
+    
+    // Get computed dimensions to ensure we capture the actual size
+    const computedStyle = window.getComputedStyle(this.dialogContainer);
+    const dimensions = {
+      width: computedStyle.width || this.dialogContainer.style.width || '400px',
+      height: computedStyle.height || this.dialogContainer.style.height || '600px'
+    };
+    
+    console.log('[ChatDialog] DEBUG: Saving dimensions:', dimensions);
+    
+    try {
+      localStorage.setItem('chatDialogDimensions', JSON.stringify(dimensions));
+      console.log('[ChatDialog] SUCCESS: Dimensions saved to localStorage:', dimensions);
+    } catch (error) {
+      console.log('[ChatDialog] ERROR saving dimensions:', error);
+    }
+  },
+  
+  /**
+   * Load saved dimensions from localStorage and apply them
+   */
+  loadSavedDimensions() {
+    console.log('[ChatDialog] DEBUG: Attempting to load saved dimensions...');
+    
+    try {
+      const savedDimensions = localStorage.getItem('chatDialogDimensions');
+      console.log('[ChatDialog] DEBUG: localStorage result:', savedDimensions);
+      
+      if (savedDimensions && this.dialogContainer) {
+        const dimensions = JSON.parse(savedDimensions);
+        const { width, height } = dimensions;
+        console.log('[ChatDialog] DEBUG: Found saved dimensions:', { width, height });
+        
+        // Apply dimensions with !important to override CSS
+        this.dialogContainer.style.setProperty('width', width, 'important');
+        this.dialogContainer.style.setProperty('height', height, 'important');
+        
+        console.log('[ChatDialog] SUCCESS: Applied dimensions:', { width, height });
+      } else {
+        console.log('[ChatDialog] DEBUG: No saved dimensions found or no dialog container');
+      }
+    } catch (error) {
+      console.log('[ChatDialog] ERROR loading dimensions:', error);
+    }
   },
   
   /**
@@ -3140,7 +3373,9 @@ const ChatDialog = {
     
     // Add click handler
     focusButton.addEventListener('click', () => {
-      const highlight = TextSelector.textToHighlights.get(this.currentTextKey);
+      // For selected text chat, use original textKey to find highlight
+      const originalTextKey = this.currentTextKey.replace(/-selected$/, '').replace(/-generic$/, '');
+      const highlight = TextSelector.textToHighlights.get(originalTextKey);
       if (highlight) {
         highlight.scrollIntoView({
           behavior: 'smooth',
@@ -3193,7 +3428,9 @@ const ChatDialog = {
     
     // Add click handler
     focusButton.addEventListener('click', () => {
-      const highlight = TextSelector.textToHighlights.get(this.currentTextKey);
+      // For selected text chat, use original textKey to find highlight
+      const originalTextKey = this.currentTextKey.replace(/-selected$/, '').replace(/-generic$/, '');
+      const highlight = TextSelector.textToHighlights.get(originalTextKey);
       if (highlight) {
         highlight.scrollIntoView({
           behavior: 'smooth',
@@ -3401,13 +3638,17 @@ const ChatDialog = {
         chatContainer.scrollTop = chatContainer.scrollHeight;
       }, 10);
     } else {
-      // Show "Ask your doubt" message
+      // Show appropriate message based on chat context
+      const promptText = this.chatContext === 'selected' 
+        ? 'Ask doubts on the selected content' 
+        : 'Ask anything about the content';
+      
       const noChatsMsg = document.createElement('div');
       noChatsMsg.className = 'vocab-chat-no-messages';
       noChatsMsg.innerHTML = `
         <div class="vocab-chat-no-messages-content">
           ${this.createChatEmptyIcon()}
-          <span>Ask your doubt</span>
+          <span>${promptText}</span>
         </div>
       `;
       chatContainer.appendChild(noChatsMsg);
@@ -3416,6 +3657,52 @@ const ChatDialog = {
     content.appendChild(chatContainer);
     
     return content;
+  },
+  
+  /**
+   * Re-render all chat messages in the existing container
+   */
+  renderChatMessages() {
+    console.log('[ChatDialog] Re-rendering chat messages, chatHistory length:', this.chatHistory.length);
+    
+    const chatContainer = document.getElementById('vocab-chat-messages');
+    if (!chatContainer) {
+      console.log('[ChatDialog] Chat container not found, cannot re-render messages');
+      return;
+    }
+    
+    // Clear existing messages
+    chatContainer.innerHTML = '';
+    
+    // If we have existing chat history, render it
+    if (this.chatHistory && this.chatHistory.length > 0) {
+      this.chatHistory.forEach(item => {
+        this.renderChatMessage(chatContainer, item.type, item.message);
+      });
+      
+      // Update delete button visibility and scroll to bottom after rendering
+      setTimeout(() => {
+        this.updateGlobalClearButton();
+        chatContainer.scrollTop = chatContainer.scrollHeight;
+      }, 10);
+    } else {
+      // Show appropriate message based on chat context
+      const promptText = this.chatContext === 'selected' 
+        ? 'Ask doubts on the selected content' 
+        : 'Ask anything about the content';
+      
+      const noChatsMsg = document.createElement('div');
+      noChatsMsg.className = 'vocab-chat-no-messages';
+      noChatsMsg.innerHTML = `
+        <div class="vocab-chat-no-messages-content">
+          ${this.createChatEmptyIcon()}
+          <span>${promptText}</span>
+        </div>
+      `;
+      chatContainer.appendChild(noChatsMsg);
+    }
+    
+    console.log('[ChatDialog] Chat messages re-rendered successfully');
   },
   
   /**
@@ -3447,6 +3734,7 @@ const ChatDialog = {
    * Create input area
    */
   createInputArea() {
+    console.log('[ChatDialog] ===== CREATE INPUT AREA FUNCTION CALLED =====');
     const inputArea = document.createElement('div');
     inputArea.className = 'vocab-chat-input-area';
     
@@ -3455,6 +3743,8 @@ const ChatDialog = {
     inputField.id = 'vocab-chat-input';
     inputField.placeholder = 'Type your question here ...';
     inputField.rows = 1;
+    
+    console.log('[ChatDialog] Input field created with ID:', inputField.id);
     
     // Auto-resize textarea with scroll when max height reached
     inputField.addEventListener('input', (e) => {
@@ -3473,7 +3763,10 @@ const ChatDialog = {
     
     // Handle Enter key (Shift+Enter for new line)
     inputField.addEventListener('keydown', (e) => {
+      console.log('[ChatDialog] ===== KEYDOWN EVENT =====');
+      console.log('[ChatDialog] Key pressed:', e.key, 'Shift:', e.shiftKey);
       if (e.key === 'Enter' && !e.shiftKey) {
+        console.log('[ChatDialog] Enter key pressed, calling sendMessage()');
         e.preventDefault();
         this.sendMessage();
       }
@@ -3484,7 +3777,11 @@ const ChatDialog = {
     sendBtn.className = 'vocab-chat-send-btn';
     sendBtn.setAttribute('aria-label', 'Send message');
     sendBtn.innerHTML = this.createSendIcon();
-    sendBtn.addEventListener('click', () => this.sendMessage());
+    sendBtn.addEventListener('click', () => {
+      console.log('[ChatDialog] ===== SEND BUTTON CLICKED =====');
+      console.log('[ChatDialog] Send button clicked, calling sendMessage()');
+      this.sendMessage();
+    });
     
     // Create delete button (same size as send button)
     const deleteBtn = document.createElement('button');
@@ -3499,6 +3796,9 @@ const ChatDialog = {
     inputArea.appendChild(inputField);
     inputArea.appendChild(sendBtn);
     inputArea.appendChild(deleteBtn);
+    
+    console.log('[ChatDialog] Input area assembled with input field, send button, and delete button');
+    console.log('[ChatDialog] Input field in DOM:', !!document.getElementById('vocab-chat-input'));
     
     return inputArea;
   },
@@ -3538,10 +3838,25 @@ const ChatDialog = {
    * Send message in chat
    */
   async sendMessage() {
+    console.log('[ChatDialog] ===== SEND MESSAGE FUNCTION CALLED =====');
     const inputField = document.getElementById('vocab-chat-input');
-    const message = inputField.value.trim();
+    console.log('[ChatDialog] Input field found:', !!inputField);
     
-    if (!message) return;
+    if (!inputField) {
+      console.log('[ChatDialog] ERROR: Input field not found!');
+      return;
+    }
+    
+    const message = inputField.value.trim();
+    console.log('[ChatDialog] Message to send:', message);
+    
+    if (!message) {
+      console.log('[ChatDialog] Empty message, returning');
+      return;
+    }
+    
+    console.log('[ChatDialog] Current textKey:', this.currentTextKey);
+    console.log('[ChatDialog] Current mode:', this.mode);
     
     // Auto-switch to chat tab if on original text tab
     this.switchTab('ask');
@@ -3608,12 +3923,7 @@ const ChatDialog = {
           // Get the chat history for the original textKey
           const originalChatHistory = this.chatHistories.get(requestTextKey) || [];
           
-          // Add the user message and AI response to the original chat history
-          originalChatHistory.push({
-            type: 'user',
-            message: message,
-            timestamp: new Date().toISOString()
-          });
+          // Only add the AI response (user message was already added when request was made)
           originalChatHistory.push({
             type: 'ai',
             message: aiResponse,
@@ -3623,10 +3933,7 @@ const ChatDialog = {
           // Update the stored chat history
           this.chatHistories.set(requestTextKey, originalChatHistory);
           
-          // If the original chat is currently open, update its display
-          if (this.isOpen && this.currentTextKey === requestTextKey) {
-            this.addMessageToChat('ai', aiResponse);
-          }
+          console.log('[ChatDialog] Added AI response to original chat history for textKey:', requestTextKey);
         }
       } else {
         // Handle error case - check if we're still in the same chat
@@ -3635,17 +3942,16 @@ const ChatDialog = {
         } else {
           // Add error to the original chat history
           const originalChatHistory = this.chatHistories.get(requestTextKey) || [];
-          originalChatHistory.push({
-            type: 'user',
-            message: message,
-            timestamp: new Date().toISOString()
-          });
+          
+          // Only add the error response (user message was already added when request was made)
           originalChatHistory.push({
             type: 'ai',
             message: `⚠️ **Error:**\n\n${response.error}`,
             timestamp: new Date().toISOString()
           });
+          
           this.chatHistories.set(requestTextKey, originalChatHistory);
+          console.log('[ChatDialog] Added error response to original chat history for textKey:', requestTextKey);
         }
       }
     } catch (error) {
@@ -3658,17 +3964,16 @@ const ChatDialog = {
       } else {
         // Add error to the original chat history
         const originalChatHistory = this.chatHistories.get(requestTextKey) || [];
-        originalChatHistory.push({
-          type: 'user',
-          message: message,
-          timestamp: new Date().toISOString()
-        });
+        
+        // Only add the error response (user message was already added when request was made)
         originalChatHistory.push({
           type: 'ai',
           message: `Error: Failed to get response from server`,
           timestamp: new Date().toISOString()
         });
+        
         this.chatHistories.set(requestTextKey, originalChatHistory);
+        console.log('[ChatDialog] Added error response to original chat history for textKey:', requestTextKey);
       }
     }
     
@@ -3683,7 +3988,7 @@ const ChatDialog = {
   addMessageToChat(type, message) {
     const chatContainer = document.getElementById('vocab-chat-messages');
     
-    // Remove "Ask your doubt" message if exists
+    // Remove "Ask anything about the content" message if exists
     const noChatsMsg = chatContainer.querySelector('.vocab-chat-no-messages');
     if (noChatsMsg) {
       noChatsMsg.remove();
@@ -3718,8 +4023,54 @@ const ChatDialog = {
     
     // Also update the stored chat history for this textKey
     if (this.currentTextKey) {
+      console.log('[ChatDialog] ===== SAVING TO CHATHISTORIES MAP =====');
+      console.log('[ChatDialog] Saving to chatHistories with key:', this.currentTextKey);
+      console.log('[ChatDialog] Messages to save:', this.chatHistory.length);
+      console.log('[ChatDialog] ChatHistories Map before set:', Array.from(this.chatHistories.keys()));
+      
       this.chatHistories.set(this.currentTextKey, [...this.chatHistory]);
+      
+      console.log('[ChatDialog] ChatHistories Map after set:', Array.from(this.chatHistories.keys()));
     }
+    
+    // Store chat message in analysis data for persistence
+    if (this.currentTextKey && window.ButtonPanel && window.ButtonPanel.topicsModal && window.ButtonPanel.topicsModal.customContentModal && window.ButtonPanel.topicsModal.customContentModal.activeTabId) {
+      const activeContent = window.ButtonPanel.topicsModal.customContentModal.getContentByTabId(parseInt(window.ButtonPanel.topicsModal.customContentModal.activeTabId));
+      if (activeContent && activeContent.analysis) {
+        // Ensure chats array is initialized
+        if (!activeContent.analysis.chats) {
+          activeContent.analysis.chats = [];
+          console.log('[ChatDialog] Initialized chats array in analysis data');
+        }
+        
+        console.log('[ChatDialog] Storing chat message for currentTextKey:', this.currentTextKey, 'ChatContext:', this.chatContext);
+        console.log('[ChatDialog] Available chats in analysis:', activeContent.analysis.chats.map(c => c.textKey));
+        // Check if this textKey already exists in chats
+        const existingChatIndex = activeContent.analysis.chats.findIndex(c => 
+          c.textKey === this.currentTextKey
+        );
+        
+        const chatData = {
+          textKey: this.currentTextKey,
+          messages: [...this.chatHistory], // Store all messages for this textKey
+          lastUpdated: new Date().toISOString()
+        };
+        
+        if (existingChatIndex !== -1) {
+          // Update existing chat
+          activeContent.analysis.chats[existingChatIndex] = chatData;
+          console.log(`[ChatDialog] Updated existing chat for textKey "${this.currentTextKey}" in analysis data`);
+        } else {
+          // Add new chat
+          activeContent.analysis.chats.push(chatData);
+          console.log(`[ChatDialog] Added new chat for textKey "${this.currentTextKey}" to analysis data`);
+        }
+        console.log('[ChatDialog] Final chats in analysis:', activeContent.analysis.chats.map(c => c.textKey));
+      }
+    }
+    
+    console.log('[ChatDialog] ===== MESSAGE SAVED IMMEDIATELY =====');
+    console.log('[ChatDialog] Message type:', type, 'Total messages:', this.chatHistory.length);
   },
   
   /**
@@ -3811,13 +4162,17 @@ const ChatDialog = {
     const chatContainer = document.getElementById('vocab-chat-messages');
     chatContainer.innerHTML = '';
     
-    // Show "No chats yet" message
+    // Show appropriate message based on chat context
+    const promptText = this.chatContext === 'selected' 
+      ? 'Ask doubts on the selected content' 
+      : 'Ask anything about the content';
+    
     const noChatsMsg = document.createElement('div');
     noChatsMsg.className = 'vocab-chat-no-messages';
     noChatsMsg.innerHTML = `
       <div class="vocab-chat-no-messages-content">
         ${this.createChatEmptyIcon()}
-        <span>Ask your doubt</span>
+        <span>${promptText}</span>
       </div>
     `;
     chatContainer.appendChild(noChatsMsg);
@@ -3849,11 +4204,32 @@ const ChatDialog = {
    * Show dialog
    */
   show() {
+    console.log('[ChatDialog] ===== SHOW FUNCTION CALLED =====');
+    console.log('[ChatDialog] Dialog container exists:', !!this.dialogContainer);
     if (this.dialogContainer) {
+      console.log('[ChatDialog] Setting isOpen to true');
       this.isOpen = true;
       setTimeout(() => {
+        console.log('[ChatDialog] Adding visible class to dialog');
         this.dialogContainer.classList.add('visible');
+        console.log('[ChatDialog] Dialog should now be visible');
+        
+        // Auto-focus the question input for both generic and selected text chat
+        setTimeout(() => {
+          const questionInput = this.dialogContainer.querySelector('.vocab-chat-input');
+          if (questionInput) {
+            questionInput.focus();
+            console.log(`[ChatDialog] Auto-focused question input for ${this.chatContext} chat`);
+          }
+        }, 100);
+        
+        // Ensure focus buttons are hidden/shown based on chat context after dialog is rendered
+        setTimeout(() => {
+          this.hideFocusButtonsForCustomContent(this.currentTextKey);
+        }, 200);
       }, 10);
+    } else {
+      console.log('[ChatDialog] ERROR: Dialog container not found!');
     }
   },
   
@@ -3861,8 +4237,14 @@ const ChatDialog = {
    * Hide dialog
    */
   hide() {
+    console.log('[ChatDialog] ===== HIDE FUNCTION CALLED =====');
+    console.log('[ChatDialog] Dialog container exists:', !!this.dialogContainer);
     if (this.dialogContainer) {
+      console.log('[ChatDialog] Removing visible class from dialog');
       this.dialogContainer.classList.remove('visible');
+      console.log('[ChatDialog] Dialog should now be hidden');
+    } else {
+      console.log('[ChatDialog] ERROR: Dialog container not found for hiding!');
     }
   },
   
@@ -4681,11 +5063,27 @@ const ChatDialog = {
         width: 4px;
         cursor: ew-resize;
         background: transparent;
-        transition: background 0.2s ease;
+        transition: all 0.2s ease;
       }
       
-      .vocab-chat-resize-left:hover {
-        background: rgba(149, 39, 245, 0.3);
+      .vocab-chat-resize-left::before {
+        content: '';
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        transform: translate(-50%, -50%);
+        width: 4px;
+        height: 40px;
+        border-radius: 2px;
+        background: #9527F5;
+        box-shadow: 0 0 8px rgba(149, 39, 245, 0.3);
+        transition: all 0.2s ease;
+      }
+      
+      .vocab-chat-resize-left:hover::before {
+        background: #9527F5;
+        box-shadow: 0 0 12px rgba(149, 39, 245, 0.5);
+        transform: translate(-50%, -50%) scale(1.1);
       }
       
       .vocab-chat-resize-bottom {
@@ -4705,24 +5103,65 @@ const ChatDialog = {
       .vocab-chat-resize-bottom-left {
         left: 0;
         bottom: 0;
-        width: 12px;
-        height: 12px;
+        width: 20px;
+        height: 20px;
         cursor: nesw-resize;
         background: transparent;
-        border-bottom-left-radius: 4px;
       }
       
-      .vocab-chat-resize-bottom-left::after {
+      .vocab-chat-resize-bottom-left::before {
         content: '';
         position: absolute;
-        left: 2px;
-        bottom: 2px;
-        width: 8px;
-        height: 8px;
-        border-left: 2px solid #9527F5;
-        border-bottom: 2px solid #9527F5;
-        opacity: 0.5;
-        border-bottom-left-radius: 2px;
+        left: 50%;
+        top: 50%;
+        transform: translate(-50%, -50%);
+        width: 20px;
+        height: 20px;
+        background: transparent;
+        box-shadow: none;
+        border-bottom: 4px solid #9527F5;
+        border-left: 4px solid #9527F5;
+        border-right: none;
+        border-top: none;
+        border-radius: 0 0 0 20px;
+        transition: all 0.2s ease;
+      }
+      
+      .vocab-chat-resize-bottom-left:hover::before {
+        transform: translate(-50%, -50%) scale(1.1);
+        box-shadow: none;
+      }
+      
+      .vocab-chat-resize-top-left {
+        left: 0;
+        top: 0;
+        width: 20px;
+        height: 20px;
+        cursor: nw-resize;
+        background: transparent;
+      }
+      
+      .vocab-chat-resize-top-left::before {
+        content: '';
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        transform: translate(-50%, -50%);
+        width: 20px;
+        height: 20px;
+        background: transparent;
+        box-shadow: none;
+        border-top: 4px solid #9527F5;
+        border-left: 4px solid #9527F5;
+        border-right: none;
+        border-bottom: none;
+        border-radius: 20px 0 0 0;
+        transition: all 0.2s ease;
+      }
+      
+      .vocab-chat-resize-top-left:hover::before {
+        transform: translate(-50%, -50%) scale(1.1);
+        box-shadow: none;
       }
       
       /* Focus Button Styles */
@@ -4826,8 +5265,8 @@ const ChatDialog = {
       }
 
       .vocab-processing-text {
-        font-size: 18px;
-        font-weight: 500;
+        font-size: 20px;
+        font-weight: 600;
         color: #A24EFF;
         margin-bottom: 20px;
         font-family: 'Inter', 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
@@ -4836,7 +5275,7 @@ const ChatDialog = {
       .vocab-processing-icon {
         width: 40px;
         height: 40px;
-        margin: 0 auto;
+        margin: 20px auto 0 auto;
         position: relative;
       }
 
@@ -4875,12 +5314,12 @@ const ChatDialog = {
       }
 
       .vocab-image-processing-text {
-        margin-bottom: 20px;
+        margin-bottom: 0;
       }
 
       .vocab-image-processing-main {
-        font-size: 18px;
-        font-weight: 500;
+        font-size: 20px;
+        font-weight: 600;
         color: #A24EFF;
         margin-bottom: 8px;
         font-family: 'Inter', 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
@@ -5345,9 +5784,9 @@ const ChatDialog = {
 
       /* Add Tab Button */
       .vocab-custom-content-add-tab {
-        background: var(--vocab-background-white);
+        background: #9527F5;
         border: none;
-        color: rgba(162, 78, 255, 0.8);
+        color: white;
         cursor: pointer;
         padding: var(--vocab-spacing-xs);
         border-radius: 50%;
@@ -5355,7 +5794,7 @@ const ChatDialog = {
         display: flex;
         align-items: center;
         justify-content: center;
-        box-shadow: none;
+        box-shadow: 0 2px 8px rgba(149, 39, 245, 0.3);
         min-width: 32px;
         height: 32px;
         flex-shrink: 0;
@@ -5367,19 +5806,18 @@ const ChatDialog = {
       }
 
       .vocab-custom-content-add-tab:hover {
-        background: rgba(162, 78, 255, 0.1);
-        color: rgba(162, 78, 255, 0.8);
-        transform: none;
-        box-shadow: none;
-        border-radius: 10px;
+        background: #7B1FD6;
+        color: white;
+        transform: scale(1.05);
+        box-shadow: 0 4px 12px rgba(149, 39, 245, 0.4);
       }
 
       .vocab-custom-content-add-tab:active {
-        transform: scale(1.1);
+        transform: scale(0.95);
         outline: none;
         border: none;
-        background: rgba(162, 78, 255, 0.1);
-        border-radius: 10px;
+        background: #6A1B9A;
+        box-shadow: 0 2px 6px rgba(149, 39, 245, 0.5);
       }
 
       /* Close Button Component */
@@ -5469,53 +5907,6 @@ const ChatDialog = {
         box-shadow: none;
       }
 
-      /* Settings Button Component */
-      .vocab-custom-content-settings {
-        position: absolute;
-        top: 50%;
-        right: var(--vocab-spacing-md);
-        transform: translateY(-50%);
-        width: 40px;
-        height: 40px;
-        background: transparent;
-        border: none;
-        border-radius: 50%;
-        color: var(--vocab-primary-color);
-        display: none;
-        align-items: center;
-        justify-content: center;
-        cursor: pointer;
-        transition: all var(--vocab-transition-normal);
-        z-index: 1000;
-        box-shadow: none;
-      }
-
-      /* Show settings button only for topics */
-      .vocab-custom-content-modal[data-content-type="topic"] .vocab-custom-content-settings {
-        display: flex;
-      }
-      
-      .vocab-custom-content-settings:hover {
-        background: transparent;
-        transform: translateY(-50%) scale(1.05);
-        box-shadow: none;
-        color: var(--vocab-primary-hover);
-      }
-
-      .vocab-custom-content-settings:active {
-        transform: translateY(-50%) scale(0.95);
-      }
-      
-      .vocab-custom-content-settings svg {
-        width: 24px;
-        height: 24px;
-        transition: transform var(--vocab-transition-normal);
-        fill: #9527F5;
-      }
-
-      .vocab-custom-content-settings:hover svg {
-        transform: rotate(15deg);
-      }
 
       /* Editor Component */
       .vocab-custom-content-editor {
@@ -5539,6 +5930,42 @@ const ChatDialog = {
           rgba(255, 255, 255, 1) calc(100% - 20px),
           rgba(255, 255, 255, 1) 100%
         );
+      }
+
+      /* Chat Icon */
+      .vocab-custom-content-chat-icon {
+        position: absolute;
+        bottom: 20px;
+        right: 20px;
+        width: 50px;
+        height: 50px;
+        background: #9527F5;
+        border: none;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        box-shadow: 0 4px 12px rgba(149, 39, 245, 0.3);
+        transition: all 0.3s ease;
+        z-index: 1000;
+        pointer-events: auto;
+      }
+
+      .vocab-custom-content-chat-icon:hover {
+        background: #7a1fd9;
+        transform: scale(1.1);
+        box-shadow: 0 6px 16px rgba(149, 39, 245, 0.4);
+      }
+
+      .vocab-custom-content-chat-icon:active {
+        transform: scale(0.95);
+      }
+
+      .vocab-custom-content-chat-icon svg {
+        width: 24px;
+        height: 24px;
+        fill: white;
       }
 
       /* Scrollbar styling */
@@ -5975,8 +6402,7 @@ const ChatDialog = {
       .vocab-custom-content-tab:focus,
       .vocab-custom-content-tab-arrow:focus,
       .vocab-custom-content-add-tab:focus,
-      .vocab-custom-content-close:focus,
-      .vocab-custom-content-settings:focus {
+      .vocab-custom-content-close:focus {
         outline: 2px solid var(--vocab-primary-color);
         outline-offset: 2px;
       }
@@ -6003,7 +6429,6 @@ const ChatDialog = {
         .vocab-custom-content-tab-arrow,
         .vocab-custom-content-add-tab,
         .vocab-custom-content-close,
-        .vocab-custom-content-settings,
         .vocab-custom-content-search-input {
           transition: none;
           animation: none;
@@ -6012,6 +6437,53 @@ const ChatDialog = {
     `;
     
     document.head.appendChild(style);
+  },
+  
+  /**
+   * Save chat history to analysis data for persistence
+   */
+  saveChatHistoryToAnalysisData() {
+    if (!this.currentTextKey || !window.ButtonPanel || !window.ButtonPanel.topicsModal || !window.ButtonPanel.topicsModal.customContentModal || !window.ButtonPanel.topicsModal.customContentModal.activeTabId) {
+      console.log('[ChatDialog] Cannot save to analysis data - missing required components');
+      return;
+    }
+    
+    const activeContent = window.ButtonPanel.topicsModal.customContentModal.getContentByTabId(parseInt(window.ButtonPanel.topicsModal.customContentModal.activeTabId));
+    if (!activeContent || !activeContent.analysis) {
+      console.log('[ChatDialog] Cannot save to analysis data - no active content or analysis');
+      return;
+    }
+    
+    // Ensure chats array is initialized
+    if (!activeContent.analysis.chats) {
+      activeContent.analysis.chats = [];
+      console.log('[ChatDialog] Initialized chats array in analysis data (close function)');
+    }
+    
+    // Extract the tab ID from the currentTextKey
+    const chatTabId = this.currentTextKey.replace(/^[^-]+-(\d+)-.*/, '$1');
+    console.log('[ChatDialog] Saving chat history to analysis data for tab:', chatTabId);
+    
+    // Check if this textKey already exists in chats
+    const existingChatIndex = activeContent.analysis.chats.findIndex(c => 
+      c.textKey === this.currentTextKey
+    );
+    
+    const chatData = {
+      textKey: this.currentTextKey,
+      messages: [...this.chatHistory],
+      lastUpdated: new Date().toISOString()
+    };
+    
+    if (existingChatIndex !== -1) {
+      // Update existing chat
+      activeContent.analysis.chats[existingChatIndex] = chatData;
+      console.log(`[ChatDialog] Updated existing chat for textKey "${this.currentTextKey}" in analysis data`);
+    } else {
+      // Add new chat
+      activeContent.analysis.chats.push(chatData);
+      console.log(`[ChatDialog] Added new chat for textKey "${this.currentTextKey}" to analysis data`);
+    }
   }
 };
 // Button Panel Module - Manages the floating button UI
@@ -6327,10 +6799,20 @@ const ButtonPanel = {
       <div class="vocab-vertical-btn-text">Topics</div>
     `;
 
+    // Create Text button
+    const textButton = document.createElement('button');
+    textButton.className = 'vocab-vertical-btn';
+    textButton.id = 'vocab-text-btn';
+    textButton.innerHTML = `
+      <div class="vocab-vertical-btn-icon">${this.createTextIcon()}</div>
+      <div class="vocab-vertical-btn-text">Text</div>
+    `;
+
     // Append buttons to group
     group.appendChild(pdfButton);
     group.appendChild(imageButton);
     group.appendChild(topicsButton);
+    group.appendChild(textButton);
 
     return group;
   },
@@ -6443,6 +6925,21 @@ const ButtonPanel = {
         <path d="M3 17H7V21H3V17Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
         <path d="M10 17H14V21H10V17Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
         <path d="M17 17H21V21H17V17Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    `;
+  },
+
+  /**
+   * Create Text icon SVG (white)
+   * @returns {string} SVG markup
+   */
+  createTextIcon() {
+    return `
+      <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M3 4C3 3.448 3.448 3 4 3H16C16.552 3 17 3.448 17 4V16C17 16.552 16.552 17 16 17H4C3.448 17 3 16.552 3 16V4Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M6 7H14M6 9H12M6 11H10M6 13H14" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M10 15L10 13M10 13L8 15M10 13L12 15" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M10 13L10 11" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
       </svg>
     `;
   },
@@ -8037,6 +8534,266 @@ const ButtonPanel = {
           min-width: 100px;
         }
       }
+
+      /* Text Input Modal Styles */
+      .vocab-text-input-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.5);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 1000001;
+        opacity: 0;
+        visibility: hidden;
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        padding: 20px;
+        box-sizing: border-box;
+      }
+
+      .vocab-text-input-overlay.visible {
+        opacity: 1;
+        visibility: visible;
+      }
+
+      .vocab-text-input-modal {
+        background: white;
+        border-radius: 20px;
+        padding: 0;
+        width: 90%;
+        max-width: 800px;
+        max-height: 80vh;
+        transform: scale(0.9) translateY(20px);
+        opacity: 0;
+        visibility: hidden;
+        transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease, visibility 0.3s ease;
+        font-family: 'Inter', 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+      }
+
+      .vocab-text-input-modal.visible {
+        transform: scale(1) translateY(0);
+        opacity: 1;
+        visibility: visible;
+      }
+
+      .vocab-text-input-header {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        padding: 30px 40px 20px 40px;
+        position: relative;
+        border-bottom: 1px solid #f0f0f0;
+      }
+
+      .vocab-text-input-title {
+        font-size: 28px;
+        font-weight: 400;
+        color: #9B6EDA;
+        margin: 0;
+        text-align: center;
+      }
+
+      .vocab-text-input-close {
+        position: absolute;
+        right: 20px;
+        top: 50%;
+        transform: translateY(-50%);
+        background: none;
+        border: none;
+        cursor: pointer;
+        padding: 8px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #A24EFF;
+        transition: all 0.2s ease;
+      }
+
+      .vocab-text-input-close:hover {
+        background: #f5f5f5;
+        color: #7A5BC7;
+        transform: translateY(-50%) scale(1.2);
+      }
+
+      .vocab-text-input-close svg {
+        width: 20px;
+        height: 20px;
+      }
+
+      .vocab-text-input-search {
+        display: flex;
+        justify-content: center;
+        padding: 20px 40px;
+      }
+
+      .vocab-text-input-search-input {
+        width: 400px;
+        padding: 8px 20px;
+        border: 1px solid #D1B3FF;
+        border-radius: 25px;
+        font-size: 16px;
+        font-family: 'Inter', 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        outline: none;
+        transition: border-color 0.2s ease;
+        box-sizing: border-box;
+        text-align: center;
+      }
+
+      .vocab-text-input-search-input:focus {
+        border-color: #A24EFF;
+      }
+
+      .vocab-text-input-content {
+        padding: 20px 40px 10px 40px;
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+      }
+
+      .vocab-text-input-textarea {
+        width: 100%;
+        min-height: 200px;
+        padding: 20px;
+        border: 1px solid #D1B3FF;
+        border-radius: 20px;
+        font-size: 16px;
+        font-family: 'Inter', 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        line-height: 1.5;
+        resize: none;
+        outline: none;
+        transition: border-color 0.2s ease;
+        box-sizing: border-box;
+      }
+
+      .vocab-text-input-textarea:focus {
+        border-color: #A24EFF;
+      }
+
+      .vocab-text-input-textarea::placeholder {
+        color: #999;
+      }
+
+      .vocab-text-input-textarea-container {
+        position: relative;
+        width: 100%;
+      }
+
+      .vocab-text-input-proceed-btn {
+        background: #A24EFF;
+        color: white;
+        border: none;
+        border-radius: 20px;
+        padding: 16px 32px;
+        font-size: 16px;
+        font-weight: 700;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        align-self: center;
+        margin: 10px 0 20px 0;
+        min-width: 120px;
+      }
+
+      .vocab-text-input-proceed-btn:hover {
+        background: #7A5BC7;
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(162, 78, 255, 0.3);
+      }
+
+      .vocab-text-input-proceed-btn:active {
+        transform: translateY(0);
+      }
+
+      /* Responsive Design for Text Input Modal */
+      @media (max-width: 768px) {
+        .vocab-text-input-modal {
+          width: 95%;
+          margin: 20px;
+        }
+
+        .vocab-text-input-title {
+          font-size: 20px;
+        }
+
+        .vocab-text-input-header {
+          padding: 20px 30px 15px 30px;
+        }
+
+        .vocab-text-input-search {
+          padding: 15px 30px;
+        }
+
+        .vocab-text-input-search-input {
+          width: 350px;
+          padding: 6px 16px;
+          font-size: 15px;
+        }
+
+        .vocab-text-input-content {
+          padding: 15px 30px 5px 30px;
+        }
+
+        .vocab-text-input-textarea {
+          min-height: 150px;
+          font-size: 15px;
+        }
+
+        .vocab-text-input-proceed-btn {
+          padding: 14px 28px;
+          font-size: 15px;
+          margin: 10px 0 20px 0;
+        }
+      }
+
+      @media (max-width: 480px) {
+        .vocab-text-input-overlay {
+          padding: 10px;
+        }
+
+        .vocab-text-input-modal {
+          width: 98%;
+          margin: 10px;
+        }
+
+        .vocab-text-input-header {
+          padding: 15px 20px 10px 20px;
+        }
+
+        .vocab-text-input-title {
+          font-size: 18px;
+        }
+
+        .vocab-text-input-search {
+          padding: 10px 20px;
+        }
+
+        .vocab-text-input-search-input {
+          width: 280px;
+          padding: 6px 14px;
+          font-size: 14px;
+        }
+
+        .vocab-text-input-content {
+          padding: 10px 20px 5px 20px;
+        }
+
+        .vocab-text-input-textarea {
+          min-height: 120px;
+          font-size: 14px;
+        }
+
+        .vocab-text-input-proceed-btn {
+          padding: 12px 24px;
+          font-size: 14px;
+          margin: 10px 0 15px 0;
+        }
+      }
     `;
 
     document.head.appendChild(style);
@@ -8100,7 +8857,7 @@ const ButtonPanel = {
     });
 
     buttons.customContent?.addEventListener('mouseleave', () => {
-      // Only hide if not clicking on the vertical group
+      // Only hide if not hovering over the vertical group
       setTimeout(() => {
         if (!this.verticalButtonGroup?.matches(':hover')) {
           this.hideVerticalButtonGroup();
@@ -8109,10 +8866,12 @@ const ButtonPanel = {
     });
 
     // Add hover events for vertical button group
+    // Keep buttons visible when hovering over them
     this.verticalButtonGroup?.addEventListener('mouseenter', () => {
       this.showVerticalButtonGroup();
     });
 
+    // Hide buttons when moving away from the group
     this.verticalButtonGroup?.addEventListener('mouseleave', () => {
       this.hideVerticalButtonGroup();
     });
@@ -8121,11 +8880,13 @@ const ButtonPanel = {
     const pdfBtn = document.getElementById('vocab-pdf-btn');
     const imageBtn = document.getElementById('vocab-image-btn');
     const topicsBtn = document.getElementById('vocab-topics-btn');
+    const textBtn = document.getElementById('vocab-text-btn');
     
     console.log('Button elements found:');
     console.log('PDF button:', pdfBtn);
     console.log('Image button:', imageBtn);
     console.log('Topics button:', topicsBtn);
+    console.log('Text button:', textBtn);
 
     pdfBtn?.addEventListener('click', () => {
       console.log('PDF button clicked');
@@ -8140,6 +8901,11 @@ const ButtonPanel = {
     topicsBtn?.addEventListener('click', (e) => {
       console.log('Topics button clicked');
       this.handleTopicsButton();
+    });
+
+    textBtn?.addEventListener('click', (e) => {
+      console.log('Text button clicked');
+      this.handleTextButton();
     });
 
     // Add tooltip event listeners
@@ -8423,8 +9189,89 @@ const ButtonPanel = {
     
     console.log('[ButtonPanel] All meanings removed');
     
+    // Also remove data from analysis structure for current tab
+    this.removeMeaningsFromAnalysisData();
+    
     // Update button states
     this.updateButtonStatesFromSelections();
+  },
+
+  /**
+   * Remove meanings from analysis data structure for current tab
+   */
+  removeMeaningsFromAnalysisData() {
+    console.log('[ButtonPanel] Removing meanings from analysis data for current tab');
+    
+    // Check if custom content modal is open and has active tab
+    if (!this.topicsModal || !this.topicsModal.customContentModal || !this.topicsModal.customContentModal.activeTabId) {
+      console.log('[ButtonPanel] No active tab in custom content modal');
+      return;
+    }
+    
+    const activeTabId = this.topicsModal.customContentModal.activeTabId;
+    const activeContent = this.topicsModal.customContentModal.getContentByTabId(parseInt(activeTabId));
+    
+    if (!activeContent || !activeContent.analysis) {
+      console.log('[ButtonPanel] No analysis data found for active tab:', activeTabId);
+      return;
+    }
+    
+    console.log('[ButtonPanel] Removing meanings from analysis data for tab:', activeTabId);
+    
+    // Clear word meanings
+    if (activeContent.analysis.wordMeanings && activeContent.analysis.wordMeanings.length > 0) {
+      console.log('[ButtonPanel] Clearing', activeContent.analysis.wordMeanings.length, 'word meanings from analysis data');
+      activeContent.analysis.wordMeanings = [];
+    }
+    
+    // Clear simplified meanings
+    if (activeContent.analysis.simplifiedMeanings && activeContent.analysis.simplifiedMeanings.length > 0) {
+      console.log('[ButtonPanel] Clearing', activeContent.analysis.simplifiedMeanings.length, 'simplified meanings from analysis data');
+      activeContent.analysis.simplifiedMeanings = [];
+    }
+    
+    // Clear chats
+    if (activeContent.analysis.chats && activeContent.analysis.chats.length > 0) {
+      console.log('[ButtonPanel] Clearing', activeContent.analysis.chats.length, 'chats from analysis data');
+      activeContent.analysis.chats = [];
+    }
+    
+    console.log('[ButtonPanel] Analysis data cleared for tab:', activeTabId);
+  },
+
+  /**
+   * Remove specific word from analysis data structure for current tab
+   * @param {string} normalizedWord - The normalized word to remove
+   */
+  removeWordFromAnalysisData(normalizedWord) {
+    console.log('[ButtonPanel] Removing word from analysis data:', normalizedWord);
+    
+    // Check if custom content modal is open and has active tab
+    if (!this.topicsModal || !this.topicsModal.customContentModal || !this.topicsModal.customContentModal.activeTabId) {
+      console.log('[ButtonPanel] No active tab in custom content modal');
+      return;
+    }
+    
+    const activeTabId = this.topicsModal.customContentModal.activeTabId;
+    const activeContent = this.topicsModal.customContentModal.getContentByTabId(parseInt(activeTabId));
+    
+    if (!activeContent || !activeContent.analysis || !activeContent.analysis.wordMeanings) {
+      console.log('[ButtonPanel] No word meanings found in analysis data for tab:', activeTabId);
+      return;
+    }
+    
+    // Find and remove the specific word from wordMeanings array
+    const initialLength = activeContent.analysis.wordMeanings.length;
+    activeContent.analysis.wordMeanings = activeContent.analysis.wordMeanings.filter(wordData => 
+      wordData.normalizedWord !== normalizedWord
+    );
+    
+    const removedCount = initialLength - activeContent.analysis.wordMeanings.length;
+    if (removedCount > 0) {
+      console.log('[ButtonPanel] Removed', removedCount, 'word explanation(s) for word:', normalizedWord, 'from analysis data');
+    } else {
+      console.log('[ButtonPanel] No word explanation found for word:', normalizedWord, 'in analysis data');
+    }
   },
 
   /**
@@ -8545,6 +9392,38 @@ const ButtonPanel = {
                   previousSimplifiedTexts: eventData.previousSimplifiedTexts || [],
                   shouldAllowSimplifyMore: eventData.shouldAllowSimplifyMore || false
                 });
+                
+                // Store simplified text in analysis data for persistence
+                if (this.topicsModal.customContentModal.activeTabId) {
+                  const activeContent = this.topicsModal.customContentModal.getContentByTabId(parseInt(this.topicsModal.customContentModal.activeTabId));
+                  if (activeContent && activeContent.analysis) {
+                    const simplifiedTextData = {
+                      textKey: matchingTextKey,
+                      textStartIndex: eventData.textStartIndex,
+                      textLength: eventData.textLength,
+                      originalText: eventData.text,
+                      simplifiedText: eventData.simplifiedText,
+                      previousSimplifiedTexts: eventData.previousSimplifiedTexts || [],
+                      shouldAllowSimplifyMore: eventData.shouldAllowSimplifyMore || false,
+                      timestamp: new Date().toISOString()
+                    };
+                    
+                    // Check if this text already exists in simplifiedMeanings
+                    const existingTextIndex = activeContent.analysis.simplifiedMeanings.findIndex(s => 
+                      s.textKey === matchingTextKey
+                    );
+                    
+                    if (existingTextIndex !== -1) {
+                      // Update existing simplified text
+                      activeContent.analysis.simplifiedMeanings[existingTextIndex] = simplifiedTextData;
+                      console.log(`[ButtonPanel] Updated existing simplified text for textKey "${matchingTextKey}" in analysis data`);
+                    } else {
+                      // Add new simplified text
+                      activeContent.analysis.simplifiedMeanings.push(simplifiedTextData);
+                      console.log(`[ButtonPanel] Added new simplified text for textKey "${matchingTextKey}" to analysis data`);
+                    }
+                  }
+                }
                 
                 // Update button states after adding to simplifiedTexts
                 ButtonPanel.updateButtonStatesFromSelections();
@@ -8904,6 +9783,38 @@ const ButtonPanel = {
               wordHighlight.setAttribute('data-meaning', wordInfo.meaning);
               wordHighlight.setAttribute('data-examples', JSON.stringify(wordInfo.examples));
               
+              // Store word explanation in analysis data for persistence
+              if (this.topicsModal.customContentModal.activeTabId) {
+                const activeContent = this.topicsModal.customContentModal.getContentByTabId(parseInt(this.topicsModal.customContentModal.activeTabId));
+                if (activeContent && activeContent.analysis) {
+                  // Check if this word already exists in wordMeanings
+                  const existingWordIndex = activeContent.analysis.wordMeanings.findIndex(w => 
+                    w.word.toLowerCase() === normalizedTargetWord
+                  );
+                  
+                  const wordExplanationData = {
+                    word: targetWord,
+                    normalizedWord: normalizedTargetWord,
+                    meaning: wordInfo.meaning,
+                    examples: wordInfo.examples,
+                    shouldAllowFetchMoreExamples: wordInfo.shouldAllowFetchMoreExamples || false,
+                    textStartIndex: wordInfo.textStartIndex,
+                    location: wordInfo.location,
+                    timestamp: new Date().toISOString()
+                  };
+                  
+                  if (existingWordIndex !== -1) {
+                    // Update existing word explanation
+                    activeContent.analysis.wordMeanings[existingWordIndex] = wordExplanationData;
+                    console.log(`[ButtonPanel] Updated existing word explanation for "${targetWord}" in analysis data`);
+                  } else {
+                    // Add new word explanation
+                    activeContent.analysis.wordMeanings.push(wordExplanationData);
+                    console.log(`[ButtonPanel] Added new word explanation for "${targetWord}" to analysis data`);
+                  }
+                }
+              }
+              
               // Add green wireframe cross button
               console.log(`[ButtonPanel] Adding green cross button`);
               const greenCrossBtn = WordSelector.createRemoveExplainedButton(targetWord);
@@ -9049,8 +9960,8 @@ const ButtonPanel = {
       // Move text from selectedTexts to askedTexts
       TextSelector.moveToAskedTexts(textKey);
       
-      // Open chat dialog
-      ChatDialog.open(originalText, textKey);
+      // Open chat dialog with selected context
+      ChatDialog.open(originalText, textKey, 'ask', null, 'selected');
     }
   },
 
@@ -9065,12 +9976,100 @@ const ButtonPanel = {
   },
 
   /**
+   * Check if the custom content modal is currently open
+   * @returns {boolean} True if the modal is open, false otherwise
+   */
+  isCustomContentModalOpen() {
+    return this.topicsModal.customContentModal.overlay && 
+           this.topicsModal.customContentModal.overlay.classList.contains('visible');
+  },
+
+  /**
+   * Get the currently active content type from the custom content modal
+   * @returns {string|null} The active content type ('pdf', 'image', 'topic', 'text') or null if no modal is open
+   */
+  getCurrentContentType() {
+    if (!this.isCustomContentModalOpen()) {
+      return null;
+    }
+    
+    // Check which content type is currently active
+    return this.topicsModal.currentContentType || null;
+  },
+
+  /**
    * Show the vertical button group
    */
   showVerticalButtonGroup() {
     if (this.verticalButtonGroup) {
+      // Show all buttons first
+      this.showAllVerticalButtons();
+      
+      // If custom content modal is open, hide the button for the current content type
+      const currentContentType = this.getCurrentContentType();
+      if (currentContentType) {
+        this.hideVerticalButtonForContentType(currentContentType);
+        console.log(`[ButtonPanel] Hiding ${currentContentType} button because modal is open`);
+      }
+      
       this.verticalButtonGroup.classList.add('visible');
       this.updateState({ showVerticalGroup: true });
+    }
+  },
+
+  /**
+   * Show all vertical buttons (make them visible)
+   */
+  showAllVerticalButtons() {
+    const buttons = [
+      document.getElementById('vocab-pdf-btn'),
+      document.getElementById('vocab-image-btn'),
+      document.getElementById('vocab-topics-btn'),
+      document.getElementById('vocab-text-btn')
+    ];
+    
+    buttons.forEach(button => {
+      if (button) {
+        button.style.display = 'flex';
+        button.style.visibility = 'visible';
+      }
+    });
+  },
+
+  /**
+   * Hide a specific vertical button based on content type
+   * @param {string} contentType - The content type ('pdf', 'image', 'topic', 'text')
+   */
+  hideVerticalButtonForContentType(contentType) {
+    const buttonIdMap = {
+      'pdf': 'vocab-pdf-btn',
+      'image': 'vocab-image-btn',
+      'topic': 'vocab-topics-btn',
+      'text': 'vocab-text-btn'
+    };
+    
+    const buttonId = buttonIdMap[contentType];
+    if (buttonId) {
+      const button = document.getElementById(buttonId);
+      if (button) {
+        button.style.display = 'none';
+        button.style.visibility = 'hidden';
+      }
+    }
+  },
+
+  /**
+   * Update vertical button visibility based on current content type
+   */
+  updateVerticalButtonVisibility() {
+    console.log('[ButtonPanel] Updating vertical button visibility');
+    const currentContentType = this.getCurrentContentType();
+    console.log('[ButtonPanel] Current content type:', currentContentType);
+    
+    if (currentContentType) {
+      // Hide the button for the current content type
+      this.hideVerticalButtonForContentType(currentContentType);
+      console.log(`[ButtonPanel] Hidden ${currentContentType} button because modal is open`);
     }
   },
 
@@ -9079,6 +10078,9 @@ const ButtonPanel = {
    */
   hideVerticalButtonGroup() {
     if (this.verticalButtonGroup) {
+      // Restore all buttons to visible state when hiding the group
+      this.showAllVerticalButtons();
+      
       this.verticalButtonGroup.classList.remove('visible');
       this.updateState({ showVerticalGroup: false });
     }
@@ -9133,6 +10135,7 @@ const ButtonPanel = {
       });
       
       customContentBtn.addEventListener('mouseleave', () => {
+        // Only hide if not hovering over the vertical group
         setTimeout(() => {
           if (!this.verticalButtonGroup?.matches(':hover')) {
             this.hideVerticalButtonGroup();
@@ -9172,10 +10175,17 @@ const ButtonPanel = {
     console.log('[ButtonPanel] PDF button clicked');
     // Hide the vertical group after selection
     this.hideVerticalButtonGroup();
-    // Hide the custom content button
-    this.hideCustomContentButton();
-    // Show the PDF upload modal
-    this.showPDFUploadModal();
+    
+    // Check if there's already PDF content in memory
+    const pdfContents = this.topicsModal.customContentModal.getContentByType('pdf');
+    if (pdfContents && pdfContents.length > 0) {
+      // Show custom content modal with only PDF contents
+      this.topicsModal.currentContentType = 'pdf';
+      this.showCustomContentModalWithContents('pdf');
+    } else {
+      // Show the PDF upload modal for new content
+      this.showPDFUploadModal();
+    }
   },
 
   /**
@@ -9185,10 +10195,17 @@ const ButtonPanel = {
     console.log('[ButtonPanel] Image button clicked');
     // Hide the vertical group after selection
     this.hideVerticalButtonGroup();
-    // Hide the custom content button
-    this.hideCustomContentButton();
-    // Show the image upload modal
-    this.showImageUploadModal();
+    
+    // Check if there's already image content in memory
+    const imageContents = this.topicsModal.customContentModal.getContentByType('image');
+    if (imageContents && imageContents.length > 0) {
+      // Show custom content modal with only image contents
+      this.topicsModal.currentContentType = 'image';
+      this.showCustomContentModalWithContents('image');
+    } else {
+      // Show the image upload modal for new content
+      this.showImageUploadModal();
+    }
   },
 
   /**
@@ -9198,18 +10215,451 @@ const ButtonPanel = {
     console.log('[ButtonPanel] Topics button clicked');
     // Hide the vertical group after selection
     this.hideVerticalButtonGroup();
-    // Hide the custom content button
-    this.hideCustomContentButton();
     
-    // Check if there's already content in memory
-    const allTabs = this.topicsModal.customContentModal.getAllTabs();
-    if (allTabs && allTabs.length > 0) {
-      // Show custom content modal with existing tabs
-      this.showCustomContentModalWithTabs();
+    // Check if there's already topic content in memory
+    const topicContents = this.topicsModal.customContentModal.getContentByType('topic');
+    if (topicContents && topicContents.length > 0) {
+      // Show custom content modal with only topic contents
+      this.topicsModal.currentContentType = 'topic';
+      this.showCustomContentModalWithContents('topic');
     } else {
       // Show the topics modal for new content
       this.showTopicsModal();
     }
+  },
+
+  /**
+   * Handler for Text button
+   */
+  handleTextButton() {
+    console.log('[ButtonPanel] Text button clicked');
+    // Hide the vertical group after selection
+    this.hideVerticalButtonGroup();
+    
+    // Check if there's already text content in memory
+    const textContents = this.topicsModal.customContentModal.getContentByType('text');
+    if (textContents && textContents.length > 0) {
+      // Show custom content modal with only text contents
+      this.topicsModal.currentContentType = 'text';
+      this.showCustomContentModalWithContents('text');
+    } else {
+      // Show the text input modal for new content
+      this.showTextInputModal();
+    }
+  },
+
+  /**
+   * Show text input modal
+   */
+  showTextInputModal() {
+    console.log('[ButtonPanel] Showing text input modal');
+    
+    // Create modal if it doesn't exist
+    if (!this.textInputModal) {
+      this.createTextInputModal();
+      
+      // Wait for DOM to be ready before showing modal using double requestAnimationFrame
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          this.showTextModalWithAnimation();
+        });
+      });
+    } else {
+      // Modal already exists, just show it
+      this.showTextModalWithAnimation();
+    }
+  },
+
+  /**
+   * Create text input modal HTML structure
+   */
+  createTextInputModal() {
+    console.log('[ButtonPanel] Creating text input modal...');
+    
+    // Create overlay
+    const overlay = document.createElement('div');
+    overlay.className = 'vocab-text-input-overlay';
+    overlay.id = 'vocab-text-input-overlay';
+    
+    // Create modal
+    const modal = document.createElement('div');
+    modal.className = 'vocab-text-input-modal';
+    
+    // Create header
+    const header = document.createElement('div');
+    header.className = 'vocab-text-input-header';
+    
+    const title = document.createElement('h2');
+    title.className = 'vocab-text-input-title';
+    title.textContent = 'Paste your text';
+    
+    const closeBtn = document.createElement('button');
+    closeBtn.className = 'vocab-text-input-close';
+    closeBtn.innerHTML = `
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M18 6L6 18M6 6L18 18" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    `;
+    closeBtn.setAttribute('aria-label', 'Close modal');
+    
+    header.appendChild(title);
+    header.appendChild(closeBtn);
+    
+    // Create search bar
+    const searchBar = document.createElement('div');
+    searchBar.className = 'vocab-text-input-search';
+    
+    const searchInput = document.createElement('input');
+    searchInput.className = 'vocab-text-input-search-input';
+    searchInput.type = 'text';
+    searchInput.placeholder = 'Search in text...';
+    
+    searchBar.appendChild(searchInput);
+    
+    // Create content container
+    const contentContainer = document.createElement('div');
+    contentContainer.className = 'vocab-text-input-content';
+    
+    // Create textarea
+    const textarea = document.createElement('textarea');
+    textarea.className = 'vocab-text-input-textarea';
+    textarea.placeholder = 'Enter your text content here...';
+    textarea.rows = 10;
+    
+    contentContainer.appendChild(textarea);
+    
+    // Create proceed button
+    const proceedBtn = document.createElement('button');
+    proceedBtn.className = 'vocab-text-input-proceed-btn';
+    proceedBtn.textContent = 'Proceed';
+    
+    // Assemble modal
+    modal.appendChild(header);
+    modal.appendChild(searchBar);
+    modal.appendChild(contentContainer);
+    modal.appendChild(proceedBtn);
+    
+    overlay.appendChild(modal);
+    
+    // Append to body
+    document.body.appendChild(overlay);
+    
+    // Store references
+    this.textInputModal = {
+      overlay: overlay,
+      modal: modal,
+      textarea: textarea,
+      searchInput: searchInput,
+      proceedBtn: proceedBtn,
+      closeBtn: closeBtn
+    };
+    
+    // Attach event listeners
+    this.attachTextInputModalListeners();
+  },
+
+  /**
+   * Show text modal with animation
+   */
+  showTextModalWithAnimation() {
+    console.log('[ButtonPanel] Showing text modal with animation');
+    
+    if (this.textInputModal && this.textInputModal.overlay) {
+      this.textInputModal.overlay.classList.add('visible');
+      this.textInputModal.modal.classList.add('visible');
+      
+      // Focus on textarea and check border radius
+      setTimeout(() => {
+        if (this.textInputModal.textarea) {
+          this.textInputModal.textarea.focus();
+          this.updateTextareaBorderRadius(this.textInputModal.textarea);
+        }
+      }, 300);
+    }
+  },
+
+  /**
+   * Hide text input modal
+   */
+  hideTextInputModal() {
+    console.log('[ButtonPanel] Hiding text input modal');
+    
+    // Hide search preview if visible
+    this.hideTextSearchPreview();
+    
+    if (this.textInputModal && this.textInputModal.overlay) {
+      this.textInputModal.overlay.classList.remove('visible');
+      this.textInputModal.modal.classList.remove('visible');
+      
+      // Clear textarea after animation
+      setTimeout(() => {
+        if (this.textInputModal.textarea) {
+          this.textInputModal.textarea.value = '';
+        }
+      }, 300);
+    }
+    
+    // Show the custom content button again
+    this.showCustomContentButton();
+  },
+
+  /**
+   * Attach event listeners to text input modal
+   */
+  attachTextInputModalListeners() {
+    const overlay = this.textInputModal.overlay;
+    const modal = this.textInputModal.modal;
+    const closeBtn = this.textInputModal.closeBtn;
+    const proceedBtn = this.textInputModal.proceedBtn;
+    const textarea = this.textInputModal.textarea;
+    const searchInput = this.textInputModal.searchInput;
+    
+    if (!overlay || !modal || !closeBtn || !proceedBtn || !textarea || !searchInput) {
+      console.error('Text input modal: Missing required elements for event listeners');
+      return;
+    }
+    
+    // Close modal events
+    closeBtn.addEventListener('click', () => this.hideTextInputModal());
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) {
+        this.hideTextInputModal();
+      }
+    });
+    
+    // Search functionality
+    searchInput.addEventListener('input', (e) => {
+      const searchTerm = e.target.value;
+      this.performTextSearchInModal(textarea, searchTerm);
+    });
+    
+    // Update border radius when content changes
+    textarea.addEventListener('input', () => {
+      this.updateTextareaBorderRadius(textarea);
+    });
+    
+    // Update border radius on resize
+    textarea.addEventListener('resize', () => {
+      this.updateTextareaBorderRadius(textarea);
+    });
+    
+    // Initial border radius check
+    setTimeout(() => {
+      this.updateTextareaBorderRadius(textarea);
+    }, 100);
+    
+    // Proceed button event
+    proceedBtn.addEventListener('click', () => {
+      const textContent = textarea.value.trim();
+      if (textContent) {
+        this.handleTextProceed(textContent);
+      }
+    });
+    
+    // Enter key to proceed
+    textarea.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && e.ctrlKey) {
+        e.preventDefault();
+        const textContent = textarea.value.trim();
+        if (textContent) {
+          this.handleTextProceed(textContent);
+        }
+      }
+    });
+  },
+
+  /**
+   * Perform search in text input modal
+   */
+  performTextSearchInModal(textarea, searchTerm) {
+    if (!searchTerm || !searchTerm.trim()) {
+      // Remove highlights if any
+      textarea.style.backgroundColor = '';
+      textarea.style.boxShadow = '';
+      this.hideTextSearchPreview();
+      return;
+    }
+    
+    // Get the text content
+    const text = textarea.value;
+    const regex = new RegExp(`(${searchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gim');
+    
+    if (regex.test(text)) {
+      // Found matches - highlight the textarea with a subtle effect
+      textarea.style.backgroundColor = 'rgba(255, 224, 102, 0.05)';
+      textarea.style.boxShadow = 'inset 0 0 0 2px rgba(255, 224, 102, 0.3)';
+      
+      // Show search preview with highlighted matches
+      this.showTextSearchPreview(textarea, text, searchTerm);
+      
+      // Scroll to first match
+      this.scrollToTextMatch(textarea, searchTerm);
+    } else {
+      // No matches found
+      textarea.style.backgroundColor = '';
+      textarea.style.boxShadow = '';
+      this.hideTextSearchPreview();
+    }
+  },
+
+  /**
+   * Show search preview with highlighted matches for textarea
+   */
+  showTextSearchPreview(textarea, text, searchTerm) {
+    // Remove existing preview if any
+    this.hideTextSearchPreview();
+    
+    // Create preview overlay
+    const preview = document.createElement('div');
+    preview.className = 'vocab-text-search-preview';
+    preview.style.cssText = `
+      position: fixed;
+      background: white;
+      border: 2px solid #FFE066;
+      border-radius: 8px;
+      padding: 12px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+      z-index: 10000;
+      max-width: 400px;
+      max-height: 200px;
+      overflow-y: auto;
+      font-size: 14px;
+      line-height: 1.4;
+      font-family: inherit;
+    `;
+    
+    // Create highlighted content
+    const regex = new RegExp(`(${searchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gim');
+    const highlightedContent = text.replace(regex, '<span style="background: linear-gradient(120deg, #FFE066 0%, #FFD700 100%); padding: 2px 4px; border-radius: 3px; font-weight: 600; color: #333;">$1</span>');
+    
+    // Count matches
+    const matches = text.match(regex);
+    const matchCount = matches ? matches.length : 0;
+    
+    preview.innerHTML = `
+      <div style="font-weight: 600; margin-bottom: 8px; color: #333; border-bottom: 1px solid #eee; padding-bottom: 4px;">
+        Search Results: ${matchCount} match${matchCount !== 1 ? 'es' : ''} found
+      </div>
+      <div style="white-space: pre-wrap;">${highlightedContent}</div>
+    `;
+    
+    // Position relative to textarea
+    const rect = textarea.getBoundingClientRect();
+    preview.style.top = (rect.top + rect.height + 10) + 'px';
+    preview.style.left = Math.max(10, rect.left) + 'px';
+    
+    document.body.appendChild(preview);
+    
+    // Store reference for cleanup
+    this.textSearchPreview = preview;
+    
+    // Auto-hide after 5 seconds
+    setTimeout(() => {
+      this.hideTextSearchPreview();
+    }, 5000);
+  },
+
+  /**
+   * Hide text search preview overlay
+   */
+  hideTextSearchPreview() {
+    if (this.textSearchPreview) {
+      this.textSearchPreview.remove();
+      this.textSearchPreview = null;
+    }
+  },
+
+  /**
+   * Scroll to the first text match in textarea
+   */
+  scrollToTextMatch(textarea, searchTerm) {
+    const text = textarea.value;
+    const regex = new RegExp(`(${searchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gim');
+    const match = regex.exec(text);
+    
+    if (match) {
+      const matchIndex = match.index;
+      
+      // Calculate line number and position
+      const textBeforeMatch = text.substring(0, matchIndex);
+      const lines = textBeforeMatch.split('\n');
+      const lineNumber = lines.length - 1;
+      
+      // Scroll to the line containing the match
+      const lineHeight = parseInt(getComputedStyle(textarea).lineHeight) || 20;
+      const scrollTop = lineNumber * lineHeight;
+      
+      textarea.scrollTop = Math.max(0, scrollTop - textarea.clientHeight / 2);
+      
+      // Don't focus the textarea - this causes cursor to jump from search input
+    }
+  },
+
+  /**
+   * Update textarea border radius based on scrollbar presence
+   */
+  updateTextareaBorderRadius(textarea) {
+    if (!textarea) return;
+    
+    // Check if scrollbar is present
+    const hasScrollbar = textarea.scrollHeight > textarea.clientHeight;
+    
+    if (hasScrollbar) {
+      // Scrollbar present - make top-right and bottom-right corners square
+      textarea.style.borderRadius = '20px 0 0 20px';
+    } else {
+      // No scrollbar - keep all corners rounded
+      textarea.style.borderRadius = '20px';
+    }
+  },
+
+  /**
+   * Handle text proceed button click
+   */
+  handleTextProceed(textContent) {
+    console.log('[ButtonPanel] Processing text content, length:', textContent.length);
+    
+    // Hide the text input modal
+    this.hideTextInputModal();
+    
+    // Set current content type
+    this.topicsModal.currentContentType = 'text';
+    
+    // Create tab name from first 3 words
+    const words = textContent.trim().split(/\s+/);
+    const tabName = words.slice(0, 3).join(' ');
+    
+    console.log('[ButtonPanel] Creating text content with name:', tabName);
+    
+    // Create text content using the new data structure
+    const newContent = this.topicsModal.customContentModal.addContent('text', tabName, textContent, {
+      inputText: textContent,
+      createdAt: new Date().toISOString()
+    });
+    
+    if (!newContent) {
+      console.error('[ButtonPanel] ===== FAILED TO CREATE TEXT CONTENT =====');
+      this.showNotification('Failed to create text content. Please try again.', 'error');
+      return;
+    }
+
+    console.log('[ButtonPanel] Text content created successfully');
+    
+    // Show modal with only text contents, and switch to the new tab
+    this.showCustomContentModalWithContents('text', newContent.tabId);
+    
+    // Ensure custom content modal is visible
+    console.log('[ButtonPanel] Ensuring custom content modal is visible...');
+    if (!this.topicsModal.customContentModal.overlay.classList.contains('visible')) {
+      this.topicsModal.customContentModal.overlay.classList.add('visible');
+      console.log('[ButtonPanel] Custom content modal is now visible');
+    } else {
+      console.log('[ButtonPanel] Custom content modal was already visible');
+    }
+    
+    // Update modal title
+    console.log('[ButtonPanel] Updating modal title to Text...');
+    this.updateCustomContentModalTitle('text');
   },
 
   /**
@@ -9455,9 +10905,9 @@ const ButtonPanel = {
       const formData = new FormData();
       formData.append('file', file);
       
-      console.log('[ButtonPanel] Making API call to:', 'https://caten-blush.vercel.app/api/v1/pdf-to-text');
+      console.log('[ButtonPanel] Making API call to:', ApiConfig.getUrl(ApiConfig.ENDPOINTS.PDF_TO_TEXT));
       // Make API call to process PDF
-      const response = await fetch('https://caten-blush.vercel.app/api/v1/pdf-to-text', {
+      const response = await fetch(ApiConfig.getUrl(ApiConfig.ENDPOINTS.PDF_TO_TEXT), {
         method: 'POST',
         body: formData,
         headers: {
@@ -9517,7 +10967,7 @@ const ButtonPanel = {
     // Update the processing text for PDF
     const processingText = this.topicsModal.processingOverlay.querySelector('.vocab-processing-text');
     if (processingText) {
-      processingText.textContent = 'PDF processing activity...';
+      processingText.textContent = 'Reading PDF file';
     }
     
     // Show the overlay
@@ -9545,26 +10995,28 @@ const ButtonPanel = {
     console.log('[ButtonPanel] File name:', fileName);
     console.log('[ButtonPanel] Content length:', content ? content.length : 'No content');
     
-    // Create PDF tab using the correct addTab method
-    const tabName = fileName.replace('.pdf', '');
-    console.log('[ButtonPanel] Creating tab with name:', tabName);
+    // Set current content type
+    this.topicsModal.currentContentType = 'pdf';
     
-    const newTab = this.topicsModal.customContentModal.addTab('pdf', tabName, content, {
+    // Create PDF content using the new data structure
+    const tabName = fileName.replace('.pdf', '');
+    console.log('[ButtonPanel] Creating content with name:', tabName);
+    
+    const newContent = this.topicsModal.customContentModal.addContent('pdf', tabName, content, {
       fileName: fileName,
       uploadedAt: new Date().toISOString()
     });
     
-    if (!newTab) {
-      console.error('[ButtonPanel] ===== FAILED TO CREATE PDF TAB =====');
-      this.showNotification('Failed to create PDF tab. Please try again.', 'error');
+    if (!newContent) {
+      console.error('[ButtonPanel] ===== FAILED TO CREATE PDF CONTENT =====');
+      this.showNotification('Failed to create PDF content. Please try again.', 'error');
       return;
     }
+
+    console.log('[ButtonPanel] PDF content created successfully');
     
-    console.log('[ButtonPanel] PDF tab created successfully:', newTab.id);
-    
-    // Switch to the new PDF tab
-    console.log('[ButtonPanel] Switching to PDF tab:', newTab.id);
-    this.switchToTab(newTab.id);
+    // Show modal with only PDF contents, and switch to the new tab
+    this.showCustomContentModalWithContents('pdf', newContent.tabId);
     
     // Ensure custom content modal is visible
     console.log('[ButtonPanel] Ensuring custom content modal is visible...');
@@ -9601,119 +11053,252 @@ const ButtonPanel = {
     wordCount: 100,
     difficulty: 'hard',
     processingOverlay: null,
+    currentContentType: 'topic', // Track which content type is currently active ('pdf', 'image', 'topic', 'text')
+    textInputModal: null, // Text input modal
     customContentModal: {
       overlay: null,
       modal: null,
       searchTerm: '',
       activeTabId: null,
-      activeContentType: null, // 'pdf', 'image', 'topic'
+      activeContentType: null, // 'pdf', 'image', 'topic', 'text'
       
-      // Three separate content containers
-      contentContainers: {
-        pdf: {
-          tabs: [],
-          tabCounter: 0,
-          containerId: 'pdf-content-container'
-        },
-        image: {
-          tabs: [],
-          tabCounter: 0,
-          containerId: 'image-content-container'
-        },
-        topic: {
-          tabs: [],
-          tabCounter: 0,
-          containerId: 'topic-content-container'
+      // New simplified data structure
+      topicContents: [],
+      imageContents: [],
+      pdfContents: [],
+      textContents: [],
+      nextTabId: 1, // Global counter for unique tab IDs
+      
+      // Helper methods for content management
+      getContentByType: function(contentType) {
+        switch(contentType) {
+          case 'topic': return this.topicContents;
+          case 'image': return this.imageContents;
+          case 'pdf': return this.pdfContents;
+          case 'text': return this.textContents;
+          default: return [];
         }
       },
       
-      // Helper methods for content management
-      getCurrentContainer: function(contentType) {
-        return this.contentContainers[contentType] || null;
+      getContentByTabId: function(tabId) {
+        // Search through all content types to find the content with matching tabId
+        // Return reference to original object, not a copy
+        for (let i = 0; i < this.topicContents.length; i++) {
+          if (this.topicContents[i].tabId === tabId) {
+            this.topicContents[i].contentType = 'topic';
+            return this.topicContents[i];
+          }
+        }
+        
+        for (let i = 0; i < this.imageContents.length; i++) {
+          if (this.imageContents[i].tabId === tabId) {
+            this.imageContents[i].contentType = 'image';
+            return this.imageContents[i];
+          }
+        }
+        
+        for (let i = 0; i < this.pdfContents.length; i++) {
+          if (this.pdfContents[i].tabId === tabId) {
+            this.pdfContents[i].contentType = 'pdf';
+            return this.pdfContents[i];
+          }
+        }
+        
+        for (let i = 0; i < this.textContents.length; i++) {
+          if (this.textContents[i].tabId === tabId) {
+            this.textContents[i].contentType = 'text';
+            return this.textContents[i];
+          }
+        }
+        
+        return null;
       },
       
-      getTabById: function(tabId) {
-        // Parse tabId to determine content type (e.g., 'pdf-1', 'image-3', 'topic-group-4')
-        const parts = tabId.split('-');
-        if (parts.length < 2) return null;
+      removeContentByTabId: function(tabId) {
+        console.log('[ButtonPanel] ===== REMOVE CONTENT BY TAB ID DEBUG =====');
+        console.log('[ButtonPanel] removeContentByTabId called with tabId:', tabId);
+        console.log('[ButtonPanel] Before removal - Topic contents:', this.topicContents);
+        console.log('[ButtonPanel] Before removal - Image contents:', this.imageContents);
+        console.log('[ButtonPanel] Before removal - PDF contents:', this.pdfContents);
+        console.log('[ButtonPanel] Before removal - Text contents:', this.textContents);
         
-        const contentType = parts[0];
-        const container = this.contentContainers[contentType];
-        if (!container) return null;
+        // Find and remove content by tabId
+        const content = this.getContentByTabId(tabId);
+        console.log('[ButtonPanel] Found content:', content);
         
-        return container.tabs.find(tab => tab.id === tabId);
+        if (!content) {
+          console.log('[ButtonPanel] No content found for tabId:', tabId);
+          console.log('[ButtonPanel] ===== END REMOVE CONTENT DEBUG (NO CONTENT FOUND) =====');
+          return false;
+        }
+        
+        const contentType = content.contentType;
+        console.log('[ButtonPanel] Content type:', contentType);
+        
+        const contents = this.getContentByType(contentType);
+        console.log('[ButtonPanel] Contents array before removal:', contents);
+        
+        const index = contents.findIndex(item => item.tabId === tabId);
+        console.log('[ButtonPanel] Index to remove:', index);
+        
+        if (index !== -1) {
+          contents.splice(index, 1);
+          console.log('[ButtonPanel] Content removed successfully');
+          console.log('[ButtonPanel] After removal - Topic contents:', this.topicContents);
+          console.log('[ButtonPanel] After removal - Image contents:', this.imageContents);
+          console.log('[ButtonPanel] After removal - PDF contents:', this.pdfContents);
+          console.log('[ButtonPanel] After removal - Text contents:', this.textContents);
+          console.log('[ButtonPanel] ===== END REMOVE CONTENT DEBUG (SUCCESS) =====');
+          
+          // Clean up analysis data for this tab
+          this.cleanupAnalysisData(content);
+          
+          return true;
+        }
+        
+        console.log('[ButtonPanel] Content not found in array');
+        console.log('[ButtonPanel] ===== END REMOVE CONTENT DEBUG (NOT FOUND) =====');
+        return false;
+      },
+      
+      // Migration function to ensure all existing content objects have contentType field
+      migrateContentTypes: function() {
+        // Migrate topic contents
+        this.topicContents.forEach(content => {
+          if (!content.contentType) {
+            content.contentType = 'topic';
+            console.log('[CustomContentModal] Migrated topic content to have contentType');
+          }
+        });
+        
+        // Migrate image contents
+        this.imageContents.forEach(content => {
+          if (!content.contentType) {
+            content.contentType = 'image';
+            console.log('[CustomContentModal] Migrated image content to have contentType');
+          }
+        });
+        
+        // Migrate PDF contents
+        this.pdfContents.forEach(content => {
+          if (!content.contentType) {
+            content.contentType = 'pdf';
+            console.log('[CustomContentModal] Migrated PDF content to have contentType');
+          }
+        });
+        
+        // Migrate text contents
+        this.textContents.forEach(content => {
+          if (!content.contentType) {
+            content.contentType = 'text';
+            console.log('[CustomContentModal] Migrated text content to have contentType');
+          }
+        });
+      },
+      
+      addContent: function(contentType, tabName, content, metadata = {}) {
+        const newContent = {
+          tabId: this.nextTabId++,
+          tabName: tabName,
+          content: content,
+          contentType: contentType, // Store the content type
+          input: {
+            topics: metadata.topics || [],
+            wordCount: metadata.wordCount || 100,
+            difficultyLevel: metadata.difficulty || 'HARD'
+          },
+          metadata: metadata,
+          searchTerm: '',
+          createdAt: new Date().toISOString(),
+          analysis: {
+            wordMeanings: [], // Store word meaning objects here per each word
+            simplifiedMeanings: [], // Store word simplified (expln1, expln2 for a selected text) explanations per each selected text
+            chats: [] // Store chats
+          }
+        };
+        
+        // Ensure all existing content objects have contentType field (migration)
+        this.migrateContentTypes();
+        
+        switch(contentType) {
+          case 'topic':
+            this.topicContents.push(newContent);
+            break;
+          case 'image':
+            this.imageContents.push(newContent);
+            break;
+          case 'pdf':
+            this.pdfContents.push(newContent);
+            break;
+          case 'text':
+            this.textContents.push(newContent);
+            break;
+          default:
+            return null;
+        }
+        
+        return newContent;
+      },
+      
+      removeContent: function(contentType, index) {
+        const contents = this.getContentByType(contentType);
+        if (index >= 0 && index < contents.length) {
+          contents.splice(index, 1);
+          return true;
+        }
+        return false;
+      },
+      
+      clearContentType: function(contentType) {
+        switch(contentType) {
+          case 'topic':
+            this.topicContents = [];
+            break;
+          case 'image':
+            this.imageContents = [];
+            break;
+          case 'pdf':
+            this.pdfContents = [];
+            break;
+          case 'text':
+            this.textContents = [];
+            break;
+        }
+      },
+      
+      clearAllContents: function() {
+        this.topicContents = [];
+        this.imageContents = [];
+        this.pdfContents = [];
+        this.textContents = [];
       },
       
       getAllTabs: function() {
-        return [
-          ...this.contentContainers.pdf.tabs,
-          ...this.contentContainers.image.tabs,
-          ...this.contentContainers.topic.tabs
+        console.log('[ButtonPanel] ===== GET ALL TABS DEBUG =====');
+        console.log('[ButtonPanel] Topic contents length:', this.topicContents.length);
+        console.log('[ButtonPanel] Image contents length:', this.imageContents.length);
+        console.log('[ButtonPanel] PDF contents length:', this.pdfContents.length);
+        console.log('[ButtonPanel] Text contents length:', this.textContents.length);
+        
+        // Return all tabs from all content types
+        const allTabs = [
+          ...this.topicContents.map(content => ({ ...content, id: content.tabId.toString() })),
+          ...this.imageContents.map(content => ({ ...content, id: content.tabId.toString() })),
+          ...this.pdfContents.map(content => ({ ...content, id: content.tabId.toString() })),
+          ...this.textContents.map(content => ({ ...content, id: content.tabId.toString() }))
         ];
+        
+        console.log('[ButtonPanel] All tabs result:', allTabs);
+        console.log('[ButtonPanel] All tabs length:', allTabs.length);
+        console.log('[ButtonPanel] ===== END GET ALL TABS DEBUG =====');
+        
+        return allTabs;
       },
       
       getTabsByType: function(contentType) {
-        const container = this.contentContainers[contentType];
-        return container ? container.tabs : [];
-      },
-      
-      addTab: function(contentType, tabName, content, metadata = {}) {
-        const container = this.contentContainers[contentType];
-        if (!container) return null;
-        
-        container.tabCounter++;
-        const tabId = `${contentType}-${container.tabCounter}`;
-        
-        const newTab = {
-          id: tabId,
-          name: tabName,
-          content: content,
-          searchTerm: '',
-          metadata: metadata,
-          createdAt: new Date().toISOString()
-        };
-        
-        container.tabs.push(newTab);
-        return newTab;
-      },
-      
-      removeTab: function(tabId) {
-        const parts = tabId.split('-');
-        if (parts.length < 2) return false;
-        
-        const contentType = parts[0];
-        const container = this.contentContainers[contentType];
-        if (!container) return false;
-        
-        const tabIndex = container.tabs.findIndex(tab => tab.id === tabId);
-        if (tabIndex === -1) return false;
-        
-        container.tabs.splice(tabIndex, 1);
-        return true;
-      },
-      
-      updateTabContent: function(tabId, content) {
-        const tab = this.getTabById(tabId);
-        if (!tab) return false;
-        
-        tab.content = content;
-        tab.updatedAt = new Date().toISOString();
-        return true;
-      },
-      
-      clearContainer: function(contentType) {
-        const container = this.contentContainers[contentType];
-        if (!container) return false;
-        
-        container.tabs = [];
-        container.tabCounter = 0;
-        return true;
-      },
-      
-      clearAllContainers: function() {
-        Object.keys(this.contentContainers).forEach(contentType => {
-          this.clearContainer(contentType);
-        });
+        // Return tabs for a specific content type
+        const contents = this.getContentByType(contentType);
+        return contents.map(content => ({ ...content, id: content.tabId.toString() }));
       }
     }
   },
@@ -10193,6 +11778,12 @@ const ButtonPanel = {
    * Update UI state based on whether there are topics
    */
   updateTopicsUIState() {
+    // Check if topics modal exists before trying to access it
+    if (!this.topicsModal.modal) {
+      console.log('[ButtonPanel] Topics modal does not exist, skipping updateTopicsUIState');
+      return;
+    }
+    
     const hasTopics = this.topicsModal.topics.length > 0;
     const secondContainer = this.topicsModal.modal.querySelector('.vocab-topics-second-container');
     const generateBtn = this.topicsModal.modal.querySelector('.vocab-topics-generate-btn');
@@ -10274,16 +11865,32 @@ const ButtonPanel = {
         
         if (isRegenerate && tabId) {
           console.log('[ButtonPanel] Regenerating content for tab:', tabId);
-          // Update existing tab content using new container system
-          const tab = this.topicsModal.customContentModal.getTabById(tabId);
-          if (tab) {
-            tab.content = response.data.text;
+          // Update existing content using new data structure
+          const content = this.topicsModal.customContentModal.getContentByTabId(parseInt(tabId));
+          if (content) {
+            // Update content
+            content.content = response.data.text;
+            
+            // Update input data with current settings
+            content.input = {
+              topics: this.topicsModal.topics || [],
+              wordCount: this.topicsModal.wordCount || 100,
+              difficultyLevel: this.topicsModal.difficulty || 'HARD'
+            };
+            
+            // Update metadata with current settings
+            content.metadata = {
+              ...content.metadata,
+              topics: this.topicsModal.topics || [],
+              wordCount: this.topicsModal.wordCount || 100,
+              difficulty: this.topicsModal.difficulty || 'hard'
+            };
+            
             // Update topicName if available
             if (response.data.topicName) {
-              tab.name = response.data.topicName;
-              // Store topicName in metadata for tooltip purposes
-              if (!tab.metadata) tab.metadata = {};
-              tab.metadata.topicName = response.data.topicName;
+              content.tabName = response.data.topicName;
+              content.metadata.topicName = response.data.topicName;
+              
               // Update the tab title in DOM
               const tabElement = this.topicsModal.customContentModal.modal.querySelector(`[data-tab-id="${tabId}"]`);
               if (tabElement) {
@@ -10293,8 +11900,11 @@ const ButtonPanel = {
                 }
               }
             }
+            
             // Update the editor content
             this.updateCustomContentEditor(response.data.text);
+            
+            console.log('[ButtonPanel] Content regenerated and stored:', content);
           }
         } else {
           console.log('[ButtonPanel] Creating new tab with content');
@@ -10373,7 +11983,7 @@ const ButtonPanel = {
     
     const text = document.createElement('div');
     text.className = 'vocab-processing-text';
-    text.textContent = 'Generating content from topics ...';
+    text.textContent = 'Generating contents on topics...';
     
     const icon = document.createElement('div');
     icon.className = 'vocab-processing-icon';
@@ -10400,9 +12010,6 @@ const ButtonPanel = {
     console.log('[ButtonPanel] Content:', content ? 'Present' : 'Missing');
     console.log('[ButtonPanel] Content type:', contentType);
     
-    // Hide the custom content button when modal opens
-    this.hideCustomContentButton();
-    
     // Hide topics modal first
     this.hideTopicsModal();
     
@@ -10416,13 +12023,31 @@ const ButtonPanel = {
       this.createCustomContentModal();
     }
     
-    // Create a new tab with the content
+    // Create new content using the new data structure
     const tabTitle = this.generateTabTitle(contentType, metadata);
-    const tabId = this.createTab(tabTitle, content, contentType, metadata);
+    const newContent = this.topicsModal.customContentModal.addContent(contentType, tabTitle, content, metadata);
+    
+    if (!newContent) {
+      console.error('[ButtonPanel] Failed to create content');
+      this.showNotification('Failed to create content. Please try again.', 'error');
+      return;
+    }
+    
+    // Set current content type immediately
+    this.topicsModal.currentContentType = contentType;
+    console.log('[ButtonPanel] Set currentContentType to:', contentType);
+    
+    // Show modal with only the specified content type, and switch to the new tab
+    this.showCustomContentModalWithContents(contentType, newContent.tabId);
     
     // Show the modal with a slight delay for smooth transition
     setTimeout(() => {
       this.topicsModal.customContentModal.overlay.classList.add('visible');
+      
+      // Update button visibility after modal is shown
+      setTimeout(() => {
+        this.updateVerticalButtonVisibility();
+      }, 100);
     }, 100);
   },
 
@@ -10459,6 +12084,13 @@ const ButtonPanel = {
         }
         return 'Topic Content';
       },
+      'text': () => {
+        if (metadata.inputText) {
+          const words = metadata.inputText.trim().split(/\s+/);
+          return words.slice(0, 3).join(' ');
+        }
+        return 'Text Content';
+      },
       'default': () => 'Generated Content'
     };
     
@@ -10470,14 +12102,18 @@ const ButtonPanel = {
    * Hide custom content modal
    */
   hideCustomContentModal() {
+    console.log('[ButtonPanel] ===== HIDE CUSTOM CONTENT MODAL DEBUG =====');
     console.log('[ButtonPanel] Hiding custom content modal');
+    console.log('[ButtonPanel] Modal overlay exists:', !!this.topicsModal.customContentModal.overlay);
     
     if (this.topicsModal.customContentModal.overlay) {
+      console.log('[ButtonPanel] Overlay classes before removal:', this.topicsModal.customContentModal.overlay.classList.toString());
       this.topicsModal.customContentModal.overlay.classList.remove('visible');
+      console.log('[ButtonPanel] Overlay classes after removal:', this.topicsModal.customContentModal.overlay.classList.toString());
+      console.log('[ButtonPanel] Overlay is now visible:', this.topicsModal.customContentModal.overlay.classList.contains('visible'));
     }
     
-    // Show the custom content button again
-    this.showCustomContentButton();
+    console.log('[ButtonPanel] ===== END HIDE CUSTOM CONTENT MODAL DEBUG =====');
   },
 
   /**
@@ -10717,7 +12353,7 @@ const ButtonPanel = {
       formData.append('file', file);
       
       console.log('[ButtonPanel] Making API call to image-to-text endpoint...');
-      const response = await fetch('https://caten-blush.vercel.app/api/v1/image-to-text', {
+      const response = await fetch(ApiConfig.getUrl(ApiConfig.ENDPOINTS.IMAGE_TO_TEXT), {
         method: 'POST',
         body: formData
       });
@@ -10756,12 +12392,37 @@ const ButtonPanel = {
     console.log('[ButtonPanel] Topic name:', topicName);
     console.log('[ButtonPanel] Content length:', content.length);
     
-    // Create new tab for image content
-    const newTab = this.topicsModal.customContentModal.addTab(topicName, 'image');
-    console.log('[ButtonPanel] New tab created:', newTab.id);
+    // Ensure modal is initialized
+    if (!this.topicsModal || !this.topicsModal.customContentModal) {
+      console.error('[ButtonPanel] Topics modal not initialized');
+      this.showNotification('Modal not initialized. Please try again.', 'error');
+      return;
+    }
     
-    // Switch to the new tab
-    this.switchToTab(newTab.id);
+    // Set current content type
+    this.topicsModal.currentContentType = 'image';
+    
+    // Create modal if it doesn't exist
+    if (!this.topicsModal.customContentModal.overlay) {
+      console.log('[ButtonPanel] Creating custom content modal...');
+      this.createCustomContentModal();
+    }
+    
+    // Create new content for image
+    const newContent = this.topicsModal.customContentModal.addContent('image', topicName, content);
+    console.log('[ButtonPanel] New content created:', newContent);
+    
+    // Check if content was created successfully
+    if (!newContent) {
+      console.error('[ButtonPanel] Failed to create image content - addContent returned null');
+      this.showNotification('Failed to create image content. Please try again.', 'error');
+      return;
+    }
+    
+    console.log('[ButtonPanel] New content created successfully');
+    
+    // Show modal with only image contents, and switch to the new tab
+    this.showCustomContentModalWithContents('image', newContent.tabId);
     
     // Ensure custom content modal is visible
     if (!this.topicsModal.customContentModal.overlay.classList.contains('visible')) {
@@ -10831,13 +12492,11 @@ const ButtonPanel = {
     // Create processing content
     overlay.innerHTML = `
       <div class="vocab-image-processing-content">
-        <div class="vocab-image-processing-spinner">
-          <div class="vocab-image-processing-spinner-circle"></div>
-        </div>
         <div class="vocab-image-processing-text">
-          <p class="vocab-image-processing-main">Reading image file...</p>
+          <p class="vocab-image-processing-main">Reading image file</p>
           <p class="vocab-image-processing-sub">Extracting text from image</p>
         </div>
+        <div class="vocab-processing-icon"></div>
       </div>
     `;
     
@@ -10914,7 +12573,7 @@ const ButtonPanel = {
     // Update the processing text for PDF
     const processingText = this.pdfUploadModal.processingOverlay.querySelector('.vocab-processing-text');
     if (processingText) {
-      processingText.textContent = 'Reading PDF file...';
+      processingText.textContent = 'Reading PDF file';
     }
     
     // Show the overlay on top of PDF modal
@@ -10949,7 +12608,7 @@ const ButtonPanel = {
     
     const text = document.createElement('div');
     text.className = 'vocab-processing-text';
-    text.textContent = 'Reading PDF file...';
+    text.textContent = 'Reading PDF file';
     
     const icon = document.createElement('div');
     icon.className = 'vocab-processing-icon';
@@ -11272,17 +12931,6 @@ const ButtonPanel = {
     
     searchSection.appendChild(searchInput);
     
-    // Settings button (positioned at rightmost end of search bar)
-    const settingsBtn = document.createElement('button');
-    settingsBtn.className = 'vocab-custom-content-settings';
-    settingsBtn.innerHTML = `
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="24" height="24" fill="#9527F5">
-        <path d="M487.4 315.7l-42.3-24.4c2.3-12.6 3.5-25.5 3.5-38.3s-1.2-25.8-3.5-38.3l42.3-24.4c8.2-4.7 11.4-15 7.3-23.6l-28.3-56.1c-4.1-8.1-13.2-12.1-22-9.5l-49.7 14.3c-19.6-17-41.6-30.7-65.4-40.1l-7.5-50.2c-1.4-9.4-9.2-16.2-18.6-16.2h-56.6c-9.4 0-17.2 6.8-18.6 16.2l-7.5 50.2c-23.8 9.4-45.8 23.1-65.4 40.1l-49.7-14.3c-8.8-2.6-17.9 1.4-22 9.5l-28.3 56.1c-4.1 8.6-.9 18.9 7.3 23.6l42.3 24.4c-2.3 12.6-3.5 25.5-3.5 38.3s1.2 25.8 3.5 38.3l-42.3 24.4c-8.2 4.7-11.4 15-7.3 23.6l28.3 56.1c4.1 8.1 13.2 12.1 22 9.5l49.7-14.3c19.6 17 41.6 30.7 65.4 40.1l7.5 50.2c1.4 9.4 9.2 16.2 18.6 16.2h56.6c9.4 0 17.2-6.8 18.6-16.2l7.5-50.2c23.8-9.4 45.8-23.1 65.4-40.1l49.7 14.3c8.8 2.6 17.9-1.4 22-9.5l28.3-56.1c4.1-8.6.9-18.9-7.3-23.6zM256 336c-44.1 0-80-35.9-80-80s35.9-80 80-80 80 35.9 80 80-35.9 80-80 80z"/>
-      </svg>
-    `;
-    settingsBtn.setAttribute('title', 'Regenerate content');
-    
-    searchSection.appendChild(settingsBtn);
     
     // Editor section
     const editorSection = document.createElement('div');
@@ -11292,6 +12940,40 @@ const ButtonPanel = {
     editorContent.className = 'vocab-custom-content-editor-content';
     
     editorSection.appendChild(editorContent);
+    
+    // Add chat icon to bottom right corner of editor
+    const chatIcon = document.createElement('button');
+    chatIcon.className = 'vocab-custom-content-chat-icon';
+    chatIcon.innerHTML = `
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" fill="white">
+        <path d="M12 2C6.48 2 2 6.48 2 12c0 1.54.36 2.98.97 4.29L1 23l6.71-1.97C9.02 21.64 10.46 22 12 22c5.52 0 10-4.48 10-10S17.52 2 12 2zm-1 15h-2v-2h2v2zm0-4h-2v-6h2v6zm4 4h-2v-2h2v2zm0-4h-2v-6h2v6z"/>
+      </svg>
+    `;
+    chatIcon.setAttribute('title', 'Ask questions about this content');
+    
+    // Add click handler for chat icon
+    chatIcon.addEventListener('click', () => {
+      console.log('[ButtonPanel] ===== CHAT ICON CLICKED =====');
+      console.log('[ButtonPanel] Chat icon clicked, toggling chat popup');
+      
+      // Check if chat is already open for this tab
+      const activeTabId = this.topicsModal.customContentModal.activeTabId;
+      const contentType = this.topicsModal.customContentModal.getContentByTabId(parseInt(activeTabId))?.contentType || 'custom-content';
+      const textKey = `${contentType}-${activeTabId}`;
+      const contextualTextKey = `${contentType}-${activeTabId}-generic`;
+      
+      if (ChatDialog.isOpen && ChatDialog.currentTextKey === contextualTextKey) {
+        console.log('[ButtonPanel] Chat already open for this tab, closing it');
+        ChatDialog.close();
+      } else {
+        console.log('[ButtonPanel] Opening chat for current content');
+        this.openChatForCurrentContent();
+      }
+    });
+    
+    // Store chat icon reference for later appending to modal
+    this.topicsModal.customContentModal.chatIcon = chatIcon;
+    console.log('[ButtonPanel] Chat icon created and stored:', !!chatIcon);
     
     // Function to check and update scrollbar visibility
     const updateScrollbarVisibility = () => {
@@ -11320,6 +13002,11 @@ const ButtonPanel = {
     const resizeHandles = this.createResizeHandles();
     modal.appendChild(resizeHandles);
     
+    // Add chat icon to modal (positioned relative to modal, not editor content)
+    console.log('[ButtonPanel] Appending chat icon to modal:', !!this.topicsModal.customContentModal.chatIcon);
+    modal.appendChild(this.topicsModal.customContentModal.chatIcon);
+    console.log('[ButtonPanel] Chat icon appended to modal successfully');
+    
     overlay.appendChild(modal);
     
     // Add to document
@@ -11335,7 +13022,6 @@ const ButtonPanel = {
     this.topicsModal.customContentModal.addTabBtn = addTabBtn;
     this.topicsModal.customContentModal.leftArrow = leftArrow;
     this.topicsModal.customContentModal.rightArrow = rightArrow;
-    this.topicsModal.customContentModal.settingsBtn = settingsBtn;
     console.log('[ButtonPanel] Stored tabsContainer:', this.topicsModal.customContentModal.tabsContainer);
     
     // Attach event listeners
@@ -11355,22 +13041,32 @@ const ButtonPanel = {
     const addTabBtn = this.topicsModal.customContentModal.addTabBtn;
     const tabsContainer = this.topicsModal.customContentModal.tabsContainer;
     console.log('[ButtonPanel] tabsContainer in attachCustomContentModalListeners:', tabsContainer);
+    console.log('[ButtonPanel] searchInput in attachCustomContentModalListeners:', searchInput);
     
     // Close modal events
     closeBtn.addEventListener('click', () => this.hideCustomContentModal());
     
     // Search functionality
-    searchInput.addEventListener('input', (e) => {
-      console.log('[ButtonPanel] Search input changed:', e.target.value);
-      const activeTab = this.topicsModal.customContentModal.getTabById(this.topicsModal.customContentModal.activeTabId);
-      if (activeTab) {
-        activeTab.searchTerm = e.target.value;
-        console.log('[ButtonPanel] Updated active tab search term:', activeTab.searchTerm);
-      this.performSearch();
-      } else {
-        console.log('[ButtonPanel] No active tab found for search');
-      }
-    });
+    if (searchInput) {
+      searchInput.addEventListener('input', (e) => {
+        console.log('[ButtonPanel] Search input changed:', e.target.value);
+        const searchTerm = e.target.value;
+        
+        // Store search term for the current active tab
+        if (this.topicsModal.customContentModal.activeTabId) {
+          const tabId = parseInt(this.topicsModal.customContentModal.activeTabId);
+          const activeContent = this.topicsModal.customContentModal.getContentByTabId(tabId);
+          if (activeContent) {
+            activeContent.searchTerm = searchTerm;
+            console.log('[ButtonPanel] Stored search term:', searchTerm, 'for tab:', tabId);
+          }
+        }
+        
+        this.performSearch();
+      });
+    } else {
+      console.error('[ButtonPanel] Search input not found!');
+    }
     
     // Add tab functionality
     addTabBtn.addEventListener('click', () => {
@@ -11381,16 +13077,13 @@ const ButtonPanel = {
         this.showPDFUploadModal();
       } else if (currentContentType === 'image') {
         this.showImageUploadModal();
+      } else if (currentContentType === 'text') {
+        this.showTextInputModal();
       } else {
         this.showTopicsModalForNewTab();
       }
     });
     
-    // Settings button functionality
-    const settingsBtn = this.topicsModal.customContentModal.settingsBtn;
-    settingsBtn.addEventListener('click', () => {
-      this.showTopicsModalForRegenerate();
-    });
     
     // Tab navigation arrows
     const leftArrow = this.topicsModal.customContentModal.leftArrow;
@@ -11497,26 +13190,31 @@ const ButtonPanel = {
       this.topicsModal.customContentModal.overlay.style.filter = 'blur(2px)';
     }
     
-    // Get current active tab data using new container system
-    const activeTab = this.topicsModal.customContentModal.getTabById(this.topicsModal.customContentModal.activeTabId);
-    if (!activeTab) {
-      console.log('[ButtonPanel] No active tab found, cannot regenerate');
+    // Get current active tab data using new data structure
+    const activeTabId = parseInt(this.topicsModal.customContentModal.activeTabId);
+    const activeContent = this.topicsModal.customContentModal.getContentByTabId(activeTabId);
+    if (!activeContent) {
+      console.log('[ButtonPanel] No active content found, cannot regenerate');
       return;
     }
     
     // Check if this is a topic tab (can be regenerated)
-    const contentType = this.topicsModal.customContentModal.activeTabId.split('-')[0];
-    if (contentType !== 'topic') {
-      console.log('[ButtonPanel] Only topic tabs can be regenerated, current type:', contentType);
+    if (activeContent.contentType !== 'topic') {
+      console.log('[ButtonPanel] Only topic tabs can be regenerated, current type:', activeContent.contentType);
       return;
     }
     
-    // Load the topics data from the active tab metadata
-    if (activeTab.metadata) {
-      // Restore the topics and settings from the tab metadata
-      this.topicsModal.topics = activeTab.metadata.topics || [];
-      this.topicsModal.wordCount = activeTab.metadata.wordCount || 100;
-      this.topicsModal.difficulty = activeTab.metadata.difficulty || 'hard';
+    // Load the topics data from the active content metadata
+    if (activeContent.input) {
+      // Restore the topics and settings from the content input data
+      this.topicsModal.topics = activeContent.input.topics || [];
+      this.topicsModal.wordCount = activeContent.input.wordCount || 100;
+      this.topicsModal.difficulty = activeContent.input.difficultyLevel || 'hard';
+    } else if (activeContent.metadata) {
+      // Fallback to metadata for backward compatibility
+      this.topicsModal.topics = activeContent.metadata.topics || [];
+      this.topicsModal.wordCount = activeContent.metadata.wordCount || 100;
+      this.topicsModal.difficulty = activeContent.metadata.difficulty || 'hard';
     }
     
     // Show the topics modal
@@ -11531,7 +13229,7 @@ const ButtonPanel = {
       if (generateBtn) {
         generateBtn.textContent = 'Re-generate content';
         generateBtn.setAttribute('data-regenerate', 'true');
-        generateBtn.setAttribute('data-tab-id', activeTab.id);
+        generateBtn.setAttribute('data-tab-id', activeTabId.toString());
       }
     }, 100);
   },
@@ -11585,11 +13283,74 @@ const ButtonPanel = {
   },
 
   /**
+   * Show custom content modal with contents of specific type
+   */
+  showCustomContentModalWithContents(contentType, activeTabId = null) {
+    console.log('[ButtonPanel] Showing custom content modal with', contentType, 'contents');
+    console.log('[ButtonPanel] Active tab ID to switch to:', activeTabId);
+    
+    // Create modal if it doesn't exist
+    if (!this.topicsModal.customContentModal.overlay) {
+      this.createCustomContentModal();
+    }
+    
+    // Get contents for the specified type
+    const contents = this.topicsModal.customContentModal.getContentByType(contentType);
+    console.log('[ButtonPanel] Contents to show:', contents);
+    
+    // Update modal title
+    this.updateCustomContentModalTitle(contentType);
+    
+    // Clear existing tabs and render new ones using original tab system
+    const existingTabs = this.topicsModal.customContentModal.modal.querySelectorAll('.vocab-custom-content-tab');
+    existingTabs.forEach(tab => tab.remove());
+    
+    // Convert contents to tab format and render using original system
+    contents.forEach((contentItem) => {
+      const tabId = contentItem.tabId.toString();
+      const tab = {
+        id: tabId,
+        name: contentItem.tabName,
+        content: contentItem.content,
+        searchTerm: contentItem.searchTerm || '',
+        metadata: contentItem.metadata,
+        createdAt: contentItem.createdAt
+      };
+      this.renderTab(tab);
+    });
+    
+    // Switch to the specified tab or first tab if available
+    if (contents.length > 0) {
+      if (activeTabId) {
+        // Switch to the specified tab if it exists
+        const targetContent = contents.find(content => content.tabId === activeTabId);
+        if (targetContent) {
+          console.log('[ButtonPanel] Switching to specified tab:', activeTabId);
+          this.switchToTab(targetContent.tabId.toString());
+        } else {
+          console.log('[ButtonPanel] Specified tab not found, switching to first tab');
+          this.switchToTab(contents[0].tabId.toString());
+        }
+      } else {
+        // Switch to the first tab if no specific tab is specified
+        console.log('[ButtonPanel] No specific tab specified, switching to first tab');
+        this.switchToTab(contents[0].tabId.toString());
+      }
+    }
+    
+    // Show the modal
+    setTimeout(() => {
+      this.topicsModal.customContentModal.overlay.classList.add('visible');
+    }, 100);
+  },
+
+  /**
    * Show custom content modal with existing tabs
    */
-  showCustomContentModalWithTabs(contentType = null) {
+  showCustomContentModalWithTabs(contentType = null, shouldFilter = false) {
     console.log('[ButtonPanel] Showing custom content modal with existing tabs');
     console.log('[ButtonPanel] Content type:', contentType);
+    console.log('[ButtonPanel] Should filter:', shouldFilter);
     
     // Create modal if it doesn't exist
     if (!this.topicsModal.customContentModal.overlay) {
@@ -11598,25 +13359,36 @@ const ButtonPanel = {
     
     // Determine which tabs to show
     let tabsToShow = [];
-    if (contentType) {
-      // Show tabs for specific content type
+    let filteredContentType = contentType;
+    
+    if (shouldFilter && contentType) {
+      // Filter tabs for specific content type (used when creating new content)
       tabsToShow = this.topicsModal.customContentModal.getTabsByType(contentType);
       this.topicsModal.customContentModal.activeContentType = contentType;
+      this.updateCustomContentModalTitle(contentType);
+      console.log('[ButtonPanel] Filtering tabs for content type:', contentType);
+    } else if (!shouldFilter && contentType) {
+      // Show ALL tabs but set the specified content type as active (used by button handlers)
+      tabsToShow = this.topicsModal.customContentModal.getAllTabs();
+      this.topicsModal.customContentModal.activeContentType = contentType;
+      this.updateCustomContentModalTitle(contentType);
+      console.log('[ButtonPanel] Showing all tabs with', contentType, 'as active content type');
     } else {
       // Show all tabs from all containers
       tabsToShow = this.topicsModal.customContentModal.getAllTabs();
+      console.log('[ButtonPanel] Showing all tabs');
     }
     
     console.log('[ButtonPanel] Tabs to show:', tabsToShow);
     
-    // Only render tabs if they don't already exist in DOM
+    // Clear existing tabs and render new ones
     const existingTabs = this.topicsModal.customContentModal.modal.querySelectorAll('.vocab-custom-content-tab');
-    if (existingTabs.length === 0) {
-      // Render all tabs to show
-      tabsToShow.forEach(tab => {
-        this.renderTab(tab);
-      });
-    }
+    existingTabs.forEach(tab => tab.remove());
+    
+    // Render all tabs to show
+    tabsToShow.forEach(tab => {
+      this.renderTab(tab);
+    });
     
     // Switch to the active tab or first tab
     if (this.topicsModal.customContentModal.activeTabId) {
@@ -11632,6 +13404,32 @@ const ButtonPanel = {
   },
 
   /**
+   * Filter tabs to show only the specified content type
+   * @param {string} contentType - The content type to filter by ('pdf', 'image', 'topic')
+   */
+  filterTabsByContentType(contentType) {
+    console.log('[ButtonPanel] Filtering tabs by content type:', contentType);
+    
+    // Get tabs for the specified content type
+    const tabsToShow = this.topicsModal.customContentModal.getTabsByType(contentType);
+    console.log('[ButtonPanel] Tabs to show for', contentType + ':', tabsToShow);
+    
+    // Clear existing tabs from the UI
+    const existingTabs = this.topicsModal.customContentModal.modal.querySelectorAll('.vocab-custom-content-tab');
+    existingTabs.forEach(tab => tab.remove());
+    
+    // Render only the filtered tabs
+    tabsToShow.forEach(tab => {
+      this.renderTab(tab);
+    });
+    
+    // Update active content type
+    this.topicsModal.customContentModal.activeContentType = contentType;
+    
+    console.log('[ButtonPanel] Filtered tabs successfully for content type:', contentType);
+  },
+
+  /**
    * Create a new tab
    * @param {string} title - The tab title
    * @param {string} content - The tab content
@@ -11642,6 +13440,15 @@ const ButtonPanel = {
   createTab(title, content, contentType = 'topic', metadata = {}) {
     console.log('[ButtonPanel] Creating new tab:', title, 'for content type:', contentType);
     console.log('[ButtonPanel] tabsContainer before renderTab:', this.topicsModal.customContentModal.tabsContainer);
+    
+    // Set current content type
+    this.topicsModal.currentContentType = contentType;
+    console.log('[ButtonPanel] Set currentContentType to:', contentType);
+    
+    // Update button visibility
+    setTimeout(() => {
+      this.updateVerticalButtonVisibility();
+    }, 100);
     
     // Use the new container system to add tab
     const newTab = this.topicsModal.customContentModal.addTab(contentType, title, content, metadata);
@@ -11768,8 +13575,36 @@ const ButtonPanel = {
    * @param {string} tabId - The tab ID to switch to
    */
   switchToTab(tabId) {
+    // Check if modal and required elements exist
+    if (!this.topicsModal || !this.topicsModal.customContentModal || !this.topicsModal.customContentModal.modal) {
+      console.error('[ButtonPanel] Cannot switch tab - modal not initialized');
+      return;
+    }
+    
     // Update active tab
     this.topicsModal.customContentModal.activeTabId = tabId;
+    
+    // Update active content type based on the tab being switched to
+    const tabContent = this.topicsModal.customContentModal.getContentByTabId(parseInt(tabId));
+    if (tabContent) {
+      // Determine content type from the content data
+      let contentType = 'topic'; // default
+      if (tabContent.metadata && tabContent.metadata.fileName) {
+        contentType = 'pdf';
+      } else if (tabContent.metadata && tabContent.metadata.inputText) {
+        contentType = 'text';
+      } else if (tabContent.metadata && tabContent.metadata.imageUrl) {
+        contentType = 'image';
+      } else if (tabContent.metadata && tabContent.metadata.topics) {
+        contentType = 'topic';
+      }
+      
+      this.topicsModal.customContentModal.activeContentType = contentType;
+      console.log('[ButtonPanel] Updated active content type to:', contentType, 'for tab:', tabId);
+    }
+    
+    // Handle chat popup when switching tabs
+    this.handleChatPopupOnTabSwitch(tabId);
     
     // Add smooth transition class to tabs container
     const tabsContainer = this.topicsModal.customContentModal.tabsContainer;
@@ -11787,10 +13622,9 @@ const ButtonPanel = {
       }
     });
     
-    // Update modal content type for settings button visibility
-    const contentType = tabId.split('-')[0];
-    this.topicsModal.customContentModal.modal.setAttribute('data-content-type', contentType);
-    this.topicsModal.customContentModal.activeContentType = contentType;
+    // Get content from new data structure using tabId
+    const activeContent = this.topicsModal.customContentModal.getContentByTabId(parseInt(tabId));
+    const contentType = activeContent ? activeContent.contentType : null;
     
     // Update sliding background position
     const activeTabElement = tabsContainer.querySelector(`[data-tab-id="${tabId}"]`);
@@ -11805,22 +13639,24 @@ const ButtonPanel = {
     
     // Update content with fade transition
     const editorContent = this.topicsModal.customContentModal.modal.querySelector('.vocab-custom-content-editor-content');
-    const activeTab = this.topicsModal.customContentModal.getTabById(tabId);
-    if (activeTab && editorContent) {
+    
+    if (activeContent && editorContent) {
       // Fade out current content
       editorContent.classList.add('fade-out');
       
       setTimeout(() => {
         // Update content
-        editorContent.innerHTML = activeTab.content;
+        this.updateCustomContentEditor(activeContent.content);
+        
+        // Restore analysis data for this tab
+        this.restoreAnalysisData(activeContent);
       
       // Update heading based on content type
-      const contentType = tabId.split('-')[0];
       this.updateCustomContentHeading(contentType);
       
       // Update search input
       const searchInput = this.topicsModal.customContentModal.searchInput;
-      searchInput.value = activeTab.searchTerm || '';
+      searchInput.value = '';
       
         // Fade in new content
         editorContent.classList.remove('fade-out');
@@ -11828,8 +13664,6 @@ const ButtonPanel = {
         
         setTimeout(() => {
           editorContent.classList.remove('fade-in');
-      // Perform search to highlight search term
-      this.performSearch();
         }, 300);
       }, 150);
     }
@@ -11843,32 +13677,730 @@ const ButtonPanel = {
   },
 
   /**
+   * Restore analysis data for a tab (word meanings, simplified texts, chats)
+   * @param {Object} activeContent - The active content object with analysis data
+   */
+  restoreAnalysisData(activeContent) {
+    if (!activeContent || !activeContent.analysis) {
+      console.log('[ButtonPanel] No analysis data to restore for tab:', activeContent?.tabId);
+      return;
+    }
+
+    console.log('[ButtonPanel] Restoring analysis data for tab:', activeContent.tabId);
+    console.log('[ButtonPanel] Analysis data:', activeContent.analysis);
+
+    // Wait for content to be fully loaded before restoring visual elements
+    setTimeout(() => {
+      // Clear existing highlights first to avoid duplicates
+      this.clearExistingHighlights();
+      
+      // Restore word meanings
+      if (activeContent.analysis.wordMeanings && activeContent.analysis.wordMeanings.length > 0) {
+        console.log('[ButtonPanel] Restoring', activeContent.analysis.wordMeanings.length, 'word meanings');
+        activeContent.analysis.wordMeanings.forEach(wordData => {
+          this.restoreWordExplanation(wordData);
+        });
+      }
+
+      // Restore simplified texts
+      if (activeContent.analysis.simplifiedMeanings && activeContent.analysis.simplifiedMeanings.length > 0) {
+        console.log('[ButtonPanel] Restoring', activeContent.analysis.simplifiedMeanings.length, 'simplified texts');
+        activeContent.analysis.simplifiedMeanings.forEach(simplifiedData => {
+          this.restoreSimplifiedText(simplifiedData);
+        });
+      }
+
+      // Restore chats
+      if (activeContent.analysis.chats && activeContent.analysis.chats.length > 0) {
+        console.log('[ButtonPanel] Restoring', activeContent.analysis.chats.length, 'chats');
+        activeContent.analysis.chats.forEach(chatData => {
+          // Restore chat history in ChatDialog
+          if (chatData.messages && chatData.messages.length > 0) {
+            console.log('[ButtonPanel] ===== RESTORING FROM ANALYSIS DATA =====');
+            console.log('[ButtonPanel] Restoring chat history for textKey:', chatData.textKey, 'with', chatData.messages.length, 'messages');
+            console.log('[ButtonPanel] ChatDialog.chatHistories before analysis restore:', Array.from(ChatDialog.chatHistories.keys()));
+            
+            ChatDialog.chatHistories.set(chatData.textKey, chatData.messages);
+            
+            console.log('[ButtonPanel] ChatDialog.chatHistories after analysis restore:', Array.from(ChatDialog.chatHistories.keys()));
+            console.log('[ButtonPanel] Chat messages:', chatData.messages);
+          }
+        });
+      }
+
+      // Update button states to reflect restored data
+      this.updateButtonStatesFromSelections();
+      
+      console.log('[ButtonPanel] Analysis data restoration complete');
+    }, 500); // Wait for content to be fully rendered
+  },
+
+  /**
+   * Clear existing highlights from the content
+   */
+  clearExistingHighlights() {
+    const contentElement = this.topicsModal.customContentModal.modal.querySelector('.vocab-custom-content-editor-content');
+    if (!contentElement) {
+      return;
+    }
+
+    // Remove all word highlights
+    const wordHighlights = contentElement.querySelectorAll('.vocab-word-highlight');
+    wordHighlights.forEach(highlight => {
+      const parent = highlight.parentNode;
+      if (parent) {
+        parent.replaceChild(document.createTextNode(highlight.textContent), highlight);
+        parent.normalize();
+      }
+    });
+
+    // Remove all text highlights
+    const textHighlights = contentElement.querySelectorAll('.vocab-text-highlight');
+    textHighlights.forEach(highlight => {
+      const parent = highlight.parentNode;
+      if (parent) {
+        parent.replaceChild(document.createTextNode(highlight.textContent), highlight);
+        parent.normalize();
+      }
+    });
+
+    console.log('[ButtonPanel] Cleared existing highlights');
+  },
+
+  /**
+   * Restore visual word explanation elements
+   * @param {Object} wordData - Word explanation data
+   */
+  restoreWordExplanation(wordData) {
+    console.log('[ButtonPanel] Restoring word explanation for:', wordData.word);
+    
+    // Find all instances of this word in the current content
+    const contentElement = this.topicsModal.customContentModal.modal.querySelector('.vocab-custom-content-editor-content');
+    if (!contentElement) {
+      console.log('[ButtonPanel] Content element not found for word restoration');
+      return;
+    }
+
+    const textContent = contentElement.textContent || contentElement.innerText;
+    if (!textContent) {
+      console.log('[ButtonPanel] No text content found for word restoration');
+      return;
+    }
+
+    // Find word positions in the text
+    const wordRegex = new RegExp(`\\b${wordData.word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'gi');
+    let match;
+    const wordPositions = [];
+    
+    while ((match = wordRegex.exec(textContent)) !== null) {
+      wordPositions.push({
+        start: match.index,
+        end: match.index + match[0].length,
+        word: match[0]
+      });
+    }
+
+    console.log('[ButtonPanel] Found', wordPositions.length, 'instances of word:', wordData.word);
+
+    // Create highlights for each word instance
+    wordPositions.forEach((pos, index) => {
+      // Check if this word is already highlighted
+      const existingHighlight = contentElement.querySelector(`[data-word-highlight="${wordData.normalizedWord}-${index}"]`);
+      if (existingHighlight) {
+        console.log('[ButtonPanel] Word already highlighted:', wordData.word, 'instance', index);
+        return;
+      }
+
+      // Create word highlight element
+      const highlight = document.createElement('span');
+      highlight.className = 'vocab-word-highlight vocab-word-explained';
+      highlight.setAttribute('data-word-highlight', `${wordData.normalizedWord}-${index}`);
+      highlight.setAttribute('data-meaning', wordData.meaning);
+      highlight.setAttribute('data-examples', JSON.stringify(wordData.examples));
+      highlight.textContent = pos.word;
+
+      // Replace the word in the DOM
+      this.replaceTextInElement(contentElement, pos.start, pos.end, highlight);
+
+      // Add to WordSelector explained words
+      if (!WordSelector.explainedWords.has(wordData.normalizedWord)) {
+        WordSelector.explainedWords.set(wordData.normalizedWord, {
+          word: wordData.word,
+          meaning: wordData.meaning,
+          examples: wordData.examples,
+          shouldAllowFetchMoreExamples: wordData.shouldAllowFetchMoreExamples || false,
+          hasCalledGetMoreExamples: false,
+          highlights: new Set()
+        });
+      }
+      WordSelector.explainedWords.get(wordData.normalizedWord).highlights.add(highlight);
+
+      // Add green cross button
+      const greenCrossBtn = WordSelector.createRemoveExplainedButton(wordData.word);
+      highlight.appendChild(greenCrossBtn);
+
+      // Setup word interactions
+      WordSelector.setupWordInteractions(highlight);
+
+      console.log('[ButtonPanel] Restored word highlight for:', wordData.word, 'instance', index);
+    });
+  },
+
+  /**
+   * Restore visual simplified text elements
+   * @param {Object} simplifiedData - Simplified text data
+   */
+  restoreSimplifiedText(simplifiedData) {
+    console.log('[ButtonPanel] Restoring simplified text for textKey:', simplifiedData.textKey);
+    console.log('[ButtonPanel] Simplified data:', simplifiedData);
+    
+    const contentElement = this.topicsModal.customContentModal.modal.querySelector('.vocab-custom-content-editor-content');
+    if (!contentElement) {
+      console.log('[ButtonPanel] Content element not found for simplified text restoration');
+      return;
+    }
+
+    const textContent = contentElement.textContent || contentElement.innerText;
+    if (!textContent) {
+      console.log('[ButtonPanel] No text content found for simplified text restoration');
+      return;
+    }
+
+    // Instead of using indices, search for the original text content
+    const originalText = simplifiedData.originalText;
+    if (!originalText) {
+      console.log('[ButtonPanel] No original text found in simplified data');
+      return;
+    }
+
+    console.log('[ButtonPanel] Searching for original text:', originalText.substring(0, 50) + '...');
+
+    // Find the text segment in the content using text matching
+    const textIndex = textContent.indexOf(originalText);
+    if (textIndex === -1) {
+      console.log('[ButtonPanel] Original text not found in current content');
+      // Try to find a partial match
+      const words = originalText.split(' ').slice(0, 5); // First 5 words
+      const partialText = words.join(' ');
+      const partialIndex = textContent.indexOf(partialText);
+      if (partialIndex !== -1) {
+        console.log('[ButtonPanel] Found partial match, using first 5 words');
+        this.createSimplifiedHighlight(contentElement, partialIndex, partialText.length, partialText, simplifiedData);
+      } else {
+        console.log('[ButtonPanel] No match found for simplified text');
+      }
+      return;
+    }
+
+    console.log('[ButtonPanel] Found original text at index:', textIndex);
+    this.createSimplifiedHighlight(contentElement, textIndex, originalText.length, originalText, simplifiedData);
+  },
+
+  /**
+   * Create a simplified text highlight
+   * @param {HTMLElement} contentElement - The content element
+   * @param {number} startIndex - Start index of the text
+   * @param {number} length - Length of the text
+   * @param {string} text - The text content
+   * @param {Object} simplifiedData - The simplified data object
+   */
+  createSimplifiedHighlight(contentElement, startIndex, length, text, simplifiedData) {
+    // Check if this text is already highlighted
+    const existingHighlight = contentElement.querySelector(`[data-text-highlight="${simplifiedData.textKey}"]`);
+    if (existingHighlight) {
+      console.log('[ButtonPanel] Text already highlighted for textKey:', simplifiedData.textKey);
+      return;
+    }
+
+    console.log('[ButtonPanel] Creating simplified text highlight for:', text.substring(0, 30) + '...');
+
+    // Create text highlight element
+    const highlight = document.createElement('span');
+    highlight.className = 'vocab-text-highlight vocab-text-simplified';
+    highlight.setAttribute('data-text-highlight', simplifiedData.textKey);
+    highlight.textContent = text;
+
+    // Replace the text in the DOM
+    this.replaceTextInElement(contentElement, startIndex, startIndex + length, highlight);
+
+    // Add to TextSelector simplified texts
+    TextSelector.simplifiedTexts.set(simplifiedData.textKey, {
+      textStartIndex: startIndex,
+      textLength: length,
+      text: text,
+      simplifiedText: simplifiedData.simplifiedText,
+      previousSimplifiedTexts: simplifiedData.previousSimplifiedTexts || [],
+      shouldAllowSimplifyMore: simplifiedData.shouldAllowSimplifyMore || false
+    });
+
+    // Add book button
+    const bookBtn = TextSelector.createBookButton(simplifiedData.textKey);
+    highlight.appendChild(bookBtn);
+
+    console.log('[ButtonPanel] Restored simplified text highlight for textKey:', simplifiedData.textKey);
+  },
+
+  /**
+   * Open chat dialog for current content tab
+   */
+  openChatForCurrentContent() {
+    console.log('[ButtonPanel] ===== OPENING CHAT FOR CURRENT CONTENT =====');
+    console.log('[ButtonPanel] Opening chat for current content');
+    
+    // Get the currently active tab content
+    const activeTabId = this.topicsModal.customContentModal.activeTabId;
+    console.log('[ButtonPanel] Active tab ID:', activeTabId);
+    if (!activeTabId) {
+      console.log('[ButtonPanel] ERROR: No active tab found');
+      return;
+    }
+    
+    const activeContent = this.topicsModal.customContentModal.getContentByTabId(parseInt(activeTabId));
+    console.log('[ButtonPanel] Active content found:', !!activeContent);
+    if (!activeContent) {
+      console.log('[ButtonPanel] ERROR: No active content found for tabId:', activeTabId);
+      return;
+    }
+    
+    console.log('[ButtonPanel] Active content details:', {
+      tabId: activeContent.tabId,
+      tabName: activeContent.tabName,
+      contentType: activeContent.contentType,
+      hasAnalysis: !!activeContent.analysis,
+      chatsCount: activeContent.analysis?.chats?.length || 0
+    });
+    
+    // Get the text content from the editor
+    const editorContent = this.topicsModal.customContentModal.modal.querySelector('.vocab-custom-content-editor-content');
+    if (!editorContent) {
+      console.log('[ButtonPanel] No editor content found');
+      return;
+    }
+    
+    // Get the text content (remove any HTML tags)
+    const textContent = editorContent.textContent || editorContent.innerText;
+    if (!textContent || textContent.trim().length === 0) {
+      console.log('[ButtonPanel] No text content found in editor');
+      return;
+    }
+    
+    console.log('[ButtonPanel] Text content:', textContent.substring(0, 100) + '...');
+    
+    // Generate a consistent textKey for this content tab using proper format
+    const contentType = activeContent.contentType || 'custom-content';
+    const textKey = `${contentType}-${activeTabId}`;
+    console.log('[ButtonPanel] Generated textKey:', textKey, 'for contentType:', contentType, 'tabId:', activeTabId);
+    
+    // Check if chat dialog is already open for this tab
+    if (ChatDialog.isOpen && ChatDialog.currentTextKey === textKey) {
+      console.log('[ButtonPanel] Chat already open for this tab, closing it');
+      ChatDialog.close();
+      return;
+    }
+    
+    // Check if there's existing chat history for this tab
+    let existingChatHistory = null;
+    const contextualTextKey = `${contentType}-${activeTabId}-generic`;
+    console.log('[ButtonPanel] Looking for chat history with contextualTextKey:', contextualTextKey);
+    
+    if (activeContent.analysis && activeContent.analysis.chats) {
+      console.log('[ButtonPanel] Available chats in analysis:', activeContent.analysis.chats.map(c => c.textKey));
+      
+      // Find chat history for this specific contextual textKey
+      existingChatHistory = activeContent.analysis.chats.find(chat => 
+        chat.textKey === contextualTextKey && chat.messages && chat.messages.length > 0
+      );
+      
+      if (existingChatHistory) {
+        console.log('[ButtonPanel] Found existing chat history for contextualTextKey:', contextualTextKey, 'with', existingChatHistory.messages.length, 'messages');
+      } else {
+        console.log('[ButtonPanel] No existing chat history found for contextualTextKey:', contextualTextKey);
+      }
+    }
+    
+    console.log('[ButtonPanel] Existing chat history found:', existingChatHistory ? existingChatHistory.messages.length : 0, 'messages');
+    
+    // Open the chat dialog with the current content as initial context
+    console.log('[ButtonPanel] Calling ChatDialog.open with:', {
+      textContentLength: textContent.length,
+      textKey: textKey,
+      mode: 'ask',
+      chatContext: 'general'
+    });
+    ChatDialog.open(textContent, textKey, 'ask', null, 'general');
+    console.log('[ButtonPanel] ChatDialog.open called successfully');
+    
+    // If there's existing chat history, restore it to the ChatDialog
+    if (existingChatHistory && existingChatHistory.messages.length > 0) {
+      console.log('[ButtonPanel] ===== RESTORING CHAT HISTORY =====');
+      console.log('[ButtonPanel] Restoring chat history for contextualTextKey:', contextualTextKey);
+      console.log('[ButtonPanel] Messages to restore:', existingChatHistory.messages.length);
+      console.log('[ButtonPanel] ChatDialog.chatHistories before set:', Array.from(ChatDialog.chatHistories.keys()));
+      
+      ChatDialog.chatHistories.set(contextualTextKey, existingChatHistory.messages);
+      ChatDialog.chatHistory = [...existingChatHistory.messages];
+      
+      console.log('[ButtonPanel] ChatDialog.chatHistories after set:', Array.from(ChatDialog.chatHistories.keys()));
+      console.log('[ButtonPanel] ChatDialog.chatHistory length:', ChatDialog.chatHistory.length);
+      
+      // Re-render the chat messages
+      setTimeout(() => {
+        ChatDialog.renderChatMessages();
+      }, 100);
+    } else {
+      // No existing chat history in analysis data - check if it exists in ChatDialog.chatHistories
+      console.log('[ButtonPanel] No existing chat history in analysis data, checking ChatDialog.chatHistories');
+      console.log('[ButtonPanel] Available keys in ChatDialog.chatHistories:', Array.from(ChatDialog.chatHistories.keys()));
+      
+      const existingInMemory = ChatDialog.chatHistories.get(contextualTextKey);
+      if (existingInMemory && existingInMemory.length > 0) {
+        console.log('[ButtonPanel] Found existing chat history in memory for contextualTextKey:', contextualTextKey);
+        ChatDialog.chatHistory = [...existingInMemory];
+        
+        // Re-render the chat messages
+        setTimeout(() => {
+          ChatDialog.renderChatMessages();
+        }, 100);
+      } else {
+        // No existing chat history anywhere - start fresh
+        console.log('[ButtonPanel] No existing chat history anywhere, starting fresh');
+        ChatDialog.chatHistory = []; // Clear current chat history only
+        
+        // Re-render the chat messages to show empty state
+        setTimeout(() => {
+          ChatDialog.renderChatMessages();
+        }, 100);
+      }
+    }
+    
+    // Auto-focus is now handled by ChatDialog.show() based on chat context
+    // No need to auto-focus here since generic chat should not be auto-focused
+    
+    console.log('[ButtonPanel] Chat dialog opened for current content');
+  },
+
+  /**
+   * Handle chat popup behavior when switching tabs
+   * @param {string} tabId - The tab ID being switched to
+   */
+  handleChatPopupOnTabSwitch(tabId) {
+    console.log('[ButtonPanel] Handling chat popup for tab switch to:', tabId);
+    
+    // Get the PREVIOUS tab ID (the one we're leaving)
+    const previousTabId = this.topicsModal.customContentModal.activeTabId;
+    console.log('[ButtonPanel] Previous tab ID:', previousTabId);
+    
+    // Save current chat history to analysis data before closing (for the tab where chat was opened)
+    if (ChatDialog.isOpen && ChatDialog.currentTextKey && ChatDialog.chatHistory.length > 0) {
+      // Extract the tab ID from the currentTextKey (format: <contentType>-<tabId>-generic or <contentType>-<tabId>-<startIndex>-<length>)
+      const chatTabId = ChatDialog.currentTextKey.replace(/^[^-]+-(\d+)-.*/, '$1');
+      console.log('[ButtonPanel] Saving current chat history for chat tab:', chatTabId);
+      console.log('[ButtonPanel] Chat was opened for tab:', chatTabId, 'but switching to tab:', tabId);
+      console.log('[ButtonPanel] CurrentTextKey:', ChatDialog.currentTextKey, 'ChatContext:', ChatDialog.chatContext);
+      
+      // Get the content for the tab where the chat was originally opened
+      const chatActiveContent = this.topicsModal.customContentModal.getContentByTabId(parseInt(chatTabId));
+      if (chatActiveContent && chatActiveContent.analysis) {
+        console.log('[ButtonPanel] Available chats before saving:', chatActiveContent.analysis.chats.map(c => c.textKey));
+        const existingChatIndex = chatActiveContent.analysis.chats.findIndex(c =>
+          c.textKey === ChatDialog.currentTextKey
+        );
+
+        const chatData = {
+          textKey: ChatDialog.currentTextKey,
+          originalText: ChatDialog.currentText,
+          messages: [...ChatDialog.chatHistory],
+          lastUpdated: new Date().toISOString()
+        };
+
+        if (existingChatIndex !== -1) {
+          chatActiveContent.analysis.chats[existingChatIndex] = chatData;
+          console.log(`[ButtonPanel] Updated existing chat for textKey "${ChatDialog.currentTextKey}" in analysis data for tab ${chatTabId}`);
+        } else {
+          chatActiveContent.analysis.chats.push(chatData);
+          console.log(`[ButtonPanel] Added new chat for textKey "${ChatDialog.currentTextKey}" to analysis data for tab ${chatTabId}`);
+        }
+      }
+    }
+    
+    // Close current chat popup if it's open
+    if (ChatDialog.isOpen) {
+      console.log('[ButtonPanel] Closing current chat popup');
+      ChatDialog.close();
+    }
+    
+    // NO AUTO-OPENING - just track chat history per tab in memory
+    console.log('[ButtonPanel] Chat history saved, no auto-opening chat popup');
+  },
+
+
+  /**
+   * Replace text in an element with a new element
+   * @param {HTMLElement} element - The element containing the text
+   * @param {number} startIndex - Start index of text to replace
+   * @param {number} endIndex - End index of text to replace
+   * @param {HTMLElement} newElement - The new element to insert
+   */
+  replaceTextInElement(element, startIndex, endIndex, newElement) {
+    const walker = document.createTreeWalker(
+      element,
+      NodeFilter.SHOW_TEXT,
+      null,
+      false
+    );
+
+    let currentPos = 0;
+    let node;
+    let targetNode = null;
+    let targetStart = 0;
+
+    // Find the text node containing our target range
+    while (node = walker.nextNode()) {
+      const nodeLength = node.textContent.length;
+      
+      if (currentPos + nodeLength > startIndex) {
+        targetNode = node;
+        targetStart = startIndex - currentPos;
+        break;
+      }
+      currentPos += nodeLength;
+    }
+
+    if (!targetNode) {
+      console.log('[ButtonPanel] Could not find target text node for replacement');
+      return;
+    }
+
+    // Split the text node if necessary
+    const beforeText = targetNode.textContent.substring(0, targetStart);
+    const afterText = targetNode.textContent.substring(targetStart + (endIndex - startIndex));
+    const targetText = targetNode.textContent.substring(targetStart, targetStart + (endIndex - startIndex));
+
+    // Create new text nodes
+    if (beforeText) {
+      const beforeNode = document.createTextNode(beforeText);
+      targetNode.parentNode.insertBefore(beforeNode, targetNode);
+    }
+
+    // Insert the new element
+    targetNode.parentNode.insertBefore(newElement, targetNode);
+
+    if (afterText) {
+      const afterNode = document.createTextNode(afterText);
+      targetNode.parentNode.insertBefore(afterNode, targetNode);
+    }
+
+    // Remove the original node
+    targetNode.remove();
+  },
+
+  /**
+   * Clean up analysis data when content is removed
+   * @param {Object} content - The content object being removed
+   */
+  cleanupAnalysisData(content) {
+    if (!content || !content.analysis) {
+      console.log('[ButtonPanel] No analysis data to clean up for content:', content?.tabId);
+      return;
+    }
+
+    console.log('[ButtonPanel] Cleaning up analysis data for content:', content.tabId);
+
+    // Clean up word meanings
+    if (content.analysis.wordMeanings && content.analysis.wordMeanings.length > 0) {
+      console.log('[ButtonPanel] Cleaning up', content.analysis.wordMeanings.length, 'word meanings');
+      content.analysis.wordMeanings.forEach(wordData => {
+        // Remove from WordSelector if it exists
+        if (WordSelector.explainedWords.has(wordData.normalizedWord)) {
+          WordSelector.explainedWords.delete(wordData.normalizedWord);
+          console.log('[ButtonPanel] Cleaned up word explanation for:', wordData.word);
+        }
+      });
+    }
+
+    // Clean up simplified texts
+    if (content.analysis.simplifiedMeanings && content.analysis.simplifiedMeanings.length > 0) {
+      console.log('[ButtonPanel] Cleaning up', content.analysis.simplifiedMeanings.length, 'simplified texts');
+      content.analysis.simplifiedMeanings.forEach(simplifiedData => {
+        // Remove from TextSelector if it exists
+        if (TextSelector.simplifiedTexts.has(simplifiedData.textKey)) {
+          TextSelector.simplifiedTexts.delete(simplifiedData.textKey);
+          console.log('[ButtonPanel] Cleaned up simplified text for textKey:', simplifiedData.textKey);
+        }
+        
+        // Remove visual elements from DOM
+        this.removeSimplifiedTextHighlights(simplifiedData.textKey);
+      });
+    }
+
+    // Clean up chats
+    if (content.analysis.chats && content.analysis.chats.length > 0) {
+      console.log('[ButtonPanel] Cleaning up', content.analysis.chats.length, 'chats');
+      content.analysis.chats.forEach(chatData => {
+        // Remove from ChatDialog if it exists
+        if (ChatDialog.chatHistories.has(chatData.textKey)) {
+          ChatDialog.chatHistories.delete(chatData.textKey);
+          console.log('[ButtonPanel] Cleaned up chat history for textKey:', chatData.textKey);
+        }
+      });
+    }
+
+    console.log('[ButtonPanel] Analysis data cleanup complete');
+  },
+
+  /**
+   * Remove simplified text highlights from DOM
+   * @param {string} textKey - The text key to remove highlights for
+   */
+  removeSimplifiedTextHighlights(textKey) {
+    console.log('[ButtonPanel] Removing simplified text highlights for textKey:', textKey);
+    
+    // Find all simplified text highlights with this textKey
+    const contentElement = this.topicsModal.customContentModal.modal.querySelector('.vocab-custom-content-editor-content');
+    if (!contentElement) {
+      console.log('[ButtonPanel] Content element not found');
+      return;
+    }
+    
+    // Find all simplified text highlights
+    const simplifiedHighlights = contentElement.querySelectorAll('.vocab-text-highlight');
+    simplifiedHighlights.forEach(highlight => {
+      const highlightTextKey = highlight.getAttribute('data-text-key');
+      if (highlightTextKey === textKey) {
+        console.log('[ButtonPanel] Removing simplified text highlight for textKey:', textKey);
+        
+        // Remove the book icon button if it exists
+        const bookButton = highlight.querySelector('.vocab-simplified-text-btn');
+        if (bookButton) {
+          bookButton.remove();
+        }
+        
+        // Replace the highlight span with plain text
+        const parent = highlight.parentNode;
+        if (parent) {
+          parent.replaceChild(document.createTextNode(highlight.textContent), highlight);
+          parent.normalize();
+        }
+      }
+    });
+    
+    // Also remove explanations from the explainedText container if chat dialog is open
+    this.removeSimplifiedTextExplanations(textKey);
+    
+    console.log('[ButtonPanel] Simplified text highlights removal complete');
+  },
+
+  /**
+   * Remove simplified text explanations from explainedText container
+   * @param {string} textKey - The text key to remove explanations for
+   */
+  removeSimplifiedTextExplanations(textKey) {
+    console.log('[ButtonPanel] Removing simplified text explanations for textKey:', textKey);
+    
+    // Find the simplified explanations container in chat dialog
+    const explanationsContainer = document.getElementById('vocab-chat-simplified-container');
+    if (!explanationsContainer) {
+      console.log('[ButtonPanel] Explanations container not found (chat dialog may not be open)');
+      return;
+    }
+    
+    // Find all explanation elements with this textKey
+    const explanationElements = explanationsContainer.querySelectorAll(`[data-text-key="${textKey}"]`);
+    explanationElements.forEach(element => {
+      console.log('[ButtonPanel] Removing explanation element for textKey:', textKey);
+      element.remove();
+    });
+    
+    // If no explanations left, hide the container
+    const remainingExplanations = explanationsContainer.querySelectorAll('[data-text-key]');
+    if (remainingExplanations.length === 0) {
+      explanationsContainer.style.display = 'none';
+      console.log('[ButtonPanel] No explanations left, hiding container');
+    }
+    
+    console.log('[ButtonPanel] Simplified text explanations removal complete');
+  },
+
+  /**
    * Close a tab
    * @param {string} tabId - The tab ID to close
    */
   closeTab(tabId) {
-    // Use new container system to remove tab
-    const removed = this.topicsModal.customContentModal.removeTab(tabId);
+    console.log('[ButtonPanel] Closing tab:', tabId);
+    
+    // Get the content type of the tab being closed BEFORE removing it
+    const contentToClose = this.topicsModal.customContentModal.getContentByTabId(parseInt(tabId));
+    if (!contentToClose) {
+      console.log('[ButtonPanel] Content not found for tabId:', tabId);
+      return;
+    }
+    
+    const contentTypeToClose = contentToClose.contentType;
+    console.log('[ButtonPanel] Closing tab of content type:', contentTypeToClose);
+    
+    // Remove content from new data structure using tabId
+    const removed = this.topicsModal.customContentModal.removeContentByTabId(parseInt(tabId));
+    console.log('[ButtonPanel] Content removed:', removed);
+    
     if (!removed) return;
     
     // Remove tab element from DOM
     const tabElement = this.topicsModal.customContentModal.modal.querySelector(`[data-tab-id="${tabId}"]`);
     if (tabElement) {
       tabElement.remove();
+      console.log('[ButtonPanel] Tab element removed from DOM');
     }
     
-    // If this was the active tab, switch to another tab
-    if (this.topicsModal.customContentModal.activeTabId === tabId) {
-      const allTabs = this.topicsModal.customContentModal.getAllTabs();
-      if (allTabs.length > 0) {
-        // Switch to the first available tab
-        this.switchToTab(allTabs[0].id);
-      } else {
-        // No tabs left, clear topics and close the modal
-        this.clearTopicsModalInputs();
-        this.hideCustomContentModal();
-      }
+    // Check if there are any tabs left at all (across all content types)
+    const allTabs = this.topicsModal.customContentModal.getAllTabs();
+    
+    // Check if there are any tabs left for the specific content type being closed
+    const tabsOfSameType = this.topicsModal.customContentModal.getTabsByType(contentTypeToClose);
+    
+    console.log('[ButtonPanel] ===== TAB CLOSING DEBUG INFO =====');
+    console.log('[ButtonPanel] Tab being closed ID:', tabId);
+    console.log('[ButtonPanel] Content type being closed:', contentTypeToClose);
+    console.log('[ButtonPanel] Active tab ID:', this.topicsModal.customContentModal.activeTabId);
+    console.log('[ButtonPanel] Total remaining tabs:', allTabs.length);
+    console.log('[ButtonPanel] Remaining tabs of same type:', tabsOfSameType.length);
+    console.log('[ButtonPanel] All remaining tabs:', allTabs);
+    console.log('[ButtonPanel] Topic contents:', this.topicsModal.customContentModal.topicContents);
+    console.log('[ButtonPanel] Image contents:', this.topicsModal.customContentModal.imageContents);
+    console.log('[ButtonPanel] PDF contents:', this.topicsModal.customContentModal.pdfContents);
+    console.log('[ButtonPanel] Text contents:', this.topicsModal.customContentModal.textContents);
+    
+    // Check if this is the last tab globally OR the last tab of this specific content type
+    const isLastTabGlobally = allTabs.length === 0;
+    const isLastTabOfType = tabsOfSameType.length === 0;
+    
+    if (isLastTabGlobally) {
+      console.log('-------- I am last tab getting closed globally -------');
+      console.log('[ButtonPanel] LAST TAB DETECTED - Should close modal');
+    } else if (isLastTabOfType) {
+      console.log(`-------- I am last tab of my current content type ${contentTypeToClose} -------`);
+      console.log('[ButtonPanel] LAST TAB OF TYPE DETECTED - Should close modal');
     }
+    
+    // Check if we should close the modal (either last tab globally or last tab of this content type)
+    if (isLastTabGlobally || isLastTabOfType) {
+      console.log('[ButtonPanel] ===== CLOSING MODAL - Last tab of type or globally =====');
+      console.log('[ButtonPanel] Calling clearTopicsModalInputs()');
+      this.clearTopicsModalInputs();
+      console.log('[ButtonPanel] Calling hideCustomContentModal()');
+      this.hideCustomContentModal();
+      console.log('[ButtonPanel] Modal close sequence completed');
+    } else if (this.topicsModal.customContentModal.activeTabId === tabId) {
+      // Only handle active tab switching if we're not closing the modal
+      console.log('[ButtonPanel] Closing active tab - switching to another tab');
+      console.log('[ButtonPanel] Switching to tab ID:', allTabs[0].id);
+      if (allTabs.length > 0) {
+        this.switchToTab(allTabs[0].id);
+      }
+    } else {
+      console.log('[ButtonPanel] Tab being closed was not active, no action needed');
+    }
+    
+    console.log('[ButtonPanel] ===== END TAB CLOSING DEBUG =====');
     
     // Update arrow states after removing tab
     setTimeout(() => {
@@ -12018,6 +14550,12 @@ const ButtonPanel = {
    */
   clearTopicsModalInputs() {
     console.log('[ButtonPanel] Clearing topics modal inputs');
+    
+    // Check if topics modal exists before trying to clear it
+    if (!this.topicsModal.modal) {
+      console.log('[ButtonPanel] Topics modal does not exist, skipping clearTopicsModalInputs');
+      return;
+    }
     
     // Clear topics array
     this.topicsModal.topics = [];
@@ -12204,9 +14742,10 @@ const ButtonPanel = {
     const title = this.topicsModal.customContentModal.modal?.querySelector('.vocab-custom-content-title');
     if (title) {
       const headingMap = {
-        'pdf': 'Content from PDF',
-        'image': 'Content from Image', 
-        'topic': 'Topic contents',
+        'pdf': 'PDF Content',
+        'image': 'Image content', 
+        'topic': 'Topic content',
+        'text': 'Text content',
         'default': 'Generated Content'
       };
       
@@ -12265,21 +14804,61 @@ const ButtonPanel = {
   },
 
   /**
+   * Update custom content modal title based on content type
+   * @param {string} contentType - The type of content (pdf, image, etc.)
+   */
+  updateCustomContentModalTitle(contentType) {
+    console.log('[ButtonPanel] ===== UPDATING CUSTOM CONTENT MODAL TITLE =====');
+    console.log('[ButtonPanel] Content type:', contentType);
+    
+    const titleElement = this.topicsModal.customContentModal.modal.querySelector('.vocab-custom-content-title');
+    
+    if (!titleElement) {
+      console.error('[ButtonPanel] Title element not found');
+      return;
+    }
+    
+    // Set heading based on content type
+    const headingMap = {
+      'pdf': 'PDF Content',
+      'image': 'Image content', 
+      'topic': 'Topic content',
+      'text': 'Text content',
+      'default': 'Generated Content'
+    };
+    
+    titleElement.textContent = headingMap[contentType] || headingMap['default'];
+    console.log('[ButtonPanel] Title updated to:', titleElement.textContent);
+    
+    console.log('[ButtonPanel] ===== MODAL TITLE UPDATED SUCCESSFULLY =====');
+  },
+
+  /**
    * Perform search in the content
    */
   performSearch() {
     console.log('[ButtonPanel] performSearch called');
-    const activeTab = this.topicsModal.customContentModal.getTabById(this.topicsModal.customContentModal.activeTabId);
-    if (!activeTab) {
-      console.log('[ButtonPanel] No active tab found in performSearch');
-      return;
+    
+    // Get search term from current active tab
+    let searchTerm = '';
+    if (this.topicsModal.customContentModal.activeTabId) {
+      const tabId = parseInt(this.topicsModal.customContentModal.activeTabId);
+      const activeContent = this.topicsModal.customContentModal.getContentByTabId(tabId);
+      if (activeContent) {
+        searchTerm = activeContent.searchTerm || '';
+      }
     }
     
-    const searchTerm = activeTab.searchTerm;
     const editorContent = this.topicsModal.customContentModal.editorContent;
     
-    console.log('[ButtonPanel] Search term:', searchTerm);
-    console.log('[ButtonPanel] Editor content:', editorContent);
+    console.log('[ButtonPanel] Search term:', JSON.stringify(searchTerm));
+    console.log('[ButtonPanel] Editor content element:', editorContent);
+    console.log('[ButtonPanel] Active tab ID:', this.topicsModal.customContentModal.activeTabId);
+    
+    if (!editorContent) {
+      console.error('[ButtonPanel] Editor content element not found!');
+      return;
+    }
     
     if (!searchTerm || !searchTerm.trim()) {
       console.log('[ButtonPanel] No search term, removing highlights');
@@ -12295,12 +14874,17 @@ const ButtonPanel = {
     
     // Get the original content without highlights
     let content = editorContent.innerHTML;
+    console.log('[ButtonPanel] Original content length:', content.length);
+    console.log('[ButtonPanel] Content preview:', content.substring(0, 200));
     
     // Remove existing highlights
     content = content.replace(/<span class="vocab-search-highlight">(.*?)<\/span>/gim, '$1');
     
     // Add new highlights
     const regex = new RegExp(`(${searchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gim');
+    const matches = content.match(regex);
+    console.log('[ButtonPanel] Found matches:', matches ? matches.length : 0);
+    
     content = content.replace(regex, '<span class="vocab-search-highlight">$1</span>');
     
     console.log('[ButtonPanel] Updated content with highlights');
