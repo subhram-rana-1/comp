@@ -6,15 +6,6 @@
 class ApiConfig {
   // Environment-based configuration
   static get BASE_URL() {
-    // Force localhost for development - remove the hostname check
-    // since extensions run in a different context
-    return 'http://localhost:8000';
-    
-    // Check if we're in development mode (localhost)
-    if (typeof window !== 'undefined' && window.location.hostname === 'localhost') {
-      return 'http://localhost:8000';
-    }
-    
     // Check for development environment variables or flags
     if (typeof process !== 'undefined' && process.env.NODE_ENV === 'development') {
       return 'http://localhost:8000';

@@ -1327,7 +1327,7 @@ const WordSelector = {
     try {
       console.log('[WordSelector] Fetching pronunciation for:', word);
       
-      const response = await fetch('http://localhost:8000/api/v2/pronunciation', {
+      const response = await fetch(`${ApiConfig.BASE_URL}/api/v2/pronunciation`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
