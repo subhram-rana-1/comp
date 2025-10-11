@@ -226,6 +226,9 @@ const WordSelector = {
   // Container for explained words (moved from selectedWords after API call)
   explainedWords: new Map(), // Map of word -> {word, meaning, examples, highlights, hasCalledGetMoreExamples}
   
+  // Cache for pronunciation audio blobs
+  pronunciationCache: new Map(), // Map of word -> audio blob
+  
   // Track if the feature is enabled
   isEnabled: false,
   
@@ -856,6 +859,17 @@ const WordSelector = {
     header.textContent = 'Contextual Meaning';
     popup.appendChild(header);
     
+    // Speaker icon for pronunciation
+    const speakerBtn = document.createElement('button');
+    speakerBtn.className = 'vocab-word-popup-speaker';
+    speakerBtn.setAttribute('aria-label', `Pronounce "${word}"`);
+    speakerBtn.innerHTML = this.createSpeakerIcon();
+    speakerBtn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      await this.handlePronunciation(word, speakerBtn);
+    });
+    popup.appendChild(speakerBtn);
+    
     // Meaning
     const meaningDiv = document.createElement('div');
     meaningDiv.className = 'vocab-word-popup-meaning';
@@ -1228,6 +1242,175 @@ const WordSelector = {
     return btn;
   },
   
+  /**
+   * Create speaker icon SVG
+   * @returns {string} SVG markup
+   */
+  createSpeakerIcon() {
+    return `
+      <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M3 9v6h4l5 5V4L7 9H3z" fill="#9F7BDB"/>
+        <path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z" fill="#9F7BDB"/>
+      </svg>
+    `;
+  },
+
+  /**
+   * Create loading spinner icon SVG
+   * @returns {string} SVG markup
+   */
+  createLoadingSpinnerIcon() {
+    return `
+      <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" class="vocab-loading-spinner">
+        <circle cx="12" cy="12" r="10" stroke="#9F7BDB" stroke-width="2" fill="none" opacity="0.3"/>
+        <path d="M12 2a10 10 0 0 1 10 10" stroke="#9F7BDB" stroke-width="2" fill="none" stroke-linecap="round">
+          <animateTransform attributeName="transform" type="rotate" dur="1s" repeatCount="indefinite" values="0 12 12;360 12 12"/>
+        </path>
+      </svg>
+    `;
+  },
+
+  /**
+   * Handle pronunciation button click
+   * @param {string} word - The word to pronounce
+   * @param {HTMLElement} button - The speaker button element
+   */
+  async handlePronunciation(word, button) {
+    // Check if we already have cached audio for this word
+    const cacheKey = `pronunciation_${word.toLowerCase()}`;
+    const cachedAudio = this.pronunciationCache?.get(cacheKey);
+    
+    if (cachedAudio) {
+      console.log('[WordSelector] Playing cached pronunciation for:', word);
+      await this.playAudio(cachedAudio);
+      return;
+    }
+    
+    // Show loading state
+    button.disabled = true;
+    button.classList.add('loading');
+    const originalIcon = button.innerHTML;
+    button.innerHTML = this.createLoadingSpinnerIcon();
+    
+    try {
+      console.log('[WordSelector] Fetching pronunciation for:', word);
+      
+      const response = await fetch('http://localhost:8000/api/v2/pronunciation', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ 
+          word: word,
+          voice: 'nova' // Default voice
+        })
+      });
+      
+      if (!response.ok) {
+        if (response.status === 429) {
+          throw new Error('Too many requests. Please wait a moment and try again.');
+        } else if (response.status === 400) {
+          const errorData = await response.json();
+          throw new Error(`Invalid request: ${errorData.detail}`);
+        } else if (response.status === 500) {
+          throw new Error('Server error. Please try again later.');
+        } else {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+      }
+      
+      const audioBlob = await response.blob();
+      
+      // Cache the audio
+      if (!this.pronunciationCache) {
+        this.pronunciationCache = new Map();
+      }
+      this.pronunciationCache.set(cacheKey, audioBlob);
+      
+      // Play the audio
+      await this.playAudio(audioBlob);
+      
+      console.log('[WordSelector] Pronunciation played successfully for:', word);
+      
+    } catch (error) {
+      console.error('[WordSelector] Pronunciation error:', error);
+      this.showErrorBanner(error.message || 'Failed to play pronunciation');
+    } finally {
+      // Restore button state
+      button.disabled = false;
+      button.classList.remove('loading');
+      button.innerHTML = originalIcon;
+    }
+  },
+
+  /**
+   * Play audio from blob
+   * @param {Blob} audioBlob - The audio blob to play
+   */
+  async playAudio(audioBlob) {
+    const audioUrl = URL.createObjectURL(audioBlob);
+    const audio = new Audio(audioUrl);
+    audio.volume = 1.0; // Maximum volume
+    
+    return new Promise((resolve, reject) => {
+      audio.onended = () => {
+        URL.revokeObjectURL(audioUrl);
+        resolve();
+      };
+      
+      audio.onerror = (error) => {
+        URL.revokeObjectURL(audioUrl);
+        reject(error);
+      };
+      
+      audio.play().catch(reject);
+    });
+  },
+
+  /**
+   * Show error banner
+   * @param {string} message - Error message to display
+   */
+  showErrorBanner(message) {
+    // Remove existing error banner if any
+    const existingBanner = document.querySelector('.vocab-error-banner');
+    if (existingBanner) {
+      existingBanner.remove();
+    }
+    
+    // Create error banner
+    const banner = document.createElement('div');
+    banner.className = 'vocab-error-banner';
+    banner.innerHTML = `
+      <div class="vocab-error-content">
+        <span class="vocab-error-icon">⚠️</span>
+        <span class="vocab-error-message">${message}</span>
+        <button class="vocab-error-close" aria-label="Close error">×</button>
+      </div>
+    `;
+    
+    // Add close functionality
+    const closeBtn = banner.querySelector('.vocab-error-close');
+    closeBtn.addEventListener('click', () => {
+      banner.remove();
+    });
+    
+    // Auto-remove after 5 seconds
+    setTimeout(() => {
+      if (banner.parentNode) {
+        banner.remove();
+      }
+    }, 5000);
+    
+    // Add to page
+    document.body.appendChild(banner);
+    
+    // Animate in
+    setTimeout(() => {
+      banner.classList.add('visible');
+    }, 10);
+  },
+
   /**
    * Create green wireframe cross icon SVG
    * @returns {string} SVG markup
@@ -1618,6 +1801,118 @@ const WordSelector = {
       .vocab-word-popup-close svg {
         width: 12px;
         height: 12px;
+      }
+      
+      /* Speaker icon for pronunciation */
+      .vocab-word-popup-speaker {
+        position: absolute;
+        top: 12px;
+        right: 12px;
+        width: 28px;
+        height: 28px;
+        background: rgba(159, 123, 219, 0.1);
+        border: 1px solid rgba(159, 123, 219, 0.3);
+        border-radius: 50%;
+        cursor: pointer;
+        opacity: 0.8;
+        transition: opacity 0.2s ease, background-color 0.2s ease, transform 0.2s ease;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 10;
+      }
+      
+      .vocab-word-popup-speaker:hover:not(.loading) {
+        opacity: 1;
+        background: rgba(159, 123, 219, 0.2);
+        transform: scale(1.05);
+      }
+      
+      .vocab-word-popup-speaker:active:not(.loading) {
+        transform: scale(0.95);
+      }
+      
+      .vocab-word-popup-speaker.loading {
+        opacity: 0.6;
+        cursor: not-allowed;
+        transform: none;
+      }
+      
+      .vocab-word-popup-speaker svg {
+        width: 16px;
+        height: 16px;
+      }
+      
+      /* Loading spinner animation */
+      .vocab-loading-spinner {
+        animation: vocab-spin 1s linear infinite;
+      }
+      
+      @keyframes vocab-spin {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
+      }
+      
+      /* Error banner */
+      .vocab-error-banner {
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        background: #ff4444;
+        color: white;
+        border-radius: 8px;
+        box-shadow: 0 4px 12px rgba(255, 68, 68, 0.3);
+        z-index: 1000000;
+        opacity: 0;
+        transform: translateX(100%);
+        transition: opacity 0.3s ease, transform 0.3s ease;
+        max-width: 400px;
+      }
+      
+      .vocab-error-banner.visible {
+        opacity: 1;
+        transform: translateX(0);
+      }
+      
+      .vocab-error-content {
+        display: flex;
+        align-items: center;
+        padding: 12px 16px;
+        gap: 8px;
+      }
+      
+      .vocab-error-icon {
+        font-size: 16px;
+        flex-shrink: 0;
+      }
+      
+      .vocab-error-message {
+        flex: 1;
+        font-size: 14px;
+        font-weight: 500;
+        line-height: 1.4;
+      }
+      
+      .vocab-error-close {
+        background: none;
+        border: none;
+        color: white;
+        font-size: 18px;
+        font-weight: bold;
+        cursor: pointer;
+        padding: 0;
+        width: 20px;
+        height: 20px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 50%;
+        transition: background-color 0.2s ease;
+        flex-shrink: 0;
+      }
+      
+      .vocab-error-close:hover {
+        background: rgba(255, 255, 255, 0.2);
       }
     `;
     
