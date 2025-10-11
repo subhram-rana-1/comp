@@ -3476,9 +3476,9 @@ const ChatDialog = {
     const contentArea = document.createElement('div');
     contentArea.className = 'vocab-chat-content-area';
     
-    // Create ask/chat content
-    const askContent = this.createAskContent();
-    contentArea.appendChild(askContent);
+    // Create simplified content (always present)
+    const simplifiedContent = this.createSimplifiedContent();
+    contentArea.appendChild(simplifiedContent);
     
     // Create input area
     const inputArea = this.createInputArea();
@@ -3678,25 +3678,25 @@ const ChatDialog = {
     const firstTab = document.createElement('button');
     
     if (this.mode === 'simplified') {
-      // In simplified mode, first tab is "Simplified" and is active
+      // In simplified mode, first tab is "Simplified explanation" and is active
       firstTab.className = 'vocab-chat-tab active';
       firstTab.setAttribute('data-tab', 'simplified');
-      firstTab.textContent = 'SIMPLIFIED';
+      firstTab.textContent = 'Simplified explanation';
       firstTab.addEventListener('click', () => this.switchTab('simplified'));
     } else {
-      // In ask mode, first tab is "Original text" and is not active
+      // In ask mode, first tab is "Simplified explanation" and is not active
       firstTab.className = 'vocab-chat-tab';
-      firstTab.setAttribute('data-tab', 'original-text');
-      firstTab.textContent = 'ORIGINAL TEXT';
-      firstTab.addEventListener('click', () => this.switchTab('original-text'));
+      firstTab.setAttribute('data-tab', 'simplified');
+      firstTab.textContent = 'Simplified explanation';
+      firstTab.addEventListener('click', () => this.switchTab('simplified'));
     }
     
-    // Second tab: Always "Chat"
+    // Second tab: Always "Ask on content"
     const chatTab = document.createElement('button');
     // Chat tab is active in ask mode, not active in simplified mode
     chatTab.className = this.mode === 'simplified' ? 'vocab-chat-tab' : 'vocab-chat-tab active';
     chatTab.setAttribute('data-tab', 'ask');
-    chatTab.textContent = 'CHAT';
+    chatTab.textContent = 'Ask on content';
     chatTab.addEventListener('click', () => this.switchTab('ask'));
     
     // Create sliding indicator
@@ -3717,242 +3717,23 @@ const ChatDialog = {
   },
   
   /**
-   * Create original text content
-   */
-  createOriginalTextContent() {
-    const content = document.createElement('div');
-    content.className = 'vocab-chat-tab-content';
-    content.setAttribute('data-content', 'original-text');
-    content.style.display = 'none';
-    
-    // Create focus button container
-    const buttonContainer = document.createElement('div');
-    buttonContainer.className = 'vocab-chat-focus-btn-container';
-    
-    // Create focus button
-    const focusButton = document.createElement('button');
-    focusButton.className = 'vocab-chat-focus-btn';
-    focusButton.innerHTML = `
-      <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-        <path d="M3 10l7-7v4c7 0 7 6 7 6s-3-3-7-3v4l-7-7z" fill="#9527F5"/>
-      </svg>
-      <span>Focus</span>
-    `;
-    
-    // Add click handler
-    focusButton.addEventListener('click', () => {
-      console.log('[Tab Focus Button] Clicked, currentTextKey:', this.currentTextKey);
-      
-      // For selected text chat, use original textKey to find highlight
-      const originalTextKey = this.currentTextKey.replace(/-selected$/, '').replace(/-generic$/, '');
-      console.log('[Tab Focus Button] Original textKey:', originalTextKey);
-      
-      // Try exact match first
-      let highlight = TextSelector.textToHighlights.get(originalTextKey);
-      
-      // If no exact match, try fuzzy matching
-      if (!highlight) {
-        console.log('[Tab Focus Button] No exact match, trying fuzzy matching...');
-        
-        // Find the best matching key by comparing text content
-        let bestMatch = null;
-        let bestScore = 0;
-        
-        for (const [key, element] of TextSelector.textToHighlights) {
-          // Calculate similarity score based on common text length
-          const commonLength = this.calculateCommonTextLength(originalTextKey, key);
-          const score = commonLength / Math.max(originalTextKey.length, key.length);
-          
-          console.log('[Tab Focus Button] Comparing with key:', key.substring(0, 50) + '...', 'Score:', score);
-          
-          if (score > bestScore && score > 0.7) { // Require at least 70% similarity
-            bestScore = score;
-            bestMatch = element;
-          }
-        }
-        
-        if (bestMatch) {
-          highlight = bestMatch;
-          console.log('[Tab Focus Button] Found fuzzy match with score:', bestScore);
-        }
-      }
-      
-      console.log('[Tab Focus Button] Found highlight:', highlight);
-      
-      if (highlight) {
-        console.log('[Tab Focus Button] Scrolling to highlight and pulsating');
-        
-        highlight.scrollIntoView({
-          behavior: 'smooth',
-          block: 'center'
-        });
-        
-        // Determine pulsate color based on text type
-        let isGreenPulsate = false;
-        
-        // Check if it's asked text (has green chat icon)
-        const hasChatBtn = highlight.querySelector('.vocab-text-chat-btn');
-        console.log('[Tab Focus Button] Checking for chat button:', hasChatBtn);
-        if (hasChatBtn) {
-          isGreenPulsate = true; // Green pulsate for asked text
-          console.log('[Tab Focus Button] Detected asked text - using green pulsate');
-        }
-        
-        // Check if it's explained text (has green dashed underline)
-        const isSimplified = highlight.classList.contains('vocab-text-simplified');
-        console.log('[Tab Focus Button] Checking for simplified class:', isSimplified);
-        if (isSimplified) {
-          isGreenPulsate = true; // Green pulsate for explained text
-          console.log('[Tab Focus Button] Detected explained text - using green pulsate');
-        }
-        
-        // Additional check: look for asked text in the askedTexts map
-        const isInAskedTexts = TextSelector.askedTexts.has(originalTextKey);
-        console.log('[Tab Focus Button] Checking if text is in askedTexts:', isInAskedTexts);
-        if (isInAskedTexts) {
-          isGreenPulsate = true; // Green pulsate for asked text
-          console.log('[Tab Focus Button] Detected asked text via askedTexts map - using green pulsate');
-        }
-        
-        console.log('[Tab Focus Button] Using green pulsate:', isGreenPulsate);
-        
-        setTimeout(() => {
-          TextSelector.pulsateText(highlight, isGreenPulsate);
-          console.log('[Tab Focus Button] Pulsate animation triggered');
-        }, 500);
-      } else {
-        console.log('[Tab Focus Button] No highlight found for textKey:', originalTextKey);
-        console.log('[Tab Focus Button] Available textToHighlights keys:', Array.from(TextSelector.textToHighlights.keys()));
-      }
-    });
-    
-    buttonContainer.appendChild(focusButton);
-    
-    // Create text display
-    const textDisplay = document.createElement('div');
-    textDisplay.className = 'vocab-chat-original-text';
-    textDisplay.textContent = this.currentText || '';
-    
-    content.appendChild(buttonContainer);
-    content.appendChild(textDisplay);
-    
-    return content;
-  },
-  
-  /**
    * Create simplified text content
    */
   createSimplifiedContent() {
     const content = document.createElement('div');
-    // In simplified mode, this content is active/visible; in ask mode, it's hidden
-    content.className = this.mode === 'simplified' ? 'vocab-chat-tab-content active' : 'vocab-chat-tab-content';
+    content.className = 'vocab-chat-tab-content active';
     content.setAttribute('data-content', 'simplified');
-    if (this.mode !== 'simplified') {
-      content.style.display = 'none';
-    }
+    content.style.display = 'flex';
+    content.style.flexDirection = 'column';
+    content.style.height = '100%';
+    content.style.overflow = 'hidden';
     
-    // Create focus button container
-    const focusButtonContainer = document.createElement('div');
-    focusButtonContainer.className = 'vocab-chat-focus-btn-container';
-    
-    // Create focus button
-    const focusButton = document.createElement('button');
-    focusButton.className = 'vocab-chat-focus-btn';
-    focusButton.innerHTML = `
-      <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-        <path d="M3 10l7-7v4c7 0 7 6 7 6s-3-3-7-3v4l-7-7z" fill="#9527F5"/>
-      </svg>
-      <span>Focus</span>
-    `;
-    
-    // Add click handler
-    focusButton.addEventListener('click', () => {
-      console.log('[Tab Focus Button] Clicked, currentTextKey:', this.currentTextKey);
-      
-      // For selected text chat, use original textKey to find highlight
-      const originalTextKey = this.currentTextKey.replace(/-selected$/, '').replace(/-generic$/, '');
-      console.log('[Tab Focus Button] Original textKey:', originalTextKey);
-      
-      // Try exact match first
-      let highlight = TextSelector.textToHighlights.get(originalTextKey);
-      
-      // If no exact match, try fuzzy matching
-      if (!highlight) {
-        console.log('[Tab Focus Button] No exact match, trying fuzzy matching...');
-        
-        // Find the best matching key by comparing text content
-        let bestMatch = null;
-        let bestScore = 0;
-        
-        for (const [key, element] of TextSelector.textToHighlights) {
-          // Calculate similarity score based on common text length
-          const commonLength = this.calculateCommonTextLength(originalTextKey, key);
-          const score = commonLength / Math.max(originalTextKey.length, key.length);
-          
-          console.log('[Tab Focus Button] Comparing with key:', key.substring(0, 50) + '...', 'Score:', score);
-          
-          if (score > bestScore && score > 0.7) { // Require at least 70% similarity
-            bestScore = score;
-            bestMatch = element;
-          }
-        }
-        
-        if (bestMatch) {
-          highlight = bestMatch;
-          console.log('[Tab Focus Button] Found fuzzy match with score:', bestScore);
-        }
-      }
-      
-      console.log('[Tab Focus Button] Found highlight:', highlight);
-      
-      if (highlight) {
-        console.log('[Tab Focus Button] Scrolling to highlight and pulsating');
-        
-        highlight.scrollIntoView({
-          behavior: 'smooth',
-          block: 'center'
-        });
-        
-        // Determine pulsate color based on text type
-        let isGreenPulsate = false;
-        
-        // Check if it's asked text (has green chat icon)
-        const hasChatBtn = highlight.querySelector('.vocab-text-chat-btn');
-        console.log('[Tab Focus Button] Checking for chat button:', hasChatBtn);
-        if (hasChatBtn) {
-          isGreenPulsate = true; // Green pulsate for asked text
-          console.log('[Tab Focus Button] Detected asked text - using green pulsate');
-        }
-        
-        // Check if it's explained text (has green dashed underline)
-        const isSimplified = highlight.classList.contains('vocab-text-simplified');
-        console.log('[Tab Focus Button] Checking for simplified class:', isSimplified);
-        if (isSimplified) {
-          isGreenPulsate = true; // Green pulsate for explained text
-          console.log('[Tab Focus Button] Detected explained text - using green pulsate');
-        }
-        
-        // Additional check: look for asked text in the askedTexts map
-        const isInAskedTexts = TextSelector.askedTexts.has(originalTextKey);
-        console.log('[Tab Focus Button] Checking if text is in askedTexts:', isInAskedTexts);
-        if (isInAskedTexts) {
-          isGreenPulsate = true; // Green pulsate for asked text
-          console.log('[Tab Focus Button] Detected asked text via askedTexts map - using green pulsate');
-        }
-        
-        console.log('[Tab Focus Button] Using green pulsate:', isGreenPulsate);
-        
-        setTimeout(() => {
-          TextSelector.pulsateText(highlight, isGreenPulsate);
-          console.log('[Tab Focus Button] Pulsate animation triggered');
-        }, 500);
-      } else {
-        console.log('[Tab Focus Button] No highlight found for textKey:', originalTextKey);
-        console.log('[Tab Focus Button] Available textToHighlights keys:', Array.from(TextSelector.textToHighlights.keys()));
-      }
-    });
-    
-    focusButtonContainer.appendChild(focusButton);
+    // Create scrollable container for all content
+    const scrollableContainer = document.createElement('div');
+    scrollableContainer.className = 'vocab-chat-scrollable-content';
+    scrollableContainer.style.flex = '1';
+    scrollableContainer.style.overflowY = 'auto';
+    scrollableContainer.style.padding = '16px';
     
     // Container for all simplified explanations
     const explanationsContainer = document.createElement('div');
@@ -3983,9 +3764,47 @@ const ChatDialog = {
     
     buttonContainer.appendChild(simplifyMoreBtn);
     
-    content.appendChild(focusButtonContainer);
-    content.appendChild(explanationsContainer);
-    content.appendChild(buttonContainer);
+    // Create chat container below Simplify more button with top margin
+    const chatContainer = document.createElement('div');
+    chatContainer.className = 'vocab-chat-messages';
+    chatContainer.id = 'vocab-chat-messages';
+    chatContainer.style.marginTop = '20px';
+    
+    // If we have existing chat history, render it
+    if (this.chatHistory && this.chatHistory.length > 0) {
+      this.chatHistory.forEach(item => {
+        this.renderChatMessage(chatContainer, item.type, item.message);
+      });
+      
+      // Update delete button visibility and scroll to bottom after rendering
+      setTimeout(() => {
+        this.updateGlobalClearButton();
+        chatContainer.scrollTop = chatContainer.scrollHeight;
+      }, 10);
+    } else {
+      // Show appropriate message based on chat context
+      const promptText = this.chatContext === 'selected' 
+        ? 'Ask doubts on the selected content' 
+        : 'Ask anything about the content';
+      
+      const noChatsMsg = document.createElement('div');
+      noChatsMsg.className = 'vocab-chat-no-messages';
+      noChatsMsg.innerHTML = `
+        <div class="vocab-chat-no-messages-content">
+          ${this.createChatEmptyIcon()}
+          <span>${promptText}</span>
+        </div>
+      `;
+      chatContainer.appendChild(noChatsMsg);
+    }
+    
+    // Add all content to scrollable container
+    scrollableContainer.appendChild(explanationsContainer);
+    scrollableContainer.appendChild(buttonContainer);
+    scrollableContainer.appendChild(chatContainer);
+    
+    // Add scrollable container to main content
+    content.appendChild(scrollableContainer);
     
     return content;
   },
@@ -3995,15 +3814,30 @@ const ChatDialog = {
    * @param {HTMLElement} container - Container element to render into
    */
   renderSimplifiedExplanations(container) {
-    if (!this.simplifiedData) return;
+    // Use simplifiedData if available, otherwise try to get it from TextSelector
+    let dataToRender = this.simplifiedData;
+    
+    if (!dataToRender && this.currentTextKey) {
+      // Try to get data from TextSelector using the original textKey
+      const originalTextKey = this.currentTextKey.replace(/-selected$/, '').replace(/-generic$/, '');
+      dataToRender = TextSelector.simplifiedTexts.get(originalTextKey);
+      console.log('[ChatDialog] Retrieved simplified data from TextSelector for key:', originalTextKey, dataToRender);
+    }
+    
+    if (!dataToRender) {
+      console.log('[ChatDialog] No simplified data available to render');
+      return;
+    }
     
     container.innerHTML = '';
     
     // Get all explanations (previous + current)
     const allExplanations = [
-      ...(this.simplifiedData.previousSimplifiedTexts || []),
-      this.simplifiedData.simplifiedText
+      ...(dataToRender.previousSimplifiedTexts || []),
+      dataToRender.simplifiedText
     ];
+    
+    console.log('[ChatDialog] Rendering', allExplanations.length, 'simplified explanations');
     
     // Render each explanation with header
     allExplanations.forEach((explanation, index) => {
@@ -4071,12 +3905,13 @@ const ChatDialog = {
           textLength: eventData.textLength,
           text: eventData.text,
           simplifiedText: eventData.simplifiedText,
-          previousSimplifiedTexts: eventData.previousSimplifiedTexts || previousSimplifiedTexts,
+          previousSimplifiedTexts: previousSimplifiedTexts, // Always use our local array
           shouldAllowSimplifyMore: eventData.shouldAllowSimplifyMore || false
         };
         
-        // Update stored data
-        TextSelector.simplifiedTexts.set(this.currentTextKey, this.simplifiedData);
+        // Update stored data - use original text key for storage
+        const originalTextKey = this.currentTextKey.replace(/-selected$/, '').replace(/-generic$/, '');
+        TextSelector.simplifiedTexts.set(originalTextKey, this.simplifiedData);
         
         // Update UI - re-render all explanations
         const container = this.dialogContainer.querySelector('#vocab-chat-simplified-container');
@@ -4128,8 +3963,12 @@ const ChatDialog = {
    */
   createAskContent() {
     const content = document.createElement('div');
-    content.className = 'vocab-chat-tab-content active';
+    content.className = this.mode === 'simplified' ? 'vocab-chat-tab-content' : 'vocab-chat-tab-content active';
     content.setAttribute('data-content', 'ask');
+    
+    if (this.mode === 'simplified') {
+      content.style.display = 'none';
+    }
     
     // Create chat messages container
     const chatContainer = document.createElement('div');
@@ -4314,11 +4153,42 @@ const ChatDialog = {
   },
   
   /**
-   * Switch between tabs (no-op since tabs are removed)
-   * @param {string} tabName - Tab name (ignored)
+   * Switch between tabs
+   * @param {string} tabName - Tab name ('simplified' or 'ask')
    */
   switchTab(tabName) {
-    // No-op since we removed the tab system
+    console.log('[ChatDialog] Switching to tab:', tabName);
+    
+    // Update tab buttons
+    const tabs = this.dialogContainer.querySelectorAll('.vocab-chat-tab');
+    tabs.forEach(tab => {
+      tab.classList.remove('active');
+      if (tab.getAttribute('data-tab') === tabName) {
+        tab.classList.add('active');
+      }
+    });
+    
+    // Update tab content
+    const contents = this.dialogContainer.querySelectorAll('.vocab-chat-tab-content');
+    contents.forEach(content => {
+      content.classList.remove('active');
+      content.style.display = 'none';
+      if (content.getAttribute('data-content') === tabName) {
+        content.classList.add('active');
+        content.style.display = 'flex';
+      }
+    });
+    
+    // Update indicator position
+    this.updateIndicatorPosition();
+    
+    // If switching to ask tab, focus the input
+    if (tabName === 'ask') {
+      const inputField = document.getElementById('vocab-chat-input');
+      if (inputField) {
+        setTimeout(() => inputField.focus(), 100);
+      }
+    }
   },
   
   /**
@@ -4367,9 +4237,6 @@ const ChatDialog = {
     
     console.log('[ChatDialog] Current textKey:', this.currentTextKey);
     console.log('[ChatDialog] Current mode:', this.mode);
-    
-    // Auto-switch to chat tab if on original text tab
-    this.switchTab('ask');
     
     // Add user message to chat
     this.addMessageToChat('user', message);
@@ -5205,6 +5072,33 @@ const ChatDialog = {
         animation: slideOutRight 0.3s ease-out;
       }
       
+      /* Scrollable Content Container */
+      .vocab-chat-scrollable-content {
+        flex: 1;
+        overflow-y: auto;
+        padding: 16px;
+        scrollbar-width: thin;
+        scrollbar-color: #cbd5e1 #f1f5f9;
+      }
+      
+      .vocab-chat-scrollable-content::-webkit-scrollbar {
+        width: 6px;
+      }
+      
+      .vocab-chat-scrollable-content::-webkit-scrollbar-track {
+        background: #f1f5f9;
+        border-radius: 3px;
+      }
+      
+      .vocab-chat-scrollable-content::-webkit-scrollbar-thumb {
+        background: #cbd5e1;
+        border-radius: 3px;
+      }
+      
+      .vocab-chat-scrollable-content::-webkit-scrollbar-thumb:hover {
+        background: #94a3b8;
+      }
+      
       /* Original Text Content */
       .vocab-chat-original-text {
         padding: 16px;
@@ -5311,25 +5205,10 @@ const ChatDialog = {
       /* Chat Messages */
       .vocab-chat-messages {
         flex: 1;
-        overflow-y: auto;
         display: flex;
         flex-direction: column;
         gap: 12px;
         padding: 0;
-      }
-      
-      .vocab-chat-messages::-webkit-scrollbar {
-        width: 6px;
-      }
-      
-      .vocab-chat-messages::-webkit-scrollbar-track {
-        background: #F8F2FC;
-        border-radius: 3px;
-      }
-      
-      .vocab-chat-messages::-webkit-scrollbar-thumb {
-        background: #D8C1E8;
-        border-radius: 4px;
       }
       
       /* No Messages State */
