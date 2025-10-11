@@ -10059,6 +10059,21 @@ const ButtonPanel = {
   },
 
   /**
+   * Update vertical button visibility based on current content type
+   */
+  updateVerticalButtonVisibility() {
+    console.log('[ButtonPanel] Updating vertical button visibility');
+    const currentContentType = this.getCurrentContentType();
+    console.log('[ButtonPanel] Current content type:', currentContentType);
+    
+    if (currentContentType) {
+      // Hide the button for the current content type
+      this.hideVerticalButtonForContentType(currentContentType);
+      console.log(`[ButtonPanel] Hidden ${currentContentType} button because modal is open`);
+    }
+  },
+
+  /**
    * Hide the vertical button group
    */
   hideVerticalButtonGroup() {
@@ -12018,12 +12033,21 @@ const ButtonPanel = {
       return;
     }
     
+    // Set current content type immediately
+    this.topicsModal.currentContentType = contentType;
+    console.log('[ButtonPanel] Set currentContentType to:', contentType);
+    
     // Show modal with only the specified content type, and switch to the new tab
     this.showCustomContentModalWithContents(contentType, newContent.tabId);
     
     // Show the modal with a slight delay for smooth transition
     setTimeout(() => {
       this.topicsModal.customContentModal.overlay.classList.add('visible');
+      
+      // Update button visibility after modal is shown
+      setTimeout(() => {
+        this.updateVerticalButtonVisibility();
+      }, 100);
     }, 100);
   },
 
@@ -13419,6 +13443,12 @@ const ButtonPanel = {
     
     // Set current content type
     this.topicsModal.currentContentType = contentType;
+    console.log('[ButtonPanel] Set currentContentType to:', contentType);
+    
+    // Update button visibility
+    setTimeout(() => {
+      this.updateVerticalButtonVisibility();
+    }, 100);
     
     // Use the new container system to add tab
     const newTab = this.topicsModal.customContentModal.addTab(contentType, title, content, metadata);
