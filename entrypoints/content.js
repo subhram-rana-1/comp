@@ -226,6 +226,9 @@ const WordSelector = {
   // Container for explained words (moved from selectedWords after API call)
   explainedWords: new Map(), // Map of word -> {word, meaning, examples, highlights, hasCalledGetMoreExamples}
   
+  // Cache for pronunciation audio blobs
+  pronunciationCache: new Map(), // Map of word -> audio blob
+  
   // Track if the feature is enabled
   isEnabled: false,
   
@@ -588,6 +591,38 @@ const WordSelector = {
     // Update button states
     ButtonPanel.updateButtonStatesFromSelections();
   },
+
+  /**
+   * Clear only selections (purple highlights) but preserve meanings (green highlights)
+   */
+  clearSelectionsOnly() {
+    console.log('[WordSelector] Clearing only selections, preserving meanings');
+    
+    // Only clear selected words (purple highlights)
+    this.selectedWords.forEach(word => {
+      const highlights = this.wordToHighlights.get(word);
+      if (highlights) {
+        highlights.forEach(highlight => {
+          // Only remove if it's a selection highlight (purple), not explained (green)
+          if (highlight.classList.contains('vocab-word-selected') && 
+              !highlight.classList.contains('vocab-word-explained')) {
+            this.removeHighlight(highlight);
+          }
+        });
+      }
+    });
+    
+    // Clear only selection data structures
+    this.selectedWords.clear();
+    this.wordPositions.clear();
+    
+    // Keep explainedWords and wordToHighlights intact
+    
+    console.log('[WordSelector] Selections cleared, meanings preserved');
+    
+    // Update button states
+    ButtonPanel.updateButtonStatesFromSelections();
+  },
   
   /**
    * Get full document text for position calculation
@@ -855,6 +890,17 @@ const WordSelector = {
     header.className = 'vocab-word-popup-header';
     header.textContent = 'Contextual Meaning';
     popup.appendChild(header);
+    
+    // Speaker icon for pronunciation
+    const speakerBtn = document.createElement('button');
+    speakerBtn.className = 'vocab-word-popup-speaker';
+    speakerBtn.setAttribute('aria-label', `Pronounce "${word}"`);
+    speakerBtn.innerHTML = this.createSpeakerIcon();
+    speakerBtn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      await this.handlePronunciation(word, speakerBtn);
+    });
+    popup.appendChild(speakerBtn);
     
     // Meaning
     const meaningDiv = document.createElement('div');
@@ -1228,6 +1274,175 @@ const WordSelector = {
     return btn;
   },
   
+  /**
+   * Create speaker icon SVG
+   * @returns {string} SVG markup
+   */
+  createSpeakerIcon() {
+    return `
+      <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M3 9v6h4l5 5V4L7 9H3z" fill="#9F7BDB"/>
+        <path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z" fill="#9F7BDB"/>
+      </svg>
+    `;
+  },
+
+  /**
+   * Create loading spinner icon SVG
+   * @returns {string} SVG markup
+   */
+  createLoadingSpinnerIcon() {
+    return `
+      <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" class="vocab-loading-spinner">
+        <circle cx="12" cy="12" r="10" stroke="#9F7BDB" stroke-width="2" fill="none" opacity="0.3"/>
+        <path d="M12 2a10 10 0 0 1 10 10" stroke="#9F7BDB" stroke-width="2" fill="none" stroke-linecap="round">
+          <animateTransform attributeName="transform" type="rotate" dur="1s" repeatCount="indefinite" values="0 12 12;360 12 12"/>
+        </path>
+      </svg>
+    `;
+  },
+
+  /**
+   * Handle pronunciation button click
+   * @param {string} word - The word to pronounce
+   * @param {HTMLElement} button - The speaker button element
+   */
+  async handlePronunciation(word, button) {
+    // Check if we already have cached audio for this word
+    const cacheKey = `pronunciation_${word.toLowerCase()}`;
+    const cachedAudio = this.pronunciationCache?.get(cacheKey);
+    
+    if (cachedAudio) {
+      console.log('[WordSelector] Playing cached pronunciation for:', word);
+      await this.playAudio(cachedAudio);
+      return;
+    }
+    
+    // Show loading state
+    button.disabled = true;
+    button.classList.add('loading');
+    const originalIcon = button.innerHTML;
+    button.innerHTML = this.createLoadingSpinnerIcon();
+    
+    try {
+      console.log('[WordSelector] Fetching pronunciation for:', word);
+      
+      const response = await fetch('http://localhost:8000/api/v2/pronunciation', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ 
+          word: word,
+          voice: 'nova' // Default voice
+        })
+      });
+      
+      if (!response.ok) {
+        if (response.status === 429) {
+          throw new Error('Too many requests. Please wait a moment and try again.');
+        } else if (response.status === 400) {
+          const errorData = await response.json();
+          throw new Error(`Invalid request: ${errorData.detail}`);
+        } else if (response.status === 500) {
+          throw new Error('Server error. Please try again later.');
+        } else {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+      }
+      
+      const audioBlob = await response.blob();
+      
+      // Cache the audio
+      if (!this.pronunciationCache) {
+        this.pronunciationCache = new Map();
+      }
+      this.pronunciationCache.set(cacheKey, audioBlob);
+      
+      // Play the audio
+      await this.playAudio(audioBlob);
+      
+      console.log('[WordSelector] Pronunciation played successfully for:', word);
+      
+    } catch (error) {
+      console.error('[WordSelector] Pronunciation error:', error);
+      this.showErrorBanner(error.message || 'Failed to play pronunciation');
+    } finally {
+      // Restore button state
+      button.disabled = false;
+      button.classList.remove('loading');
+      button.innerHTML = originalIcon;
+    }
+  },
+
+  /**
+   * Play audio from blob
+   * @param {Blob} audioBlob - The audio blob to play
+   */
+  async playAudio(audioBlob) {
+    const audioUrl = URL.createObjectURL(audioBlob);
+    const audio = new Audio(audioUrl);
+    audio.volume = 1.0; // Maximum volume
+    
+    return new Promise((resolve, reject) => {
+      audio.onended = () => {
+        URL.revokeObjectURL(audioUrl);
+        resolve();
+      };
+      
+      audio.onerror = (error) => {
+        URL.revokeObjectURL(audioUrl);
+        reject(error);
+      };
+      
+      audio.play().catch(reject);
+    });
+  },
+
+  /**
+   * Show error banner
+   * @param {string} message - Error message to display
+   */
+  showErrorBanner(message) {
+    // Remove existing error banner if any
+    const existingBanner = document.querySelector('.vocab-error-banner');
+    if (existingBanner) {
+      existingBanner.remove();
+    }
+    
+    // Create error banner
+    const banner = document.createElement('div');
+    banner.className = 'vocab-error-banner';
+    banner.innerHTML = `
+      <div class="vocab-error-content">
+        <span class="vocab-error-icon">⚠️</span>
+        <span class="vocab-error-message">${message}</span>
+        <button class="vocab-error-close" aria-label="Close error">×</button>
+      </div>
+    `;
+    
+    // Add close functionality
+    const closeBtn = banner.querySelector('.vocab-error-close');
+    closeBtn.addEventListener('click', () => {
+      banner.remove();
+    });
+    
+    // Auto-remove after 5 seconds
+    setTimeout(() => {
+      if (banner.parentNode) {
+        banner.remove();
+      }
+    }, 5000);
+    
+    // Add to page
+    document.body.appendChild(banner);
+    
+    // Animate in
+    setTimeout(() => {
+      banner.classList.add('visible');
+    }, 10);
+  },
+
   /**
    * Create green wireframe cross icon SVG
    * @returns {string} SVG markup
@@ -1619,6 +1834,118 @@ const WordSelector = {
         width: 12px;
         height: 12px;
       }
+      
+      /* Speaker icon for pronunciation */
+      .vocab-word-popup-speaker {
+        position: absolute;
+        top: 12px;
+        right: 12px;
+        width: 28px;
+        height: 28px;
+        background: rgba(159, 123, 219, 0.1);
+        border: 1px solid rgba(159, 123, 219, 0.3);
+        border-radius: 50%;
+        cursor: pointer;
+        opacity: 0.8;
+        transition: opacity 0.2s ease, background-color 0.2s ease, transform 0.2s ease;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 10;
+      }
+      
+      .vocab-word-popup-speaker:hover:not(.loading) {
+        opacity: 1;
+        background: rgba(159, 123, 219, 0.2);
+        transform: scale(1.05);
+      }
+      
+      .vocab-word-popup-speaker:active:not(.loading) {
+        transform: scale(0.95);
+      }
+      
+      .vocab-word-popup-speaker.loading {
+        opacity: 0.6;
+        cursor: not-allowed;
+        transform: none;
+      }
+      
+      .vocab-word-popup-speaker svg {
+        width: 16px;
+        height: 16px;
+      }
+      
+      /* Loading spinner animation */
+      .vocab-loading-spinner {
+        animation: vocab-spin 1s linear infinite;
+      }
+      
+      @keyframes vocab-spin {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
+      }
+      
+      /* Error banner */
+      .vocab-error-banner {
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        background: #ff4444;
+        color: white;
+        border-radius: 8px;
+        box-shadow: 0 4px 12px rgba(255, 68, 68, 0.3);
+        z-index: 1000000;
+        opacity: 0;
+        transform: translateX(100%);
+        transition: opacity 0.3s ease, transform 0.3s ease;
+        max-width: 400px;
+      }
+      
+      .vocab-error-banner.visible {
+        opacity: 1;
+        transform: translateX(0);
+      }
+      
+      .vocab-error-content {
+        display: flex;
+        align-items: center;
+        padding: 12px 16px;
+        gap: 8px;
+      }
+      
+      .vocab-error-icon {
+        font-size: 16px;
+        flex-shrink: 0;
+      }
+      
+      .vocab-error-message {
+        flex: 1;
+        font-size: 14px;
+        font-weight: 500;
+        line-height: 1.4;
+      }
+      
+      .vocab-error-close {
+        background: none;
+        border: none;
+        color: white;
+        font-size: 18px;
+        font-weight: bold;
+        cursor: pointer;
+        padding: 0;
+        width: 20px;
+        height: 20px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 50%;
+        transition: background-color 0.2s ease;
+        flex-shrink: 0;
+      }
+      
+      .vocab-error-close:hover {
+        background: rgba(255, 255, 255, 0.2);
+      }
     `;
     
     document.head.appendChild(style);
@@ -1763,7 +2090,7 @@ const TextSelector = {
       const range = selection.getRangeAt(0);
       
       // Check if this exact text is already selected
-      const textKey = this.getTextKey(selectedText);
+      const textKey = this.getContextualTextKey(selectedText);
       if (this.selectedTexts.has(textKey)) {
         console.log('[TextSelector] Text already selected');
         selection.removeAllRanges();
@@ -1893,6 +2220,35 @@ const TextSelector = {
   getTextKey(text) {
     return text.toLowerCase().replace(/\s+/g, ' ').trim();
   },
+
+  /**
+   * Generate contextual textKey based on current content context
+   * @param {string} text - The text to generate key for
+   * @returns {string} Contextual textKey
+   */
+  getContextualTextKey(text) {
+    const normalizedText = this.getTextKey(text);
+    
+    // Check if we're in custom content context
+    if (window.ButtonPanel && window.ButtonPanel.topicsModal && 
+        window.ButtonPanel.topicsModal.customContentModal && 
+        window.ButtonPanel.topicsModal.customContentModal.activeTabId) {
+      
+      const activeTabId = window.ButtonPanel.topicsModal.customContentModal.activeTabId;
+      const activeContent = window.ButtonPanel.topicsModal.customContentModal.getContentByTabId(parseInt(activeTabId));
+      
+      if (activeContent) {
+        // Generate contextual textKey for custom content
+        const contextualTextKey = `${activeContent.contentType}-${activeTabId}-${normalizedText}`;
+        console.log('[TextSelector] Generated contextual textKey:', contextualTextKey, 'for text:', normalizedText);
+        return contextualTextKey;
+      }
+    }
+    
+    // Default to main page textKey
+    console.log('[TextSelector] Generated main page textKey:', normalizedText);
+    return normalizedText;
+  },
   
   /**
    * Calculate text position in document (approximate position in plain text)
@@ -1924,7 +2280,8 @@ const TextSelector = {
    * @param {Range} range - The range object (optional, for position tracking)
    */
   addText(text, range = null) {
-    const textKey = this.getTextKey(text);
+    // Generate contextual textKey based on current context
+    const textKey = this.getContextualTextKey(text);
     this.selectedTexts.add(textKey); // O(1) operation
     
     // Store position information if range is provided
@@ -1942,7 +2299,7 @@ const TextSelector = {
    * @param {string} text - The text to remove
    */
   removeText(text) {
-    const textKey = this.getTextKey(text);
+    const textKey = this.getContextualTextKey(text);
     
     // Get the highlight for this text
     const highlight = this.textToHighlights.get(textKey);
@@ -1974,7 +2331,7 @@ const TextSelector = {
    * @param {string} text - The text being highlighted
    */
   highlightRange(range, text) {
-    const textKey = this.getTextKey(text);
+    const textKey = this.getContextualTextKey(text);
     
     // Create highlight wrapper
     const highlight = document.createElement('span');
@@ -2082,6 +2439,37 @@ const TextSelector = {
     this.textToHighlights.clear();
     
     console.log('[TextSelector] All selections cleared');
+    
+    // Update button states
+    ButtonPanel.updateButtonStatesFromSelections();
+  },
+
+  /**
+   * Clear only selections (purple highlights) but preserve meanings (green highlights and chat icons)
+   */
+  clearSelectionsOnly() {
+    console.log('[TextSelector] Clearing only selections, preserving meanings');
+    
+    // Only clear selected texts (purple highlights)
+    this.selectedTexts.forEach(textKey => {
+      const highlight = this.textToHighlights.get(textKey);
+      if (highlight) {
+        // Only remove if it's a selection highlight (purple), not asked/simplified (green)
+        if (highlight.classList.contains('vocab-text-highlight') && 
+            !highlight.classList.contains('vocab-text-simplified') &&
+            !highlight.querySelector('.vocab-text-chat-btn')) {
+          this.removeHighlight(highlight);
+        }
+      }
+    });
+    
+    // Clear only selection data structures
+    this.selectedTexts.clear();
+    this.textPositions.clear();
+    
+    // Keep askedTexts, simplifiedTexts, and their highlights intact
+    
+    console.log('[TextSelector] Selections cleared, meanings preserved');
     
     // Update button states
     ButtonPanel.updateButtonStatesFromSelections();
@@ -2498,7 +2886,7 @@ const TextSelector = {
           background-color: transparent;
         }
         50% {
-          background-color: rgba(34, 197, 94, 0.25);
+          background-color: rgba(34, 197, 94, 0.15);
         }
         100% {
           background-color: transparent;
@@ -3086,21 +3474,94 @@ const ChatDialog = {
     
     // Add click handler for focus button
     focusButton.addEventListener('click', () => {
+      console.log('[Focus Button] Clicked, currentTextKey:', this.currentTextKey);
+      
       if (this.currentTextKey) {
         // For selected text chat, use original textKey to find highlight
         const originalTextKey = this.currentTextKey.replace(/-selected$/, '').replace(/-generic$/, '');
-        const highlight = TextSelector.textToHighlights.get(originalTextKey);
+        console.log('[Focus Button] Original textKey:', originalTextKey);
+        
+        // Try exact match first
+        let highlight = TextSelector.textToHighlights.get(originalTextKey);
+        
+        // If no exact match, try fuzzy matching
+        if (!highlight) {
+          console.log('[Focus Button] No exact match, trying fuzzy matching...');
+          
+          // Find the best matching key by comparing text content
+          let bestMatch = null;
+          let bestScore = 0;
+          
+          for (const [key, element] of TextSelector.textToHighlights) {
+            // Calculate similarity score based on common text length
+            const commonLength = this.calculateCommonTextLength(originalTextKey, key);
+            const score = commonLength / Math.max(originalTextKey.length, key.length);
+            
+            console.log('[Focus Button] Comparing with key:', key.substring(0, 50) + '...', 'Score:', score);
+            
+            if (score > bestScore && score > 0.7) { // Require at least 70% similarity
+              bestScore = score;
+              bestMatch = element;
+            }
+          }
+          
+          if (bestMatch) {
+            highlight = bestMatch;
+            console.log('[Focus Button] Found fuzzy match with score:', bestScore);
+          }
+        }
+        
+        console.log('[Focus Button] Found highlight:', highlight);
+        
         if (highlight) {
+          console.log('[Focus Button] Scrolling to highlight and pulsating');
+          
           // First scroll to the element
           highlight.scrollIntoView({
             behavior: 'smooth',
             block: 'center'
           });
-          // Then pulsate without changing state or creating new icons
+          
+          // Determine pulsate color based on text type
+          let isGreenPulsate = false;
+          
+          // Check if it's asked text (has green chat icon)
+          const hasChatBtn = highlight.querySelector('.vocab-text-chat-btn');
+          console.log('[Focus Button] Checking for chat button:', hasChatBtn);
+          if (hasChatBtn) {
+            isGreenPulsate = true; // Green pulsate for asked text
+            console.log('[Focus Button] Detected asked text - using green pulsate');
+          }
+          
+          // Check if it's explained text (has green dashed underline)
+          const isSimplified = highlight.classList.contains('vocab-text-simplified');
+          console.log('[Focus Button] Checking for simplified class:', isSimplified);
+          if (isSimplified) {
+            isGreenPulsate = true; // Green pulsate for explained text
+            console.log('[Focus Button] Detected explained text - using green pulsate');
+          }
+          
+          // Additional check: look for asked text in the askedTexts map
+          const isInAskedTexts = TextSelector.askedTexts.has(originalTextKey);
+          console.log('[Focus Button] Checking if text is in askedTexts:', isInAskedTexts);
+          if (isInAskedTexts) {
+            isGreenPulsate = true; // Green pulsate for asked text
+            console.log('[Focus Button] Detected asked text via askedTexts map - using green pulsate');
+          }
+          
+          console.log('[Focus Button] Using green pulsate:', isGreenPulsate);
+          
+          // Then pulsate with appropriate color
           setTimeout(() => {
-            TextSelector.pulsateText(highlight, true);
+            TextSelector.pulsateText(highlight, isGreenPulsate);
+            console.log('[Focus Button] Pulsate animation triggered');
           }, 300); // Small delay to let scroll complete
+        } else {
+          console.log('[Focus Button] No highlight found for textKey:', originalTextKey);
+          console.log('[Focus Button] Available textToHighlights keys:', Array.from(TextSelector.textToHighlights.keys()));
         }
+      } else {
+        console.log('[Focus Button] No currentTextKey available');
       }
     });
     
@@ -3108,9 +3569,9 @@ const ChatDialog = {
     const contentArea = document.createElement('div');
     contentArea.className = 'vocab-chat-content-area';
     
-    // Create ask/chat content
-    const askContent = this.createAskContent();
-    contentArea.appendChild(askContent);
+    // Create simplified content (always present)
+    const simplifiedContent = this.createSimplifiedContent();
+    contentArea.appendChild(simplifiedContent);
     
     // Create input area
     const inputArea = this.createInputArea();
@@ -3310,25 +3771,25 @@ const ChatDialog = {
     const firstTab = document.createElement('button');
     
     if (this.mode === 'simplified') {
-      // In simplified mode, first tab is "Simplified" and is active
+      // In simplified mode, first tab is "Simplified explanation" and is active
       firstTab.className = 'vocab-chat-tab active';
       firstTab.setAttribute('data-tab', 'simplified');
-      firstTab.textContent = 'SIMPLIFIED';
+      firstTab.textContent = 'Simplified explanation';
       firstTab.addEventListener('click', () => this.switchTab('simplified'));
     } else {
-      // In ask mode, first tab is "Original text" and is not active
+      // In ask mode, first tab is "Simplified explanation" and is not active
       firstTab.className = 'vocab-chat-tab';
-      firstTab.setAttribute('data-tab', 'original-text');
-      firstTab.textContent = 'ORIGINAL TEXT';
-      firstTab.addEventListener('click', () => this.switchTab('original-text'));
+      firstTab.setAttribute('data-tab', 'simplified');
+      firstTab.textContent = 'Simplified explanation';
+      firstTab.addEventListener('click', () => this.switchTab('simplified'));
     }
     
-    // Second tab: Always "Chat"
+    // Second tab: Always "Ask on content"
     const chatTab = document.createElement('button');
     // Chat tab is active in ask mode, not active in simplified mode
     chatTab.className = this.mode === 'simplified' ? 'vocab-chat-tab' : 'vocab-chat-tab active';
     chatTab.setAttribute('data-tab', 'ask');
-    chatTab.textContent = 'CHAT';
+    chatTab.textContent = 'Ask on content';
     chatTab.addEventListener('click', () => this.switchTab('ask'));
     
     // Create sliding indicator
@@ -3349,100 +3810,23 @@ const ChatDialog = {
   },
   
   /**
-   * Create original text content
-   */
-  createOriginalTextContent() {
-    const content = document.createElement('div');
-    content.className = 'vocab-chat-tab-content';
-    content.setAttribute('data-content', 'original-text');
-    content.style.display = 'none';
-    
-    // Create focus button container
-    const buttonContainer = document.createElement('div');
-    buttonContainer.className = 'vocab-chat-focus-btn-container';
-    
-    // Create focus button
-    const focusButton = document.createElement('button');
-    focusButton.className = 'vocab-chat-focus-btn';
-    focusButton.innerHTML = `
-      <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-        <path d="M3 10l7-7v4c7 0 7 6 7 6s-3-3-7-3v4l-7-7z" fill="#9527F5"/>
-      </svg>
-      <span>Focus</span>
-    `;
-    
-    // Add click handler
-    focusButton.addEventListener('click', () => {
-      // For selected text chat, use original textKey to find highlight
-      const originalTextKey = this.currentTextKey.replace(/-selected$/, '').replace(/-generic$/, '');
-      const highlight = TextSelector.textToHighlights.get(originalTextKey);
-      if (highlight) {
-        highlight.scrollIntoView({
-          behavior: 'smooth',
-          block: 'center'
-        });
-        setTimeout(() => {
-          TextSelector.pulsateText(highlight, true);
-        }, 500);
-      }
-    });
-    
-    buttonContainer.appendChild(focusButton);
-    
-    // Create text display
-    const textDisplay = document.createElement('div');
-    textDisplay.className = 'vocab-chat-original-text';
-    textDisplay.textContent = this.currentText || '';
-    
-    content.appendChild(buttonContainer);
-    content.appendChild(textDisplay);
-    
-    return content;
-  },
-  
-  /**
    * Create simplified text content
    */
   createSimplifiedContent() {
     const content = document.createElement('div');
-    // In simplified mode, this content is active/visible; in ask mode, it's hidden
-    content.className = this.mode === 'simplified' ? 'vocab-chat-tab-content active' : 'vocab-chat-tab-content';
+    content.className = 'vocab-chat-tab-content active';
     content.setAttribute('data-content', 'simplified');
-    if (this.mode !== 'simplified') {
-      content.style.display = 'none';
-    }
+    content.style.display = 'flex';
+    content.style.flexDirection = 'column';
+    content.style.height = '100%';
+    content.style.overflow = 'hidden';
     
-    // Create focus button container
-    const focusButtonContainer = document.createElement('div');
-    focusButtonContainer.className = 'vocab-chat-focus-btn-container';
-    
-    // Create focus button
-    const focusButton = document.createElement('button');
-    focusButton.className = 'vocab-chat-focus-btn';
-    focusButton.innerHTML = `
-      <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-        <path d="M3 10l7-7v4c7 0 7 6 7 6s-3-3-7-3v4l-7-7z" fill="#9527F5"/>
-      </svg>
-      <span>Focus</span>
-    `;
-    
-    // Add click handler
-    focusButton.addEventListener('click', () => {
-      // For selected text chat, use original textKey to find highlight
-      const originalTextKey = this.currentTextKey.replace(/-selected$/, '').replace(/-generic$/, '');
-      const highlight = TextSelector.textToHighlights.get(originalTextKey);
-      if (highlight) {
-        highlight.scrollIntoView({
-          behavior: 'smooth',
-          block: 'center'
-        });
-        setTimeout(() => {
-          TextSelector.pulsateText(highlight, true);
-        }, 500);
-      }
-    });
-    
-    focusButtonContainer.appendChild(focusButton);
+    // Create scrollable container for all content
+    const scrollableContainer = document.createElement('div');
+    scrollableContainer.className = 'vocab-chat-scrollable-content';
+    scrollableContainer.style.flex = '1';
+    scrollableContainer.style.overflowY = 'auto';
+    scrollableContainer.style.padding = '16px';
     
     // Container for all simplified explanations
     const explanationsContainer = document.createElement('div');
@@ -3473,9 +3857,47 @@ const ChatDialog = {
     
     buttonContainer.appendChild(simplifyMoreBtn);
     
-    content.appendChild(focusButtonContainer);
-    content.appendChild(explanationsContainer);
-    content.appendChild(buttonContainer);
+    // Create chat container below Simplify more button with top margin
+    const chatContainer = document.createElement('div');
+    chatContainer.className = 'vocab-chat-messages';
+    chatContainer.id = 'vocab-chat-messages';
+    chatContainer.style.marginTop = '20px';
+    
+    // If we have existing chat history, render it
+    if (this.chatHistory && this.chatHistory.length > 0) {
+      this.chatHistory.forEach(item => {
+        this.renderChatMessage(chatContainer, item.type, item.message);
+      });
+      
+      // Update delete button visibility and scroll to bottom after rendering
+      setTimeout(() => {
+        this.updateGlobalClearButton();
+        chatContainer.scrollTop = chatContainer.scrollHeight;
+      }, 10);
+    } else {
+      // Show appropriate message based on chat context
+      const promptText = this.chatContext === 'selected' 
+        ? 'Ask doubts on the selected content' 
+        : 'Ask anything about the content';
+      
+      const noChatsMsg = document.createElement('div');
+      noChatsMsg.className = 'vocab-chat-no-messages';
+      noChatsMsg.innerHTML = `
+        <div class="vocab-chat-no-messages-content">
+          ${this.createChatEmptyIcon()}
+          <span>${promptText}</span>
+        </div>
+      `;
+      chatContainer.appendChild(noChatsMsg);
+    }
+    
+    // Add all content to scrollable container
+    scrollableContainer.appendChild(explanationsContainer);
+    scrollableContainer.appendChild(buttonContainer);
+    scrollableContainer.appendChild(chatContainer);
+    
+    // Add scrollable container to main content
+    content.appendChild(scrollableContainer);
     
     return content;
   },
@@ -3485,15 +3907,30 @@ const ChatDialog = {
    * @param {HTMLElement} container - Container element to render into
    */
   renderSimplifiedExplanations(container) {
-    if (!this.simplifiedData) return;
+    // Use simplifiedData if available, otherwise try to get it from TextSelector
+    let dataToRender = this.simplifiedData;
+    
+    if (!dataToRender && this.currentTextKey) {
+      // Try to get data from TextSelector using the original textKey
+      const originalTextKey = this.currentTextKey.replace(/-selected$/, '').replace(/-generic$/, '');
+      dataToRender = TextSelector.simplifiedTexts.get(originalTextKey);
+      console.log('[ChatDialog] Retrieved simplified data from TextSelector for key:', originalTextKey, dataToRender);
+    }
+    
+    if (!dataToRender) {
+      console.log('[ChatDialog] No simplified data available to render');
+      return;
+    }
     
     container.innerHTML = '';
     
     // Get all explanations (previous + current)
     const allExplanations = [
-      ...(this.simplifiedData.previousSimplifiedTexts || []),
-      this.simplifiedData.simplifiedText
+      ...(dataToRender.previousSimplifiedTexts || []),
+      dataToRender.simplifiedText
     ];
+    
+    console.log('[ChatDialog] Rendering', allExplanations.length, 'simplified explanations');
     
     // Render each explanation with header
     allExplanations.forEach((explanation, index) => {
@@ -3561,12 +3998,13 @@ const ChatDialog = {
           textLength: eventData.textLength,
           text: eventData.text,
           simplifiedText: eventData.simplifiedText,
-          previousSimplifiedTexts: eventData.previousSimplifiedTexts || previousSimplifiedTexts,
+          previousSimplifiedTexts: previousSimplifiedTexts, // Always use our local array
           shouldAllowSimplifyMore: eventData.shouldAllowSimplifyMore || false
         };
         
-        // Update stored data
-        TextSelector.simplifiedTexts.set(this.currentTextKey, this.simplifiedData);
+        // Update stored data - use original text key for storage
+        const originalTextKey = this.currentTextKey.replace(/-selected$/, '').replace(/-generic$/, '');
+        TextSelector.simplifiedTexts.set(originalTextKey, this.simplifiedData);
         
         // Update UI - re-render all explanations
         const container = this.dialogContainer.querySelector('#vocab-chat-simplified-container');
@@ -3618,8 +4056,12 @@ const ChatDialog = {
    */
   createAskContent() {
     const content = document.createElement('div');
-    content.className = 'vocab-chat-tab-content active';
+    content.className = this.mode === 'simplified' ? 'vocab-chat-tab-content' : 'vocab-chat-tab-content active';
     content.setAttribute('data-content', 'ask');
+    
+    if (this.mode === 'simplified') {
+      content.style.display = 'none';
+    }
     
     // Create chat messages container
     const chatContainer = document.createElement('div');
@@ -3804,11 +4246,42 @@ const ChatDialog = {
   },
   
   /**
-   * Switch between tabs (no-op since tabs are removed)
-   * @param {string} tabName - Tab name (ignored)
+   * Switch between tabs
+   * @param {string} tabName - Tab name ('simplified' or 'ask')
    */
   switchTab(tabName) {
-    // No-op since we removed the tab system
+    console.log('[ChatDialog] Switching to tab:', tabName);
+    
+    // Update tab buttons
+    const tabs = this.dialogContainer.querySelectorAll('.vocab-chat-tab');
+    tabs.forEach(tab => {
+      tab.classList.remove('active');
+      if (tab.getAttribute('data-tab') === tabName) {
+        tab.classList.add('active');
+      }
+    });
+    
+    // Update tab content
+    const contents = this.dialogContainer.querySelectorAll('.vocab-chat-tab-content');
+    contents.forEach(content => {
+      content.classList.remove('active');
+      content.style.display = 'none';
+      if (content.getAttribute('data-content') === tabName) {
+        content.classList.add('active');
+        content.style.display = 'flex';
+      }
+    });
+    
+    // Update indicator position
+    this.updateIndicatorPosition();
+    
+    // If switching to ask tab, focus the input
+    if (tabName === 'ask') {
+      const inputField = document.getElementById('vocab-chat-input');
+      if (inputField) {
+        setTimeout(() => inputField.focus(), 100);
+      }
+    }
   },
   
   /**
@@ -3857,9 +4330,6 @@ const ChatDialog = {
     
     console.log('[ChatDialog] Current textKey:', this.currentTextKey);
     console.log('[ChatDialog] Current mode:', this.mode);
-    
-    // Auto-switch to chat tab if on original text tab
-    this.switchTab('ask');
     
     // Add user message to chat
     this.addMessageToChat('user', message);
@@ -4257,6 +4727,39 @@ const ChatDialog = {
         <path d="M12.5 15L7.5 10L12.5 5" stroke="#9527F5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
       </svg>
     `;
+  },
+  
+  /**
+   * Calculate common text length between two strings for fuzzy matching
+   * @param {string} text1 - First text string
+   * @param {string} text2 - Second text string
+   * @returns {number} Length of common text
+   */
+  calculateCommonTextLength(text1, text2) {
+    // Remove common suffixes that might differ (like coordinates)
+    const cleanText1 = text1.replace(/-\d+-\d+$/, '').trim();
+    const cleanText2 = text2.replace(/-\d+-\d+$/, '').trim();
+    
+    // Find the longest common substring
+    let maxLength = 0;
+    const len1 = cleanText1.length;
+    const len2 = cleanText2.length;
+    
+    // Use dynamic programming to find longest common substring
+    const dp = Array(len1 + 1).fill().map(() => Array(len2 + 1).fill(0));
+    
+    for (let i = 1; i <= len1; i++) {
+      for (let j = 1; j <= len2; j++) {
+        if (cleanText1[i - 1] === cleanText2[j - 1]) {
+          dp[i][j] = dp[i - 1][j - 1] + 1;
+          maxLength = Math.max(maxLength, dp[i][j]);
+        } else {
+          dp[i][j] = 0;
+        }
+      }
+    }
+    
+    return maxLength;
   },
   
   /**
@@ -4662,6 +5165,33 @@ const ChatDialog = {
         animation: slideOutRight 0.3s ease-out;
       }
       
+      /* Scrollable Content Container */
+      .vocab-chat-scrollable-content {
+        flex: 1;
+        overflow-y: auto;
+        padding: 16px;
+        scrollbar-width: thin;
+        scrollbar-color: #cbd5e1 #f1f5f9;
+      }
+      
+      .vocab-chat-scrollable-content::-webkit-scrollbar {
+        width: 6px;
+      }
+      
+      .vocab-chat-scrollable-content::-webkit-scrollbar-track {
+        background: #f1f5f9;
+        border-radius: 3px;
+      }
+      
+      .vocab-chat-scrollable-content::-webkit-scrollbar-thumb {
+        background: #cbd5e1;
+        border-radius: 3px;
+      }
+      
+      .vocab-chat-scrollable-content::-webkit-scrollbar-thumb:hover {
+        background: #94a3b8;
+      }
+      
       /* Original Text Content */
       .vocab-chat-original-text {
         padding: 16px;
@@ -4768,25 +5298,10 @@ const ChatDialog = {
       /* Chat Messages */
       .vocab-chat-messages {
         flex: 1;
-        overflow-y: auto;
         display: flex;
         flex-direction: column;
         gap: 12px;
         padding: 0;
-      }
-      
-      .vocab-chat-messages::-webkit-scrollbar {
-        width: 6px;
-      }
-      
-      .vocab-chat-messages::-webkit-scrollbar-track {
-        background: #F8F2FC;
-        border-radius: 3px;
-      }
-      
-      .vocab-chat-messages::-webkit-scrollbar-thumb {
-        background: #D8C1E8;
-        border-radius: 4px;
       }
       
       /* No Messages State */
@@ -5455,6 +5970,49 @@ const ChatDialog = {
       .vocab-custom-content-overlay.visible {
         opacity: 1;
         visibility: visible;
+      }
+
+      /* Hide webpage icons when custom content modal is visible - exclude icons within the modal */
+      body.vocab-custom-content-modal-open .vocab-word-remove-explained-btn {
+        opacity: 0 !important;
+        visibility: hidden !important;
+        pointer-events: none !important;
+        transition: opacity 0.2s ease, visibility 0.2s ease;
+      }
+      
+      body.vocab-custom-content-modal-open .vocab-text-book-btn {
+        opacity: 0 !important;
+        visibility: hidden !important;
+        pointer-events: none !important;
+        transition: opacity 0.2s ease, visibility 0.2s ease;
+      }
+      
+      body.vocab-custom-content-modal-open .vocab-text-remove-btn {
+        opacity: 0 !important;
+        visibility: hidden !important;
+        pointer-events: none !important;
+        transition: opacity 0.2s ease, visibility 0.2s ease;
+      }
+      
+      body.vocab-custom-content-modal-open .vocab-text-chat-btn {
+        opacity: 0 !important;
+        visibility: hidden !important;
+        pointer-events: none !important;
+        transition: opacity 0.2s ease, visibility 0.2s ease;
+      }
+
+      /* Override with higher specificity: Ensure icons within the custom content modal remain visible and functional */
+      body.vocab-custom-content-modal-open .vocab-custom-content-overlay .vocab-word-remove-explained-btn,
+      body.vocab-custom-content-modal-open .vocab-custom-content-overlay .vocab-text-book-btn,
+      body.vocab-custom-content-modal-open .vocab-custom-content-overlay .vocab-text-remove-btn,
+      body.vocab-custom-content-modal-open .vocab-custom-content-overlay .vocab-text-chat-btn,
+      body.vocab-custom-content-modal-open .vocab-custom-content-overlay * .vocab-word-remove-explained-btn,
+      body.vocab-custom-content-modal-open .vocab-custom-content-overlay * .vocab-text-book-btn,
+      body.vocab-custom-content-modal-open .vocab-custom-content-overlay * .vocab-text-remove-btn,
+      body.vocab-custom-content-modal-open .vocab-custom-content-overlay * .vocab-text-chat-btn {
+        opacity: 1 !important;
+        visibility: visible !important;
+        pointer-events: auto !important;
       }
 
       @keyframes overlayFadeIn {
@@ -8866,11 +9424,6 @@ const ButtonPanel = {
     });
 
     // Add hover events for vertical button group
-    // Keep buttons visible when hovering over them
-    this.verticalButtonGroup?.addEventListener('mouseenter', () => {
-      this.showVerticalButtonGroup();
-    });
-
     // Hide buttons when moving away from the group
     this.verticalButtonGroup?.addEventListener('mouseleave', () => {
       this.hideVerticalButtonGroup();
@@ -9053,22 +9606,42 @@ const ButtonPanel = {
   handleRemoveAllMeanings() {
     console.log('[ButtonPanel] Remove all meanings clicked');
     
+    // Get current context
+    const context = this.getCurrentContentContext();
+    console.log('[ButtonPanel] Current context:', context);
+    
     // Get all asked texts, simplified texts, and explained words
     const askedTextsMap = TextSelector.askedTexts;
     const simplifiedTextsMap = TextSelector.simplifiedTexts;
     const explainedWordsMap = WordSelector.explainedWords;
     
-    if (askedTextsMap.size === 0 && simplifiedTextsMap.size === 0 && explainedWordsMap.size === 0) {
-      console.warn('[ButtonPanel] No meanings to remove');
+    // Filter items to only those in current context
+    const contextAskedTexts = Array.from(askedTextsMap.keys()).filter(textKey => 
+      this.isTextKeyInCurrentContext(textKey, context)
+    );
+    const contextSimplifiedTexts = Array.from(simplifiedTextsMap.keys()).filter(textKey => 
+      this.isTextKeyInCurrentContext(textKey, context)
+    );
+    const contextExplainedWords = Array.from(explainedWordsMap.keys()).filter(word => 
+      this.isWordInCurrentContext(word, context)
+    );
+    
+    if (contextAskedTexts.length === 0 && contextSimplifiedTexts.length === 0 && contextExplainedWords.length === 0) {
+      console.warn('[ButtonPanel] No meanings to remove in current context');
       return;
     }
     
-    // Process asked texts
-    if (askedTextsMap.size > 0) {
-      const askedTextKeys = Array.from(askedTextsMap.keys());
-      console.log(`[ButtonPanel] Removing ${askedTextKeys.length} asked texts`);
+    console.log(`[ButtonPanel] Removing meanings from ${context.type}:`, {
+      askedTexts: contextAskedTexts.length,
+      simplifiedTexts: contextSimplifiedTexts.length,
+      explainedWords: contextExplainedWords.length
+    });
+    
+    // Process asked texts in current context
+    if (contextAskedTexts.length > 0) {
+      console.log(`[ButtonPanel] Removing ${contextAskedTexts.length} asked texts from current context`);
       
-      askedTextKeys.forEach(textKey => {
+      contextAskedTexts.forEach(textKey => {
         const askedData = askedTextsMap.get(textKey);
         
         if (askedData && askedData.highlight) {
@@ -9100,12 +9673,11 @@ const ButtonPanel = {
       });
     }
     
-    // Process simplified texts
-    if (simplifiedTextsMap.size > 0) {
-      const simplifiedTextKeys = Array.from(simplifiedTextsMap.keys());
-      console.log(`[ButtonPanel] Removing ${simplifiedTextKeys.length} simplified texts`);
+    // Process simplified texts in current context
+    if (contextSimplifiedTexts.length > 0) {
+      console.log(`[ButtonPanel] Removing ${contextSimplifiedTexts.length} simplified texts from current context`);
       
-      simplifiedTextKeys.forEach(textKey => {
+      contextSimplifiedTexts.forEach(textKey => {
         const highlight = TextSelector.textToHighlights.get(textKey);
         
         if (highlight) {
@@ -9141,20 +9713,31 @@ const ButtonPanel = {
       });
     }
     
-    // Process explained words
-    if (explainedWordsMap.size > 0) {
-      const explainedWordKeys = Array.from(explainedWordsMap.keys());
-      console.log(`[ButtonPanel] Removing ${explainedWordKeys.length} explained words`);
+    // Process explained words in current context
+    if (contextExplainedWords.length > 0) {
+      console.log(`[ButtonPanel] Removing ${contextExplainedWords.length} explained words from current context`);
       
-      explainedWordKeys.forEach(word => {
+      contextExplainedWords.forEach(word => {
         const normalizedWord = word.toLowerCase().trim();
         const wordData = explainedWordsMap.get(word);
         
         console.log(`[ButtonPanel] Removing explained word: "${word}" (normalized: "${normalizedWord}")`);
         
         if (wordData && wordData.highlights) {
-          // Remove all highlights for this word
-          wordData.highlights.forEach(highlight => {
+          // Filter highlights to only those in current context
+          const contextHighlights = Array.from(wordData.highlights).filter(highlight => {
+            if (context.type === 'main-page') {
+              // For main page, check if highlight is in main document
+              return highlight.closest('.vocab-custom-content-modal') === null;
+            } else {
+              // For custom content, check if highlight is in current tab
+              const activeContentElement = this.topicsModal.customContentModal.modal.querySelector('.vocab-custom-content-editor-content');
+              return activeContentElement && activeContentElement.contains(highlight);
+            }
+          });
+          
+          // Remove only context-specific highlights
+          contextHighlights.forEach(highlight => {
             // Remove the green explained class
             highlight.classList.remove('vocab-word-explained');
             
@@ -9174,26 +9757,119 @@ const ButtonPanel = {
               highlight.remove();
             }
           });
+          
+          // Remove highlights from the word's highlight set
+          contextHighlights.forEach(highlight => {
+            wordData.highlights.delete(highlight);
+          });
+          
+          // If no highlights remain for this word, remove it completely
+          if (wordData.highlights.size === 0) {
+            explainedWordsMap.delete(word);
+            WordSelector.wordToHighlights.delete(normalizedWord);
+          }
         }
-        
-        // Remove from explainedWords Map
-        explainedWordsMap.delete(word);
-        
-        // Also remove from wordToHighlights Map using normalized word
-        WordSelector.wordToHighlights.delete(normalizedWord);
       });
       
       // Hide any open popups
       WordSelector.hideAllPopups();
     }
     
-    console.log('[ButtonPanel] All meanings removed');
+    console.log(`[ButtonPanel] Meanings removed from ${context.type} context`);
     
     // Also remove data from analysis structure for current tab
     this.removeMeaningsFromAnalysisData();
     
     // Update button states
     this.updateButtonStatesFromSelections();
+  },
+
+  /**
+   * Get the current content context (main page or specific custom content tab)
+   * @returns {Object} Context object with type, contentType, tabId, and textKeyPrefix
+   */
+  getCurrentContentContext() {
+    // Check if custom content modal is open and has active tab
+    if (this.topicsModal && 
+        this.topicsModal.customContentModal && 
+        this.topicsModal.customContentModal.activeTabId) {
+      
+      const activeTabId = this.topicsModal.customContentModal.activeTabId;
+      const activeContent = this.topicsModal.customContentModal.getContentByTabId(parseInt(activeTabId));
+      
+      if (activeContent) {
+        return {
+          type: 'custom-content',
+          contentType: activeContent.contentType,
+          tabId: activeTabId,
+          textKeyPrefix: `${activeContent.contentType}-${activeTabId}`,
+          activeContent: activeContent
+        };
+      }
+    }
+    
+    // Default to main page context
+    return {
+      type: 'main-page',
+      contentType: 'main',
+      tabId: null,
+      textKeyPrefix: 'main',
+      activeContent: null
+    };
+  },
+
+  /**
+   * Check if a textKey belongs to the current context
+   * @param {string} textKey - The textKey to check
+   * @param {Object} context - The current context (optional, will be detected if not provided)
+   * @returns {boolean} True if the textKey belongs to current context
+   */
+  isTextKeyInCurrentContext(textKey, context = null) {
+    if (!context) {
+      context = this.getCurrentContentContext();
+    }
+    
+    if (context.type === 'main-page') {
+      // For main page, textKey should NOT have content type prefix
+      // Main page textKeys are typically just the normalized text
+      return !textKey.includes('-') || !['pdf', 'image', 'topic', 'text'].some(type => textKey.startsWith(type + '-'));
+    } else {
+      // For custom content, textKey should start with the context prefix
+      // Format: ${contentType}-${tabId}-${normalizedText}
+      return textKey.startsWith(context.textKeyPrefix + '-');
+    }
+  },
+
+  /**
+   * Check if a word belongs to the current context
+   * @param {string} word - The word to check
+   * @param {Object} context - The current context (optional, will be detected if not provided)
+   * @returns {boolean} True if the word belongs to current context
+   */
+  isWordInCurrentContext(word, context = null) {
+    if (!context) {
+      context = this.getCurrentContentContext();
+    }
+    
+    // Check if the word has highlights in the current context
+    const wordData = WordSelector.explainedWords.get(word);
+    if (!wordData || !wordData.highlights) {
+      return false;
+    }
+    
+    // For main page context, check if any highlight is in the main document
+    if (context.type === 'main-page') {
+      return Array.from(wordData.highlights).some(highlight => {
+        // Check if highlight is in the main document (not in custom content modal)
+        return highlight.closest('.vocab-custom-content-modal') === null;
+      });
+    } else {
+      // For custom content context, check if any highlight is in the current tab's content
+      const activeContentElement = this.topicsModal.customContentModal.modal.querySelector('.vocab-custom-content-editor-content');
+      return Array.from(wordData.highlights).some(highlight => {
+        return activeContentElement && activeContentElement.contains(highlight);
+      });
+    }
   },
 
   /**
@@ -10364,6 +11040,9 @@ const ButtonPanel = {
   showTextModalWithAnimation() {
     console.log('[ButtonPanel] Showing text modal with animation');
     
+    // Clear all selections when opening modal
+    this.clearSelectionsOnModalOpen();
+    
     if (this.textInputModal && this.textInputModal.overlay) {
       this.textInputModal.overlay.classList.add('visible');
       this.textInputModal.modal.classList.add('visible');
@@ -10652,6 +11331,13 @@ const ButtonPanel = {
     console.log('[ButtonPanel] Ensuring custom content modal is visible...');
     if (!this.topicsModal.customContentModal.overlay.classList.contains('visible')) {
       this.topicsModal.customContentModal.overlay.classList.add('visible');
+      
+      // Clear all selections when opening modal
+      this.clearSelectionsOnModalOpen();
+      
+      // Add class to body to hide webpage icons
+      document.body.classList.add('vocab-custom-content-modal-open');
+      
       console.log('[ButtonPanel] Custom content modal is now visible');
     } else {
       console.log('[ButtonPanel] Custom content modal was already visible');
@@ -10765,21 +11451,55 @@ const ButtonPanel = {
     const hasWords = WordSelector.selectedWords.size > 0;
     const hasTexts = TextSelector.selectedTexts.size > 0;
     const hasExactlyOneText = TextSelector.selectedTexts.size === 1;
+    
+    // Get current context
+    const context = this.getCurrentContentContext();
+    console.log('[ButtonPanel] Current context for button states:', context);
+    
+    // Check for meanings in current context only
+    const hasAskedTextsInContext = Array.from(TextSelector.askedTexts.keys()).some(textKey => 
+      this.isTextKeyInCurrentContext(textKey, context)
+    );
+    const hasSimplifiedTextsInContext = Array.from(TextSelector.simplifiedTexts.keys()).some(textKey => 
+      this.isTextKeyInCurrentContext(textKey, context)
+    );
+    const hasExplainedWordsInContext = Array.from(WordSelector.explainedWords.keys()).some(word => 
+      this.isWordInCurrentContext(word, context)
+    );
+    
+    // Debug logging
+    console.log('[ButtonPanel] Button state checks:', {
+      context: context.type,
+      hasWords,
+      hasTexts,
+      hasAskedTextsInContext,
+      hasSimplifiedTextsInContext,
+      hasExplainedWordsInContext,
+      totalAskedTexts: TextSelector.askedTexts.size,
+      totalSimplifiedTexts: TextSelector.simplifiedTexts.size,
+      totalExplainedWords: WordSelector.explainedWords.size,
+      askedTextKeys: Array.from(TextSelector.askedTexts.keys()),
+      simplifiedTextKeys: Array.from(TextSelector.simplifiedTexts.keys()),
+      explainedWordKeys: Array.from(WordSelector.explainedWords.keys())
+    });
+    
+    // Legacy global checks (for backward compatibility)
     const hasAskedTexts = TextSelector.askedTexts.size > 0;
     const hasSimplifiedTexts = TextSelector.simplifiedTexts.size > 0;
     const hasExplainedWords = WordSelector.explainedWords.size > 0;
     
     console.log('[ButtonPanel] Updating button states:', {
+      context: context.type,
       hasWords,
       hasTexts,
-      hasAskedTexts,
-      hasSimplifiedTexts,
-      hasExplainedWords,
-      showRemoveMeanings: hasAskedTexts || hasSimplifiedTexts || hasExplainedWords
+      hasAskedTextsInContext,
+      hasSimplifiedTextsInContext,
+      hasExplainedWordsInContext,
+      showRemoveMeanings: hasAskedTextsInContext || hasSimplifiedTextsInContext || hasExplainedWordsInContext
     });
     
-    // Show "Remove all meanings" if there are any asked texts, simplified texts, OR explained words
-    this.setShowRemoveMeanings(hasAskedTexts || hasSimplifiedTexts || hasExplainedWords);
+    // Show "Remove all meanings" if there are any asked texts, simplified texts, OR explained words in current context
+    this.setShowRemoveMeanings(hasAskedTextsInContext || hasSimplifiedTextsInContext || hasExplainedWordsInContext);
     
     // Show "Deselect all" if there are any words or texts selected
     this.setShowDeselectAll(hasWords || hasTexts);
@@ -10787,8 +11507,9 @@ const ButtonPanel = {
     // Enable "Magic meaning" if there are any words or texts selected
     this.setMagicMeaningEnabled(hasWords || hasTexts);
     
-    // Show "Ask" only if exactly one text is selected
-    this.setAskVisible(hasExactlyOneText);
+    // Show "Ask" only if exactly one text is selected AND custom content modal is not open
+    const isCustomModalOpen = this.isCustomContentModalOpen();
+    this.setAskVisible(hasExactlyOneText && !isCustomModalOpen);
   },
 
   /**
@@ -11022,6 +11743,13 @@ const ButtonPanel = {
     console.log('[ButtonPanel] Ensuring custom content modal is visible...');
     if (!this.topicsModal.customContentModal.overlay.classList.contains('visible')) {
       this.topicsModal.customContentModal.overlay.classList.add('visible');
+      
+      // Clear all selections when opening modal
+      this.clearSelectionsOnModalOpen();
+      
+      // Add class to body to hide webpage icons
+      document.body.classList.add('vocab-custom-content-modal-open');
+      
       console.log('[ButtonPanel] Custom content modal is now visible');
     } else {
       console.log('[ButtonPanel] Custom content modal was already visible');
@@ -11336,6 +12064,9 @@ const ButtonPanel = {
    * Show modal with animation and initialize everything
    */
   showModalWithAnimation() {
+    // Clear all selections when opening modal
+    this.clearSelectionsOnModalOpen();
+    
     // Show modal with animation
     this.topicsModal.overlay.classList.add('visible');
     this.topicsModal.modal.classList.add('visible');
@@ -12044,6 +12775,12 @@ const ButtonPanel = {
     setTimeout(() => {
       this.topicsModal.customContentModal.overlay.classList.add('visible');
       
+      // Clear all selections when opening modal
+      this.clearSelectionsOnModalOpen();
+      
+      // Add class to body to hide webpage icons
+      document.body.classList.add('vocab-custom-content-modal-open');
+      
       // Update button visibility after modal is shown
       setTimeout(() => {
         this.updateVerticalButtonVisibility();
@@ -12099,6 +12836,30 @@ const ButtonPanel = {
   },
 
   /**
+   * Clear all text and word selections when opening modals
+   */
+  clearSelectionsOnModalOpen() {
+    console.log('[ButtonPanel] Clearing only selections due to modal opening, preserving meanings');
+    
+    // Clear word selections only (preserve meanings)
+    if (typeof WordSelector !== 'undefined' && WordSelector.clearSelectionsOnly) {
+      WordSelector.clearSelectionsOnly();
+    }
+    
+    // Clear text selections only (preserve meanings)
+    if (typeof TextSelector !== 'undefined' && TextSelector.clearSelectionsOnly) {
+      TextSelector.clearSelectionsOnly();
+    }
+    
+    // Clear any browser text selection
+    if (window.getSelection) {
+      window.getSelection().removeAllRanges();
+    }
+    
+    console.log('[ButtonPanel] Selections cleared, meanings preserved');
+  },
+
+  /**
    * Hide custom content modal
    */
   hideCustomContentModal() {
@@ -12109,8 +12870,15 @@ const ButtonPanel = {
     if (this.topicsModal.customContentModal.overlay) {
       console.log('[ButtonPanel] Overlay classes before removal:', this.topicsModal.customContentModal.overlay.classList.toString());
       this.topicsModal.customContentModal.overlay.classList.remove('visible');
+      
+      // Remove class from body to show webpage icons again
+      document.body.classList.remove('vocab-custom-content-modal-open');
+      
       console.log('[ButtonPanel] Overlay classes after removal:', this.topicsModal.customContentModal.overlay.classList.toString());
       console.log('[ButtonPanel] Overlay is now visible:', this.topicsModal.customContentModal.overlay.classList.contains('visible'));
+      
+      // Update button states after modal closes
+      this.updateButtonStatesFromSelections();
     }
     
     console.log('[ButtonPanel] ===== END HIDE CUSTOM CONTENT MODAL DEBUG =====');
@@ -12142,6 +12910,9 @@ const ButtonPanel = {
    * Show image modal with animation
    */
   showImageModalWithAnimation() {
+    // Clear all selections when opening modal
+    this.clearSelectionsOnModalOpen();
+    
     if (this.imageUploadModal.overlay) {
       this.imageUploadModal.overlay.classList.add('visible');
     }
@@ -12427,6 +13198,12 @@ const ButtonPanel = {
     // Ensure custom content modal is visible
     if (!this.topicsModal.customContentModal.overlay.classList.contains('visible')) {
       this.topicsModal.customContentModal.overlay.classList.add('visible');
+      
+      // Clear all selections when opening modal
+      this.clearSelectionsOnModalOpen();
+      
+      // Add class to body to hide webpage icons
+      document.body.classList.add('vocab-custom-content-modal-open');
     }
     
     // Update modal title
@@ -12551,6 +13328,9 @@ const ButtonPanel = {
    * Show PDF modal with animation
    */
   showPDFModalWithAnimation() {
+    // Clear all selections when opening modal
+    this.clearSelectionsOnModalOpen();
+    
     if (this.pdfUploadModal.overlay) {
       this.pdfUploadModal.overlay.classList.add('visible');
     }
@@ -13341,6 +14121,15 @@ const ButtonPanel = {
     // Show the modal
     setTimeout(() => {
       this.topicsModal.customContentModal.overlay.classList.add('visible');
+      
+      // Clear all selections when opening modal
+      this.clearSelectionsOnModalOpen();
+      
+      // Add class to body to hide webpage icons
+      document.body.classList.add('vocab-custom-content-modal-open');
+      
+      // Update button states after modal opens to reflect new context
+      this.updateButtonStatesFromSelections();
     }, 100);
   },
 
@@ -13400,6 +14189,12 @@ const ButtonPanel = {
     // Show the modal
     setTimeout(() => {
       this.topicsModal.customContentModal.overlay.classList.add('visible');
+      
+      // Clear all selections when opening modal
+      this.clearSelectionsOnModalOpen();
+      
+      // Add class to body to hide webpage icons
+      document.body.classList.add('vocab-custom-content-modal-open');
     }, 100);
   },
 
@@ -13673,6 +14468,9 @@ const ButtonPanel = {
       if (tabsContainer) {
         tabsContainer.classList.remove('tab-transitioning');
       }
+      
+      // Update button states after tab switch to reflect new context
+      this.updateButtonStatesFromSelections();
     }, 300);
   },
 
