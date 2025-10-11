@@ -3,12 +3,16 @@
  * Modular service for the /api/v2/simplify endpoint
  */
 
+import ApiConfig from '../config/apiConfig.js';
+
 class SimplifyService {
-  // Configurable base URL - uses same base as ApiService
-  static BASE_URL = 'https://caten-production.up.railway.app';
+  // Use centralized config for base URL
+  static get BASE_URL() {
+    return ApiConfig.getCurrentBaseUrl();
+  }
   
-  // API endpoint
-  static ENDPOINT = '/api/v2/simplify';
+  // API endpoint - use centralized config
+  static ENDPOINT = ApiConfig.ENDPOINTS.SIMPLIFY;
   
   /**
    * Simplify multiple text segments using SSE

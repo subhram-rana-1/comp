@@ -1,4 +1,5 @@
 import { defineConfig } from 'wxt';
+import { getHostPermissions } from './core/config/buildConfig.js';
 
 export default defineConfig({
   publicDir: 'assets',
@@ -20,9 +21,7 @@ export default defineConfig({
       'tabs',
       'activeTab'
     ],
-    host_permissions: [
-      'https://caten-production.up.railway.app/*'
-    ],
+    host_permissions: getHostPermissions(),
   },
 });
 
