@@ -10950,6 +10950,9 @@ const ButtonPanel = {
   showTextModalWithAnimation() {
     console.log('[ButtonPanel] Showing text modal with animation');
     
+    // Clear all selections when opening modal
+    this.clearSelectionsOnModalOpen();
+    
     if (this.textInputModal && this.textInputModal.overlay) {
       this.textInputModal.overlay.classList.add('visible');
       this.textInputModal.modal.classList.add('visible');
@@ -11238,6 +11241,9 @@ const ButtonPanel = {
     console.log('[ButtonPanel] Ensuring custom content modal is visible...');
     if (!this.topicsModal.customContentModal.overlay.classList.contains('visible')) {
       this.topicsModal.customContentModal.overlay.classList.add('visible');
+      
+      // Clear all selections when opening modal
+      this.clearSelectionsOnModalOpen();
       
       // Add class to body to hide webpage icons
       document.body.classList.add('vocab-custom-content-modal-open');
@@ -11613,6 +11619,9 @@ const ButtonPanel = {
     if (!this.topicsModal.customContentModal.overlay.classList.contains('visible')) {
       this.topicsModal.customContentModal.overlay.classList.add('visible');
       
+      // Clear all selections when opening modal
+      this.clearSelectionsOnModalOpen();
+      
       // Add class to body to hide webpage icons
       document.body.classList.add('vocab-custom-content-modal-open');
       
@@ -11930,6 +11939,9 @@ const ButtonPanel = {
    * Show modal with animation and initialize everything
    */
   showModalWithAnimation() {
+    // Clear all selections when opening modal
+    this.clearSelectionsOnModalOpen();
+    
     // Show modal with animation
     this.topicsModal.overlay.classList.add('visible');
     this.topicsModal.modal.classList.add('visible');
@@ -12638,6 +12650,9 @@ const ButtonPanel = {
     setTimeout(() => {
       this.topicsModal.customContentModal.overlay.classList.add('visible');
       
+      // Clear all selections when opening modal
+      this.clearSelectionsOnModalOpen();
+      
       // Add class to body to hide webpage icons
       document.body.classList.add('vocab-custom-content-modal-open');
       
@@ -12696,6 +12711,30 @@ const ButtonPanel = {
   },
 
   /**
+   * Clear all text and word selections when opening modals
+   */
+  clearSelectionsOnModalOpen() {
+    console.log('[ButtonPanel] Clearing all selections due to modal opening');
+    
+    // Clear word selections
+    if (typeof WordSelector !== 'undefined' && WordSelector.clearAll) {
+      WordSelector.clearAll();
+    }
+    
+    // Clear text selections
+    if (typeof TextSelector !== 'undefined' && TextSelector.clearAll) {
+      TextSelector.clearAll();
+    }
+    
+    // Clear any browser text selection
+    if (window.getSelection) {
+      window.getSelection().removeAllRanges();
+    }
+    
+    console.log('[ButtonPanel] All selections cleared');
+  },
+
+  /**
    * Hide custom content modal
    */
   hideCustomContentModal() {
@@ -12743,6 +12782,9 @@ const ButtonPanel = {
    * Show image modal with animation
    */
   showImageModalWithAnimation() {
+    // Clear all selections when opening modal
+    this.clearSelectionsOnModalOpen();
+    
     if (this.imageUploadModal.overlay) {
       this.imageUploadModal.overlay.classList.add('visible');
     }
@@ -13029,6 +13071,9 @@ const ButtonPanel = {
     if (!this.topicsModal.customContentModal.overlay.classList.contains('visible')) {
       this.topicsModal.customContentModal.overlay.classList.add('visible');
       
+      // Clear all selections when opening modal
+      this.clearSelectionsOnModalOpen();
+      
       // Add class to body to hide webpage icons
       document.body.classList.add('vocab-custom-content-modal-open');
     }
@@ -13155,6 +13200,9 @@ const ButtonPanel = {
    * Show PDF modal with animation
    */
   showPDFModalWithAnimation() {
+    // Clear all selections when opening modal
+    this.clearSelectionsOnModalOpen();
+    
     if (this.pdfUploadModal.overlay) {
       this.pdfUploadModal.overlay.classList.add('visible');
     }
@@ -13946,6 +13994,9 @@ const ButtonPanel = {
     setTimeout(() => {
       this.topicsModal.customContentModal.overlay.classList.add('visible');
       
+      // Clear all selections when opening modal
+      this.clearSelectionsOnModalOpen();
+      
       // Add class to body to hide webpage icons
       document.body.classList.add('vocab-custom-content-modal-open');
     }, 100);
@@ -14007,6 +14058,9 @@ const ButtonPanel = {
     // Show the modal
     setTimeout(() => {
       this.topicsModal.customContentModal.overlay.classList.add('visible');
+      
+      // Clear all selections when opening modal
+      this.clearSelectionsOnModalOpen();
       
       // Add class to body to hide webpage icons
       document.body.classList.add('vocab-custom-content-modal-open');
