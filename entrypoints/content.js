@@ -2958,9 +2958,11 @@ const ChatDialog = {
    * @param {string} textKey - The text key to check if it's custom content
    */
   hideFocusButtonsForCustomContent(textKey) {
-    // Check if this is custom content by looking at the textKey pattern
-    if (textKey && textKey.startsWith('custom-content-')) {
-      console.log('[ChatDialog] Hiding Focus buttons for custom content:', textKey);
+    // Hide focus buttons for general chat (chat icon), show for selected text chat (book icon)
+    const shouldHideFocus = this.chatContext === 'general';
+    
+    if (shouldHideFocus) {
+      console.log('[ChatDialog] Hiding Focus buttons for general chat:', textKey);
       
       // Hide the top-right Focus button
       const topRightFocusBtn = this.dialogContainer.querySelector('.vocab-chat-focus-btn-top-right');
@@ -2974,7 +2976,23 @@ const ChatDialog = {
         container.style.display = 'none';
       });
       
-      console.log('[ChatDialog] Focus buttons hidden for custom content');
+      console.log('[ChatDialog] Focus buttons hidden for general chat');
+    } else {
+      console.log('[ChatDialog] Showing Focus buttons for selected text chat:', textKey);
+      
+      // Show the top-right Focus button
+      const topRightFocusBtn = this.dialogContainer.querySelector('.vocab-chat-focus-btn-top-right');
+      if (topRightFocusBtn) {
+        topRightFocusBtn.style.display = 'block';
+      }
+      
+      // Show Focus button containers in tab contents
+      const focusBtnContainers = this.dialogContainer.querySelectorAll('.vocab-chat-focus-btn-container');
+      focusBtnContainers.forEach(container => {
+        container.style.display = 'block';
+      });
+      
+      console.log('[ChatDialog] Focus buttons shown for selected text chat');
     }
   },
   
@@ -3069,7 +3087,9 @@ const ChatDialog = {
     // Add click handler for focus button
     focusButton.addEventListener('click', () => {
       if (this.currentTextKey) {
-        const highlight = TextSelector.textToHighlights.get(this.currentTextKey);
+        // For selected text chat, use original textKey to find highlight
+        const originalTextKey = this.currentTextKey.replace(/-selected$/, '').replace(/-generic$/, '');
+        const highlight = TextSelector.textToHighlights.get(originalTextKey);
         if (highlight) {
           // First scroll to the element
           highlight.scrollIntoView({
@@ -3353,7 +3373,9 @@ const ChatDialog = {
     
     // Add click handler
     focusButton.addEventListener('click', () => {
-      const highlight = TextSelector.textToHighlights.get(this.currentTextKey);
+      // For selected text chat, use original textKey to find highlight
+      const originalTextKey = this.currentTextKey.replace(/-selected$/, '').replace(/-generic$/, '');
+      const highlight = TextSelector.textToHighlights.get(originalTextKey);
       if (highlight) {
         highlight.scrollIntoView({
           behavior: 'smooth',
@@ -3406,7 +3428,9 @@ const ChatDialog = {
     
     // Add click handler
     focusButton.addEventListener('click', () => {
-      const highlight = TextSelector.textToHighlights.get(this.currentTextKey);
+      // For selected text chat, use original textKey to find highlight
+      const originalTextKey = this.currentTextKey.replace(/-selected$/, '').replace(/-generic$/, '');
+      const highlight = TextSelector.textToHighlights.get(originalTextKey);
       if (highlight) {
         highlight.scrollIntoView({
           behavior: 'smooth',
@@ -4189,6 +4213,20 @@ const ChatDialog = {
         console.log('[ChatDialog] Adding visible class to dialog');
         this.dialogContainer.classList.add('visible');
         console.log('[ChatDialog] Dialog should now be visible');
+        
+        // Auto-focus the question input for both generic and selected text chat
+        setTimeout(() => {
+          const questionInput = this.dialogContainer.querySelector('.vocab-chat-input');
+          if (questionInput) {
+            questionInput.focus();
+            console.log(`[ChatDialog] Auto-focused question input for ${this.chatContext} chat`);
+          }
+        }, 100);
+        
+        // Ensure focus buttons are hidden/shown based on chat context after dialog is rendered
+        setTimeout(() => {
+          this.hideFocusButtonsForCustomContent(this.currentTextKey);
+        }, 200);
       }, 10);
     } else {
       console.log('[ChatDialog] ERROR: Dialog container not found!');
@@ -11108,11 +11146,47 @@ const ButtonPanel = {
         return false;
       },
       
+      // Migration function to ensure all existing content objects have contentType field
+      migrateContentTypes: function() {
+        // Migrate topic contents
+        this.topicContents.forEach(content => {
+          if (!content.contentType) {
+            content.contentType = 'topic';
+            console.log('[CustomContentModal] Migrated topic content to have contentType');
+          }
+        });
+        
+        // Migrate image contents
+        this.imageContents.forEach(content => {
+          if (!content.contentType) {
+            content.contentType = 'image';
+            console.log('[CustomContentModal] Migrated image content to have contentType');
+          }
+        });
+        
+        // Migrate PDF contents
+        this.pdfContents.forEach(content => {
+          if (!content.contentType) {
+            content.contentType = 'pdf';
+            console.log('[CustomContentModal] Migrated PDF content to have contentType');
+          }
+        });
+        
+        // Migrate text contents
+        this.textContents.forEach(content => {
+          if (!content.contentType) {
+            content.contentType = 'text';
+            console.log('[CustomContentModal] Migrated text content to have contentType');
+          }
+        });
+      },
+      
       addContent: function(contentType, tabName, content, metadata = {}) {
         const newContent = {
           tabId: this.nextTabId++,
           tabName: tabName,
           content: content,
+          contentType: contentType, // Store the content type
           input: {
             topics: metadata.topics || [],
             wordCount: metadata.wordCount || 100,
@@ -11127,6 +11201,9 @@ const ButtonPanel = {
             chats: [] // Store chats
           }
         };
+        
+        // Ensure all existing content objects have contentType field (migration)
+        this.migrateContentTypes();
         
         switch(contentType) {
           case 'topic':
@@ -12853,8 +12930,21 @@ const ButtonPanel = {
     // Add click handler for chat icon
     chatIcon.addEventListener('click', () => {
       console.log('[ButtonPanel] ===== CHAT ICON CLICKED =====');
-      console.log('[ButtonPanel] Chat icon clicked, calling openChatForCurrentContent()');
-      this.openChatForCurrentContent();
+      console.log('[ButtonPanel] Chat icon clicked, toggling chat popup');
+      
+      // Check if chat is already open for this tab
+      const activeTabId = this.topicsModal.customContentModal.activeTabId;
+      const contentType = this.topicsModal.customContentModal.getContentByTabId(parseInt(activeTabId))?.contentType || 'custom-content';
+      const textKey = `${contentType}-${activeTabId}`;
+      const contextualTextKey = `${contentType}-${activeTabId}-generic`;
+      
+      if (ChatDialog.isOpen && ChatDialog.currentTextKey === contextualTextKey) {
+        console.log('[ButtonPanel] Chat already open for this tab, closing it');
+        ChatDialog.close();
+      } else {
+        console.log('[ButtonPanel] Opening chat for current content');
+        this.openChatForCurrentContent();
+      }
     });
     
     // Store chat icon reference for later appending to modal
@@ -13953,23 +14043,8 @@ const ButtonPanel = {
       }
     }
     
-    // Auto-focus the question input after chat dialog opens
-    setTimeout(() => {
-      const questionInput = document.querySelector('.vocab-chat-input');
-      if (questionInput) {
-        questionInput.focus();
-        console.log('[ButtonPanel] Auto-focused question input');
-      } else {
-        // Try again with a longer delay if element not found
-        setTimeout(() => {
-          const questionInput = document.querySelector('.vocab-chat-input');
-          if (questionInput) {
-            questionInput.focus();
-            console.log('[ButtonPanel] Auto-focused question input (retry)');
-          }
-        }, 200);
-      }
-    }, 200);
+    // Auto-focus is now handled by ChatDialog.show() based on chat context
+    // No need to auto-focus here since generic chat should not be auto-focused
     
     console.log('[ButtonPanel] Chat dialog opened for current content');
   },
