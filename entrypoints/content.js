@@ -2793,7 +2793,7 @@ const TextSelector = {
           background-color: transparent;
         }
         50% {
-          background-color: rgba(34, 197, 94, 0.25);
+          background-color: rgba(34, 197, 94, 0.15);
         }
         100% {
           background-color: transparent;
@@ -3381,21 +3381,94 @@ const ChatDialog = {
     
     // Add click handler for focus button
     focusButton.addEventListener('click', () => {
+      console.log('[Focus Button] Clicked, currentTextKey:', this.currentTextKey);
+      
       if (this.currentTextKey) {
         // For selected text chat, use original textKey to find highlight
         const originalTextKey = this.currentTextKey.replace(/-selected$/, '').replace(/-generic$/, '');
-        const highlight = TextSelector.textToHighlights.get(originalTextKey);
+        console.log('[Focus Button] Original textKey:', originalTextKey);
+        
+        // Try exact match first
+        let highlight = TextSelector.textToHighlights.get(originalTextKey);
+        
+        // If no exact match, try fuzzy matching
+        if (!highlight) {
+          console.log('[Focus Button] No exact match, trying fuzzy matching...');
+          
+          // Find the best matching key by comparing text content
+          let bestMatch = null;
+          let bestScore = 0;
+          
+          for (const [key, element] of TextSelector.textToHighlights) {
+            // Calculate similarity score based on common text length
+            const commonLength = this.calculateCommonTextLength(originalTextKey, key);
+            const score = commonLength / Math.max(originalTextKey.length, key.length);
+            
+            console.log('[Focus Button] Comparing with key:', key.substring(0, 50) + '...', 'Score:', score);
+            
+            if (score > bestScore && score > 0.7) { // Require at least 70% similarity
+              bestScore = score;
+              bestMatch = element;
+            }
+          }
+          
+          if (bestMatch) {
+            highlight = bestMatch;
+            console.log('[Focus Button] Found fuzzy match with score:', bestScore);
+          }
+        }
+        
+        console.log('[Focus Button] Found highlight:', highlight);
+        
         if (highlight) {
+          console.log('[Focus Button] Scrolling to highlight and pulsating');
+          
           // First scroll to the element
           highlight.scrollIntoView({
             behavior: 'smooth',
             block: 'center'
           });
-          // Then pulsate without changing state or creating new icons
+          
+          // Determine pulsate color based on text type
+          let isGreenPulsate = false;
+          
+          // Check if it's asked text (has green chat icon)
+          const hasChatBtn = highlight.querySelector('.vocab-text-chat-btn');
+          console.log('[Focus Button] Checking for chat button:', hasChatBtn);
+          if (hasChatBtn) {
+            isGreenPulsate = true; // Green pulsate for asked text
+            console.log('[Focus Button] Detected asked text - using green pulsate');
+          }
+          
+          // Check if it's explained text (has green dashed underline)
+          const isSimplified = highlight.classList.contains('vocab-text-simplified');
+          console.log('[Focus Button] Checking for simplified class:', isSimplified);
+          if (isSimplified) {
+            isGreenPulsate = true; // Green pulsate for explained text
+            console.log('[Focus Button] Detected explained text - using green pulsate');
+          }
+          
+          // Additional check: look for asked text in the askedTexts map
+          const isInAskedTexts = TextSelector.askedTexts.has(originalTextKey);
+          console.log('[Focus Button] Checking if text is in askedTexts:', isInAskedTexts);
+          if (isInAskedTexts) {
+            isGreenPulsate = true; // Green pulsate for asked text
+            console.log('[Focus Button] Detected asked text via askedTexts map - using green pulsate');
+          }
+          
+          console.log('[Focus Button] Using green pulsate:', isGreenPulsate);
+          
+          // Then pulsate with appropriate color
           setTimeout(() => {
-            TextSelector.pulsateText(highlight, true);
+            TextSelector.pulsateText(highlight, isGreenPulsate);
+            console.log('[Focus Button] Pulsate animation triggered');
           }, 300); // Small delay to let scroll complete
+        } else {
+          console.log('[Focus Button] No highlight found for textKey:', originalTextKey);
+          console.log('[Focus Button] Available textToHighlights keys:', Array.from(TextSelector.textToHighlights.keys()));
         }
+      } else {
+        console.log('[Focus Button] No currentTextKey available');
       }
     });
     
@@ -3668,17 +3741,88 @@ const ChatDialog = {
     
     // Add click handler
     focusButton.addEventListener('click', () => {
+      console.log('[Tab Focus Button] Clicked, currentTextKey:', this.currentTextKey);
+      
       // For selected text chat, use original textKey to find highlight
       const originalTextKey = this.currentTextKey.replace(/-selected$/, '').replace(/-generic$/, '');
-      const highlight = TextSelector.textToHighlights.get(originalTextKey);
+      console.log('[Tab Focus Button] Original textKey:', originalTextKey);
+      
+      // Try exact match first
+      let highlight = TextSelector.textToHighlights.get(originalTextKey);
+      
+      // If no exact match, try fuzzy matching
+      if (!highlight) {
+        console.log('[Tab Focus Button] No exact match, trying fuzzy matching...');
+        
+        // Find the best matching key by comparing text content
+        let bestMatch = null;
+        let bestScore = 0;
+        
+        for (const [key, element] of TextSelector.textToHighlights) {
+          // Calculate similarity score based on common text length
+          const commonLength = this.calculateCommonTextLength(originalTextKey, key);
+          const score = commonLength / Math.max(originalTextKey.length, key.length);
+          
+          console.log('[Tab Focus Button] Comparing with key:', key.substring(0, 50) + '...', 'Score:', score);
+          
+          if (score > bestScore && score > 0.7) { // Require at least 70% similarity
+            bestScore = score;
+            bestMatch = element;
+          }
+        }
+        
+        if (bestMatch) {
+          highlight = bestMatch;
+          console.log('[Tab Focus Button] Found fuzzy match with score:', bestScore);
+        }
+      }
+      
+      console.log('[Tab Focus Button] Found highlight:', highlight);
+      
       if (highlight) {
+        console.log('[Tab Focus Button] Scrolling to highlight and pulsating');
+        
         highlight.scrollIntoView({
           behavior: 'smooth',
           block: 'center'
         });
+        
+        // Determine pulsate color based on text type
+        let isGreenPulsate = false;
+        
+        // Check if it's asked text (has green chat icon)
+        const hasChatBtn = highlight.querySelector('.vocab-text-chat-btn');
+        console.log('[Tab Focus Button] Checking for chat button:', hasChatBtn);
+        if (hasChatBtn) {
+          isGreenPulsate = true; // Green pulsate for asked text
+          console.log('[Tab Focus Button] Detected asked text - using green pulsate');
+        }
+        
+        // Check if it's explained text (has green dashed underline)
+        const isSimplified = highlight.classList.contains('vocab-text-simplified');
+        console.log('[Tab Focus Button] Checking for simplified class:', isSimplified);
+        if (isSimplified) {
+          isGreenPulsate = true; // Green pulsate for explained text
+          console.log('[Tab Focus Button] Detected explained text - using green pulsate');
+        }
+        
+        // Additional check: look for asked text in the askedTexts map
+        const isInAskedTexts = TextSelector.askedTexts.has(originalTextKey);
+        console.log('[Tab Focus Button] Checking if text is in askedTexts:', isInAskedTexts);
+        if (isInAskedTexts) {
+          isGreenPulsate = true; // Green pulsate for asked text
+          console.log('[Tab Focus Button] Detected asked text via askedTexts map - using green pulsate');
+        }
+        
+        console.log('[Tab Focus Button] Using green pulsate:', isGreenPulsate);
+        
         setTimeout(() => {
-          TextSelector.pulsateText(highlight, true);
+          TextSelector.pulsateText(highlight, isGreenPulsate);
+          console.log('[Tab Focus Button] Pulsate animation triggered');
         }, 500);
+      } else {
+        console.log('[Tab Focus Button] No highlight found for textKey:', originalTextKey);
+        console.log('[Tab Focus Button] Available textToHighlights keys:', Array.from(TextSelector.textToHighlights.keys()));
       }
     });
     
@@ -3723,17 +3867,88 @@ const ChatDialog = {
     
     // Add click handler
     focusButton.addEventListener('click', () => {
+      console.log('[Tab Focus Button] Clicked, currentTextKey:', this.currentTextKey);
+      
       // For selected text chat, use original textKey to find highlight
       const originalTextKey = this.currentTextKey.replace(/-selected$/, '').replace(/-generic$/, '');
-      const highlight = TextSelector.textToHighlights.get(originalTextKey);
+      console.log('[Tab Focus Button] Original textKey:', originalTextKey);
+      
+      // Try exact match first
+      let highlight = TextSelector.textToHighlights.get(originalTextKey);
+      
+      // If no exact match, try fuzzy matching
+      if (!highlight) {
+        console.log('[Tab Focus Button] No exact match, trying fuzzy matching...');
+        
+        // Find the best matching key by comparing text content
+        let bestMatch = null;
+        let bestScore = 0;
+        
+        for (const [key, element] of TextSelector.textToHighlights) {
+          // Calculate similarity score based on common text length
+          const commonLength = this.calculateCommonTextLength(originalTextKey, key);
+          const score = commonLength / Math.max(originalTextKey.length, key.length);
+          
+          console.log('[Tab Focus Button] Comparing with key:', key.substring(0, 50) + '...', 'Score:', score);
+          
+          if (score > bestScore && score > 0.7) { // Require at least 70% similarity
+            bestScore = score;
+            bestMatch = element;
+          }
+        }
+        
+        if (bestMatch) {
+          highlight = bestMatch;
+          console.log('[Tab Focus Button] Found fuzzy match with score:', bestScore);
+        }
+      }
+      
+      console.log('[Tab Focus Button] Found highlight:', highlight);
+      
       if (highlight) {
+        console.log('[Tab Focus Button] Scrolling to highlight and pulsating');
+        
         highlight.scrollIntoView({
           behavior: 'smooth',
           block: 'center'
         });
+        
+        // Determine pulsate color based on text type
+        let isGreenPulsate = false;
+        
+        // Check if it's asked text (has green chat icon)
+        const hasChatBtn = highlight.querySelector('.vocab-text-chat-btn');
+        console.log('[Tab Focus Button] Checking for chat button:', hasChatBtn);
+        if (hasChatBtn) {
+          isGreenPulsate = true; // Green pulsate for asked text
+          console.log('[Tab Focus Button] Detected asked text - using green pulsate');
+        }
+        
+        // Check if it's explained text (has green dashed underline)
+        const isSimplified = highlight.classList.contains('vocab-text-simplified');
+        console.log('[Tab Focus Button] Checking for simplified class:', isSimplified);
+        if (isSimplified) {
+          isGreenPulsate = true; // Green pulsate for explained text
+          console.log('[Tab Focus Button] Detected explained text - using green pulsate');
+        }
+        
+        // Additional check: look for asked text in the askedTexts map
+        const isInAskedTexts = TextSelector.askedTexts.has(originalTextKey);
+        console.log('[Tab Focus Button] Checking if text is in askedTexts:', isInAskedTexts);
+        if (isInAskedTexts) {
+          isGreenPulsate = true; // Green pulsate for asked text
+          console.log('[Tab Focus Button] Detected asked text via askedTexts map - using green pulsate');
+        }
+        
+        console.log('[Tab Focus Button] Using green pulsate:', isGreenPulsate);
+        
         setTimeout(() => {
-          TextSelector.pulsateText(highlight, true);
+          TextSelector.pulsateText(highlight, isGreenPulsate);
+          console.log('[Tab Focus Button] Pulsate animation triggered');
         }, 500);
+      } else {
+        console.log('[Tab Focus Button] No highlight found for textKey:', originalTextKey);
+        console.log('[Tab Focus Button] Available textToHighlights keys:', Array.from(TextSelector.textToHighlights.keys()));
       }
     });
     
@@ -4552,6 +4767,39 @@ const ChatDialog = {
         <path d="M12.5 15L7.5 10L12.5 5" stroke="#9527F5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
       </svg>
     `;
+  },
+  
+  /**
+   * Calculate common text length between two strings for fuzzy matching
+   * @param {string} text1 - First text string
+   * @param {string} text2 - Second text string
+   * @returns {number} Length of common text
+   */
+  calculateCommonTextLength(text1, text2) {
+    // Remove common suffixes that might differ (like coordinates)
+    const cleanText1 = text1.replace(/-\d+-\d+$/, '').trim();
+    const cleanText2 = text2.replace(/-\d+-\d+$/, '').trim();
+    
+    // Find the longest common substring
+    let maxLength = 0;
+    const len1 = cleanText1.length;
+    const len2 = cleanText2.length;
+    
+    // Use dynamic programming to find longest common substring
+    const dp = Array(len1 + 1).fill().map(() => Array(len2 + 1).fill(0));
+    
+    for (let i = 1; i <= len1; i++) {
+      for (let j = 1; j <= len2; j++) {
+        if (cleanText1[i - 1] === cleanText2[j - 1]) {
+          dp[i][j] = dp[i - 1][j - 1] + 1;
+          maxLength = Math.max(maxLength, dp[i][j]);
+        } else {
+          dp[i][j] = 0;
+        }
+      }
+    }
+    
+    return maxLength;
   },
   
   /**
