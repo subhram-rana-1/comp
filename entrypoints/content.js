@@ -2818,8 +2818,19 @@ const ChatDialog = {
    * @param {Object} simplifiedData - Simplified text data (for simplified mode)
    */
   open(text, textKey, mode = 'ask', simplifiedData = null) {
+    console.log('[ChatDialog] ===== OPEN FUNCTION CALLED =====');
+    console.log('[ChatDialog] open() called with:', {
+      textLength: text ? text.length : 0,
+      textKey: textKey,
+      mode: mode,
+      isOpen: this.isOpen,
+      currentTextKey: this.currentTextKey
+    });
+    console.log('[ChatDialog] ChatHistories Map contents:', Array.from(this.chatHistories.keys()));
+    
     // If dialog is already open for the same text
     if (this.isOpen && this.currentTextKey === textKey) {
+      console.log('[ChatDialog] Dialog already open for same textKey:', textKey);
       // If opening in simplified mode and already open for same text
       if (mode === 'simplified') {
         // Do nothing - popup is already open for this text
@@ -2828,6 +2839,7 @@ const ChatDialog = {
       }
       // If opening in 'ask' mode, just switch to ask tab
       else {
+        console.log('[ChatDialog] Switching to ask tab');
         this.switchTab('ask');
       }
       return; // Don't re-create the dialog
@@ -2835,13 +2847,16 @@ const ChatDialog = {
     
     // If dialog is open for different text, close it first
     if (this.isOpen) {
+      console.log('[ChatDialog] Dialog open for different text, closing first');
       this.close();
-      // Wait for close animation to complete
+      // Wait for close animation to complete and ensure cleanup
       setTimeout(() => {
+        console.log('[ChatDialog] Opening dialog after close delay');
         this.openDialog(text, textKey, mode, simplifiedData);
-      }, 350);
+      }, 400); // Increased delay to ensure proper cleanup
     } else {
       // Dialog is not open, open it
+      console.log('[ChatDialog] Dialog not open, opening directly');
       this.openDialog(text, textKey, mode, simplifiedData);
     }
   },
@@ -2854,16 +2869,28 @@ const ChatDialog = {
    * @param {Object} simplifiedData - Simplified text data (for simplified mode)
    */
   openDialog(text, textKey, mode = 'ask', simplifiedData = null) {
+    console.log('[ChatDialog] ===== OPEN DIALOG FUNCTION CALLED =====');
+    console.log('[ChatDialog] openDialog() called with:', {
+      textLength: text ? text.length : 0,
+      textKey: textKey,
+      mode: mode,
+      hasSimplifiedData: !!simplifiedData
+    });
+    
     this.currentText = text;
     this.currentTextKey = textKey;
     
     // Load existing chat history for this text, or create new empty array
     this.chatHistory = this.chatHistories.get(textKey) || [];
+    console.log('[ChatDialog] Loaded chat history:', this.chatHistory.length, 'messages');
+    console.log('[ChatDialog] Chat history for textKey', textKey, ':', this.chatHistory);
     
     this.mode = mode;
     this.simplifiedData = simplifiedData;
     
+    console.log('[ChatDialog] Creating dialog...');
     this.createDialog();
+    console.log('[ChatDialog] Showing dialog...');
     this.show();
     
     // Hide Focus buttons for custom content (pdf, text, topics, image)
@@ -2902,7 +2929,13 @@ const ChatDialog = {
    * Close chat dialog
    */
   close() {
-    if (!this.isOpen) return;
+    console.log('[ChatDialog] ===== CLOSE FUNCTION CALLED =====');
+    console.log('[ChatDialog] Current state - isOpen:', this.isOpen, 'currentTextKey:', this.currentTextKey);
+    
+    if (!this.isOpen) {
+      console.log('[ChatDialog] Dialog not open, nothing to close');
+      return;
+    }
     
     // Save chat history before closing
     if (this.currentTextKey && this.chatHistory.length > 0) {
@@ -2910,22 +2943,25 @@ const ChatDialog = {
       console.log('[ChatDialog] Saved', this.chatHistory.length, 'chat messages for', this.currentTextKey);
     }
     
+    console.log('[ChatDialog] Hiding dialog...');
     this.hide();
     
     // Keep the chat icon on the text (don't remove it)
     // The text should remain in askedTexts container
     
     setTimeout(() => {
+      console.log('[ChatDialog] Removing dialog container...');
       if (this.dialogContainer) {
         this.dialogContainer.remove();
         this.dialogContainer = null;
+        console.log('[ChatDialog] Dialog container removed');
       }
+      // Reset state
+      this.isOpen = false;
+      this.currentText = null;
+      this.currentTextKey = null;
+      console.log('[ChatDialog] Dialog state reset');
     }, 300); // Wait for slide-out animation
-    
-    this.isOpen = false;
-    this.currentText = null;
-    this.currentTextKey = null;
-    this.chatHistory = [];
     
     console.log('[ChatDialog] Closed');
   },
@@ -2934,10 +2970,15 @@ const ChatDialog = {
    * Create dialog DOM structure
    */
   createDialog() {
+    console.log('[ChatDialog] ===== CREATE DIALOG FUNCTION CALLED =====');
+    console.log('[ChatDialog] Creating dialog container...');
+    
     // Create main container
     this.dialogContainer = document.createElement('div');
     this.dialogContainer.id = 'vocab-chat-dialog';
     this.dialogContainer.className = 'vocab-chat-dialog';
+    
+    console.log('[ChatDialog] Dialog container created:', this.dialogContainer.id);
     
     // Create dialog content
     const dialogContent = document.createElement('div');
@@ -3010,6 +3051,7 @@ const ChatDialog = {
     this.dialogContainer.appendChild(resizeHandles.bottomLeft);
     
     document.body.appendChild(this.dialogContainer);
+    console.log('[ChatDialog] Dialog container appended to body');
     
     // Initialize resize functionality
     this.initResize();
@@ -3479,6 +3521,7 @@ const ChatDialog = {
    * Create input area
    */
   createInputArea() {
+    console.log('[ChatDialog] ===== CREATE INPUT AREA FUNCTION CALLED =====');
     const inputArea = document.createElement('div');
     inputArea.className = 'vocab-chat-input-area';
     
@@ -3487,6 +3530,8 @@ const ChatDialog = {
     inputField.id = 'vocab-chat-input';
     inputField.placeholder = 'Type your question here ...';
     inputField.rows = 1;
+    
+    console.log('[ChatDialog] Input field created with ID:', inputField.id);
     
     // Auto-resize textarea with scroll when max height reached
     inputField.addEventListener('input', (e) => {
@@ -3505,7 +3550,10 @@ const ChatDialog = {
     
     // Handle Enter key (Shift+Enter for new line)
     inputField.addEventListener('keydown', (e) => {
+      console.log('[ChatDialog] ===== KEYDOWN EVENT =====');
+      console.log('[ChatDialog] Key pressed:', e.key, 'Shift:', e.shiftKey);
       if (e.key === 'Enter' && !e.shiftKey) {
+        console.log('[ChatDialog] Enter key pressed, calling sendMessage()');
         e.preventDefault();
         this.sendMessage();
       }
@@ -3516,7 +3564,11 @@ const ChatDialog = {
     sendBtn.className = 'vocab-chat-send-btn';
     sendBtn.setAttribute('aria-label', 'Send message');
     sendBtn.innerHTML = this.createSendIcon();
-    sendBtn.addEventListener('click', () => this.sendMessage());
+    sendBtn.addEventListener('click', () => {
+      console.log('[ChatDialog] ===== SEND BUTTON CLICKED =====');
+      console.log('[ChatDialog] Send button clicked, calling sendMessage()');
+      this.sendMessage();
+    });
     
     // Create delete button (same size as send button)
     const deleteBtn = document.createElement('button');
@@ -3531,6 +3583,9 @@ const ChatDialog = {
     inputArea.appendChild(inputField);
     inputArea.appendChild(sendBtn);
     inputArea.appendChild(deleteBtn);
+    
+    console.log('[ChatDialog] Input area assembled with input field, send button, and delete button');
+    console.log('[ChatDialog] Input field in DOM:', !!document.getElementById('vocab-chat-input'));
     
     return inputArea;
   },
@@ -3570,10 +3625,25 @@ const ChatDialog = {
    * Send message in chat
    */
   async sendMessage() {
+    console.log('[ChatDialog] ===== SEND MESSAGE FUNCTION CALLED =====');
     const inputField = document.getElementById('vocab-chat-input');
-    const message = inputField.value.trim();
+    console.log('[ChatDialog] Input field found:', !!inputField);
     
-    if (!message) return;
+    if (!inputField) {
+      console.log('[ChatDialog] ERROR: Input field not found!');
+      return;
+    }
+    
+    const message = inputField.value.trim();
+    console.log('[ChatDialog] Message to send:', message);
+    
+    if (!message) {
+      console.log('[ChatDialog] Empty message, returning');
+      return;
+    }
+    
+    console.log('[ChatDialog] Current textKey:', this.currentTextKey);
+    console.log('[ChatDialog] Current mode:', this.mode);
     
     // Auto-switch to chat tab if on original text tab
     this.switchTab('ask');
@@ -3640,12 +3710,7 @@ const ChatDialog = {
           // Get the chat history for the original textKey
           const originalChatHistory = this.chatHistories.get(requestTextKey) || [];
           
-          // Add the user message and AI response to the original chat history
-          originalChatHistory.push({
-            type: 'user',
-            message: message,
-            timestamp: new Date().toISOString()
-          });
+          // Only add the AI response (user message was already added when request was made)
           originalChatHistory.push({
             type: 'ai',
             message: aiResponse,
@@ -3655,10 +3720,7 @@ const ChatDialog = {
           // Update the stored chat history
           this.chatHistories.set(requestTextKey, originalChatHistory);
           
-          // If the original chat is currently open, update its display
-          if (this.isOpen && this.currentTextKey === requestTextKey) {
-            this.addMessageToChat('ai', aiResponse);
-          }
+          console.log('[ChatDialog] Added AI response to original chat history for textKey:', requestTextKey);
         }
       } else {
         // Handle error case - check if we're still in the same chat
@@ -3667,17 +3729,16 @@ const ChatDialog = {
         } else {
           // Add error to the original chat history
           const originalChatHistory = this.chatHistories.get(requestTextKey) || [];
-          originalChatHistory.push({
-            type: 'user',
-            message: message,
-            timestamp: new Date().toISOString()
-          });
+          
+          // Only add the error response (user message was already added when request was made)
           originalChatHistory.push({
             type: 'ai',
             message: `⚠️ **Error:**\n\n${response.error}`,
             timestamp: new Date().toISOString()
           });
+          
           this.chatHistories.set(requestTextKey, originalChatHistory);
+          console.log('[ChatDialog] Added error response to original chat history for textKey:', requestTextKey);
         }
       }
     } catch (error) {
@@ -3690,17 +3751,16 @@ const ChatDialog = {
       } else {
         // Add error to the original chat history
         const originalChatHistory = this.chatHistories.get(requestTextKey) || [];
-        originalChatHistory.push({
-          type: 'user',
-          message: message,
-          timestamp: new Date().toISOString()
-        });
+        
+        // Only add the error response (user message was already added when request was made)
         originalChatHistory.push({
           type: 'ai',
           message: `Error: Failed to get response from server`,
           timestamp: new Date().toISOString()
         });
+        
         this.chatHistories.set(requestTextKey, originalChatHistory);
+        console.log('[ChatDialog] Added error response to original chat history for textKey:', requestTextKey);
       }
     }
     
@@ -3908,11 +3968,18 @@ const ChatDialog = {
    * Show dialog
    */
   show() {
+    console.log('[ChatDialog] ===== SHOW FUNCTION CALLED =====');
+    console.log('[ChatDialog] Dialog container exists:', !!this.dialogContainer);
     if (this.dialogContainer) {
+      console.log('[ChatDialog] Setting isOpen to true');
       this.isOpen = true;
       setTimeout(() => {
+        console.log('[ChatDialog] Adding visible class to dialog');
         this.dialogContainer.classList.add('visible');
+        console.log('[ChatDialog] Dialog should now be visible');
       }, 10);
+    } else {
+      console.log('[ChatDialog] ERROR: Dialog container not found!');
     }
   },
   
@@ -3920,8 +3987,14 @@ const ChatDialog = {
    * Hide dialog
    */
   hide() {
+    console.log('[ChatDialog] ===== HIDE FUNCTION CALLED =====');
+    console.log('[ChatDialog] Dialog container exists:', !!this.dialogContainer);
     if (this.dialogContainer) {
+      console.log('[ChatDialog] Removing visible class from dialog');
       this.dialogContainer.classList.remove('visible');
+      console.log('[ChatDialog] Dialog should now be hidden');
+    } else {
+      console.log('[ChatDialog] ERROR: Dialog container not found for hiding!');
     }
   },
   
@@ -10203,8 +10276,8 @@ const ButtonPanel = {
 
     console.log('[ButtonPanel] Text content created successfully');
     
-    // Show modal with only text contents
-    this.showCustomContentModalWithContents('text');
+    // Show modal with only text contents, and switch to the new tab
+    this.showCustomContentModalWithContents('text', newContent.tabId);
     
     // Ensure custom content modal is visible
     console.log('[ButtonPanel] Ensuring custom content modal is visible...');
@@ -10573,8 +10646,8 @@ const ButtonPanel = {
 
     console.log('[ButtonPanel] PDF content created successfully');
     
-    // Show modal with only PDF contents
-    this.showCustomContentModalWithContents('pdf');
+    // Show modal with only PDF contents, and switch to the new tab
+    this.showCustomContentModalWithContents('pdf', newContent.tabId);
     
     // Ensure custom content modal is visible
     console.log('[ButtonPanel] Ensuring custom content modal is visible...');
@@ -11552,8 +11625,8 @@ const ButtonPanel = {
       return;
     }
     
-    // Show modal with only the specified content type
-    this.showCustomContentModalWithContents(contentType);
+    // Show modal with only the specified content type, and switch to the new tab
+    this.showCustomContentModalWithContents(contentType, newContent.tabId);
     
     // Show the modal with a slight delay for smooth transition
     setTimeout(() => {
@@ -11931,8 +12004,8 @@ const ButtonPanel = {
     
     console.log('[ButtonPanel] New content created successfully');
     
-    // Show modal with only image contents
-    this.showCustomContentModalWithContents('image');
+    // Show modal with only image contents, and switch to the new tab
+    this.showCustomContentModalWithContents('image', newContent.tabId);
     
     // Ensure custom content modal is visible
     if (!this.topicsModal.customContentModal.overlay.classList.contains('visible')) {
@@ -12463,11 +12536,14 @@ const ButtonPanel = {
     
     // Add click handler for chat icon
     chatIcon.addEventListener('click', () => {
+      console.log('[ButtonPanel] ===== CHAT ICON CLICKED =====');
+      console.log('[ButtonPanel] Chat icon clicked, calling openChatForCurrentContent()');
       this.openChatForCurrentContent();
     });
     
     // Store chat icon reference for later appending to modal
     this.topicsModal.customContentModal.chatIcon = chatIcon;
+    console.log('[ButtonPanel] Chat icon created and stored:', !!chatIcon);
     
     // Function to check and update scrollbar visibility
     const updateScrollbarVisibility = () => {
@@ -12497,7 +12573,9 @@ const ButtonPanel = {
     modal.appendChild(resizeHandles);
     
     // Add chat icon to modal (positioned relative to modal, not editor content)
+    console.log('[ButtonPanel] Appending chat icon to modal:', !!this.topicsModal.customContentModal.chatIcon);
     modal.appendChild(this.topicsModal.customContentModal.chatIcon);
+    console.log('[ButtonPanel] Chat icon appended to modal successfully');
     
     overlay.appendChild(modal);
     
@@ -12777,8 +12855,9 @@ const ButtonPanel = {
   /**
    * Show custom content modal with contents of specific type
    */
-  showCustomContentModalWithContents(contentType) {
+  showCustomContentModalWithContents(contentType, activeTabId = null) {
     console.log('[ButtonPanel] Showing custom content modal with', contentType, 'contents');
+    console.log('[ButtonPanel] Active tab ID to switch to:', activeTabId);
     
     // Create modal if it doesn't exist
     if (!this.topicsModal.customContentModal.overlay) {
@@ -12810,9 +12889,23 @@ const ButtonPanel = {
       this.renderTab(tab);
     });
     
-    // Switch to the first tab if available
+    // Switch to the specified tab or first tab if available
     if (contents.length > 0) {
-      this.switchToTab(contents[0].tabId.toString());
+      if (activeTabId) {
+        // Switch to the specified tab if it exists
+        const targetContent = contents.find(content => content.tabId === activeTabId);
+        if (targetContent) {
+          console.log('[ButtonPanel] Switching to specified tab:', activeTabId);
+          this.switchToTab(targetContent.tabId.toString());
+        } else {
+          console.log('[ButtonPanel] Specified tab not found, switching to first tab');
+          this.switchToTab(contents[0].tabId.toString());
+        }
+      } else {
+        // Switch to the first tab if no specific tab is specified
+        console.log('[ButtonPanel] No specific tab specified, switching to first tab');
+        this.switchToTab(contents[0].tabId.toString());
+      }
     }
     
     // Show the modal
@@ -13410,22 +13503,31 @@ const ButtonPanel = {
    * Open chat dialog for current content tab
    */
   openChatForCurrentContent() {
+    console.log('[ButtonPanel] ===== OPENING CHAT FOR CURRENT CONTENT =====');
     console.log('[ButtonPanel] Opening chat for current content');
     
     // Get the currently active tab content
     const activeTabId = this.topicsModal.customContentModal.activeTabId;
+    console.log('[ButtonPanel] Active tab ID:', activeTabId);
     if (!activeTabId) {
-      console.log('[ButtonPanel] No active tab found');
+      console.log('[ButtonPanel] ERROR: No active tab found');
       return;
     }
     
     const activeContent = this.topicsModal.customContentModal.getContentByTabId(parseInt(activeTabId));
+    console.log('[ButtonPanel] Active content found:', !!activeContent);
     if (!activeContent) {
-      console.log('[ButtonPanel] No active content found');
+      console.log('[ButtonPanel] ERROR: No active content found for tabId:', activeTabId);
       return;
     }
     
-    console.log('[ButtonPanel] Active content:', activeContent);
+    console.log('[ButtonPanel] Active content details:', {
+      tabId: activeContent.tabId,
+      tabName: activeContent.tabName,
+      contentType: activeContent.contentType,
+      hasAnalysis: !!activeContent.analysis,
+      chatsCount: activeContent.analysis?.chats?.length || 0
+    });
     
     // Get the text content from the editor
     const editorContent = this.topicsModal.customContentModal.modal.querySelector('.vocab-custom-content-editor-content');
@@ -13443,11 +13545,63 @@ const ButtonPanel = {
     
     console.log('[ButtonPanel] Text content:', textContent.substring(0, 100) + '...');
     
-    // Generate a unique textKey for this content
-    const textKey = `custom-content-${activeTabId}-${Date.now()}`;
+    // Generate a consistent textKey for this content tab (without timestamp)
+    const textKey = `custom-content-${activeTabId}`;
+    
+    // Check if chat dialog is already open for this tab
+    if (ChatDialog.isOpen && ChatDialog.currentTextKey === textKey) {
+      console.log('[ButtonPanel] Chat already open for this tab, closing it');
+      ChatDialog.close();
+      return;
+    }
+    
+    // Check if there's existing chat history for this tab
+    let existingChatHistory = null;
+    if (activeContent.analysis && activeContent.analysis.chats) {
+      // Find chat history for this tab - look for any chat history (regardless of textKey format)
+      existingChatHistory = activeContent.analysis.chats.find(chat => 
+        chat.messages && chat.messages.length > 0
+      );
+      
+      // If found, update the textKey to match the current tab
+      if (existingChatHistory) {
+        existingChatHistory.textKey = textKey; // Update to current tab's textKey
+        console.log('[ButtonPanel] Updated chat history textKey to:', textKey);
+      }
+    }
+    
+    console.log('[ButtonPanel] Existing chat history found:', existingChatHistory ? existingChatHistory.messages.length : 0, 'messages');
     
     // Open the chat dialog with the current content as initial context
+    console.log('[ButtonPanel] Calling ChatDialog.open with:', {
+      textContentLength: textContent.length,
+      textKey: textKey,
+      mode: 'ask'
+    });
     ChatDialog.open(textContent, textKey, 'ask');
+    console.log('[ButtonPanel] ChatDialog.open called successfully');
+    
+    // If there's existing chat history, restore it to the ChatDialog
+    if (existingChatHistory && existingChatHistory.messages.length > 0) {
+      console.log('[ButtonPanel] Restoring chat history for textKey:', textKey);
+      ChatDialog.chatHistories.set(textKey, existingChatHistory.messages);
+      ChatDialog.chatHistory = [...existingChatHistory.messages];
+      
+      // Re-render the chat messages
+      setTimeout(() => {
+        ChatDialog.renderChatMessages();
+      }, 100);
+    } else {
+      // No existing chat history - clear any previous chat history and start fresh
+      console.log('[ButtonPanel] No existing chat history, clearing previous chat history and starting fresh');
+      ChatDialog.chatHistories.clear(); // Clear all previous chat histories
+      ChatDialog.chatHistory = []; // Clear current chat history
+      
+      // Re-render the chat messages to show empty state
+      setTimeout(() => {
+        ChatDialog.renderChatMessages();
+      }, 100);
+    }
     
     // Auto-focus the question input after chat dialog opens
     setTimeout(() => {
@@ -13477,14 +13631,21 @@ const ButtonPanel = {
   handleChatPopupOnTabSwitch(tabId) {
     console.log('[ButtonPanel] Handling chat popup for tab switch to:', tabId);
     
-    // Save current chat history to analysis data before closing
+    // Get the PREVIOUS tab ID (the one we're leaving)
+    const previousTabId = this.topicsModal.customContentModal.activeTabId;
+    console.log('[ButtonPanel] Previous tab ID:', previousTabId);
+    
+    // Save current chat history to analysis data before closing (for the tab where chat was opened)
     if (ChatDialog.isOpen && ChatDialog.currentTextKey && ChatDialog.chatHistory.length > 0) {
-      console.log('[ButtonPanel] Saving current chat history before switching tabs');
+      // Extract the tab ID from the currentTextKey (format: custom-content-${tabId})
+      const chatTabId = ChatDialog.currentTextKey.replace('custom-content-', '');
+      console.log('[ButtonPanel] Saving current chat history for chat tab:', chatTabId);
+      console.log('[ButtonPanel] Chat was opened for tab:', chatTabId, 'but switching to tab:', tabId);
       
-      // Get the current active content to save chat history
-      const currentActiveContent = this.topicsModal.customContentModal.getContentByTabId(parseInt(this.topicsModal.customContentModal.activeTabId));
-      if (currentActiveContent && currentActiveContent.analysis) {
-        const existingChatIndex = currentActiveContent.analysis.chats.findIndex(c =>
+      // Get the content for the tab where the chat was originally opened
+      const chatActiveContent = this.topicsModal.customContentModal.getContentByTabId(parseInt(chatTabId));
+      if (chatActiveContent && chatActiveContent.analysis) {
+        const existingChatIndex = chatActiveContent.analysis.chats.findIndex(c =>
           c.textKey === ChatDialog.currentTextKey
         );
 
@@ -13496,11 +13657,11 @@ const ButtonPanel = {
         };
 
         if (existingChatIndex !== -1) {
-          currentActiveContent.analysis.chats[existingChatIndex] = chatData;
-          console.log(`[ButtonPanel] Updated existing chat for textKey "${ChatDialog.currentTextKey}" in analysis data`);
+          chatActiveContent.analysis.chats[existingChatIndex] = chatData;
+          console.log(`[ButtonPanel] Updated existing chat for textKey "${ChatDialog.currentTextKey}" in analysis data for tab ${chatTabId}`);
         } else {
-          currentActiveContent.analysis.chats.push(chatData);
-          console.log(`[ButtonPanel] Added new chat for textKey "${ChatDialog.currentTextKey}" to analysis data`);
+          chatActiveContent.analysis.chats.push(chatData);
+          console.log(`[ButtonPanel] Added new chat for textKey "${ChatDialog.currentTextKey}" to analysis data for tab ${chatTabId}`);
         }
       }
     }
@@ -13511,57 +13672,10 @@ const ButtonPanel = {
       ChatDialog.close();
     }
     
-    // Check if the new tab has chat history
-    const activeContent = this.topicsModal.customContentModal.getContentByTabId(parseInt(tabId));
-    if (!activeContent || !activeContent.analysis || !activeContent.analysis.chats) {
-      console.log('[ButtonPanel] No chat history found for tab:', tabId);
-      return;
-    }
-    
-    // Find chat history for this tab
-    const chatHistory = activeContent.analysis.chats.find(chat => 
-      chat.textKey && chat.messages && chat.messages.length > 0
-    );
-    
-    if (chatHistory && chatHistory.messages.length > 0) {
-      console.log('[ButtonPanel] Found non-empty chat history for tab:', tabId, 'with', chatHistory.messages.length, 'messages');
-      
-      // Restore chat history to ChatDialog
-      ChatDialog.chatHistories.set(chatHistory.textKey, chatHistory.messages);
-      
-      // Get the text content from the editor
-      const editorContent = this.topicsModal.customContentModal.modal.querySelector('.vocab-custom-content-editor-content');
-      if (editorContent) {
-        const textContent = editorContent.textContent || editorContent.innerText;
-        if (textContent && textContent.trim().length > 0) {
-          // Open chat dialog with restored history
-          ChatDialog.open(textContent, chatHistory.textKey, 'ask');
-          
-          // Auto-focus the question input after chat dialog opens
-          setTimeout(() => {
-            const questionInput = document.querySelector('.vocab-chat-input');
-            if (questionInput) {
-              questionInput.focus();
-              console.log('[ButtonPanel] Auto-focused question input for restored chat');
-            } else {
-              // Try again with a longer delay if element not found
-              setTimeout(() => {
-                const questionInput = document.querySelector('.vocab-chat-input');
-                if (questionInput) {
-                  questionInput.focus();
-                  console.log('[ButtonPanel] Auto-focused question input for restored chat (retry)');
-                }
-              }, 200);
-            }
-          }, 200);
-          
-          console.log('[ButtonPanel] Restored chat popup for tab:', tabId);
-        }
-      }
-    } else {
-      console.log('[ButtonPanel] No chat history or empty chat history found for tab:', tabId, '- not auto-opening chat');
-    }
+    // NO AUTO-OPENING - just track chat history per tab in memory
+    console.log('[ButtonPanel] Chat history saved, no auto-opening chat popup');
   },
+
 
   /**
    * Replace text in an element with a new element
