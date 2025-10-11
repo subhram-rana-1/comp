@@ -5457,6 +5457,49 @@ const ChatDialog = {
         visibility: visible;
       }
 
+      /* Hide webpage icons when custom content modal is visible - exclude icons within the modal */
+      body.vocab-custom-content-modal-open .vocab-word-remove-explained-btn {
+        opacity: 0 !important;
+        visibility: hidden !important;
+        pointer-events: none !important;
+        transition: opacity 0.2s ease, visibility 0.2s ease;
+      }
+      
+      body.vocab-custom-content-modal-open .vocab-text-book-btn {
+        opacity: 0 !important;
+        visibility: hidden !important;
+        pointer-events: none !important;
+        transition: opacity 0.2s ease, visibility 0.2s ease;
+      }
+      
+      body.vocab-custom-content-modal-open .vocab-text-remove-btn {
+        opacity: 0 !important;
+        visibility: hidden !important;
+        pointer-events: none !important;
+        transition: opacity 0.2s ease, visibility 0.2s ease;
+      }
+      
+      body.vocab-custom-content-modal-open .vocab-text-chat-btn {
+        opacity: 0 !important;
+        visibility: hidden !important;
+        pointer-events: none !important;
+        transition: opacity 0.2s ease, visibility 0.2s ease;
+      }
+
+      /* Override with higher specificity: Ensure icons within the custom content modal remain visible and functional */
+      body.vocab-custom-content-modal-open .vocab-custom-content-overlay .vocab-word-remove-explained-btn,
+      body.vocab-custom-content-modal-open .vocab-custom-content-overlay .vocab-text-book-btn,
+      body.vocab-custom-content-modal-open .vocab-custom-content-overlay .vocab-text-remove-btn,
+      body.vocab-custom-content-modal-open .vocab-custom-content-overlay .vocab-text-chat-btn,
+      body.vocab-custom-content-modal-open .vocab-custom-content-overlay * .vocab-word-remove-explained-btn,
+      body.vocab-custom-content-modal-open .vocab-custom-content-overlay * .vocab-text-book-btn,
+      body.vocab-custom-content-modal-open .vocab-custom-content-overlay * .vocab-text-remove-btn,
+      body.vocab-custom-content-modal-open .vocab-custom-content-overlay * .vocab-text-chat-btn {
+        opacity: 1 !important;
+        visibility: visible !important;
+        pointer-events: auto !important;
+      }
+
       @keyframes overlayFadeIn {
         from {
           opacity: 0;
@@ -10652,6 +10695,10 @@ const ButtonPanel = {
     console.log('[ButtonPanel] Ensuring custom content modal is visible...');
     if (!this.topicsModal.customContentModal.overlay.classList.contains('visible')) {
       this.topicsModal.customContentModal.overlay.classList.add('visible');
+      
+      // Add class to body to hide webpage icons
+      document.body.classList.add('vocab-custom-content-modal-open');
+      
       console.log('[ButtonPanel] Custom content modal is now visible');
     } else {
       console.log('[ButtonPanel] Custom content modal was already visible');
@@ -11022,6 +11069,10 @@ const ButtonPanel = {
     console.log('[ButtonPanel] Ensuring custom content modal is visible...');
     if (!this.topicsModal.customContentModal.overlay.classList.contains('visible')) {
       this.topicsModal.customContentModal.overlay.classList.add('visible');
+      
+      // Add class to body to hide webpage icons
+      document.body.classList.add('vocab-custom-content-modal-open');
+      
       console.log('[ButtonPanel] Custom content modal is now visible');
     } else {
       console.log('[ButtonPanel] Custom content modal was already visible');
@@ -12044,6 +12095,9 @@ const ButtonPanel = {
     setTimeout(() => {
       this.topicsModal.customContentModal.overlay.classList.add('visible');
       
+      // Add class to body to hide webpage icons
+      document.body.classList.add('vocab-custom-content-modal-open');
+      
       // Update button visibility after modal is shown
       setTimeout(() => {
         this.updateVerticalButtonVisibility();
@@ -12109,6 +12163,10 @@ const ButtonPanel = {
     if (this.topicsModal.customContentModal.overlay) {
       console.log('[ButtonPanel] Overlay classes before removal:', this.topicsModal.customContentModal.overlay.classList.toString());
       this.topicsModal.customContentModal.overlay.classList.remove('visible');
+      
+      // Remove class from body to show webpage icons again
+      document.body.classList.remove('vocab-custom-content-modal-open');
+      
       console.log('[ButtonPanel] Overlay classes after removal:', this.topicsModal.customContentModal.overlay.classList.toString());
       console.log('[ButtonPanel] Overlay is now visible:', this.topicsModal.customContentModal.overlay.classList.contains('visible'));
     }
@@ -12427,6 +12485,9 @@ const ButtonPanel = {
     // Ensure custom content modal is visible
     if (!this.topicsModal.customContentModal.overlay.classList.contains('visible')) {
       this.topicsModal.customContentModal.overlay.classList.add('visible');
+      
+      // Add class to body to hide webpage icons
+      document.body.classList.add('vocab-custom-content-modal-open');
     }
     
     // Update modal title
@@ -13341,6 +13402,9 @@ const ButtonPanel = {
     // Show the modal
     setTimeout(() => {
       this.topicsModal.customContentModal.overlay.classList.add('visible');
+      
+      // Add class to body to hide webpage icons
+      document.body.classList.add('vocab-custom-content-modal-open');
     }, 100);
   },
 
@@ -13400,6 +13464,9 @@ const ButtonPanel = {
     // Show the modal
     setTimeout(() => {
       this.topicsModal.customContentModal.overlay.classList.add('visible');
+      
+      // Add class to body to hide webpage icons
+      document.body.classList.add('vocab-custom-content-modal-open');
     }, 100);
   },
 
