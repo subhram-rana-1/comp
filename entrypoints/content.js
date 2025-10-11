@@ -3049,6 +3049,7 @@ const ChatDialog = {
     this.dialogContainer.appendChild(resizeHandles.left);
     this.dialogContainer.appendChild(resizeHandles.bottom);
     this.dialogContainer.appendChild(resizeHandles.bottomLeft);
+    this.dialogContainer.appendChild(resizeHandles.topLeft);
     
     document.body.appendChild(this.dialogContainer);
     console.log('[ChatDialog] Dialog container appended to body');
@@ -3070,10 +3071,14 @@ const ChatDialog = {
     const bottomLeftHandle = document.createElement('div');
     bottomLeftHandle.className = 'vocab-chat-resize-handle vocab-chat-resize-bottom-left';
     
+    const topLeftHandle = document.createElement('div');
+    topLeftHandle.className = 'vocab-chat-resize-handle vocab-chat-resize-top-left';
+    
     return {
       left: leftHandle,
       bottom: bottomHandle,
-      bottomLeft: bottomLeftHandle
+      bottomLeft: bottomLeftHandle,
+      topLeft: topLeftHandle
     };
   },
   
@@ -3108,13 +3113,18 @@ const ChatDialog = {
       const deltaX = startX - e.clientX; // Inverted for right-side panel
       const deltaY = e.clientY - startY;
       
-      if (resizeType === 'left' || resizeType === 'bottom-left') {
+      if (resizeType === 'left' || resizeType === 'bottom-left' || resizeType === 'top-left') {
         const newWidth = Math.max(300, Math.min(800, startWidth + deltaX));
         this.dialogContainer.style.width = `${newWidth}px`;
       }
       
       if (resizeType === 'bottom' || resizeType === 'bottom-left') {
         const newHeight = Math.max(400, Math.min(window.innerHeight * 0.9, startHeight + deltaY));
+        this.dialogContainer.style.height = `${newHeight}px`;
+      }
+      
+      if (resizeType === 'top-left') {
+        const newHeight = Math.max(400, Math.min(window.innerHeight * 0.9, startHeight - deltaY));
         this.dialogContainer.style.height = `${newHeight}px`;
       }
     };
@@ -3131,10 +3141,12 @@ const ChatDialog = {
     const leftHandle = this.dialogContainer.querySelector('.vocab-chat-resize-left');
     const bottomHandle = this.dialogContainer.querySelector('.vocab-chat-resize-bottom');
     const bottomLeftHandle = this.dialogContainer.querySelector('.vocab-chat-resize-bottom-left');
+    const topLeftHandle = this.dialogContainer.querySelector('.vocab-chat-resize-top-left');
     
     leftHandle.addEventListener('mousedown', (e) => startResize(e, 'left'));
     bottomHandle.addEventListener('mousedown', (e) => startResize(e, 'bottom'));
     bottomLeftHandle.addEventListener('mousedown', (e) => startResize(e, 'bottom-left'));
+    topLeftHandle.addEventListener('mousedown', (e) => startResize(e, 'top-left'));
     
     document.addEventListener('mousemove', resize);
     document.addEventListener('mouseup', stopResize);
@@ -4813,11 +4825,27 @@ const ChatDialog = {
         width: 4px;
         cursor: ew-resize;
         background: transparent;
-        transition: background 0.2s ease;
+        transition: all 0.2s ease;
       }
       
-      .vocab-chat-resize-left:hover {
-        background: rgba(149, 39, 245, 0.3);
+      .vocab-chat-resize-left::before {
+        content: '';
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        transform: translate(-50%, -50%);
+        width: 4px;
+        height: 40px;
+        border-radius: 2px;
+        background: #9527F5;
+        box-shadow: 0 0 8px rgba(149, 39, 245, 0.3);
+        transition: all 0.2s ease;
+      }
+      
+      .vocab-chat-resize-left:hover::before {
+        background: #9527F5;
+        box-shadow: 0 0 12px rgba(149, 39, 245, 0.5);
+        transform: translate(-50%, -50%) scale(1.1);
       }
       
       .vocab-chat-resize-bottom {
@@ -4837,24 +4865,65 @@ const ChatDialog = {
       .vocab-chat-resize-bottom-left {
         left: 0;
         bottom: 0;
-        width: 12px;
-        height: 12px;
+        width: 20px;
+        height: 20px;
         cursor: nesw-resize;
         background: transparent;
-        border-bottom-left-radius: 4px;
       }
       
-      .vocab-chat-resize-bottom-left::after {
+      .vocab-chat-resize-bottom-left::before {
         content: '';
         position: absolute;
-        left: 2px;
-        bottom: 2px;
-        width: 8px;
-        height: 8px;
-        border-left: 2px solid #9527F5;
-        border-bottom: 2px solid #9527F5;
-        opacity: 0.5;
-        border-bottom-left-radius: 2px;
+        left: 50%;
+        top: 50%;
+        transform: translate(-50%, -50%);
+        width: 20px;
+        height: 20px;
+        background: transparent;
+        box-shadow: none;
+        border-bottom: 4px solid #9527F5;
+        border-left: 4px solid #9527F5;
+        border-right: none;
+        border-top: none;
+        border-radius: 0 0 0 20px;
+        transition: all 0.2s ease;
+      }
+      
+      .vocab-chat-resize-bottom-left:hover::before {
+        transform: translate(-50%, -50%) scale(1.1);
+        box-shadow: none;
+      }
+      
+      .vocab-chat-resize-top-left {
+        left: 0;
+        top: 0;
+        width: 20px;
+        height: 20px;
+        cursor: nw-resize;
+        background: transparent;
+      }
+      
+      .vocab-chat-resize-top-left::before {
+        content: '';
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        transform: translate(-50%, -50%);
+        width: 20px;
+        height: 20px;
+        background: transparent;
+        box-shadow: none;
+        border-top: 4px solid #9527F5;
+        border-left: 4px solid #9527F5;
+        border-right: none;
+        border-bottom: none;
+        border-radius: 20px 0 0 0;
+        transition: all 0.2s ease;
+      }
+      
+      .vocab-chat-resize-top-left:hover::before {
+        transform: translate(-50%, -50%) scale(1.1);
+        box-shadow: none;
       }
       
       /* Focus Button Styles */
