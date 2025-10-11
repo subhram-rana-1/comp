@@ -2190,9 +2190,9 @@ const TextSelector = {
         // Use green pulsate if it's a green icon (from askedTexts)
         this.pulsateText(highlight, isGreen);
         
-        // Open chat dialog
+        // Open chat dialog with selected context
         const originalText = highlight.textContent.replace(/\s+/g, ' ').trim();
-        ChatDialog.open(originalText, textKey);
+        ChatDialog.open(originalText, textKey, 'ask', null, 'selected');
       }
     });
     
@@ -2244,8 +2244,8 @@ const TextSelector = {
           this.pulsateText(highlight, true);
         }
         
-        // Open ChatDialog in simplified mode
-        ChatDialog.open(simplifiedData.text, textKey, 'simplified', simplifiedData);
+        // Open ChatDialog in simplified mode with selected context
+        ChatDialog.open(simplifiedData.text, textKey, 'simplified', simplifiedData, 'selected');
       }
     });
     
@@ -2801,6 +2801,7 @@ const ChatDialog = {
   mode: 'ask', // 'ask' or 'simplified'
   simplifiedData: null, // For simplified mode
   isSimplifying: false, // Track if currently simplifying more
+  chatContext: 'general', // 'general' for content chat, 'selected' for selected text chat
   
   /**
    * Initialize chat dialog
@@ -2816,21 +2817,68 @@ const ChatDialog = {
    * @param {string} textKey - The text key for identification
    * @param {string} mode - The dialog mode: 'ask' or 'simplified'
    * @param {Object} simplifiedData - Simplified text data (for simplified mode)
+   * @param {string} chatContext - The chat context: 'general' or 'selected'
    */
-  open(text, textKey, mode = 'ask', simplifiedData = null) {
+  open(text, textKey, mode = 'ask', simplifiedData = null, chatContext = 'general') {
     console.log('[ChatDialog] ===== OPEN FUNCTION CALLED =====');
     console.log('[ChatDialog] open() called with:', {
       textLength: text ? text.length : 0,
       textKey: textKey,
       mode: mode,
+      chatContext: chatContext,
       isOpen: this.isOpen,
       currentTextKey: this.currentTextKey
     });
     console.log('[ChatDialog] ChatHistories Map contents:', Array.from(this.chatHistories.keys()));
     
-    // If dialog is already open for the same text
-    if (this.isOpen && this.currentTextKey === textKey) {
-      console.log('[ChatDialog] Dialog already open for same textKey:', textKey);
+    // Set the chat context
+    this.chatContext = chatContext;
+    
+    // Generate proper contextual textKey based on chat context
+    let contextualTextKey;
+    if (chatContext === 'general') {
+      // For general chat: <content type>-<tab id>-generic
+      // Extract content type and tab ID from textKey
+      const parts = textKey.split('-');
+      if (parts.length >= 3) {
+        const contentType = parts[0]; // e.g., "pdf"
+        const tabId = parts[1]; // e.g., "tabId2"
+        contextualTextKey = `${contentType}-${tabId}-generic`;
+      } else {
+        // Fallback for custom content
+        contextualTextKey = `${textKey}-generic`;
+      }
+    } else if (chatContext === 'selected') {
+      // For selected text chat: <content type>-<tab id>-<start index>-<selected text length>
+      // Extract content type and tab ID from textKey
+      const parts = textKey.split('-');
+      if (parts.length >= 3) {
+        const contentType = parts[0]; // e.g., "pdf"
+        const tabId = parts[1]; // e.g., "tabId2"
+        // For selected text, we need start index and length from simplifiedData or textKey
+        if (simplifiedData && simplifiedData.textStartIndex !== undefined && simplifiedData.textLength !== undefined) {
+          contextualTextKey = `${contentType}-${tabId}-${simplifiedData.textStartIndex}-${simplifiedData.textLength}`;
+        } else if (parts.length >= 5) {
+          // textKey already contains start index and length
+          contextualTextKey = textKey;
+        } else {
+          // Fallback - use simplified format
+          contextualTextKey = `${contentType}-${tabId}-selected`;
+        }
+      } else {
+        // Fallback for custom content
+        contextualTextKey = `${textKey}-selected`;
+      }
+    } else {
+      // Fallback to old format
+      contextualTextKey = `${textKey}-${chatContext}`;
+    }
+    
+    console.log('[ChatDialog] Generated contextualTextKey:', contextualTextKey, 'for chatContext:', chatContext);
+    
+    // If dialog is already open for the same text and context
+    if (this.isOpen && this.currentTextKey === contextualTextKey) {
+      console.log('[ChatDialog] Dialog already open for same textKey and context:', contextualTextKey);
       // If opening in simplified mode and already open for same text
       if (mode === 'simplified') {
         // Do nothing - popup is already open for this text
@@ -2852,38 +2900,43 @@ const ChatDialog = {
       // Wait for close animation to complete and ensure cleanup
       setTimeout(() => {
         console.log('[ChatDialog] Opening dialog after close delay');
-        this.openDialog(text, textKey, mode, simplifiedData);
+        this.openDialog(text, contextualTextKey, mode, simplifiedData);
       }, 400); // Increased delay to ensure proper cleanup
     } else {
       // Dialog is not open, open it
       console.log('[ChatDialog] Dialog not open, opening directly');
-      this.openDialog(text, textKey, mode, simplifiedData);
+      this.openDialog(text, contextualTextKey, mode, simplifiedData);
     }
   },
   
   /**
    * Internal method to open dialog
    * @param {string} text - The selected text
-   * @param {string} textKey - The text key for identification
+   * @param {string} contextualTextKey - The contextual text key for identification
    * @param {string} mode - The dialog mode: 'ask' or 'simplified'
    * @param {Object} simplifiedData - Simplified text data (for simplified mode)
    */
-  openDialog(text, textKey, mode = 'ask', simplifiedData = null) {
+  openDialog(text, contextualTextKey, mode = 'ask', simplifiedData = null) {
     console.log('[ChatDialog] ===== OPEN DIALOG FUNCTION CALLED =====');
     console.log('[ChatDialog] openDialog() called with:', {
       textLength: text ? text.length : 0,
-      textKey: textKey,
+      contextualTextKey: contextualTextKey,
       mode: mode,
       hasSimplifiedData: !!simplifiedData
     });
     
     this.currentText = text;
-    this.currentTextKey = textKey;
+    this.currentTextKey = contextualTextKey;
     
     // Load existing chat history for this text, or create new empty array
-    this.chatHistory = this.chatHistories.get(textKey) || [];
+    console.log('[ChatDialog] ===== LOADING CHAT HISTORY =====');
+    console.log('[ChatDialog] Looking for contextualTextKey:', contextualTextKey);
+    console.log('[ChatDialog] Available keys in chatHistories:', Array.from(this.chatHistories.keys()));
+    console.log('[ChatDialog] ChatHistories Map size:', this.chatHistories.size);
+    
+    this.chatHistory = this.chatHistories.get(contextualTextKey) || [];
     console.log('[ChatDialog] Loaded chat history:', this.chatHistory.length, 'messages');
-    console.log('[ChatDialog] Chat history for textKey', textKey, ':', this.chatHistory);
+    console.log('[ChatDialog] Chat history for contextualTextKey', contextualTextKey, ':', this.chatHistory);
     
     this.mode = mode;
     this.simplifiedData = simplifiedData;
@@ -2941,6 +2994,9 @@ const ChatDialog = {
     if (this.currentTextKey && this.chatHistory.length > 0) {
       this.chatHistories.set(this.currentTextKey, [...this.chatHistory]);
       console.log('[ChatDialog] Saved', this.chatHistory.length, 'chat messages for', this.currentTextKey);
+      
+      // Also save to analysis data for persistence
+      this.saveChatHistoryToAnalysisData();
     }
     
     // Save current dimensions before closing
@@ -3558,13 +3614,17 @@ const ChatDialog = {
         chatContainer.scrollTop = chatContainer.scrollHeight;
       }, 10);
     } else {
-      // Show "Ask anything about the content" message
+      // Show appropriate message based on chat context
+      const promptText = this.chatContext === 'selected' 
+        ? 'Ask doubts on the selected content' 
+        : 'Ask anything about the content';
+      
       const noChatsMsg = document.createElement('div');
       noChatsMsg.className = 'vocab-chat-no-messages';
       noChatsMsg.innerHTML = `
         <div class="vocab-chat-no-messages-content">
           ${this.createChatEmptyIcon()}
-          <span>Ask anything about the content</span>
+          <span>${promptText}</span>
         </div>
       `;
       chatContainer.appendChild(noChatsMsg);
@@ -3573,6 +3633,52 @@ const ChatDialog = {
     content.appendChild(chatContainer);
     
     return content;
+  },
+  
+  /**
+   * Re-render all chat messages in the existing container
+   */
+  renderChatMessages() {
+    console.log('[ChatDialog] Re-rendering chat messages, chatHistory length:', this.chatHistory.length);
+    
+    const chatContainer = document.getElementById('vocab-chat-messages');
+    if (!chatContainer) {
+      console.log('[ChatDialog] Chat container not found, cannot re-render messages');
+      return;
+    }
+    
+    // Clear existing messages
+    chatContainer.innerHTML = '';
+    
+    // If we have existing chat history, render it
+    if (this.chatHistory && this.chatHistory.length > 0) {
+      this.chatHistory.forEach(item => {
+        this.renderChatMessage(chatContainer, item.type, item.message);
+      });
+      
+      // Update delete button visibility and scroll to bottom after rendering
+      setTimeout(() => {
+        this.updateGlobalClearButton();
+        chatContainer.scrollTop = chatContainer.scrollHeight;
+      }, 10);
+    } else {
+      // Show appropriate message based on chat context
+      const promptText = this.chatContext === 'selected' 
+        ? 'Ask doubts on the selected content' 
+        : 'Ask anything about the content';
+      
+      const noChatsMsg = document.createElement('div');
+      noChatsMsg.className = 'vocab-chat-no-messages';
+      noChatsMsg.innerHTML = `
+        <div class="vocab-chat-no-messages-content">
+          ${this.createChatEmptyIcon()}
+          <span>${promptText}</span>
+        </div>
+      `;
+      chatContainer.appendChild(noChatsMsg);
+    }
+    
+    console.log('[ChatDialog] Chat messages re-rendered successfully');
   },
   
   /**
@@ -3893,13 +3999,28 @@ const ChatDialog = {
     
     // Also update the stored chat history for this textKey
     if (this.currentTextKey) {
+      console.log('[ChatDialog] ===== SAVING TO CHATHISTORIES MAP =====');
+      console.log('[ChatDialog] Saving to chatHistories with key:', this.currentTextKey);
+      console.log('[ChatDialog] Messages to save:', this.chatHistory.length);
+      console.log('[ChatDialog] ChatHistories Map before set:', Array.from(this.chatHistories.keys()));
+      
       this.chatHistories.set(this.currentTextKey, [...this.chatHistory]);
+      
+      console.log('[ChatDialog] ChatHistories Map after set:', Array.from(this.chatHistories.keys()));
     }
     
     // Store chat message in analysis data for persistence
     if (this.currentTextKey && window.ButtonPanel && window.ButtonPanel.topicsModal && window.ButtonPanel.topicsModal.customContentModal && window.ButtonPanel.topicsModal.customContentModal.activeTabId) {
       const activeContent = window.ButtonPanel.topicsModal.customContentModal.getContentByTabId(parseInt(window.ButtonPanel.topicsModal.customContentModal.activeTabId));
       if (activeContent && activeContent.analysis) {
+        // Ensure chats array is initialized
+        if (!activeContent.analysis.chats) {
+          activeContent.analysis.chats = [];
+          console.log('[ChatDialog] Initialized chats array in analysis data');
+        }
+        
+        console.log('[ChatDialog] Storing chat message for currentTextKey:', this.currentTextKey, 'ChatContext:', this.chatContext);
+        console.log('[ChatDialog] Available chats in analysis:', activeContent.analysis.chats.map(c => c.textKey));
         // Check if this textKey already exists in chats
         const existingChatIndex = activeContent.analysis.chats.findIndex(c => 
           c.textKey === this.currentTextKey
@@ -3920,8 +4041,12 @@ const ChatDialog = {
           activeContent.analysis.chats.push(chatData);
           console.log(`[ChatDialog] Added new chat for textKey "${this.currentTextKey}" to analysis data`);
         }
+        console.log('[ChatDialog] Final chats in analysis:', activeContent.analysis.chats.map(c => c.textKey));
       }
     }
+    
+    console.log('[ChatDialog] ===== MESSAGE SAVED IMMEDIATELY =====');
+    console.log('[ChatDialog] Message type:', type, 'Total messages:', this.chatHistory.length);
   },
   
   /**
@@ -4013,13 +4138,17 @@ const ChatDialog = {
     const chatContainer = document.getElementById('vocab-chat-messages');
     chatContainer.innerHTML = '';
     
-    // Show "No chats yet" message
+    // Show appropriate message based on chat context
+    const promptText = this.chatContext === 'selected' 
+      ? 'Ask doubts on the selected content' 
+      : 'Ask anything about the content';
+    
     const noChatsMsg = document.createElement('div');
     noChatsMsg.className = 'vocab-chat-no-messages';
     noChatsMsg.innerHTML = `
       <div class="vocab-chat-no-messages-content">
         ${this.createChatEmptyIcon()}
-        <span>Ask anything about the content</span>
+        <span>${promptText}</span>
       </div>
     `;
     chatContainer.appendChild(noChatsMsg);
@@ -6270,6 +6399,53 @@ const ChatDialog = {
     `;
     
     document.head.appendChild(style);
+  },
+  
+  /**
+   * Save chat history to analysis data for persistence
+   */
+  saveChatHistoryToAnalysisData() {
+    if (!this.currentTextKey || !window.ButtonPanel || !window.ButtonPanel.topicsModal || !window.ButtonPanel.topicsModal.customContentModal || !window.ButtonPanel.topicsModal.customContentModal.activeTabId) {
+      console.log('[ChatDialog] Cannot save to analysis data - missing required components');
+      return;
+    }
+    
+    const activeContent = window.ButtonPanel.topicsModal.customContentModal.getContentByTabId(parseInt(window.ButtonPanel.topicsModal.customContentModal.activeTabId));
+    if (!activeContent || !activeContent.analysis) {
+      console.log('[ChatDialog] Cannot save to analysis data - no active content or analysis');
+      return;
+    }
+    
+    // Ensure chats array is initialized
+    if (!activeContent.analysis.chats) {
+      activeContent.analysis.chats = [];
+      console.log('[ChatDialog] Initialized chats array in analysis data (close function)');
+    }
+    
+    // Extract the tab ID from the currentTextKey
+    const chatTabId = this.currentTextKey.replace(/^[^-]+-(\d+)-.*/, '$1');
+    console.log('[ChatDialog] Saving chat history to analysis data for tab:', chatTabId);
+    
+    // Check if this textKey already exists in chats
+    const existingChatIndex = activeContent.analysis.chats.findIndex(c => 
+      c.textKey === this.currentTextKey
+    );
+    
+    const chatData = {
+      textKey: this.currentTextKey,
+      messages: [...this.chatHistory],
+      lastUpdated: new Date().toISOString()
+    };
+    
+    if (existingChatIndex !== -1) {
+      // Update existing chat
+      activeContent.analysis.chats[existingChatIndex] = chatData;
+      console.log(`[ChatDialog] Updated existing chat for textKey "${this.currentTextKey}" in analysis data`);
+    } else {
+      // Add new chat
+      activeContent.analysis.chats.push(chatData);
+      console.log(`[ChatDialog] Added new chat for textKey "${this.currentTextKey}" to analysis data`);
+    }
   }
 };
 // Button Panel Module - Manages the floating button UI
@@ -9746,8 +9922,8 @@ const ButtonPanel = {
       // Move text from selectedTexts to askedTexts
       TextSelector.moveToAskedTexts(textKey);
       
-      // Open chat dialog
-      ChatDialog.open(originalText, textKey);
+      // Open chat dialog with selected context
+      ChatDialog.open(originalText, textKey, 'ask', null, 'selected');
     }
   },
 
@@ -13420,8 +13596,13 @@ const ButtonPanel = {
         activeContent.analysis.chats.forEach(chatData => {
           // Restore chat history in ChatDialog
           if (chatData.messages && chatData.messages.length > 0) {
+            console.log('[ButtonPanel] ===== RESTORING FROM ANALYSIS DATA =====');
+            console.log('[ButtonPanel] Restoring chat history for textKey:', chatData.textKey, 'with', chatData.messages.length, 'messages');
+            console.log('[ButtonPanel] ChatDialog.chatHistories before analysis restore:', Array.from(ChatDialog.chatHistories.keys()));
+            
             ChatDialog.chatHistories.set(chatData.textKey, chatData.messages);
-            console.log('[ButtonPanel] Restored chat history for textKey:', chatData.textKey, 'with', chatData.messages.length, 'messages');
+            
+            console.log('[ButtonPanel] ChatDialog.chatHistories after analysis restore:', Array.from(ChatDialog.chatHistories.keys()));
             console.log('[ButtonPanel] Chat messages:', chatData.messages);
           }
         });
@@ -13685,8 +13866,10 @@ const ButtonPanel = {
     
     console.log('[ButtonPanel] Text content:', textContent.substring(0, 100) + '...');
     
-    // Generate a consistent textKey for this content tab (without timestamp)
-    const textKey = `custom-content-${activeTabId}`;
+    // Generate a consistent textKey for this content tab using proper format
+    const contentType = activeContent.contentType || 'custom-content';
+    const textKey = `${contentType}-${activeTabId}`;
+    console.log('[ButtonPanel] Generated textKey:', textKey, 'for contentType:', contentType, 'tabId:', activeTabId);
     
     // Check if chat dialog is already open for this tab
     if (ChatDialog.isOpen && ChatDialog.currentTextKey === textKey) {
@@ -13697,16 +13880,21 @@ const ButtonPanel = {
     
     // Check if there's existing chat history for this tab
     let existingChatHistory = null;
+    const contextualTextKey = `${contentType}-${activeTabId}-generic`;
+    console.log('[ButtonPanel] Looking for chat history with contextualTextKey:', contextualTextKey);
+    
     if (activeContent.analysis && activeContent.analysis.chats) {
-      // Find chat history for this tab - look for any chat history (regardless of textKey format)
+      console.log('[ButtonPanel] Available chats in analysis:', activeContent.analysis.chats.map(c => c.textKey));
+      
+      // Find chat history for this specific contextual textKey
       existingChatHistory = activeContent.analysis.chats.find(chat => 
-        chat.messages && chat.messages.length > 0
+        chat.textKey === contextualTextKey && chat.messages && chat.messages.length > 0
       );
       
-      // If found, update the textKey to match the current tab
       if (existingChatHistory) {
-        existingChatHistory.textKey = textKey; // Update to current tab's textKey
-        console.log('[ButtonPanel] Updated chat history textKey to:', textKey);
+        console.log('[ButtonPanel] Found existing chat history for contextualTextKey:', contextualTextKey, 'with', existingChatHistory.messages.length, 'messages');
+      } else {
+        console.log('[ButtonPanel] No existing chat history found for contextualTextKey:', contextualTextKey);
       }
     }
     
@@ -13716,31 +13904,53 @@ const ButtonPanel = {
     console.log('[ButtonPanel] Calling ChatDialog.open with:', {
       textContentLength: textContent.length,
       textKey: textKey,
-      mode: 'ask'
+      mode: 'ask',
+      chatContext: 'general'
     });
-    ChatDialog.open(textContent, textKey, 'ask');
+    ChatDialog.open(textContent, textKey, 'ask', null, 'general');
     console.log('[ButtonPanel] ChatDialog.open called successfully');
     
     // If there's existing chat history, restore it to the ChatDialog
     if (existingChatHistory && existingChatHistory.messages.length > 0) {
-      console.log('[ButtonPanel] Restoring chat history for textKey:', textKey);
-      ChatDialog.chatHistories.set(textKey, existingChatHistory.messages);
+      console.log('[ButtonPanel] ===== RESTORING CHAT HISTORY =====');
+      console.log('[ButtonPanel] Restoring chat history for contextualTextKey:', contextualTextKey);
+      console.log('[ButtonPanel] Messages to restore:', existingChatHistory.messages.length);
+      console.log('[ButtonPanel] ChatDialog.chatHistories before set:', Array.from(ChatDialog.chatHistories.keys()));
+      
+      ChatDialog.chatHistories.set(contextualTextKey, existingChatHistory.messages);
       ChatDialog.chatHistory = [...existingChatHistory.messages];
+      
+      console.log('[ButtonPanel] ChatDialog.chatHistories after set:', Array.from(ChatDialog.chatHistories.keys()));
+      console.log('[ButtonPanel] ChatDialog.chatHistory length:', ChatDialog.chatHistory.length);
       
       // Re-render the chat messages
       setTimeout(() => {
         ChatDialog.renderChatMessages();
       }, 100);
     } else {
-      // No existing chat history - clear any previous chat history and start fresh
-      console.log('[ButtonPanel] No existing chat history, clearing previous chat history and starting fresh');
-      ChatDialog.chatHistories.clear(); // Clear all previous chat histories
-      ChatDialog.chatHistory = []; // Clear current chat history
+      // No existing chat history in analysis data - check if it exists in ChatDialog.chatHistories
+      console.log('[ButtonPanel] No existing chat history in analysis data, checking ChatDialog.chatHistories');
+      console.log('[ButtonPanel] Available keys in ChatDialog.chatHistories:', Array.from(ChatDialog.chatHistories.keys()));
       
-      // Re-render the chat messages to show empty state
-      setTimeout(() => {
-        ChatDialog.renderChatMessages();
-      }, 100);
+      const existingInMemory = ChatDialog.chatHistories.get(contextualTextKey);
+      if (existingInMemory && existingInMemory.length > 0) {
+        console.log('[ButtonPanel] Found existing chat history in memory for contextualTextKey:', contextualTextKey);
+        ChatDialog.chatHistory = [...existingInMemory];
+        
+        // Re-render the chat messages
+        setTimeout(() => {
+          ChatDialog.renderChatMessages();
+        }, 100);
+      } else {
+        // No existing chat history anywhere - start fresh
+        console.log('[ButtonPanel] No existing chat history anywhere, starting fresh');
+        ChatDialog.chatHistory = []; // Clear current chat history only
+        
+        // Re-render the chat messages to show empty state
+        setTimeout(() => {
+          ChatDialog.renderChatMessages();
+        }, 100);
+      }
     }
     
     // Auto-focus the question input after chat dialog opens
@@ -13777,14 +13987,16 @@ const ButtonPanel = {
     
     // Save current chat history to analysis data before closing (for the tab where chat was opened)
     if (ChatDialog.isOpen && ChatDialog.currentTextKey && ChatDialog.chatHistory.length > 0) {
-      // Extract the tab ID from the currentTextKey (format: custom-content-${tabId})
-      const chatTabId = ChatDialog.currentTextKey.replace('custom-content-', '');
+      // Extract the tab ID from the currentTextKey (format: <contentType>-<tabId>-generic or <contentType>-<tabId>-<startIndex>-<length>)
+      const chatTabId = ChatDialog.currentTextKey.replace(/^[^-]+-(\d+)-.*/, '$1');
       console.log('[ButtonPanel] Saving current chat history for chat tab:', chatTabId);
       console.log('[ButtonPanel] Chat was opened for tab:', chatTabId, 'but switching to tab:', tabId);
+      console.log('[ButtonPanel] CurrentTextKey:', ChatDialog.currentTextKey, 'ChatContext:', ChatDialog.chatContext);
       
       // Get the content for the tab where the chat was originally opened
       const chatActiveContent = this.topicsModal.customContentModal.getContentByTabId(parseInt(chatTabId));
       if (chatActiveContent && chatActiveContent.analysis) {
+        console.log('[ButtonPanel] Available chats before saving:', chatActiveContent.analysis.chats.map(c => c.textKey));
         const existingChatIndex = chatActiveContent.analysis.chats.findIndex(c =>
           c.textKey === ChatDialog.currentTextKey
         );
