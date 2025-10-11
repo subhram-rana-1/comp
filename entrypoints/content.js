@@ -591,6 +591,38 @@ const WordSelector = {
     // Update button states
     ButtonPanel.updateButtonStatesFromSelections();
   },
+
+  /**
+   * Clear only selections (purple highlights) but preserve meanings (green highlights)
+   */
+  clearSelectionsOnly() {
+    console.log('[WordSelector] Clearing only selections, preserving meanings');
+    
+    // Only clear selected words (purple highlights)
+    this.selectedWords.forEach(word => {
+      const highlights = this.wordToHighlights.get(word);
+      if (highlights) {
+        highlights.forEach(highlight => {
+          // Only remove if it's a selection highlight (purple), not explained (green)
+          if (highlight.classList.contains('vocab-word-selected') && 
+              !highlight.classList.contains('vocab-word-explained')) {
+            this.removeHighlight(highlight);
+          }
+        });
+      }
+    });
+    
+    // Clear only selection data structures
+    this.selectedWords.clear();
+    this.wordPositions.clear();
+    
+    // Keep explainedWords and wordToHighlights intact
+    
+    console.log('[WordSelector] Selections cleared, meanings preserved');
+    
+    // Update button states
+    ButtonPanel.updateButtonStatesFromSelections();
+  },
   
   /**
    * Get full document text for position calculation
@@ -2058,7 +2090,7 @@ const TextSelector = {
       const range = selection.getRangeAt(0);
       
       // Check if this exact text is already selected
-      const textKey = this.getTextKey(selectedText);
+      const textKey = this.getContextualTextKey(selectedText);
       if (this.selectedTexts.has(textKey)) {
         console.log('[TextSelector] Text already selected');
         selection.removeAllRanges();
@@ -2188,6 +2220,35 @@ const TextSelector = {
   getTextKey(text) {
     return text.toLowerCase().replace(/\s+/g, ' ').trim();
   },
+
+  /**
+   * Generate contextual textKey based on current content context
+   * @param {string} text - The text to generate key for
+   * @returns {string} Contextual textKey
+   */
+  getContextualTextKey(text) {
+    const normalizedText = this.getTextKey(text);
+    
+    // Check if we're in custom content context
+    if (window.ButtonPanel && window.ButtonPanel.topicsModal && 
+        window.ButtonPanel.topicsModal.customContentModal && 
+        window.ButtonPanel.topicsModal.customContentModal.activeTabId) {
+      
+      const activeTabId = window.ButtonPanel.topicsModal.customContentModal.activeTabId;
+      const activeContent = window.ButtonPanel.topicsModal.customContentModal.getContentByTabId(parseInt(activeTabId));
+      
+      if (activeContent) {
+        // Generate contextual textKey for custom content
+        const contextualTextKey = `${activeContent.contentType}-${activeTabId}-${normalizedText}`;
+        console.log('[TextSelector] Generated contextual textKey:', contextualTextKey, 'for text:', normalizedText);
+        return contextualTextKey;
+      }
+    }
+    
+    // Default to main page textKey
+    console.log('[TextSelector] Generated main page textKey:', normalizedText);
+    return normalizedText;
+  },
   
   /**
    * Calculate text position in document (approximate position in plain text)
@@ -2219,7 +2280,8 @@ const TextSelector = {
    * @param {Range} range - The range object (optional, for position tracking)
    */
   addText(text, range = null) {
-    const textKey = this.getTextKey(text);
+    // Generate contextual textKey based on current context
+    const textKey = this.getContextualTextKey(text);
     this.selectedTexts.add(textKey); // O(1) operation
     
     // Store position information if range is provided
@@ -2237,7 +2299,7 @@ const TextSelector = {
    * @param {string} text - The text to remove
    */
   removeText(text) {
-    const textKey = this.getTextKey(text);
+    const textKey = this.getContextualTextKey(text);
     
     // Get the highlight for this text
     const highlight = this.textToHighlights.get(textKey);
@@ -2269,7 +2331,7 @@ const TextSelector = {
    * @param {string} text - The text being highlighted
    */
   highlightRange(range, text) {
-    const textKey = this.getTextKey(text);
+    const textKey = this.getContextualTextKey(text);
     
     // Create highlight wrapper
     const highlight = document.createElement('span');
@@ -2377,6 +2439,37 @@ const TextSelector = {
     this.textToHighlights.clear();
     
     console.log('[TextSelector] All selections cleared');
+    
+    // Update button states
+    ButtonPanel.updateButtonStatesFromSelections();
+  },
+
+  /**
+   * Clear only selections (purple highlights) but preserve meanings (green highlights and chat icons)
+   */
+  clearSelectionsOnly() {
+    console.log('[TextSelector] Clearing only selections, preserving meanings');
+    
+    // Only clear selected texts (purple highlights)
+    this.selectedTexts.forEach(textKey => {
+      const highlight = this.textToHighlights.get(textKey);
+      if (highlight) {
+        // Only remove if it's a selection highlight (purple), not asked/simplified (green)
+        if (highlight.classList.contains('vocab-text-highlight') && 
+            !highlight.classList.contains('vocab-text-simplified') &&
+            !highlight.querySelector('.vocab-text-chat-btn')) {
+          this.removeHighlight(highlight);
+        }
+      }
+    });
+    
+    // Clear only selection data structures
+    this.selectedTexts.clear();
+    this.textPositions.clear();
+    
+    // Keep askedTexts, simplifiedTexts, and their highlights intact
+    
+    console.log('[TextSelector] Selections cleared, meanings preserved');
     
     // Update button states
     ButtonPanel.updateButtonStatesFromSelections();
@@ -9331,11 +9424,6 @@ const ButtonPanel = {
     });
 
     // Add hover events for vertical button group
-    // Keep buttons visible when hovering over them
-    this.verticalButtonGroup?.addEventListener('mouseenter', () => {
-      this.showVerticalButtonGroup();
-    });
-
     // Hide buttons when moving away from the group
     this.verticalButtonGroup?.addEventListener('mouseleave', () => {
       this.hideVerticalButtonGroup();
@@ -9518,22 +9606,42 @@ const ButtonPanel = {
   handleRemoveAllMeanings() {
     console.log('[ButtonPanel] Remove all meanings clicked');
     
+    // Get current context
+    const context = this.getCurrentContentContext();
+    console.log('[ButtonPanel] Current context:', context);
+    
     // Get all asked texts, simplified texts, and explained words
     const askedTextsMap = TextSelector.askedTexts;
     const simplifiedTextsMap = TextSelector.simplifiedTexts;
     const explainedWordsMap = WordSelector.explainedWords;
     
-    if (askedTextsMap.size === 0 && simplifiedTextsMap.size === 0 && explainedWordsMap.size === 0) {
-      console.warn('[ButtonPanel] No meanings to remove');
+    // Filter items to only those in current context
+    const contextAskedTexts = Array.from(askedTextsMap.keys()).filter(textKey => 
+      this.isTextKeyInCurrentContext(textKey, context)
+    );
+    const contextSimplifiedTexts = Array.from(simplifiedTextsMap.keys()).filter(textKey => 
+      this.isTextKeyInCurrentContext(textKey, context)
+    );
+    const contextExplainedWords = Array.from(explainedWordsMap.keys()).filter(word => 
+      this.isWordInCurrentContext(word, context)
+    );
+    
+    if (contextAskedTexts.length === 0 && contextSimplifiedTexts.length === 0 && contextExplainedWords.length === 0) {
+      console.warn('[ButtonPanel] No meanings to remove in current context');
       return;
     }
     
-    // Process asked texts
-    if (askedTextsMap.size > 0) {
-      const askedTextKeys = Array.from(askedTextsMap.keys());
-      console.log(`[ButtonPanel] Removing ${askedTextKeys.length} asked texts`);
+    console.log(`[ButtonPanel] Removing meanings from ${context.type}:`, {
+      askedTexts: contextAskedTexts.length,
+      simplifiedTexts: contextSimplifiedTexts.length,
+      explainedWords: contextExplainedWords.length
+    });
+    
+    // Process asked texts in current context
+    if (contextAskedTexts.length > 0) {
+      console.log(`[ButtonPanel] Removing ${contextAskedTexts.length} asked texts from current context`);
       
-      askedTextKeys.forEach(textKey => {
+      contextAskedTexts.forEach(textKey => {
         const askedData = askedTextsMap.get(textKey);
         
         if (askedData && askedData.highlight) {
@@ -9565,12 +9673,11 @@ const ButtonPanel = {
       });
     }
     
-    // Process simplified texts
-    if (simplifiedTextsMap.size > 0) {
-      const simplifiedTextKeys = Array.from(simplifiedTextsMap.keys());
-      console.log(`[ButtonPanel] Removing ${simplifiedTextKeys.length} simplified texts`);
+    // Process simplified texts in current context
+    if (contextSimplifiedTexts.length > 0) {
+      console.log(`[ButtonPanel] Removing ${contextSimplifiedTexts.length} simplified texts from current context`);
       
-      simplifiedTextKeys.forEach(textKey => {
+      contextSimplifiedTexts.forEach(textKey => {
         const highlight = TextSelector.textToHighlights.get(textKey);
         
         if (highlight) {
@@ -9606,20 +9713,31 @@ const ButtonPanel = {
       });
     }
     
-    // Process explained words
-    if (explainedWordsMap.size > 0) {
-      const explainedWordKeys = Array.from(explainedWordsMap.keys());
-      console.log(`[ButtonPanel] Removing ${explainedWordKeys.length} explained words`);
+    // Process explained words in current context
+    if (contextExplainedWords.length > 0) {
+      console.log(`[ButtonPanel] Removing ${contextExplainedWords.length} explained words from current context`);
       
-      explainedWordKeys.forEach(word => {
+      contextExplainedWords.forEach(word => {
         const normalizedWord = word.toLowerCase().trim();
         const wordData = explainedWordsMap.get(word);
         
         console.log(`[ButtonPanel] Removing explained word: "${word}" (normalized: "${normalizedWord}")`);
         
         if (wordData && wordData.highlights) {
-          // Remove all highlights for this word
-          wordData.highlights.forEach(highlight => {
+          // Filter highlights to only those in current context
+          const contextHighlights = Array.from(wordData.highlights).filter(highlight => {
+            if (context.type === 'main-page') {
+              // For main page, check if highlight is in main document
+              return highlight.closest('.vocab-custom-content-modal') === null;
+            } else {
+              // For custom content, check if highlight is in current tab
+              const activeContentElement = this.topicsModal.customContentModal.modal.querySelector('.vocab-custom-content-editor-content');
+              return activeContentElement && activeContentElement.contains(highlight);
+            }
+          });
+          
+          // Remove only context-specific highlights
+          contextHighlights.forEach(highlight => {
             // Remove the green explained class
             highlight.classList.remove('vocab-word-explained');
             
@@ -9639,26 +9757,119 @@ const ButtonPanel = {
               highlight.remove();
             }
           });
+          
+          // Remove highlights from the word's highlight set
+          contextHighlights.forEach(highlight => {
+            wordData.highlights.delete(highlight);
+          });
+          
+          // If no highlights remain for this word, remove it completely
+          if (wordData.highlights.size === 0) {
+            explainedWordsMap.delete(word);
+            WordSelector.wordToHighlights.delete(normalizedWord);
+          }
         }
-        
-        // Remove from explainedWords Map
-        explainedWordsMap.delete(word);
-        
-        // Also remove from wordToHighlights Map using normalized word
-        WordSelector.wordToHighlights.delete(normalizedWord);
       });
       
       // Hide any open popups
       WordSelector.hideAllPopups();
     }
     
-    console.log('[ButtonPanel] All meanings removed');
+    console.log(`[ButtonPanel] Meanings removed from ${context.type} context`);
     
     // Also remove data from analysis structure for current tab
     this.removeMeaningsFromAnalysisData();
     
     // Update button states
     this.updateButtonStatesFromSelections();
+  },
+
+  /**
+   * Get the current content context (main page or specific custom content tab)
+   * @returns {Object} Context object with type, contentType, tabId, and textKeyPrefix
+   */
+  getCurrentContentContext() {
+    // Check if custom content modal is open and has active tab
+    if (this.topicsModal && 
+        this.topicsModal.customContentModal && 
+        this.topicsModal.customContentModal.activeTabId) {
+      
+      const activeTabId = this.topicsModal.customContentModal.activeTabId;
+      const activeContent = this.topicsModal.customContentModal.getContentByTabId(parseInt(activeTabId));
+      
+      if (activeContent) {
+        return {
+          type: 'custom-content',
+          contentType: activeContent.contentType,
+          tabId: activeTabId,
+          textKeyPrefix: `${activeContent.contentType}-${activeTabId}`,
+          activeContent: activeContent
+        };
+      }
+    }
+    
+    // Default to main page context
+    return {
+      type: 'main-page',
+      contentType: 'main',
+      tabId: null,
+      textKeyPrefix: 'main',
+      activeContent: null
+    };
+  },
+
+  /**
+   * Check if a textKey belongs to the current context
+   * @param {string} textKey - The textKey to check
+   * @param {Object} context - The current context (optional, will be detected if not provided)
+   * @returns {boolean} True if the textKey belongs to current context
+   */
+  isTextKeyInCurrentContext(textKey, context = null) {
+    if (!context) {
+      context = this.getCurrentContentContext();
+    }
+    
+    if (context.type === 'main-page') {
+      // For main page, textKey should NOT have content type prefix
+      // Main page textKeys are typically just the normalized text
+      return !textKey.includes('-') || !['pdf', 'image', 'topic', 'text'].some(type => textKey.startsWith(type + '-'));
+    } else {
+      // For custom content, textKey should start with the context prefix
+      // Format: ${contentType}-${tabId}-${normalizedText}
+      return textKey.startsWith(context.textKeyPrefix + '-');
+    }
+  },
+
+  /**
+   * Check if a word belongs to the current context
+   * @param {string} word - The word to check
+   * @param {Object} context - The current context (optional, will be detected if not provided)
+   * @returns {boolean} True if the word belongs to current context
+   */
+  isWordInCurrentContext(word, context = null) {
+    if (!context) {
+      context = this.getCurrentContentContext();
+    }
+    
+    // Check if the word has highlights in the current context
+    const wordData = WordSelector.explainedWords.get(word);
+    if (!wordData || !wordData.highlights) {
+      return false;
+    }
+    
+    // For main page context, check if any highlight is in the main document
+    if (context.type === 'main-page') {
+      return Array.from(wordData.highlights).some(highlight => {
+        // Check if highlight is in the main document (not in custom content modal)
+        return highlight.closest('.vocab-custom-content-modal') === null;
+      });
+    } else {
+      // For custom content context, check if any highlight is in the current tab's content
+      const activeContentElement = this.topicsModal.customContentModal.modal.querySelector('.vocab-custom-content-editor-content');
+      return Array.from(wordData.highlights).some(highlight => {
+        return activeContentElement && activeContentElement.contains(highlight);
+      });
+    }
   },
 
   /**
@@ -11240,21 +11451,55 @@ const ButtonPanel = {
     const hasWords = WordSelector.selectedWords.size > 0;
     const hasTexts = TextSelector.selectedTexts.size > 0;
     const hasExactlyOneText = TextSelector.selectedTexts.size === 1;
+    
+    // Get current context
+    const context = this.getCurrentContentContext();
+    console.log('[ButtonPanel] Current context for button states:', context);
+    
+    // Check for meanings in current context only
+    const hasAskedTextsInContext = Array.from(TextSelector.askedTexts.keys()).some(textKey => 
+      this.isTextKeyInCurrentContext(textKey, context)
+    );
+    const hasSimplifiedTextsInContext = Array.from(TextSelector.simplifiedTexts.keys()).some(textKey => 
+      this.isTextKeyInCurrentContext(textKey, context)
+    );
+    const hasExplainedWordsInContext = Array.from(WordSelector.explainedWords.keys()).some(word => 
+      this.isWordInCurrentContext(word, context)
+    );
+    
+    // Debug logging
+    console.log('[ButtonPanel] Button state checks:', {
+      context: context.type,
+      hasWords,
+      hasTexts,
+      hasAskedTextsInContext,
+      hasSimplifiedTextsInContext,
+      hasExplainedWordsInContext,
+      totalAskedTexts: TextSelector.askedTexts.size,
+      totalSimplifiedTexts: TextSelector.simplifiedTexts.size,
+      totalExplainedWords: WordSelector.explainedWords.size,
+      askedTextKeys: Array.from(TextSelector.askedTexts.keys()),
+      simplifiedTextKeys: Array.from(TextSelector.simplifiedTexts.keys()),
+      explainedWordKeys: Array.from(WordSelector.explainedWords.keys())
+    });
+    
+    // Legacy global checks (for backward compatibility)
     const hasAskedTexts = TextSelector.askedTexts.size > 0;
     const hasSimplifiedTexts = TextSelector.simplifiedTexts.size > 0;
     const hasExplainedWords = WordSelector.explainedWords.size > 0;
     
     console.log('[ButtonPanel] Updating button states:', {
+      context: context.type,
       hasWords,
       hasTexts,
-      hasAskedTexts,
-      hasSimplifiedTexts,
-      hasExplainedWords,
-      showRemoveMeanings: hasAskedTexts || hasSimplifiedTexts || hasExplainedWords
+      hasAskedTextsInContext,
+      hasSimplifiedTextsInContext,
+      hasExplainedWordsInContext,
+      showRemoveMeanings: hasAskedTextsInContext || hasSimplifiedTextsInContext || hasExplainedWordsInContext
     });
     
-    // Show "Remove all meanings" if there are any asked texts, simplified texts, OR explained words
-    this.setShowRemoveMeanings(hasAskedTexts || hasSimplifiedTexts || hasExplainedWords);
+    // Show "Remove all meanings" if there are any asked texts, simplified texts, OR explained words in current context
+    this.setShowRemoveMeanings(hasAskedTextsInContext || hasSimplifiedTextsInContext || hasExplainedWordsInContext);
     
     // Show "Deselect all" if there are any words or texts selected
     this.setShowDeselectAll(hasWords || hasTexts);
@@ -12594,16 +12839,16 @@ const ButtonPanel = {
    * Clear all text and word selections when opening modals
    */
   clearSelectionsOnModalOpen() {
-    console.log('[ButtonPanel] Clearing all selections due to modal opening');
+    console.log('[ButtonPanel] Clearing only selections due to modal opening, preserving meanings');
     
-    // Clear word selections
-    if (typeof WordSelector !== 'undefined' && WordSelector.clearAll) {
-      WordSelector.clearAll();
+    // Clear word selections only (preserve meanings)
+    if (typeof WordSelector !== 'undefined' && WordSelector.clearSelectionsOnly) {
+      WordSelector.clearSelectionsOnly();
     }
     
-    // Clear text selections
-    if (typeof TextSelector !== 'undefined' && TextSelector.clearAll) {
-      TextSelector.clearAll();
+    // Clear text selections only (preserve meanings)
+    if (typeof TextSelector !== 'undefined' && TextSelector.clearSelectionsOnly) {
+      TextSelector.clearSelectionsOnly();
     }
     
     // Clear any browser text selection
@@ -12611,7 +12856,7 @@ const ButtonPanel = {
       window.getSelection().removeAllRanges();
     }
     
-    console.log('[ButtonPanel] All selections cleared');
+    console.log('[ButtonPanel] Selections cleared, meanings preserved');
   },
 
   /**
@@ -13882,6 +14127,9 @@ const ButtonPanel = {
       
       // Add class to body to hide webpage icons
       document.body.classList.add('vocab-custom-content-modal-open');
+      
+      // Update button states after modal opens to reflect new context
+      this.updateButtonStatesFromSelections();
     }, 100);
   },
 
@@ -14220,6 +14468,9 @@ const ButtonPanel = {
       if (tabsContainer) {
         tabsContainer.classList.remove('tab-transitioning');
       }
+      
+      // Update button states after tab switch to reflect new context
+      this.updateButtonStatesFromSelections();
     }, 300);
   },
 
