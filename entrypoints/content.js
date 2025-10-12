@@ -1299,7 +1299,7 @@ const WordSelector = {
    */
   createSpeakerIcon() {
     return `
-      <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <svg viewBox="0 0 26 24" fill="none" xmlns="http://www.w3.org/2000/svg">
         <path d="M3 9v6h4l5 5V4L7 9H3z" fill="#A020F0"/>
         <path d="M15.54 8.46c.78.78 1.28 1.86 1.28 3.04s-.5 2.26-1.28 3.04" stroke="#A020F0" stroke-width="2" stroke-linecap="round"/>
         <path d="M18.36 5.64c1.56 1.56 2.52 3.71 2.52 6.09s-.96 4.53-2.52 6.09" stroke="#A020F0" stroke-width="2" stroke-linecap="round"/>
@@ -1367,7 +1367,7 @@ const WordSelector = {
         },
         body: JSON.stringify({ 
           word: word,
-          voice: 'nova' // Default voice
+          voice: 'alloy' // Default voice
         })
       });
       
