@@ -193,6 +193,57 @@ class ApiService {
   }
   
   /**
+   * Convert voice audio to text
+   * @param {FormData} formData - FormData containing audio file
+   * @returns {Promise<Object>} - API response with transcribed text
+   */
+  static async voiceToText(formData) {
+    const url = `${this.BASE_URL}${this.ENDPOINTS.VOICE_TO_TEXT}?translate=true`;
+    
+    try {
+      console.log('[ApiService] Converting voice to text...');
+      
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Accept': 'application/json'
+          // Don't set Content-Type header - let browser set it with boundary for multipart/form-data
+        },
+        mode: 'cors',
+        body: formData
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Voice to text conversion failed: ${response.status} ${response.statusText}`);
+      }
+      
+      const data = await response.json();
+      console.log('[ApiService] Voice to text response received:', data);
+      
+      return {
+        success: true,
+        data: data
+      };
+      
+    } catch (error) {
+      console.error('[ApiService] Error converting voice to text:', error);
+      
+      let errorMessage = error.message;
+      
+      if (error.message.includes('Failed to fetch') || error.name === 'TypeError') {
+        errorMessage = 'Cannot connect to voice transcription service. Please check:\n' +
+                      '1. Backend server is running at ' + this.BASE_URL + '\n' +
+                      '2. CORS is properly configured to allow requests from this origin';
+      }
+      
+      return {
+        success: false,
+        error: errorMessage
+      };
+    }
+  }
+  
+  /**
    * Update base URL configuration
    * @param {string} newBaseUrl - New base URL
    */
