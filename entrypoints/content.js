@@ -2871,10 +2871,11 @@ const TextSelector = {
     const className = isGreen ? 'vocab-text-pulsate-green' : 'vocab-text-pulsate';
     highlight.classList.add(className);
     
-    // Remove class after animation completes (0.6s)
+    // Remove class after animation completes (0.6s for purple, 1.2s for green)
+    const duration = isGreen ? 1200 : 600;
     setTimeout(() => {
       highlight.classList.remove(className);
-    }, 600);
+    }, duration);
   },
   
   /**
@@ -3125,12 +3126,18 @@ const TextSelector = {
         border-radius: 3px;
       }
       
-      /* Pulsate animation for text highlights - light green */
+      /* Pulsate animation for text highlights - light green (pulsates twice) */
       @keyframes vocab-text-pulsate-green {
         0% {
           background-color: transparent;
         }
+        25% {
+          background-color: rgba(34, 197, 94, 0.15);
+        }
         50% {
+          background-color: transparent;
+        }
+        75% {
           background-color: rgba(34, 197, 94, 0.15);
         }
         100% {
@@ -3139,7 +3146,7 @@ const TextSelector = {
       }
       
       .vocab-text-pulsate-green {
-        animation: vocab-text-pulsate-green 0.6s ease-in-out;
+        animation: vocab-text-pulsate-green 1.2s ease-in-out;
       }
       
       /* Notification banner at top right */
@@ -3720,14 +3727,93 @@ const ChatDialog = {
     // Add click handler for focus button
     focusButton.addEventListener('click', () => {
       console.log('[Focus Button] Clicked, currentTextKey:', this.currentTextKey);
+      console.log('[Focus Button] chatContext:', this.chatContext);
       
       if (this.currentTextKey) {
         // For selected text chat, use original textKey to find highlight
         const originalTextKey = this.currentTextKey.replace(/-selected$/, '').replace(/-generic$/, '');
         console.log('[Focus Button] Original textKey:', originalTextKey);
         
-        // Try exact match first
-        let highlight = TextSelector.textToHighlights.get(originalTextKey);
+        // Try exact match first with current key
+        let highlight = TextSelector.textToHighlights.get(this.currentTextKey);
+        let matchedKey = this.currentTextKey;
+        
+        // If no match, try with originalTextKey (after removing suffixes)
+        if (!highlight) {
+          highlight = TextSelector.textToHighlights.get(originalTextKey);
+          matchedKey = originalTextKey;
+          console.log('[Focus Button] Trying with originalTextKey:', originalTextKey, 'Found:', !!highlight);
+        }
+        
+        // If still no match, try checking askedTexts map (for green chat icon texts)
+        if (!highlight) {
+          console.log('[Focus Button] Trying to find in askedTexts...');
+          const askedData = TextSelector.askedTexts.get(originalTextKey);
+          if (askedData && askedData.highlight) {
+            highlight = askedData.highlight;
+            matchedKey = originalTextKey;
+            console.log('[Focus Button] Found in askedTexts:', originalTextKey);
+          } else {
+            // Try iterating through askedTexts to find a partial match
+            console.log('[Focus Button] Trying to find matching asked text by iteration...');
+            for (const [key, data] of TextSelector.askedTexts) {
+              if (key.includes(originalTextKey) || originalTextKey.includes(key)) {
+                highlight = data.highlight;
+                matchedKey = key;
+                console.log('[Focus Button] Found matching asked text:', key);
+                break;
+              }
+            }
+          }
+        }
+        
+        // If still no match, try checking simplifiedTexts map
+        if (!highlight) {
+          console.log('[Focus Button] Trying to find in simplifiedTexts...');
+          const simplifiedData = TextSelector.simplifiedTexts.get(originalTextKey);
+          if (simplifiedData && simplifiedData.highlight) {
+            highlight = simplifiedData.highlight;
+            matchedKey = originalTextKey;
+            console.log('[Focus Button] Found in simplifiedTexts:', originalTextKey);
+          } else {
+            // Try to find a matching key in simplifiedTexts by comparing text positions
+            console.log('[Focus Button] Trying to find matching simplified text by position...');
+            const parts = originalTextKey.split('-');
+            if (parts.length >= 4) {
+              const contentType = parts[0];
+              const tabId = parts[1];
+              const startIndex = parseInt(parts[2]);
+              const textLength = parseInt(parts[3]);
+              
+              // Search through simplifiedTexts for matching position
+              for (const [key, data] of TextSelector.simplifiedTexts) {
+                if (data.textStartIndex === startIndex && data.textLength === textLength) {
+                  highlight = data.highlight;
+                  matchedKey = key;
+                  console.log('[Focus Button] Found matching simplified text by position:', key);
+                  break;
+                }
+              }
+            }
+          }
+        }
+        
+        // If no exact match, try searching by comparing the current text with highlight text
+        if (!highlight && this.currentText) {
+          console.log('[Focus Button] Trying to match by text content...');
+          const currentText = this.currentText.trim();
+          
+          // Search through all highlights
+          for (const [key, element] of TextSelector.textToHighlights) {
+            const elementText = element.textContent.replace(/\s+/g, ' ').trim();
+            if (elementText === currentText || elementText.includes(currentText) || currentText.includes(elementText)) {
+              highlight = element;
+              matchedKey = key;
+              console.log('[Focus Button] Found match by text content:', key.substring(0, 50) + '...');
+              break;
+            }
+          }
+        }
         
         // If no exact match, try fuzzy matching
         if (!highlight) {
@@ -3747,12 +3833,13 @@ const ChatDialog = {
             if (score > bestScore && score > 0.7) { // Require at least 70% similarity
               bestScore = score;
               bestMatch = element;
+              matchedKey = key;
             }
           }
           
           if (bestMatch) {
             highlight = bestMatch;
-            console.log('[Focus Button] Found fuzzy match with score:', bestScore);
+            console.log('[Focus Button] Found fuzzy match with score:', bestScore, 'Key:', matchedKey);
           }
         }
         
@@ -3772,26 +3859,36 @@ const ChatDialog = {
           
           // Check if it's asked text (has green chat icon)
           const hasChatBtn = highlight.querySelector('.vocab-text-chat-btn');
-          console.log('[Focus Button] Checking for chat button:', hasChatBtn);
-          if (hasChatBtn) {
+          const hasGreenChatBtn = highlight.querySelector('.vocab-text-chat-btn-green');
+          console.log('[Focus Button] Checking for chat button:', hasChatBtn, 'Green:', hasGreenChatBtn);
+          if (hasChatBtn || hasGreenChatBtn) {
             isGreenPulsate = true; // Green pulsate for asked text
             console.log('[Focus Button] Detected asked text - using green pulsate');
           }
           
-          // Check if it's explained text (has green dashed underline)
+          // Check if it's explained text (has green dashed underline or book icon)
           const isSimplified = highlight.classList.contains('vocab-text-simplified');
-          console.log('[Focus Button] Checking for simplified class:', isSimplified);
-          if (isSimplified) {
+          const hasBookBtn = highlight.querySelector('.vocab-text-book-btn');
+          console.log('[Focus Button] Checking for simplified class:', isSimplified, 'Book button:', hasBookBtn);
+          if (isSimplified || hasBookBtn) {
             isGreenPulsate = true; // Green pulsate for explained text
             console.log('[Focus Button] Detected explained text - using green pulsate');
           }
           
-          // Additional check: look for asked text in the askedTexts map
-          const isInAskedTexts = TextSelector.askedTexts.has(originalTextKey);
-          console.log('[Focus Button] Checking if text is in askedTexts:', isInAskedTexts);
+          // Additional check: look for asked text in the askedTexts map using matchedKey
+          const isInAskedTexts = TextSelector.askedTexts.has(matchedKey) || TextSelector.askedTexts.has(originalTextKey);
+          console.log('[Focus Button] Checking if text is in askedTexts (matchedKey:', matchedKey, 'originalTextKey:', originalTextKey, '):', isInAskedTexts);
           if (isInAskedTexts) {
             isGreenPulsate = true; // Green pulsate for asked text
             console.log('[Focus Button] Detected asked text via askedTexts map - using green pulsate');
+          }
+          
+          // Additional check: look for simplified text in simplifiedTexts map using matchedKey
+          const isInSimplifiedTexts = TextSelector.simplifiedTexts.has(matchedKey) || TextSelector.simplifiedTexts.has(originalTextKey);
+          console.log('[Focus Button] Checking if text is in simplifiedTexts (matchedKey:', matchedKey, 'originalTextKey:', originalTextKey, '):', isInSimplifiedTexts);
+          if (isInSimplifiedTexts) {
+            isGreenPulsate = true; // Green pulsate for simplified text
+            console.log('[Focus Button] Detected simplified text via simplifiedTexts map - using green pulsate');
           }
           
           console.log('[Focus Button] Using green pulsate:', isGreenPulsate);
@@ -3803,7 +3900,10 @@ const ChatDialog = {
           }, 300); // Small delay to let scroll complete
         } else {
           console.log('[Focus Button] No highlight found for textKey:', originalTextKey);
+          console.log('[Focus Button] Current textKey:', this.currentTextKey);
           console.log('[Focus Button] Available textToHighlights keys:', Array.from(TextSelector.textToHighlights.keys()));
+          console.log('[Focus Button] Available askedTexts keys:', Array.from(TextSelector.askedTexts.keys()));
+          console.log('[Focus Button] Available simplifiedTexts keys:', Array.from(TextSelector.simplifiedTexts.keys()));
         }
       } else {
         console.log('[Focus Button] No currentTextKey available');
