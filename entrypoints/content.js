@@ -3160,9 +3160,9 @@ const DragHandle = {
    * Reset to default position
    */
   resetPosition() {
-    this.targetElement.style.left = '';
+    this.targetElement.style.left = '0';
     this.targetElement.style.top = '';
-    this.targetElement.style.right = '0';
+    this.targetElement.style.right = '';
     this.targetElement.style.transform = '';
     PositionManager.clearPosition();
   },
@@ -4808,9 +4808,9 @@ const ChatDialog = {
    */
   createTrashIcon() {
     return `
-      <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M2.25 4.5h13.5M6 4.5V3a1.5 1.5 0 0 1 1.5-1.5h3A1.5 1.5 0 0 1 12 3v1.5m2.25 0v10.5a1.5 1.5 0 0 1-1.5 1.5h-7.5a1.5 1.5 0 0 1-1.5-1.5V4.5h10.5Z" stroke="#ef4444" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-        <path d="M7.5 8.25v4.5M10.5 8.25v4.5" stroke="#ef4444" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+      <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M3 5h14M6.5 5V3.5a1.5 1.5 0 0 1 1.5-1.5h4a1.5 1.5 0 0 1 1.5 1.5V5M15 5v10.5a1.5 1.5 0 0 1-1.5 1.5h-7a1.5 1.5 0 0 1-1.5-1.5V5h10Z" stroke="#ef4444" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M8 9v5M12 9v5" stroke="#ef4444" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
       </svg>
     `;
   },
@@ -7103,11 +7103,19 @@ const ButtonPanel = {
         const constrainedLeft = Math.max(constraints.minX, Math.min(constraints.maxX, savedPosition.left));
         const constrainedTop = Math.max(constraints.minY, Math.min(constraints.maxY, savedPosition.top));
         
+        // Check if saved position is valid (not off-screen on the right)
+        // If left position is too far right, reset to default left position
+        if (constrainedLeft > window.innerWidth / 2) {
+          console.log('[ButtonPanel] Saved position appears to be from right-side config, resetting...');
+          await PositionManager.clearPosition();
+          return; // Let CSS handle default positioning
+        }
+        
         // Apply the position
         this.panelContainer.style.left = `${constrainedLeft}px`;
         this.panelContainer.style.top = `${constrainedTop}px`;
         this.panelContainer.style.right = 'auto';
-        this.panelContainer.style.transform = 'none';
+        this.panelContainer.style.transform = 'translateY(-50%)';
         
         console.log('[ButtonPanel] Applied saved position:', { left: constrainedLeft, top: constrainedTop });
       }
@@ -7177,10 +7185,10 @@ const ButtonPanel = {
 
     const upperButtons = [
       {
-        id: 'remove-all-meanings',
+        id: 'remove-explanations',
         className: 'vocab-btn vocab-btn-outline-green hidden',
         icon: this.createTrashIcon('green'),
-        text: 'Remove meanings',
+        text: 'Remove explanations',
         type: 'outline-green'
       }
     ];
@@ -7210,10 +7218,10 @@ const ButtonPanel = {
         type: 'solid-purple'
       },
       {
-        id: 'custom-content',
+        id: 'import-content',
         className: 'vocab-btn vocab-btn-solid-purple',
-        icon: this.createContentIcon(),
-        text: 'Custom content',
+        icon: this.createUploadIcon(),
+        text: 'Import content',
         type: 'solid-purple'
       }
     ];
@@ -7273,15 +7281,15 @@ const ButtonPanel = {
   createPanIcon() {
     return `
       <svg width="20" height="16" viewBox="0 0 20 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <circle cx="6" cy="4" r="1.5" fill="#9527F5"/>
-        <circle cx="10" cy="4" r="1.5" fill="#9527F5"/>
-        <circle cx="14" cy="4" r="1.5" fill="#9527F5"/>
-        <circle cx="6" cy="8" r="1.5" fill="#9527F5"/>
-        <circle cx="10" cy="8" r="1.5" fill="#9527F5"/>
-        <circle cx="14" cy="8" r="1.5" fill="#9527F5"/>
-        <circle cx="6" cy="12" r="1.5" fill="#9527F5"/>
-        <circle cx="10" cy="12" r="1.5" fill="#9527F5"/>
-        <circle cx="14" cy="12" r="1.5" fill="#9527F5"/>
+        <circle cx="6" cy="4" r="1.5" fill="#d4b5f5"/>
+        <circle cx="10" cy="4" r="1.5" fill="#d4b5f5"/>
+        <circle cx="14" cy="4" r="1.5" fill="#d4b5f5"/>
+        <circle cx="6" cy="8" r="1.5" fill="#d4b5f5"/>
+        <circle cx="10" cy="8" r="1.5" fill="#d4b5f5"/>
+        <circle cx="14" cy="8" r="1.5" fill="#d4b5f5"/>
+        <circle cx="6" cy="12" r="1.5" fill="#d4b5f5"/>
+        <circle cx="10" cy="12" r="1.5" fill="#d4b5f5"/>
+        <circle cx="14" cy="12" r="1.5" fill="#d4b5f5"/>
       </svg>
     `;
   },
@@ -7374,13 +7382,11 @@ const ButtonPanel = {
    * @returns {string} SVG markup
    */
   createTrashIcon(color) {
-    const strokeColor = color === 'green' ? '#22c55e' : '#9527F5';
+    const strokeColor = color === 'green' ? '#16a34a' : '#9527F5';
     return `
-      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M2 4h12M5.333 4V2.667a1.333 1.333 0 0 1 1.334-1.334h2.666a1.333 1.333 0 0 1 1.334 1.334V4m2 0v9.333a1.333 1.333 0 0 1-1.334 1.334H4.667a1.333 1.333 0 0 1-1.334-1.334V4h9.334Z" stroke="${strokeColor}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-        <path d="M6.667 7.333v4M9.333 7.333v4" stroke="${strokeColor}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-        <circle cx="12" cy="4" r="2" fill="white"/>
-        <path d="M10.5 3l1 1m0 0l1 1m-1-1l1-1m-1 1l-1 1" stroke="${strokeColor}" stroke-width="1.2" stroke-linecap="round"/>
+      <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M3 5h14M6.5 5V3.5a1.5 1.5 0 0 1 1.5-1.5h4a1.5 1.5 0 0 1 1.5 1.5V5M15 5v10.5a1.5 1.5 0 0 1-1.5 1.5h-7a1.5 1.5 0 0 1-1.5-1.5V5h10Z" stroke="${strokeColor}" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M8 9v5M12 9v5" stroke="${strokeColor}" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
       </svg>
     `;
   },
@@ -7400,16 +7406,32 @@ const ButtonPanel = {
   },
 
   /**
-   * Create chat bubble icon SVG (solid white)
+   * Create chat bubble icon SVG - Purple wireframe chatbot agent
    * @returns {string} SVG markup
    */
   createChatIcon() {
     return `
-      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M8 1C4.134 1 1 3.91 1 7.5C1 9.09 1.59 10.56 2.586 11.707L1.293 14.293C1.195 14.488 1.195 14.722 1.293 14.918C1.39 15.113 1.597 15.234 1.817 15.234C1.89 15.234 1.963 15.219 2.033 15.188L5.457 13.711C6.245 13.9 7.107 14 8 14C11.866 14 15 11.09 15 7.5C15 3.91 11.866 1 8 1Z" fill="white"/>
-        <circle cx="5" cy="7.5" r="1" fill="#9527F5"/>
-        <circle cx="8" cy="7.5" r="1" fill="#9527F5"/>
-        <circle cx="11" cy="7.5" r="1" fill="#9527F5"/>
+      <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect x="4" y="4" width="12" height="10" rx="2" stroke="#9527F5" stroke-width="1.3" fill="none"/>
+        <line x1="10" y1="2" x2="10" y2="4" stroke="#9527F5" stroke-width="1.3" stroke-linecap="round"/>
+        <circle cx="10" cy="1.5" r="0.8" fill="#9527F5"/>
+        <circle cx="7.5" cy="8.5" r="1.2" fill="#9527F5"/>
+        <circle cx="12.5" cy="8.5" r="1.2" fill="#9527F5"/>
+        <path d="M7 11C7.5 11.8 8.5 12.5 10 12.5C11.5 12.5 12.5 11.8 13 11" stroke="#9527F5" stroke-width="1.3" stroke-linecap="round" fill="none"/>
+        <path d="M10 14L10 16.5L8 15" stroke="#9527F5" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    `;
+  },
+
+  /**
+   * Create upload icon SVG - Purple wireframe
+   * @returns {string} SVG markup
+   */
+  createUploadIcon() {
+    return `
+      <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M10 14V6M10 6L7 9M10 6L13 9" stroke="#9527F5" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M4 14V16C4 17.1046 4.89543 18 6 18H14C15.1046 18 16 17.1046 16 16V14" stroke="#9527F5" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
       </svg>
     `;
   },
@@ -7420,10 +7442,10 @@ const ButtonPanel = {
    */
   createContentIcon() {
     return `
-      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M3 2C3 1.448 3.448 1 4 1H12C12.552 1 13 1.448 13 2V14C13 14.552 12.552 15 12 15H4C3.448 15 3 14.552 3 14V2Z" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-        <path d="M5 5H11M5 7H11M5 9H9" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-        <path d="M6 12H10" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+      <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="5" cy="10" r="1.5" fill="#9527F5"/>
+        <circle cx="10" cy="10" r="1.5" fill="#9527F5"/>
+        <circle cx="15" cy="10" r="1.5" fill="#9527F5"/>
       </svg>
     `;
   },
@@ -7512,9 +7534,9 @@ const ButtonPanel = {
       /* Main Panel Container */
       .vocab-helper-panel {
         position: fixed;
-        right: 0;
+        left: 0;
         top: 50%;
-        transform: translateY(-50%) translateX(100%);
+        transform: translateY(-50%) translateX(-100%);
         z-index: 999999;
         font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
         transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
@@ -7526,13 +7548,15 @@ const ButtonPanel = {
         transform: translateY(-50%) translateX(0);
       }
 
-      /* Wrapper Container - Invisible container for button group + pan button */
+      /* Wrapper Container - Unified container for button group + drag handle */
       .vocab-wrapper-container {
         display: flex;
         flex-direction: column;
         align-items: center;
         gap: 0;
         overflow: visible !important;
+        border-radius: 100px;
+        box-shadow: 0 4px 20px rgba(149, 39, 245, 0.3), 0 2px 8px rgba(149, 39, 245, 0.2);
       }
 
       /* Main Button Group with Purple Shadow */
@@ -7541,10 +7565,11 @@ const ButtonPanel = {
         flex-direction: column;
         gap: 0;
         background: white;
-        padding: 6px 6px 6px 6px;
-        border-radius: 16px;
-        box-shadow: 0 4px 20px rgba(149, 39, 245, 0.3), 0 2px 8px rgba(149, 39, 245, 0.2);
+        padding: 6px 6px 0 6px;
+        border-radius: 100px 100px 0 0;
+        box-shadow: none;
         border: 1px solid rgba(149, 39, 245, 0.1);
+        border-bottom: none;
         overflow: visible !important;
       }
 
@@ -7577,6 +7602,7 @@ const ButtonPanel = {
         flex-direction: column;
         gap: 6px;
         padding-top: 0;
+        padding-bottom: 6px;
         transition: gap 0.3s ease;
         overflow: hidden;
       }
@@ -7586,20 +7612,16 @@ const ButtonPanel = {
         display: flex;
         justify-content: center;
         align-items: center;
-        padding: 6px 16px 8px 16px;
+        padding: 8px 6px 10px 6px;
         cursor: grab;
         user-select: none;
-        border-radius: 0 0 20px 20px;
+        border-radius: 0 0 100px 100px;
         background: white;
-        width: fit-content;
-        margin-top: -1px;
-        box-shadow: 
-          2px 4px 4px rgba(149, 39, 245, 0.15),
-          -2px 4px 4px rgba(149, 39, 245, 0.15),
-          0 4px 3px rgba(149, 39, 245, 0.12);
+        width: calc(46px);
+        margin-top: 0;
+        box-shadow: none;
         border: 1px solid rgba(149, 39, 245, 0.1);
         border-top: none;
-        clip-path: inset(0px -10px -10px -10px);
       }
 
       .vocab-drag-handle:hover {
@@ -7616,25 +7638,25 @@ const ButtonPanel = {
         display: block;
       }
 
-      /* Base Button Styles */
+      /* Base Button Styles - Icon Only */
       .vocab-btn {
-        display: grid;
-        grid-template-columns: 20px 1fr;
+        display: flex;
         align-items: center;
+        justify-content: center;
         gap: 6px;
-        padding: 8px 10px;
-        border-radius: 10px;
+        padding: 12px;
+        border-radius: 50%;
         font-size: 11.5px;
         font-weight: 500;
-        border: 2px solid;
+        border: none;
         cursor: pointer;
-        transition: background 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+        transition: background 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
         outline: none;
-        width: 100px;
+        width: 46px;
+        height: 46px;
         max-height: 100px;
         overflow: hidden;
         opacity: 1;
-        min-height: 32px;
         text-decoration: none;
       }
       
@@ -7664,7 +7686,7 @@ const ButtonPanel = {
         }
         100% {
           opacity: 0;
-          transform: translateX(120px) scale(0.8);
+          transform: translateX(-120px) scale(0.8);
           max-height: 0;
           margin-top: 0;
           margin-bottom: 0;
@@ -7680,12 +7702,11 @@ const ButtonPanel = {
       @keyframes buttonSlideInRight {
         0% {
           opacity: 0;
-          transform: translateX(120px) scale(0.8);
+          transform: translateX(-120px) scale(0.8);
           max-height: 0;
           margin-top: 0;
           margin-bottom: 0;
-          padding-top: 0;
-          padding-bottom: 0;
+          padding: 0;
         }
         60% {
           opacity: 1;
@@ -7696,8 +7717,7 @@ const ButtonPanel = {
           max-height: 100px;
           margin-top: 0;
           margin-bottom: 0;
-          padding-top: 8px;
-          padding-bottom: 8px;
+          padding: 12px;
         }
       }
 
@@ -7709,29 +7729,30 @@ const ButtonPanel = {
       .vocab-btn-icon {
         display: flex;
         align-items: center;
-        justify-content: flex-start;
-        width: 20px;
-        height: 20px;
+        justify-content: center;
+        width: 22px;
+        height: 22px;
+      }
+      
+      .vocab-btn-icon svg {
+        width: 22px;
+        height: 22px;
       }
 
       .vocab-btn-text {
-        text-align: left;
-        line-height: 1.2;
-        word-wrap: break-word;
-        white-space: normal;
+        display: none !important;
       }
 
-      /* Green Outline Button */
+      /* Green Outline Button - Remove Meanings */
       .vocab-btn-outline-green {
-        background: white;
-        border-color: #22c55e;
-        color: #22c55e;
+        background: #d1fae5 !important;
+        border: none !important;
+        color: #16a34a;
       }
 
       .vocab-btn-outline-green:hover {
-        background: #f0fdf4;
-        border-color: #16a34a;
-        color: #16a34a;
+        background: #a7f3d0 !important;
+        color: #15803d;
         text-decoration: none;
       }
 
@@ -7756,10 +7777,66 @@ const ButtonPanel = {
         color: white;
       }
 
-      .vocab-btn-solid-purple:hover {
+      .vocab-btn-solid-purple:hover:not(.disabled) {
         background: #7a1fd9;
         border-color: #7a1fd9;
         text-decoration: none;
+      }
+
+      /* Import Content Button - Light Purple BG with Upload Icon */
+      #import-content {
+        background: #ede5ff !important;
+        border: none !important;
+      }
+
+      #import-content:hover {
+        background: #ddc8ff !important;
+      }
+      
+      /* Ask Anything Button - Light Purple BG with Purple Wireframe Icon */
+      #ask {
+        background: #ede5ff !important;
+        border: none !important;
+      }
+
+      #ask:hover:not(.disabled) {
+        background: #ddc8ff !important;
+      }
+
+      /* Magic Meaning Button - VIBGYOR Flowing Gradient when enabled */
+      #magic-meaning:not(.disabled) {
+        background: linear-gradient(
+          45deg,
+          #8B5CF6,
+          #4F46E5,
+          #3B82F6,
+          #10B981,
+          #F59E0B,
+          #F97316,
+          #EF4444,
+          #8B5CF6
+        );
+        background-size: 400% 400%;
+        border-color: #8B5CF6;
+        animation: vibgyorFlow 3s ease-in-out infinite;
+        position: relative;
+        overflow: hidden;
+      }
+      
+      #magic-meaning:hover:not(.disabled) {
+        animation: vibgyorFlow 2s ease-in-out infinite;
+      }
+
+      @keyframes vibgyorFlow {
+        0% {
+          background-position: 0% 50%;
+        }
+        50% {
+          background-position: 100% 50%;
+        }
+        100% {
+          background-position: 0% 50%;
+        }
       }
 
       /* Disabled Button State */
@@ -7839,7 +7916,7 @@ const ButtonPanel = {
         content: '';
         position: absolute;
         top: 100%;
-        right: 20px;
+        left: 20px;
         border: 6px solid transparent;
         border-top-color: white;
         filter: drop-shadow(0 2px 3px rgba(167, 139, 250, 0.2));
@@ -7853,7 +7930,7 @@ const ButtonPanel = {
       /* Responsive adjustments */
       @media (max-width: 768px) {
         .vocab-helper-panel {
-          right: 0;
+          left: 0;
         }
 
         .vocab-button-group-main {
@@ -7861,25 +7938,28 @@ const ButtonPanel = {
         }
 
         .vocab-btn {
-          width: 90px;
-          padding: 6px 8px;
-          font-size: 11px;
-          grid-template-columns: 16px 1fr;
-          gap: 4px;
+          width: 40px;
+          height: 40px;
+          padding: 10px;
         }
 
         .vocab-btn-icon {
-          width: 16px;
-          height: 16px;
+          width: 18px;
+          height: 18px;
+        }
+        
+        .vocab-btn-icon svg {
+          width: 18px;
+          height: 18px;
         }
       }
 
       /* Vertical Button Group Styles */
       .vocab-vertical-button-group {
         position: absolute;
-        right: 100%;
+        left: 100%;
         top: 50%;
-        transform: translateY(-50%) translateX(12px) translateY(23px);
+        transform: translateY(-50%) translateX(-12px) translateY(23px);
         display: flex;
         flex-direction: column;
         gap: 6px;
@@ -7899,7 +7979,7 @@ const ButtonPanel = {
         opacity: 1;
         visibility: visible;
         pointer-events: auto;
-        transform: translateY(-50%) translateX(16px) translateY(23px);
+        transform: translateY(-50%) translateX(-16px) translateY(23px);
       }
 
 
@@ -7954,8 +8034,8 @@ const ButtonPanel = {
       /* Responsive adjustments for vertical button group */
       @media (max-width: 768px) {
         .vocab-vertical-button-group {
-          right: 100%;
-          transform: translateY(-50%) translateX(-15px);
+          left: 100%;
+          transform: translateY(-50%) translateX(15px);
           padding: 0;
           min-width: 100px;
         }
@@ -9409,15 +9489,15 @@ const ButtonPanel = {
    */
   attachEventListeners() {
     const buttons = {
-      removeAllMeanings: document.getElementById('remove-all-meanings'),
+      removeExplanations: document.getElementById('remove-explanations'),
       magicMeaning: document.getElementById('magic-meaning'),
       ask: document.getElementById('ask'),
-      customContent: document.getElementById('custom-content')
+      importContent: document.getElementById('import-content')
     };
 
-    // Remove all meanings button
-    buttons.removeAllMeanings?.addEventListener('click', () => {
-      console.log('Remove all meanings clicked');
+    // Remove explanations button
+    buttons.removeExplanations?.addEventListener('click', () => {
+      console.log('Remove explanations clicked');
       this.handleRemoveAllMeanings();
     });
 
@@ -9443,10 +9523,10 @@ const ButtonPanel = {
       this.handleAsk();
     });
 
-    // Custom content button
-    buttons.customContent?.addEventListener('click', (e) => {
+    // Import content button
+    buttons.importContent?.addEventListener('click', (e) => {
       e.stopPropagation(); // Prevent event from bubbling up
-      console.log('Custom content clicked');
+      console.log('Import content clicked');
       this.toggleVerticalButtonGroup();
     });
 
@@ -9488,6 +9568,13 @@ const ButtonPanel = {
     });
 
     // Add tooltip event listeners
+    if (buttons.removeExplanations) {
+      console.log('[ButtonPanel] Attaching tooltip to Remove explanations button');
+      this.attachTooltipListeners(buttons.removeExplanations, 'remove-explanations');
+    } else {
+      console.warn('[ButtonPanel] Remove explanations button not found');
+    }
+    
     if (buttons.magicMeaning) {
       console.log('[ButtonPanel] Attaching tooltip to Magic meaning button');
       this.attachTooltipListeners(buttons.magicMeaning, 'magic-meaning');
@@ -9501,12 +9588,19 @@ const ButtonPanel = {
     } else {
       console.warn('[ButtonPanel] Ask button not found');
     }
+    
+    if (buttons.importContent) {
+      console.log('[ButtonPanel] Attaching tooltip to Import content button');
+      this.attachTooltipListeners(buttons.importContent, 'import-content');
+    } else {
+      console.warn('[ButtonPanel] Import content button not found');
+    }
 
     // Close vertical button group when clicking outside
     document.addEventListener('click', (e) => {
       if (this.verticalButtonGroup && this.verticalButtonGroup.classList.contains('visible')) {
-        // Check if click is outside both the custom content button and the vertical group
-        const clickedInsideButton = buttons.customContent?.contains(e.target);
+        // Check if click is outside both the import content button and the vertical group
+        const clickedInsideButton = buttons.importContent?.contains(e.target);
         const clickedInsideGroup = this.verticalButtonGroup?.contains(e.target);
         
         if (!clickedInsideButton && !clickedInsideGroup) {
@@ -9542,10 +9636,13 @@ const ButtonPanel = {
       let message = '';
 
       // Determine tooltip message based on button type and state
-      if (buttonType === 'magic-meaning') {
+      if (buttonType === 'remove-explanations') {
+        message = 'Remove all explanations';
+        console.log(`[ButtonPanel] Remove-explanations button message: "${message}"`);
+      } else if (buttonType === 'magic-meaning') {
         message = isDisabled 
           ? 'Select words or passages first' 
-          : 'Get meanings and explanations';
+          : 'Get contextual explanations';
         console.log(`[ButtonPanel] Magic-meaning button message: "${message}"`);
       } else if (buttonType === 'ask') {
         if (isDisabled) {
@@ -9562,6 +9659,9 @@ const ButtonPanel = {
           message = 'Ask anything about the selected content';
         }
         console.log(`[ButtonPanel] Ask button message: "${message}" (textCount: ${TextSelector.selectedTexts.size})`);
+      } else if (buttonType === 'import-content') {
+        message = 'Import content';
+        console.log(`[ButtonPanel] Import-content button message: "${message}"`);
       }
 
       console.log(`[ButtonPanel] Final tooltip message: "${message}" (disabled: ${isDisabled})`);
@@ -9575,13 +9675,12 @@ const ButtonPanel = {
       document.body.appendChild(tooltip);
       console.log(`[ButtonPanel] Tooltip appended to body`);
       
-      // Position tooltip relative to button (top-left)
+      // Position tooltip relative to button (top-right since panel is on left)
       const buttonRect = button.getBoundingClientRect();
       tooltip.style.position = 'fixed';
       tooltip.style.top = (buttonRect.top - 50) + 'px';
-      // Position tooltip to the left of the button, accounting for tooltip width
-      const tooltipWidth = 200; // Approximate tooltip width
-      tooltip.style.left = (buttonRect.left - tooltipWidth - 10) + 'px';
+      // Position tooltip to the right of the button
+      tooltip.style.left = (buttonRect.right + 10) + 'px';
       tooltip.style.zIndex = '9999999';
       console.log(`[ButtonPanel] Tooltip positioned at:`, tooltip.style.top, tooltip.style.left);
       console.log(`[ButtonPanel] Button rect:`, buttonRect);
@@ -9644,6 +9743,12 @@ const ButtonPanel = {
    */
   handleRemoveAllMeanings() {
     console.log('[ButtonPanel] Remove all meanings clicked');
+    
+    // Close any open right-side popups (chat dialog, etc.)
+    if (ChatDialog && ChatDialog.isOpen) {
+      console.log('[ButtonPanel] Closing chat dialog before removing meanings');
+      ChatDialog.close();
+    }
     
     // Get current context
     const context = this.getCurrentContentContext();
@@ -10792,59 +10897,59 @@ const ButtonPanel = {
   },
 
   /**
-   * Hide the custom content button
+   * Hide the import content button
    */
   hideCustomContentButton() {
-    const customContentBtn = document.getElementById('custom-content');
-    console.log('[ButtonPanel] Attempting to hide custom content button:', customContentBtn);
+    const importContentBtn = document.getElementById('import-content');
+    console.log('[ButtonPanel] Attempting to hide import content button:', importContentBtn);
     
-    if (customContentBtn) {
+    if (importContentBtn) {
       // Store the button's parent and next sibling for reinsertion
-      this.customContentButtonParent = customContentBtn.parentNode;
-      this.customContentButtonNextSibling = customContentBtn.nextSibling;
+      this.importContentButtonParent = importContentBtn.parentNode;
+      this.importContentButtonNextSibling = importContentBtn.nextSibling;
       
-      console.log('[ButtonPanel] Stored parent:', this.customContentButtonParent);
-      console.log('[ButtonPanel] Stored next sibling:', this.customContentButtonNextSibling);
+      console.log('[ButtonPanel] Stored parent:', this.importContentButtonParent);
+      console.log('[ButtonPanel] Stored next sibling:', this.importContentButtonNextSibling);
       
       // Simply remove from DOM - this will immediately fix the layout
-      customContentBtn.remove();
-      console.log('[ButtonPanel] Custom content button removed from DOM');
+      importContentBtn.remove();
+      console.log('[ButtonPanel] Import content button removed from DOM');
     } else {
-      console.log('[ButtonPanel] Custom content button not found!');
+      console.log('[ButtonPanel] Import content button not found!');
     }
   },
 
   /**
-   * Show the custom content button
+   * Show the import content button
    */
   showCustomContentButton() {
     // Only recreate if we have the stored references
-    if (this.customContentButtonParent) {
+    if (this.importContentButtonParent) {
       // Recreate the button
-      const customContentBtn = this.createButton({
-        id: 'custom-content',
+      const importContentBtn = this.createButton({
+        id: 'import-content',
         className: 'vocab-btn vocab-btn-solid-purple',
-        icon: this.createContentIcon(),
-        text: 'Custom content',
+        icon: this.createUploadIcon(),
+        text: 'Import content',
         type: 'solid-purple'
       });
       
       // Reattach event listeners
-      customContentBtn.addEventListener('click', (e) => {
+      importContentBtn.addEventListener('click', (e) => {
         e.stopPropagation(); // Prevent event from bubbling up
-        console.log('Custom content clicked');
+        console.log('Import content clicked');
         this.toggleVerticalButtonGroup();
       });
       
       // Insert back into the DOM
-      if (this.customContentButtonNextSibling) {
-        this.customContentButtonParent.insertBefore(customContentBtn, this.customContentButtonNextSibling);
+      if (this.importContentButtonNextSibling) {
+        this.importContentButtonParent.insertBefore(importContentBtn, this.importContentButtonNextSibling);
       } else {
-        this.customContentButtonParent.appendChild(customContentBtn);
+        this.importContentButtonParent.appendChild(importContentBtn);
       }
       
       // Store reference for future removal
-      this.customContentButton = customContentBtn;
+      this.importContentButton = importContentBtn;
     }
   },
 
@@ -11371,9 +11476,14 @@ const ButtonPanel = {
   show() {
     if (this.panelContainer) {
       this.panelContainer.style.display = 'block';
-      // Add visible class for initial slide-in animation if at default position
+      // Ensure left-side positioning if no custom position is set
+      if (!this.panelContainer.style.left || this.panelContainer.style.left === '') {
+        this.panelContainer.style.left = '0';
+        this.panelContainer.style.right = 'auto';
+      }
+      // Add visible class for initial slide-in animation
       this.panelContainer.classList.add('visible');
-      console.log('[ButtonPanel] Panel shown');
+      console.log('[ButtonPanel] Panel shown at left:', this.panelContainer.style.left);
     }
   },
 
@@ -11446,7 +11556,7 @@ const ButtonPanel = {
     }
 
     // Update individual button visibility in upper group with smooth animation
-    const removeMeaningsBtn = document.getElementById('remove-all-meanings');
+    const removeMeaningsBtn = document.getElementById('remove-explanations');
     
     if (removeMeaningsBtn) {
       if (this.state.showRemoveMeanings) {
