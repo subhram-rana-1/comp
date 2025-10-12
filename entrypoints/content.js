@@ -7059,6 +7059,13 @@ const ButtonPanel = {
     showVerticalGroup: false       // Controls visibility of vertical button group
   },
 
+  // API completion tracking
+  apiCompletionState: {
+    simplifyCompleted: true,
+    wordsExplanationCompleted: true,
+    shouldTrack: false  // Only track when magic meaning is clicked
+  },
+
   /**
    * Initialize the button panel
    */
@@ -7437,6 +7444,31 @@ const ButtonPanel = {
   },
 
   /**
+   * Create processing spinner icon SVG
+   * @returns {string} SVG markup
+   */
+  createProcessingSpinner() {
+    return `
+      <svg class="vocab-processing-spinner" width="28" height="28" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="14" cy="14" r="10" stroke="white" stroke-width="3" stroke-opacity="0.3" fill="none"/>
+        <path d="M14 4 A10 10 0 0 1 24 14" stroke="white" stroke-width="3" stroke-linecap="round" fill="none"/>
+      </svg>
+    `;
+  },
+
+  /**
+   * Create success check icon SVG
+   * @returns {string} SVG markup
+   */
+  createSuccessCheckIcon() {
+    return `
+      <svg width="28" height="28" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M6 14L11 19L22 8" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    `;
+  },
+
+  /**
    * Create content icon SVG (solid white)
    * @returns {string} SVG markup
    */
@@ -7518,6 +7550,183 @@ const ButtonPanel = {
   },
 
   /**
+   * Check if success banner should be shown
+   * @returns {Promise<boolean>}
+   */
+  async shouldShowSuccessBanner() {
+    try {
+      const result = await chrome.storage.local.get(['dontShowSuccessBanner']);
+      return !result.dontShowSuccessBanner; // Show if not set or false
+    } catch (error) {
+      console.error('[ButtonPanel] Error checking success banner preference:', error);
+      return true; // Default to showing
+    }
+  },
+
+  /**
+   * Set success banner preference
+   * @param {boolean} dontShow - Whether to hide banner in future
+   */
+  async setSuccessBannerPreference(dontShow) {
+    try {
+      await chrome.storage.local.set({ dontShowSuccessBanner: dontShow });
+      console.log('[ButtonPanel] Success banner preference saved:', dontShow);
+    } catch (error) {
+      console.error('[ButtonPanel] Error saving success banner preference:', error);
+    }
+  },
+
+  /**
+   * Show success banner after API completion
+   */
+  async showSuccessBanner() {
+    // Check if user has opted out
+    const shouldShow = await this.shouldShowSuccessBanner();
+    if (!shouldShow) {
+      console.log('[ButtonPanel] Success banner hidden by user preference');
+      return;
+    }
+
+    // Create banner element
+    const banner = document.createElement('div');
+    banner.className = 'vocab-success-banner';
+    banner.innerHTML = `
+      <div class="vocab-success-banner-header">
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="10" cy="10" r="9" stroke="#22c55e" stroke-width="2" fill="none"/>
+          <path d="M6 10L9 13L14 8" stroke="#22c55e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <span class="vocab-success-banner-text">Your contextual explanations are ready</span>
+      </div>
+      <div class="vocab-success-banner-footer">
+        <button class="vocab-success-banner-dismiss" title="Don't show again">Don't show again</button>
+      </div>
+    `;
+
+    // Add to body
+    document.body.appendChild(banner);
+
+    // Add dismiss handler
+    const dismissBtn = banner.querySelector('.vocab-success-banner-dismiss');
+    dismissBtn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      await this.setSuccessBannerPreference(true);
+      banner.classList.add('hiding');
+      setTimeout(() => banner.remove(), 300);
+    });
+
+    // Show banner with animation
+    requestAnimationFrame(() => {
+      banner.classList.add('visible');
+    });
+
+    // Auto-hide after 4 seconds
+    setTimeout(() => {
+      banner.classList.add('hiding');
+      setTimeout(() => banner.remove(), 300);
+    }, 4000);
+  },
+
+  /**
+   * Update magic meaning button to show processing state
+   */
+  setMagicMeaningProcessing() {
+    const magicBtn = document.getElementById('magic-meaning');
+    if (magicBtn) {
+      const iconSpan = magicBtn.querySelector('.vocab-btn-icon');
+      if (iconSpan) {
+        iconSpan.innerHTML = this.createProcessingSpinner();
+      }
+      magicBtn.classList.add('processing');
+      magicBtn.disabled = true;
+      
+      // Remove any existing tooltips when state changes
+      this.removeAllTooltips();
+    }
+  },
+
+  /**
+   * Update magic meaning button to show success state
+   */
+  setMagicMeaningSuccess() {
+    const magicBtn = document.getElementById('magic-meaning');
+    if (magicBtn) {
+      const iconSpan = magicBtn.querySelector('.vocab-btn-icon');
+      if (iconSpan) {
+        iconSpan.innerHTML = this.createSuccessCheckIcon();
+      }
+      magicBtn.classList.remove('processing');
+      magicBtn.classList.add('success');
+      // Keep button disabled during success animation
+      magicBtn.disabled = true;
+      
+      // Remove any existing tooltips when state changes
+      this.removeAllTooltips();
+    }
+  },
+
+  /**
+   * Reset magic meaning button to its proper state based on selections
+   */
+  resetMagicMeaningButton() {
+    const magicBtn = document.getElementById('magic-meaning');
+    if (magicBtn) {
+      const iconSpan = magicBtn.querySelector('.vocab-btn-icon');
+      if (iconSpan) {
+        iconSpan.innerHTML = this.createSparkleIcon();
+      }
+      magicBtn.classList.remove('processing', 'success');
+      
+      // Remove any existing tooltips when state changes
+      this.removeAllTooltips();
+      
+      // Update button state based on current selections
+      // This will enable the button if there are new selections, or disable it if there aren't
+      this.updateButtonStatesFromSelections();
+    }
+  },
+
+  /**
+   * Remove all tooltips from the page
+   */
+  removeAllTooltips() {
+    const tooltips = document.querySelectorAll('.vocab-btn-tooltip');
+    tooltips.forEach(tooltip => {
+      tooltip.classList.remove('visible');
+      tooltip.remove();
+    });
+  },
+
+  /**
+   * Check if all APIs have completed
+   */
+  checkAPICompletion() {
+    if (!this.apiCompletionState.shouldTrack) {
+      return;
+    }
+
+    console.log('[ButtonPanel] Checking API completion:', this.apiCompletionState);
+
+    if (this.apiCompletionState.simplifyCompleted && this.apiCompletionState.wordsExplanationCompleted) {
+      console.log('[ButtonPanel] All APIs completed!');
+      
+      // Stop tracking
+      this.apiCompletionState.shouldTrack = false;
+
+      // Show success state
+      this.setMagicMeaningSuccess();
+
+      // Show success banner
+      this.showSuccessBanner();
+
+      // Reset button after 2 seconds
+      setTimeout(() => {
+        this.resetMagicMeaningButton();
+      }, 2000);
+    }
+  },
+
+  /**
    * Inject CSS styles for the button panel
    */
   injectStyles() {
@@ -7557,6 +7766,7 @@ const ButtonPanel = {
         overflow: visible !important;
         border-radius: 100px;
         box-shadow: 0 4px 20px rgba(149, 39, 245, 0.3), 0 2px 8px rgba(149, 39, 245, 0.2);
+        background: transparent;
       }
 
       /* Main Button Group with Purple Shadow */
@@ -7565,7 +7775,7 @@ const ButtonPanel = {
         flex-direction: column;
         gap: 0;
         background: white;
-        padding: 6px 6px 0 6px;
+        padding: 0;
         border-radius: 100px 100px 0 0;
         box-shadow: none;
         border: 1px solid rgba(149, 39, 245, 0.1);
@@ -7577,7 +7787,7 @@ const ButtonPanel = {
       .vocab-button-group-upper {
         display: flex;
         flex-direction: column;
-        gap: 6px;
+        gap: 0;
         max-height: 0;
         overflow: hidden;
         opacity: 0;
@@ -7585,26 +7795,27 @@ const ButtonPanel = {
         transform-origin: top;
         transition: max-height 0.3s ease, opacity 0.3s ease, transform 0.3s ease, margin 0.3s ease, padding 0.3s ease;
         margin-bottom: 0;
-        padding-top: 0;
+        padding: 0;
+        background: transparent;
       }
       
       .vocab-button-group-upper.visible {
         max-height: 200px;
         opacity: 1;
         transform: scaleY(1);
-        margin-bottom: 6px;
-        padding-top: 0;
+        margin-bottom: 0;
+        padding: 0;
       }
 
       /* Lower Button Group (no additional styling) */
       .vocab-button-group-lower {
         display: flex;
         flex-direction: column;
-        gap: 6px;
-        padding-top: 0;
-        padding-bottom: 6px;
+        gap: 0;
+        padding: 0;
         transition: gap 0.3s ease;
-        overflow: hidden;
+        overflow: visible;
+        background: transparent;
       }
 
       /* Drag Handle Styles - Semi-circular (bottom half rounded) */
@@ -7658,6 +7869,8 @@ const ButtonPanel = {
         overflow: hidden;
         opacity: 1;
         text-decoration: none;
+        margin: 6px;
+        flex-shrink: 0;
       }
       
       /* Disable transitions during animations to prevent conflicts */
@@ -9479,6 +9692,201 @@ const ButtonPanel = {
           margin: 10px 0 15px 0;
         }
       }
+
+      /* ===================================
+         Success Banner Styles
+         =================================== */
+      .vocab-success-banner {
+        position: fixed;
+        top: 20px;
+        right: -350px;
+        background: white;
+        border: 2px solid #22c55e;
+        border-radius: 12px;
+        padding: 16px 20px 12px 20px;
+        box-shadow: 0 4px 12px rgba(34, 197, 94, 0.2);
+        z-index: 2147483647;
+        opacity: 0;
+        transition: opacity 0.4s ease, right 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+        pointer-events: all;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        min-width: 300px;
+      }
+
+      .vocab-success-banner.visible {
+        opacity: 1;
+        right: 20px;
+      }
+
+      .vocab-success-banner.hiding {
+        opacity: 0;
+        right: -350px;
+        transition: opacity 0.3s ease, right 0.4s cubic-bezier(0.6, 0, 0.4, 1);
+      }
+
+      .vocab-success-banner-header {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+
+      .vocab-success-banner-text {
+        font-family: 'Inter', 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        font-size: 14px;
+        font-weight: 500;
+        color: #16a34a;
+      }
+
+      .vocab-success-banner-footer {
+        display: flex;
+        justify-content: flex-end;
+        align-items: center;
+      }
+
+      .vocab-success-banner-dismiss {
+        background: transparent;
+        border: 1px solid #22c55e;
+        color: #16a34a;
+        padding: 4px 12px;
+        border-radius: 6px;
+        font-size: 11px;
+        font-family: 'Inter', 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        white-space: nowrap;
+      }
+
+      .vocab-success-banner-dismiss:hover {
+        background: #22c55e;
+        color: white;
+      }
+
+      /* ===================================
+         Processing Spinner Animation
+         =================================== */
+      .vocab-processing-spinner {
+        animation: vocab-spin 1s linear infinite;
+      }
+
+      @keyframes vocab-spin {
+        0% {
+          transform: rotate(0deg);
+        }
+        100% {
+          transform: rotate(360deg);
+        }
+      }
+
+      /* ===================================
+         Magic Meaning Button States
+         =================================== */
+      .vocab-btn.processing {
+        pointer-events: none;
+        opacity: 1;
+      }
+
+      .vocab-btn.success {
+        background: #22c55e !important;
+        border-color: #22c55e !important;
+      }
+
+      .vocab-btn.success:hover {
+        background: #16a34a !important;
+        border-color: #16a34a !important;
+      }
+
+      /* Magic Meaning Button - Ready/Enabled State Animation */
+      #magic-meaning:not(.disabled):not(.processing):not(.success) {
+        animation: vocab-magic-ready 2s ease-in-out infinite;
+        position: relative;
+        overflow: hidden;
+        isolation: isolate;
+      }
+
+      /* Attention-grabbing animation when button becomes enabled */
+      #magic-meaning.just-enabled {
+        animation: vocab-magic-attention 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+      }
+
+      @keyframes vocab-magic-attention {
+        0% {
+          transform: scale(1);
+        }
+        30% {
+          transform: scale(1.15);
+        }
+        50% {
+          transform: scale(0.95);
+        }
+        70% {
+          transform: scale(1.05);
+        }
+        100% {
+          transform: scale(1);
+        }
+      }
+
+      #magic-meaning:not(.disabled):not(.processing):not(.success)::before {
+        content: '';
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        width: 120%;
+        height: 120%;
+        transform: translate(-50%, -50%);
+        border-radius: 50%;
+        background: radial-gradient(circle, rgba(149, 39, 245, 0.4), rgba(208, 151, 255, 0.2), transparent 70%);
+        opacity: 0;
+        z-index: -1;
+        animation: vocab-magic-glow 2s ease-in-out infinite;
+        pointer-events: none;
+      }
+
+      @keyframes vocab-magic-ready {
+        0%, 100% {
+          transform: scale(1);
+          box-shadow: 0 2px 8px rgba(149, 39, 245, 0.3);
+        }
+        50% {
+          transform: scale(1.05);
+          box-shadow: 0 4px 16px rgba(149, 39, 245, 0.5), 0 0 20px rgba(149, 39, 245, 0.3);
+        }
+      }
+
+      @keyframes vocab-magic-glow {
+        0%, 100% {
+          opacity: 0;
+          transform: translate(-50%, -50%) scale(1);
+        }
+        50% {
+          opacity: 1;
+          transform: translate(-50%, -50%) scale(1.1);
+        }
+      }
+
+      /* Shimmer effect for magic meaning button */
+      #magic-meaning:not(.disabled):not(.processing):not(.success)::after {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: -100%;
+        width: 100%;
+        height: 100%;
+        background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+        animation: vocab-magic-shimmer 3s ease-in-out infinite;
+        pointer-events: none;
+      }
+
+      @keyframes vocab-magic-shimmer {
+        0% {
+          left: -100%;
+        }
+        50%, 100% {
+          left: 100%;
+        }
+      }
     `;
 
     document.head.appendChild(style);
@@ -9629,6 +10037,9 @@ const ButtonPanel = {
       console.log(`[ButtonPanel] Mouse enter on ${buttonType} button`);
       console.log(`[ButtonPanel] Button element:`, button);
       console.log(`[ButtonPanel] Button classes:`, button.className);
+      
+      // Clean up any existing tooltips first
+      this.removeAllTooltips();
       
       const isDisabled = button.classList.contains('disabled');
       console.log(`[ButtonPanel] Is disabled: ${isDisabled}`);
@@ -10109,6 +10520,16 @@ const ButtonPanel = {
       console.warn('[ButtonPanel] No text or words selected');
       return;
     }
+
+    // Initialize API completion tracking
+    this.apiCompletionState.simplifyCompleted = selectedTexts.size === 0; // If no texts, mark as completed
+    this.apiCompletionState.wordsExplanationCompleted = selectedWords.size === 0; // If no words, mark as completed
+    this.apiCompletionState.shouldTrack = true;
+
+    // Set button to processing state
+    this.setMagicMeaningProcessing();
+
+    console.log('[ButtonPanel] API tracking initialized:', this.apiCompletionState);
     
     // ========== Process Text Segments (existing functionality) ==========
     if (selectedTexts.size > 0) {
@@ -10251,6 +10672,13 @@ const ButtonPanel = {
                 highlight.classList.remove('vocab-text-loading');
               }
             }
+
+            // Mark simplify API as completed
+            this.apiCompletionState.simplifyCompleted = true;
+            console.log('[ButtonPanel] Simplify API marked as completed');
+            
+            // Check if all APIs are complete
+            this.checkAPICompletion();
           },
           // onError callback
           (error) => {
@@ -10266,6 +10694,13 @@ const ButtonPanel = {
             
             // Show error notification
             TextSelector.showNotification('Error simplifying text. Please try again.');
+
+            // Mark simplify API as completed (even on error)
+            this.apiCompletionState.simplifyCompleted = true;
+            console.log('[ButtonPanel] Simplify API marked as completed (with error)');
+            
+            // Check if all APIs are complete
+            this.checkAPICompletion();
           }
         );
       }
@@ -10282,6 +10717,13 @@ const ButtonPanel = {
       
       if (wordPayload.length === 0) {
         console.warn('[ButtonPanel] No word segments with position data');
+        
+        // Mark words explanation API as completed (no payload to process)
+        this.apiCompletionState.wordsExplanationCompleted = true;
+        console.log('[ButtonPanel] Words explanation API marked as completed (no payload)');
+        
+        // Check if all APIs are complete
+        this.checkAPICompletion();
         return;
       }
       
@@ -10719,6 +11161,13 @@ const ButtonPanel = {
           }
           
           console.log('[ButtonPanel] ===== MAGIC MEANING: Complete =====');
+
+          // Mark words explanation API as completed
+          this.apiCompletionState.wordsExplanationCompleted = true;
+          console.log('[ButtonPanel] Words explanation API marked as completed');
+          
+          // Check if all APIs are complete
+          this.checkAPICompletion();
         },
         // onError callback
         (error) => {
@@ -10734,6 +11183,13 @@ const ButtonPanel = {
           
           // Show error notification
           TextSelector.showNotification('Error getting word meanings. Please try again.');
+
+          // Mark words explanation API as completed (even on error)
+          this.apiCompletionState.wordsExplanationCompleted = true;
+          console.log('[ButtonPanel] Words explanation API marked as completed (with error)');
+          
+          // Check if all APIs are complete
+          this.checkAPICompletion();
         }
       );
     }
@@ -11569,10 +12025,23 @@ const ButtonPanel = {
     // Update enabled/disabled state of magic meaning button
     const magicMeaningBtn = document.getElementById('magic-meaning');
     if (magicMeaningBtn) {
+      const wasDisabled = magicMeaningBtn.classList.contains('disabled');
+      
       if (this.state.isMagicMeaningEnabled) {
         magicMeaningBtn.classList.remove('disabled');
+        magicMeaningBtn.disabled = false; // Remove disabled attribute
+        
+        // If button was previously disabled and is now enabled, trigger attention animation
+        if (wasDisabled && !magicMeaningBtn.classList.contains('processing') && !magicMeaningBtn.classList.contains('success')) {
+          magicMeaningBtn.classList.add('just-enabled');
+          // Remove the class after animation completes
+          setTimeout(() => {
+            magicMeaningBtn.classList.remove('just-enabled');
+          }, 600);
+        }
       } else {
         magicMeaningBtn.classList.add('disabled');
+        magicMeaningBtn.disabled = true; // Add disabled attribute
       }
     }
 
