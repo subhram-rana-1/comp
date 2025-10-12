@@ -2690,10 +2690,26 @@ const TextSelector = {
       }
     }
     
-    // Remove icons wrapper
-    const iconsWrapper = highlight.querySelector('.vocab-text-icons-wrapper');
+    // Remove icons wrapper - check both inside highlight and in modal overlay
+    let iconsWrapper = highlight.querySelector('.vocab-text-icons-wrapper');
     if (iconsWrapper) {
       iconsWrapper.remove();
+    } else {
+      // Check if icons are in modal overlay (for modal context)
+      const modalOverlay = ButtonPanel.topicsModal.customContentModal.overlay;
+      if (modalOverlay) {
+        iconsWrapper = modalOverlay.querySelector(`[data-text-key="${textKey}"]`);
+        if (iconsWrapper) {
+          iconsWrapper.remove();
+        }
+      }
+      // Check if icons are in document body (for main webpage context)
+      if (!iconsWrapper) {
+        iconsWrapper = document.body.querySelector(`[data-text-key="${textKey}"]`);
+        if (iconsWrapper) {
+          iconsWrapper.remove();
+        }
+      }
     }
     
     // Remove the simplified class (green underline)
@@ -2704,9 +2720,11 @@ const TextSelector = {
     
     // Remove from simplifiedTexts map
     this.simplifiedTexts.delete(textKey);
+    console.log('[TextSelector] Removed from simplifiedTexts map:', textKey);
     
     // Remove from textToHighlights map if present
     this.textToHighlights.delete(textKey);
+    console.log('[TextSelector] Removed from textToHighlights map:', textKey);
     
     // Remove from analysis data structure for current tab
     ButtonPanel.removeSimplifiedTextFromAnalysisData(textKey);
@@ -2714,7 +2732,7 @@ const TextSelector = {
     // Update button states to hide "Remove meanings" if no more data exists
     ButtonPanel.updateButtonStatesFromSelections();
     
-    console.log('[TextSelector] Text removed from simplifiedTexts:', textKey);
+    console.log('[TextSelector] Text removal completed for:', textKey);
   },
   
   /**
@@ -2955,9 +2973,7 @@ const TextSelector = {
       
       /* Wrapper containers for icon groups */
       .vocab-text-icons-wrapper {
-        position: absolute;
-        top: -12px;
-        left: -60px;
+        position: fixed;
         display: flex;
         flex-direction: row;
         align-items: center;
@@ -2965,6 +2981,15 @@ const TextSelector = {
         z-index: 10000003;
         animation: vocab-icon-appear 0.4s ease-out;
         pointer-events: auto;
+      }
+
+      /* Modal context: enhanced styling */
+      .vocab-custom-content-modal .vocab-text-icons-wrapper {
+        z-index: 10000005;
+        background: rgba(255, 255, 255, 0.9);
+        border-radius: 8px;
+        padding: 4px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
       }
       
       /* Chat button - Solid purple circle with white chat icon on top-left (bigger) */
@@ -10643,6 +10668,7 @@ const ButtonPanel = {
       .vocab-text-input-textarea {
         width: 100%;
         min-height: 200px;
+        max-height: 400px;
         padding: 20px;
         border: 1px solid #D1B3FF;
         border-radius: 20px;
@@ -10678,6 +10704,25 @@ const ButtonPanel = {
         border-radius: 4px;
         font-weight: 600;
         box-shadow: 0 2px 4px rgba(255, 224, 102, 0.3);
+      }
+
+      /* Custom scrollbar for textarea */
+      .vocab-text-input-textarea::-webkit-scrollbar {
+        width: 8px;
+      }
+
+      .vocab-text-input-textarea::-webkit-scrollbar-track {
+        background: #f1f1f1;
+        border-radius: 4px;
+      }
+
+      .vocab-text-input-textarea::-webkit-scrollbar-thumb {
+        background: #D1B3FF;
+        border-radius: 4px;
+      }
+
+      .vocab-text-input-textarea::-webkit-scrollbar-thumb:hover {
+        background: #A24EFF;
       }
 
       .vocab-text-input-textarea-container {
@@ -10745,6 +10790,7 @@ const ButtonPanel = {
 
         .vocab-text-input-textarea {
           min-height: 150px;
+          max-height: 300px;
           font-size: 15px;
         }
 
@@ -10789,6 +10835,7 @@ const ButtonPanel = {
 
         .vocab-text-input-textarea {
           min-height: 120px;
+          max-height: 250px;
           font-size: 14px;
         }
 
@@ -11727,18 +11774,18 @@ const ButtonPanel = {
     const activeTabId = this.topicsModal.customContentModal.activeTabId;
     const activeContent = this.topicsModal.customContentModal.getContentByTabId(parseInt(activeTabId));
     
-    if (!activeContent || !activeContent.analysis || !activeContent.analysis.simplifiedTexts) {
-      console.log('[ButtonPanel] No simplified texts found in analysis data for tab:', activeTabId);
+    if (!activeContent || !activeContent.analysis || !activeContent.analysis.simplifiedMeanings) {
+      console.log('[ButtonPanel] No simplified meanings found in analysis data for tab:', activeTabId);
       return;
     }
     
-    // Find and remove the specific text from simplifiedTexts array
-    const initialLength = activeContent.analysis.simplifiedTexts.length;
-    activeContent.analysis.simplifiedTexts = activeContent.analysis.simplifiedTexts.filter(textData => 
+    // Find and remove the specific text from simplifiedMeanings array
+    const initialLength = activeContent.analysis.simplifiedMeanings.length;
+    activeContent.analysis.simplifiedMeanings = activeContent.analysis.simplifiedMeanings.filter(textData => 
       textData.textKey !== textKey
     );
     
-    const removedCount = initialLength - activeContent.analysis.simplifiedTexts.length;
+    const removedCount = initialLength - activeContent.analysis.simplifiedMeanings.length;
     if (removedCount > 0) {
       console.log('[ButtonPanel] Removed', removedCount, 'simplified text(s) for textKey:', textKey, 'from analysis data');
     } else {
@@ -14853,6 +14900,12 @@ const ButtonPanel = {
       
       // Hide info banner if visible
       this.hideCustomContentInfoBanner();
+      
+      // Clean up any remaining icon wrappers from modal overlay only
+      const iconWrappers = this.topicsModal.customContentModal.overlay.querySelectorAll('.vocab-text-icons-wrapper');
+      iconWrappers.forEach(wrapper => {
+        wrapper.remove();
+      });
     }
     
     console.log('[ButtonPanel] ===== END HIDE CUSTOM CONTENT MODAL DEBUG =====');
@@ -16625,6 +16678,11 @@ const ButtonPanel = {
           activeContent.analysis.simplifiedMeanings.forEach(simplifiedData => {
             this.restoreSimplifiedText(simplifiedData);
           });
+          
+          // Additional repositioning after all simplified texts are restored
+          setTimeout(() => {
+            this.repositionAllSimplifiedIcons();
+          }, 100);
         }, 200);
       }
 
@@ -16680,6 +16738,21 @@ const ButtonPanel = {
         parent.replaceChild(document.createTextNode(highlight.textContent), highlight);
         parent.normalize();
       }
+    });
+
+    // Remove all icon wrappers from modal overlay (if in modal context)
+    const modalOverlay = this.topicsModal.customContentModal.overlay;
+    if (modalOverlay) {
+      const iconWrappers = modalOverlay.querySelectorAll('.vocab-text-icons-wrapper');
+      iconWrappers.forEach(wrapper => {
+        wrapper.remove();
+      });
+    }
+
+    // Remove all icon wrappers from document body (for main webpage context)
+    const bodyIconWrappers = document.body.querySelectorAll('.vocab-text-icons-wrapper');
+    bodyIconWrappers.forEach(wrapper => {
+      wrapper.remove();
     });
 
     console.log('[ButtonPanel] Cleared existing highlights');
@@ -16850,6 +16923,7 @@ const ButtonPanel = {
     // Create wrapper for icons
     const iconsWrapper = document.createElement('div');
     iconsWrapper.className = 'vocab-text-icons-wrapper';
+    iconsWrapper.setAttribute('data-text-key', simplifiedData.textKey);
     
     // Add green remove button first (left position)
     const greenRemoveBtn = TextSelector.createGreenRemoveButtonForSimplifiedText(simplifiedData.textKey);
@@ -16859,8 +16933,17 @@ const ButtonPanel = {
     const bookBtn = TextSelector.createBookButton(simplifiedData.textKey);
     iconsWrapper.appendChild(bookBtn);
     
-    // Append wrapper to highlight
-    highlight.appendChild(iconsWrapper);
+    // Check if we're in modal context or main webpage context
+    const modalOverlay = this.topicsModal.customContentModal.overlay;
+    if (modalOverlay && contentElement.closest('.vocab-custom-content-modal')) {
+      // Modal context: append to modal overlay and position dynamically
+      modalOverlay.appendChild(iconsWrapper);
+      this.positionIconsRelativeToHighlight(iconsWrapper, highlight);
+    } else {
+      // Main webpage context: append to document body and position relative to highlight
+      document.body.appendChild(iconsWrapper);
+      this.positionIconsRelativeToHighlight(iconsWrapper, highlight);
+    }
 
     // Add to TextSelector simplified texts
     TextSelector.simplifiedTexts.set(simplifiedData.textKey, {
@@ -16875,6 +16958,108 @@ const ButtonPanel = {
 
     console.log('[ButtonPanel] Restored simplified text highlight for textKey:', simplifiedData.textKey);
     console.log('[ButtonPanel] ===== SIMPLIFIED HIGHLIGHT CREATION COMPLETE =====');
+  },
+
+  /**
+   * Position icons relative to a text highlight
+   * @param {HTMLElement} iconsWrapper - The icons wrapper element
+   * @param {HTMLElement} highlight - The text highlight element
+   */
+  positionIconsRelativeToHighlight(iconsWrapper, highlight) {
+    // Function to perform the actual positioning
+    const performPositioning = () => {
+      const highlightRect = highlight.getBoundingClientRect();
+      const isModalContext = highlight.closest('.vocab-custom-content-modal');
+      
+      // Check if highlight has valid dimensions
+      if (highlightRect && highlightRect.width > 0 && highlightRect.height > 0) {
+        if (isModalContext) {
+          // Modal context: position relative to modal overlay
+          const modalOverlay = this.topicsModal.customContentModal.overlay;
+          if (modalOverlay) {
+            const overlayRect = modalOverlay.getBoundingClientRect();
+            
+            // Position icons above and to the left of the highlight
+            const top = highlightRect.top - overlayRect.top - 40; // 40px above
+            const left = highlightRect.left - overlayRect.left - 60; // 60px to the left
+            
+            iconsWrapper.style.top = `${Math.max(10, top)}px`; // Ensure it doesn't go above modal
+            iconsWrapper.style.left = `${Math.max(10, left)}px`; // Ensure it doesn't go left of modal
+            
+            console.log('[ButtonPanel] Modal context - Positioned icons at:', { 
+              top: iconsWrapper.style.top, 
+              left: iconsWrapper.style.left,
+              highlightRect: { top: highlightRect.top, left: highlightRect.left },
+              overlayRect: { top: overlayRect.top, left: overlayRect.left }
+            });
+          }
+        } else {
+          // Main webpage context: position relative to viewport (original behavior)
+          const top = highlightRect.top - 40; // 40px above
+          const left = highlightRect.left - 60; // 60px to the left
+          
+          iconsWrapper.style.top = `${Math.max(10, top)}px`; // Ensure it doesn't go above viewport
+          iconsWrapper.style.left = `${Math.max(10, left)}px`; // Ensure it doesn't go left of viewport
+          
+          console.log('[ButtonPanel] Main webpage context - Positioned icons at:', { 
+            top: iconsWrapper.style.top, 
+            left: iconsWrapper.style.left,
+            highlightRect: { top: highlightRect.top, left: highlightRect.left }
+          });
+        }
+        return true; // Successfully positioned
+      }
+      return false; // Not ready yet
+    };
+
+    // Try positioning immediately
+    if (performPositioning()) {
+      return;
+    }
+
+    // If not ready, try with increasing delays
+    const delays = [50, 100, 200, 300];
+    delays.forEach(delay => {
+      setTimeout(() => {
+        if (!performPositioning()) {
+          console.log('[ButtonPanel] Positioning attempt failed at delay:', delay);
+        }
+      }, delay);
+    });
+  },
+
+  /**
+   * Reposition all simplified text icons after restoration
+   */
+  repositionAllSimplifiedIcons() {
+    console.log('[ButtonPanel] Repositioning all simplified text icons');
+    
+    // Get all simplified text highlights
+    const contentElement = this.topicsModal.customContentModal.modal.querySelector('.vocab-custom-content-editor-content');
+    if (!contentElement) {
+      console.log('[ButtonPanel] No content element found for repositioning');
+      return;
+    }
+    
+    const simplifiedHighlights = contentElement.querySelectorAll('.vocab-text-highlight.vocab-text-simplified');
+    console.log('[ButtonPanel] Found', simplifiedHighlights.length, 'simplified highlights to reposition');
+    
+    simplifiedHighlights.forEach(highlight => {
+      const textKey = highlight.getAttribute('data-text-highlight');
+      if (textKey) {
+        // Find the corresponding icon wrapper
+        const modalOverlay = this.topicsModal.customContentModal.overlay;
+        if (modalOverlay) {
+          const iconsWrapper = modalOverlay.querySelector(`[data-text-key="${textKey}"]`);
+          if (iconsWrapper) {
+            console.log('[ButtonPanel] Repositioning icons for textKey:', textKey);
+            this.positionIconsRelativeToHighlight(iconsWrapper, highlight);
+          }
+        }
+      }
+    });
+    
+    console.log('[ButtonPanel] Completed repositioning all simplified text icons');
   },
 
   /**
