@@ -22,6 +22,12 @@ export default defineConfig({
       'activeTab'
     ],
     host_permissions: getHostPermissions(),
+    web_accessible_resources: [
+      {
+        resources: ['logo_1-removebg.png', '*.png', '*.svg'],
+        matches: ['<all_urls>']
+      }
+    ],
   },
 });
 

@@ -4184,23 +4184,30 @@ const ChatDialog = {
     const buttonContainer = document.createElement('div');
     buttonContainer.className = 'vocab-chat-simplify-more-container';
     
-    const simplifyMoreBtn = document.createElement('button');
-    simplifyMoreBtn.className = 'vocab-chat-simplify-more-btn';
-    simplifyMoreBtn.textContent = 'Simplify more';
-    simplifyMoreBtn.id = 'vocab-chat-simplify-more-btn';
-    
-    // Set initial disabled state based on shouldAllowSimplifyMore
-    if (this.simplifiedData && this.simplifiedData.shouldAllowSimplifyMore) {
-      simplifyMoreBtn.disabled = false;
+    // Only show "Simplify more" button for selected text chat, not for general content chat
+    console.log('[ChatDialog] Creating Simplify more button - chatContext:', this.chatContext, 'mode:', this.mode);
+    if (this.chatContext !== 'general' && this.mode === 'simplified') {
+      console.log('[ChatDialog] Adding Simplify more button');
+      const simplifyMoreBtn = document.createElement('button');
+      simplifyMoreBtn.className = 'vocab-chat-simplify-more-btn';
+      simplifyMoreBtn.textContent = 'Simplify more';
+      simplifyMoreBtn.id = 'vocab-chat-simplify-more-btn';
+      
+      // Set initial disabled state based on shouldAllowSimplifyMore
+      if (this.simplifiedData && this.simplifiedData.shouldAllowSimplifyMore) {
+        simplifyMoreBtn.disabled = false;
+      } else {
+        simplifyMoreBtn.disabled = true;
+        simplifyMoreBtn.classList.add('disabled');
+      }
+      
+      // Add click handler
+      simplifyMoreBtn.addEventListener('click', () => this.handleSimplifyMore());
+      
+      buttonContainer.appendChild(simplifyMoreBtn);
     } else {
-      simplifyMoreBtn.disabled = true;
-      simplifyMoreBtn.classList.add('disabled');
+      console.log('[ChatDialog] NOT adding Simplify more button - chatContext:', this.chatContext, 'mode:', this.mode);
     }
-    
-    // Add click handler
-    simplifyMoreBtn.addEventListener('click', () => this.handleSimplifyMore());
-    
-    buttonContainer.appendChild(simplifyMoreBtn);
     
     // Create chat container below Simplify more button with top margin
     const chatContainer = document.createElement('div');
@@ -4222,7 +4229,7 @@ const ChatDialog = {
     } else {
       // Show appropriate message based on chat context
       const promptText = this.chatContext === 'selected' 
-        ? 'Ask doubts on the selected content' 
+        ? 'Anything to ask on the selected content ?' 
         : 'Ask anything about the content';
       
       const noChatsMsg = document.createElement('div');
@@ -4427,7 +4434,7 @@ const ChatDialog = {
     } else {
       // Show appropriate message based on chat context
       const promptText = this.chatContext === 'selected' 
-        ? 'Ask doubts on the selected content' 
+        ? 'Anything to ask on the selected content ?' 
         : 'Ask anything about the content';
       
       const noChatsMsg = document.createElement('div');
@@ -4475,7 +4482,7 @@ const ChatDialog = {
     } else {
       // Show appropriate message based on chat context
       const promptText = this.chatContext === 'selected' 
-        ? 'Ask doubts on the selected content' 
+        ? 'Anything to ask on the selected content ?' 
         : 'Ask anything about the content';
       
       const noChatsMsg = document.createElement('div');
@@ -4979,7 +4986,7 @@ const ChatDialog = {
     
     // Show appropriate message based on chat context
     const promptText = this.chatContext === 'selected' 
-      ? 'Ask doubts on the selected content' 
+      ? 'Anything to ask on the selected content ?' 
       : 'Ask anything about the content';
     
     const noChatsMsg = document.createElement('div');
@@ -5164,25 +5171,9 @@ const ChatDialog = {
    * Create chat empty icon (professional purple)
    */
   createChatEmptyIcon() {
-    return `
-      <svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <!-- Background Circle -->
-        <circle cx="32" cy="32" r="30" fill="#f3e8ff" stroke="#9527F5" stroke-width="2"/>
-        
-        <!-- Chat Bubble -->
-        <path d="M32 16C22.059 16 14 22.925 14 31.5C14 35.635 15.785 39.44 18.667 42.385L14.879 48.879C14.585 49.464 14.585 50.166 14.879 50.754C15.17 51.339 15.791 51.702 16.451 51.702C16.67 51.702 16.889 51.657 17.099 51.564L24.371 48.133C26.735 48.7 29.281 49 32 49C41.941 49 50 43.075 50 34.5C50 25.925 41.941 16 32 16Z" fill="#9527F5"/>
-        
-        <!-- Message Dots -->
-        <circle cx="24" cy="34.5" r="2" fill="white"/>
-        <circle cx="32" cy="34.5" r="2" fill="white"/>
-        <circle cx="40" cy="34.5" r="2" fill="white"/>
-        
-        <!-- Decorative Elements -->
-        <circle cx="46" cy="20" r="3" fill="#D097FF" opacity="0.6"/>
-        <circle cx="18" cy="18" r="2" fill="#D097FF" opacity="0.4"/>
-        <circle cx="48" cy="46" r="2.5" fill="#D097FF" opacity="0.5"/>
-      </svg>
-    `;
+    // Use the actual logo PNG file
+    const iconUrl = chrome.runtime.getURL('logo_1-removebg.png');
+    return `<img src="${iconUrl}" alt="Cat with glasses" class="vocab-chat-empty-cat-icon">`;
   },
   
   /**
@@ -5666,9 +5657,30 @@ const ChatDialog = {
       }
       
       .vocab-chat-no-messages-content span {
-        font-size: 14px;
+        font-size: 16px;
         font-weight: 500;
         color: #9527F5;
+      }
+      
+      /* Cat icon with breathing animation */
+      .vocab-chat-empty-cat-icon {
+        width: 80px;
+        height: 80px;
+        object-fit: contain;
+        animation: catBreathing 2s ease-in-out infinite;
+        display: block;
+        filter: brightness(1.1) saturate(1.4) hue-rotate(5deg);
+      }
+      
+      @keyframes catBreathing {
+        0%, 100% {
+          transform: scale(1);
+          filter: brightness(1.1) saturate(1.4) hue-rotate(5deg) drop-shadow(0 0 8px rgba(160, 32, 240, 0.4));
+        }
+        50% {
+          transform: scale(1.15);
+          filter: brightness(1.1) saturate(1.4) hue-rotate(5deg) drop-shadow(0 0 20px rgba(160, 32, 240, 0.8)) drop-shadow(0 0 30px rgba(160, 32, 240, 0.5));
+        }
       }
       
       /* Message Bubbles */
