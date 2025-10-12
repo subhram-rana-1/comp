@@ -3442,6 +3442,9 @@ const ChatDialog = {
   simplifiedData: null, // For simplified mode
   isSimplifying: false, // Track if currently simplifying more
   chatContext: 'general', // 'general' for content chat, 'selected' for selected text chat
+  isRecording: false, // Track if currently recording voice
+  mediaRecorder: null, // MediaRecorder instance
+  audioChunks: [], // Store audio chunks during recording
   
   /**
    * Initialize chat dialog
@@ -4238,6 +4241,7 @@ const ChatDialog = {
         <div class="vocab-chat-no-messages-content">
           ${this.createChatEmptyIcon()}
           <span>${promptText}</span>
+          <span class="vocab-chat-regional-lang-text">You can ask in your regional language</span>
         </div>
       `;
       chatContainer.appendChild(noChatsMsg);
@@ -4443,6 +4447,7 @@ const ChatDialog = {
         <div class="vocab-chat-no-messages-content">
           ${this.createChatEmptyIcon()}
           <span>${promptText}</span>
+          <span class="vocab-chat-regional-lang-text">You can ask in your regional language</span>
         </div>
       `;
       chatContainer.appendChild(noChatsMsg);
@@ -4491,6 +4496,7 @@ const ChatDialog = {
         <div class="vocab-chat-no-messages-content">
           ${this.createChatEmptyIcon()}
           <span>${promptText}</span>
+          <span class="vocab-chat-regional-lang-text">You can ask in your regional language</span>
         </div>
       `;
       chatContainer.appendChild(noChatsMsg);
@@ -4566,6 +4572,15 @@ const ChatDialog = {
       }
     });
     
+    // Create mic button for voice input
+    const micBtn = document.createElement('button');
+    micBtn.className = 'vocab-chat-mic-btn';
+    micBtn.id = 'vocab-chat-mic-btn';
+    micBtn.setAttribute('aria-label', 'Voice input');
+    micBtn.title = 'Record voice';
+    micBtn.innerHTML = this.createMicIcon();
+    micBtn.addEventListener('click', () => this.toggleVoiceRecording());
+    
     // Create send button (restore original styling but same size as delete)
     const sendBtn = document.createElement('button');
     sendBtn.className = 'vocab-chat-send-btn';
@@ -4588,6 +4603,7 @@ const ChatDialog = {
     deleteBtn.addEventListener('click', () => this.deleteConversation());
     
     inputArea.appendChild(inputField);
+    inputArea.appendChild(micBtn);
     inputArea.appendChild(sendBtn);
     inputArea.appendChild(deleteBtn);
     
@@ -4800,6 +4816,219 @@ const ChatDialog = {
     }
     
     console.log('[ChatDialog] Message sent:', message);
+  },
+  
+  /**
+   * Toggle voice recording on/off
+   */
+  async toggleVoiceRecording() {
+    console.log('[ChatDialog] ===== TOGGLE VOICE RECORDING =====');
+    
+    if (!this.isRecording) {
+      // Start recording
+      await this.startVoiceRecording();
+    } else {
+      // Stop recording
+      await this.stopVoiceRecording();
+    }
+  },
+  
+  /**
+   * Start voice recording
+   */
+  async startVoiceRecording() {
+    console.log('[ChatDialog] Starting voice recording...');
+    
+    try {
+      // Request microphone permission - this will trigger browser's native permission prompt
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      
+      console.log('[ChatDialog] Microphone access granted');
+      
+      // Use webm format with opus codec for smallest file size
+      const options = {
+        mimeType: 'audio/webm;codecs=opus'
+      };
+      
+      this.mediaRecorder = new MediaRecorder(stream, options);
+      this.audioChunks = [];
+      
+      this.mediaRecorder.addEventListener('dataavailable', (event) => {
+        if (event.data.size > 0) {
+          this.audioChunks.push(event.data);
+        }
+      });
+      
+      this.mediaRecorder.addEventListener('stop', () => {
+        this.handleRecordingStop();
+      });
+      
+      this.mediaRecorder.start();
+      this.isRecording = true;
+      
+      // Update mic button to show recording state
+      const micBtn = document.getElementById('vocab-chat-mic-btn');
+      if (micBtn) {
+        micBtn.classList.add('recording');
+        micBtn.title = 'Stop recording';
+      }
+      
+      console.log('[ChatDialog] Recording started');
+    } catch (error) {
+      console.error('[ChatDialog] Error starting recording:', error);
+      alert('Failed to access microphone. Please allow microphone access in your browser settings and refresh the page.');
+    }
+  },
+  
+  /**
+   * Stop voice recording
+   */
+  async stopVoiceRecording() {
+    console.log('[ChatDialog] Stopping voice recording...');
+    
+    if (this.mediaRecorder && this.mediaRecorder.state !== 'inactive') {
+      this.mediaRecorder.stop();
+      
+      // Stop all audio tracks
+      const tracks = this.mediaRecorder.stream.getTracks();
+      tracks.forEach(track => track.stop());
+      
+      this.isRecording = false;
+      
+      // Update mic button to show normal state
+      const micBtn = document.getElementById('vocab-chat-mic-btn');
+      if (micBtn) {
+        micBtn.classList.remove('recording');
+        micBtn.title = 'Record voice';
+      }
+      
+      console.log('[ChatDialog] Recording stopped');
+    }
+  },
+  
+  /**
+   * Handle recording stop and process audio
+   */
+  async handleRecordingStop() {
+    console.log('[ChatDialog] Processing recorded audio...');
+    
+    // Create blob from audio chunks
+    const audioBlob = new Blob(this.audioChunks, { type: 'audio/webm' });
+    console.log('[ChatDialog] Audio blob size:', audioBlob.size, 'bytes');
+    
+    // Show loading spinner at the bottom of chat
+    this.showVoiceLoadingSpinner();
+    
+    // Disable mic button during processing
+    const micBtn = document.getElementById('vocab-chat-mic-btn');
+    if (micBtn) {
+      micBtn.disabled = true;
+    }
+    
+    try {
+      // Call voice-to-text API
+      const transcribedText = await this.sendAudioToAPI(audioBlob);
+      
+      // Remove loading spinner
+      this.removeVoiceLoadingSpinner();
+      
+      // Enable mic button
+      if (micBtn) {
+        micBtn.disabled = false;
+      }
+      
+      if (transcribedText) {
+        // Display transcribed text in input field
+        const inputField = document.getElementById('vocab-chat-input');
+        if (inputField) {
+          inputField.value = transcribedText;
+          inputField.style.height = 'auto';
+          inputField.style.height = inputField.scrollHeight + 'px';
+        }
+        
+        // Automatically send the message
+        this.sendMessage();
+      }
+    } catch (error) {
+      console.error('[ChatDialog] Error processing audio:', error);
+      
+      // Remove loading spinner
+      this.removeVoiceLoadingSpinner();
+      
+      // Enable mic button
+      if (micBtn) {
+        micBtn.disabled = false;
+      }
+      
+      // Show error message
+      alert('Failed to transcribe audio. Please try again.');
+    }
+    
+    // Clear audio chunks
+    this.audioChunks = [];
+  },
+  
+  /**
+   * Send audio to voice-to-text API
+   * @param {Blob} audioBlob - Audio blob to send
+   * @returns {Promise<string>} Transcribed text
+   */
+  async sendAudioToAPI(audioBlob) {
+    console.log('[ChatDialog] Sending audio to API...');
+    
+    // Create FormData
+    const formData = new FormData();
+    formData.append('audio_file', audioBlob, 'recording.webm');
+    
+    try {
+      const response = await ApiService.voiceToText(formData);
+      
+      if (response.success && response.data && response.data.text) {
+        console.log('[ChatDialog] Transcription successful:', response.data.text);
+        return response.data.text;
+      } else {
+        console.error('[ChatDialog] API error:', response.error);
+        throw new Error(response.error || 'Failed to transcribe audio');
+      }
+    } catch (error) {
+      console.error('[ChatDialog] Error calling API:', error);
+      throw error;
+    }
+  },
+  
+  /**
+   * Show loading spinner for voice processing
+   */
+  showVoiceLoadingSpinner() {
+    const chatContainer = document.getElementById('vocab-chat-messages');
+    if (!chatContainer) return;
+    
+    // Remove existing spinner if any
+    this.removeVoiceLoadingSpinner();
+    
+    // Create spinner element
+    const spinner = document.createElement('div');
+    spinner.className = 'vocab-chat-voice-spinner';
+    spinner.id = 'vocab-chat-voice-spinner';
+    spinner.innerHTML = `
+      <div class="vocab-spinner-circle"></div>
+      <span>Transcribing...</span>
+    `;
+    
+    chatContainer.appendChild(spinner);
+    
+    // Scroll to bottom
+    chatContainer.scrollTop = chatContainer.scrollHeight;
+  },
+  
+  /**
+   * Remove loading spinner for voice processing
+   */
+  removeVoiceLoadingSpinner() {
+    const spinner = document.getElementById('vocab-chat-voice-spinner');
+    if (spinner) {
+      spinner.remove();
+    }
   },
   
   /**
@@ -5168,6 +5397,18 @@ const ChatDialog = {
   },
   
   /**
+   * Create mic icon for voice input
+   */
+  createMicIcon() {
+    return `
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="#9527F5" xmlns="http://www.w3.org/2000/svg">
+        <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/>
+        <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
+      </svg>
+    `;
+  },
+  
+  /**
    * Create chat empty icon (professional purple)
    */
   createChatEmptyIcon() {
@@ -5190,11 +5431,11 @@ const ChatDialog = {
     style.id = styleId;
     style.textContent = `
       /* Global button underline prevention */
-      button, .vocab-btn, .vocab-chat-tab, .vocab-chat-focus-btn, .vocab-chat-send-btn, .vocab-chat-delete-conversation-btn, .vocab-chat-collapse-btn, .vocab-chat-simplify-more-btn, .vocab-chat-collapse-btn-small, .vocab-chat-delete-conversation-btn-small, .vocab-chat-focus-btn-top-right {
+      button, .vocab-btn, .vocab-chat-tab, .vocab-chat-focus-btn, .vocab-chat-send-btn, .vocab-chat-mic-btn, .vocab-chat-delete-conversation-btn, .vocab-chat-collapse-btn, .vocab-chat-simplify-more-btn, .vocab-chat-collapse-btn-small, .vocab-chat-delete-conversation-btn-small, .vocab-chat-focus-btn-top-right {
         text-decoration: none !important;
       }
       
-      button:hover, .vocab-btn:hover, .vocab-chat-tab:hover, .vocab-chat-focus-btn:hover, .vocab-chat-send-btn:hover, .vocab-chat-delete-conversation-btn:hover, .vocab-chat-collapse-btn:hover, .vocab-chat-simplify-more-btn:hover, .vocab-chat-collapse-btn-small:hover, .vocab-chat-delete-conversation-btn-small:hover, .vocab-chat-focus-btn-top-right:hover {
+      button:hover, .vocab-btn:hover, .vocab-chat-tab:hover, .vocab-chat-focus-btn:hover, .vocab-chat-send-btn:hover, .vocab-chat-mic-btn:hover, .vocab-chat-delete-conversation-btn:hover, .vocab-chat-collapse-btn:hover, .vocab-chat-simplify-more-btn:hover, .vocab-chat-collapse-btn-small:hover, .vocab-chat-delete-conversation-btn-small:hover, .vocab-chat-focus-btn-top-right:hover {
         text-decoration: none !important;
       }
       
@@ -5662,6 +5903,25 @@ const ChatDialog = {
         color: #9527F5;
       }
       
+      .vocab-chat-regional-lang-text {
+        font-size: 13px !important;
+        font-weight: 400 !important;
+        color: #9527F5 !important;
+        animation: pulse 2s ease-in-out infinite;
+        text-align: center;
+      }
+      
+      @keyframes pulse {
+        0%, 100% {
+          opacity: 0.6;
+          transform: scale(1);
+        }
+        50% {
+          opacity: 1;
+          transform: scale(1.05);
+        }
+      }
+      
       /* Cat icon with breathing animation */
       .vocab-chat-empty-cat-icon {
         width: 80px;
@@ -5892,6 +6152,314 @@ const ChatDialog = {
       
       .vocab-chat-send-btn:active {
         transform: translateY(0) scale(0.95);
+      }
+      
+      /* Mic Button - Voice Input */
+      .vocab-chat-mic-btn {
+        width: 44px;
+        height: 44px;
+        background: white;
+        border: 2px solid #9527F5;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        flex-shrink: 0;
+        text-decoration: none;
+      }
+      
+      .vocab-chat-mic-btn:hover {
+        background: #f0e6ff;
+        border-color: #7a1fd9;
+        transform: translateY(-1px);
+        text-decoration: none;
+      }
+      
+      .vocab-chat-mic-btn:active {
+        transform: translateY(0) scale(0.95);
+      }
+      
+      .vocab-chat-mic-btn.recording {
+        background: #9527F5;
+        border-color: #9527F5;
+        animation: recording-pulse 1s ease-in-out infinite;
+      }
+      
+      .vocab-chat-mic-btn.recording svg {
+        fill: white;
+      }
+      
+      .vocab-chat-mic-btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+      
+      @keyframes recording-pulse {
+        0%, 100% {
+          box-shadow: 0 0 0 0 rgba(149, 39, 245, 0.7);
+        }
+        50% {
+          box-shadow: 0 0 0 10px rgba(149, 39, 245, 0);
+        }
+      }
+      
+      /* Voice Loading Spinner */
+      .vocab-chat-voice-spinner {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 12px;
+        margin: 8px 0;
+        background: #f9fafb;
+        border-radius: 10px;
+      }
+      
+      .vocab-spinner-circle {
+        width: 20px;
+        height: 20px;
+        border: 2px solid #e5e7eb;
+        border-top-color: #9527F5;
+        border-radius: 50%;
+        animation: spin 0.6s linear infinite;
+      }
+      
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+      
+      .vocab-chat-voice-spinner span {
+        font-size: 14px;
+        color: #9527F5;
+        font-weight: 500;
+      }
+      
+      /* Microphone Permission Modal */
+      .vocab-mic-permission-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.6);
+        backdrop-filter: blur(4px);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 10000000;
+        animation: fadeIn 0.2s ease;
+      }
+      
+      @keyframes fadeIn {
+        from {
+          opacity: 0;
+        }
+        to {
+          opacity: 1;
+        }
+      }
+      
+      .vocab-mic-permission-modal {
+        background: white;
+        border-radius: 16px;
+        max-width: 480px;
+        width: 90%;
+        box-shadow: 0 20px 60px rgba(149, 39, 245, 0.3);
+        animation: slideUp 0.3s ease;
+        overflow: hidden;
+      }
+      
+      @keyframes slideUp {
+        from {
+          transform: translateY(20px);
+          opacity: 0;
+        }
+        to {
+          transform: translateY(0);
+          opacity: 1;
+        }
+      }
+      
+      .vocab-mic-permission-header {
+        text-align: center;
+        padding: 32px 24px 24px;
+        border-bottom: 1px solid #e5e7eb;
+      }
+      
+      .vocab-mic-permission-header svg {
+        margin-bottom: 16px;
+      }
+      
+      .vocab-mic-permission-header h2 {
+        font-size: 24px;
+        font-weight: 600;
+        color: #1f2937;
+        margin: 0 0 8px 0;
+      }
+      
+      .vocab-mic-permission-header p {
+        font-size: 14px;
+        color: #6b7280;
+        margin: 0;
+      }
+      
+      .vocab-mic-permission-body {
+        padding: 24px;
+      }
+      
+      .vocab-mic-permission-step {
+        display: flex;
+        gap: 16px;
+        margin-bottom: 20px;
+      }
+      
+      .vocab-mic-permission-step:last-of-type {
+        margin-bottom: 24px;
+      }
+      
+      .vocab-mic-step-number {
+        width: 32px;
+        height: 32px;
+        background: #f0e6ff;
+        color: #9527F5;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 600;
+        font-size: 14px;
+        flex-shrink: 0;
+      }
+      
+      .vocab-mic-step-content h3 {
+        font-size: 16px;
+        font-weight: 600;
+        color: #1f2937;
+        margin: 0 0 4px 0;
+      }
+      
+      .vocab-mic-step-content p {
+        font-size: 14px;
+        color: #6b7280;
+        margin: 0;
+        line-height: 1.5;
+      }
+      
+      .vocab-mic-permission-note {
+        background: #fef3c7;
+        border: 1px solid #fcd34d;
+        border-radius: 8px;
+        padding: 12px;
+        font-size: 13px;
+        color: #92400e;
+        line-height: 1.5;
+      }
+      
+      .vocab-mic-permission-note strong {
+        font-weight: 600;
+        color: #78350f;
+      }
+      
+      .vocab-mic-permission-visual-guide {
+        margin: 20px 0;
+      }
+      
+      .vocab-mic-address-bar-demo {
+        background: #f3f4f6;
+        border: 2px solid #d1d5db;
+        border-radius: 8px;
+        padding: 12px 16px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin: 0 auto;
+        max-width: 300px;
+      }
+      
+      .vocab-mic-lock-icon {
+        font-size: 20px;
+        animation: bounce 1s ease-in-out infinite;
+      }
+      
+      @keyframes bounce {
+        0%, 100% {
+          transform: translateY(0);
+        }
+        50% {
+          transform: translateY(-5px);
+        }
+      }
+      
+      .vocab-mic-url-demo {
+        font-size: 14px;
+        color: #374151;
+        font-weight: 500;
+      }
+      
+      .vocab-mic-permission-footer {
+        padding: 16px 24px;
+        background: #f9fafb;
+        display: flex;
+        gap: 12px;
+        justify-content: flex-end;
+        border-top: 1px solid #e5e7eb;
+      }
+      
+      .vocab-mic-permission-btn-secondary,
+      .vocab-mic-permission-btn-primary {
+        padding: 10px 20px;
+        border-radius: 8px;
+        font-size: 14px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        border: none;
+        outline: none;
+        font-family: inherit;
+      }
+      
+      .vocab-mic-permission-btn-secondary {
+        background: white;
+        color: #6b7280;
+        border: 1px solid #d1d5db;
+      }
+      
+      .vocab-mic-permission-btn-secondary:hover {
+        background: #f9fafb;
+        border-color: #9ca3af;
+      }
+      
+      .vocab-mic-permission-btn-primary {
+        background: #9527F5;
+        color: white;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        animation: buttonPulse 2s ease-in-out infinite;
+        box-shadow: 0 4px 12px rgba(149, 39, 245, 0.4);
+      }
+      
+      @keyframes buttonPulse {
+        0%, 100% {
+          box-shadow: 0 4px 12px rgba(149, 39, 245, 0.4);
+        }
+        50% {
+          box-shadow: 0 6px 20px rgba(149, 39, 245, 0.6);
+        }
+      }
+      
+      .vocab-mic-permission-btn-primary:hover {
+        background: #7a1fd9;
+        transform: translateY(-1px);
+        box-shadow: 0 6px 16px rgba(149, 39, 245, 0.5) !important;
+        animation: none;
+      }
+      
+      .vocab-mic-permission-btn-primary:active {
+        transform: translateY(0);
       }
       
       /* Delete Conversation Button - Wireframe Red Circular */
