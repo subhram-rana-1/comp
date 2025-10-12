@@ -7329,6 +7329,7 @@ const ButtonPanel = {
     const group = document.createElement('div');
     group.className = 'vocab-vertical-button-group';
     group.id = 'vocab-vertical-button-group';
+    group.style.pointerEvents = 'none'; // Initially not interactive
 
     // Create PDF button
     const pdfButton = document.createElement('button');
@@ -7844,6 +7845,7 @@ const ButtonPanel = {
         box-shadow: none;
         opacity: 0;
         visibility: hidden;
+        pointer-events: none;
         transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         z-index: 1000000;
         min-width: 120px;
@@ -7852,6 +7854,7 @@ const ButtonPanel = {
       .vocab-vertical-button-group.visible {
         opacity: 1;
         visibility: visible;
+        pointer-events: auto;
         transform: translateY(-50%) translateX(16px) translateY(23px);
       }
 
@@ -9405,28 +9408,9 @@ const ButtonPanel = {
 
     // Custom content button
     buttons.customContent?.addEventListener('click', (e) => {
+      e.stopPropagation(); // Prevent event from bubbling up
       console.log('Custom content clicked');
       this.toggleVerticalButtonGroup();
-    });
-
-    // Add hover events for custom content button
-    buttons.customContent?.addEventListener('mouseenter', () => {
-      this.showVerticalButtonGroup();
-    });
-
-    buttons.customContent?.addEventListener('mouseleave', () => {
-      // Only hide if not hovering over the vertical group
-      setTimeout(() => {
-        if (!this.verticalButtonGroup?.matches(':hover')) {
-          this.hideVerticalButtonGroup();
-        }
-      }, 100);
-    });
-
-    // Add hover events for vertical button group
-    // Hide buttons when moving away from the group
-    this.verticalButtonGroup?.addEventListener('mouseleave', () => {
-      this.hideVerticalButtonGroup();
     });
 
     // Add event listeners for vertical button group buttons
@@ -9461,6 +9445,11 @@ const ButtonPanel = {
       this.handleTextButton();
     });
 
+    // Prevent clicks inside vertical button group from closing it
+    this.verticalButtonGroup?.addEventListener('click', (e) => {
+      e.stopPropagation();
+    });
+
     // Add tooltip event listeners
     if (buttons.magicMeaning) {
       console.log('[ButtonPanel] Attaching tooltip to Magic meaning button');
@@ -9475,6 +9464,19 @@ const ButtonPanel = {
     } else {
       console.warn('[ButtonPanel] Ask button not found');
     }
+
+    // Close vertical button group when clicking outside
+    document.addEventListener('click', (e) => {
+      if (this.verticalButtonGroup && this.verticalButtonGroup.classList.contains('visible')) {
+        // Check if click is outside both the custom content button and the vertical group
+        const clickedInsideButton = buttons.customContent?.contains(e.target);
+        const clickedInsideGroup = this.verticalButtonGroup?.contains(e.target);
+        
+        if (!clickedInsideButton && !clickedInsideGroup) {
+          this.hideVerticalButtonGroup();
+        }
+      }
+    });
   },
 
   /**
@@ -10689,6 +10691,7 @@ const ButtonPanel = {
       }
       
       this.verticalButtonGroup.classList.add('visible');
+      this.verticalButtonGroup.style.pointerEvents = 'auto';
       this.updateState({ showVerticalGroup: true });
     }
   },
@@ -10758,6 +10761,7 @@ const ButtonPanel = {
       this.showAllVerticalButtons();
       
       this.verticalButtonGroup.classList.remove('visible');
+      this.verticalButtonGroup.style.pointerEvents = 'none';
       this.updateState({ showVerticalGroup: false });
     }
   },
@@ -10802,21 +10806,9 @@ const ButtonPanel = {
       
       // Reattach event listeners
       customContentBtn.addEventListener('click', (e) => {
+        e.stopPropagation(); // Prevent event from bubbling up
         console.log('Custom content clicked');
         this.toggleVerticalButtonGroup();
-      });
-      
-      customContentBtn.addEventListener('mouseenter', () => {
-        this.showVerticalButtonGroup();
-      });
-      
-      customContentBtn.addEventListener('mouseleave', () => {
-        // Only hide if not hovering over the vertical group
-        setTimeout(() => {
-          if (!this.verticalButtonGroup?.matches(':hover')) {
-            this.hideVerticalButtonGroup();
-          }
-        }, 100);
       });
       
       // Insert back into the DOM
