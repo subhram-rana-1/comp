@@ -8278,7 +8278,6 @@ const ButtonPanel = {
     pdfButton.id = 'vocab-pdf-btn';
     pdfButton.innerHTML = `
       <div class="vocab-vertical-btn-icon">${this.createPDFIcon()}</div>
-      <div class="vocab-vertical-btn-text">PDF</div>
     `;
 
     // Create Image button
@@ -8287,7 +8286,6 @@ const ButtonPanel = {
     imageButton.id = 'vocab-image-btn';
     imageButton.innerHTML = `
       <div class="vocab-vertical-btn-icon">${this.createImageIcon()}</div>
-      <div class="vocab-vertical-btn-text">Image</div>
     `;
 
     // Create Topics button
@@ -8296,7 +8294,6 @@ const ButtonPanel = {
     topicsButton.id = 'vocab-topics-btn';
     topicsButton.innerHTML = `
       <div class="vocab-vertical-btn-icon">${this.createTopicsIcon()}</div>
-      <div class="vocab-vertical-btn-text">Topics</div>
     `;
 
     // Create Text button
@@ -8305,7 +8302,6 @@ const ButtonPanel = {
     textButton.id = 'vocab-text-btn';
     textButton.innerHTML = `
       <div class="vocab-vertical-btn-icon">${this.createTextIcon()}</div>
-      <div class="vocab-vertical-btn-text">Text</div>
     `;
 
     // Append buttons to group
@@ -8422,12 +8418,16 @@ const ButtonPanel = {
    */
   createPDFIcon() {
     return `
-      <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M4 2C4 1.448 4.448 1 5 1H12L16 5V18C16 18.552 15.552 19 15 19H5C4.448 19 4 18.552 4 18V2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-        <path d="M12 1V5H16" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-        <path d="M6 8H14M6 10H12M6 12H10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-        <path d="M10 15L10 13M10 13L8 15M10 13L12 15" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-        <path d="M10 13L10 11" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      <svg width="36" height="36" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <!-- Document body with folded corner -->
+        <path d="M5 2C4.44772 2 4 2.44772 4 3V21C4 21.5523 4.44772 22 5 22H19C19.5523 22 20 21.5523 20 21V8L14 2H5Z" fill="#9527F5"/>
+        <!-- Folded corner -->
+        <path d="M14 2V7C14 7.55228 14.4477 8 15 8H20L14 2Z" fill="#7c1fd9"/>
+        <!-- PDF text -->
+        <text x="6" y="14" font-family="Arial, sans-serif" font-size="7" font-weight="900" letter-spacing="0.5" fill="white">PDF</text>
+        <!-- Upload arrow -->
+        <path d="M17 16V20" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M15 18L17 16L19 18" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
       </svg>
     `;
   },
@@ -8438,12 +8438,19 @@ const ButtonPanel = {
    */
   createImageIcon() {
     return `
-      <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M3 4C3 3.448 3.448 3 4 3H16C16.552 3 17 3.448 17 4V16C17 16.552 16.552 17 16 17H4C3.448 17 3 16.552 3 16V4Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-        <path d="M7 8L10 11L13 8L17 12V16H3V12L7 8Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-        <circle cx="7" cy="8" r="1.5" fill="currentColor"/>
-        <path d="M10 15L10 13M10 13L8 15M10 13L12 15" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-        <path d="M10 13L10 11" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      <svg width="36" height="36" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <!-- Image frame with rounded corners -->
+        <rect x="2" y="3" width="16" height="16" rx="2" fill="#9527F5"/>
+        <!-- Sun/circle in top right -->
+        <circle cx="14" cy="7" r="1.5" fill="white"/>
+        <!-- Mountain/landscape shape -->
+        <path d="M2 15L6 11L10 15L14 11L18 15V17C18 18.1046 17.1046 19 16 19H4C2.89543 19 2 18.1046 2 17V15Z" fill="white"/>
+        <!-- Plus badge circle -->
+        <circle cx="18" cy="18" r="5" fill="#9527F5"/>
+        <circle cx="18" cy="18" r="4" fill="white"/>
+        <circle cx="18" cy="18" r="3.5" fill="#9527F5"/>
+        <!-- Plus sign -->
+        <path d="M18 16V20M16 18H20" stroke="white" stroke-width="1.5" stroke-linecap="round"/>
       </svg>
     `;
   },
@@ -8454,16 +8461,8 @@ const ButtonPanel = {
    */
   createTopicsIcon() {
     return `
-      <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M3 3H7V7H3V3Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-        <path d="M10 3H14V7H10V3Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-        <path d="M17 3H21V7H17V3Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-        <path d="M3 10H7V14H3V10Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-        <path d="M10 10H14V14H10V10Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-        <path d="M17 10H21V14H17V10Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-        <path d="M3 17H7V21H3V17Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-        <path d="M10 17H14V21H10V17Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-        <path d="M17 17H21V21H17V17Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      <svg width="36" height="36" viewBox="0 0 28 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <text x="3" y="18" font-family="Arial, sans-serif" font-size="20" font-weight="900" fill="#9527F5">W</text>
       </svg>
     `;
   },
@@ -8474,11 +8473,8 @@ const ButtonPanel = {
    */
   createTextIcon() {
     return `
-      <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M3 4C3 3.448 3.448 3 4 3H16C16.552 3 17 3.448 17 4V16C17 16.552 16.552 17 16 17H4C3.448 17 3 16.552 3 16V4Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-        <path d="M6 7H14M6 9H12M6 11H10M6 13H14" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-        <path d="M10 15L10 13M10 13L8 15M10 13L12 15" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-        <path d="M10 13L10 11" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      <svg width="36" height="36" viewBox="0 0 32 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <text x="2" y="16" font-family="Arial, sans-serif" font-size="14" font-weight="900" fill="#9527F5">Txt</text>
       </svg>
     `;
   },
@@ -9106,7 +9102,7 @@ const ButtonPanel = {
         position: absolute;
         left: 100%;
         top: 50%;
-        transform: translateY(-50%) translateX(-12px) translateY(23px);
+        transform: translateY(-50%) translateX(4px);
         display: flex;
         flex-direction: column;
         gap: 6px;
@@ -9119,14 +9115,14 @@ const ButtonPanel = {
         pointer-events: none;
         transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         z-index: 1000000;
-        min-width: 120px;
+        min-width: auto;
       }
 
       .vocab-vertical-button-group.visible {
         opacity: 1;
         visibility: visible;
         pointer-events: auto;
-        transform: translateY(-50%) translateX(-16px) translateY(23px);
+        transform: translateY(-50%) translateX(8px);
       }
 
 
@@ -9134,47 +9130,46 @@ const ButtonPanel = {
         display: flex;
         flex-direction: row;
         align-items: center;
-        justify-content: flex-start;
-        padding: 8px 12px;
+        justify-content: center;
+        padding: 4px;
         background: white;
-        border: 2px solid #A24EFF;
-        border-radius: 16px;
-        color: #A24EFF;
+        border: 2px solid #9527F5;
+        border-radius: 12px;
+        color: #9527F5;
         font-size: 12px;
         font-weight: 700;
         cursor: pointer;
         transition: all 0.2s ease;
-        min-height: 40px;
-        width: 90px;
-        gap: 8px;
+        width: 44px;
+        height: 44px;
       }
 
       .vocab-vertical-btn:hover {
-        background: white;
-        transform: scale(1.05);
-        box-shadow: 0 2px 8px rgba(162, 78, 255, 0.2);
+        background: #ede5ff;
+        border-color: #7c1fd9;
       }
 
       .vocab-vertical-btn:active {
-        transform: scale(1.02);
-        box-shadow: 0 1px 4px rgba(162, 78, 255, 0.3);
+        background: #ddc8ff;
+        border-color: #7c1fd9;
       }
 
       .vocab-vertical-btn-icon {
-        width: 16px;
-        height: 16px;
+        width: 36px;
+        height: 36px;
         display: flex;
         align-items: center;
         justify-content: center;
         flex-shrink: 0;
       }
+      
+      .vocab-vertical-btn-icon svg {
+        width: 36px;
+        height: 36px;
+      }
 
       .vocab-vertical-btn-text {
-        font-size: 12px;
-        font-weight: 700;
-        text-align: left;
-        line-height: 1.2;
-        flex: 1;
+        display: none;
       }
 
 
@@ -9182,24 +9177,30 @@ const ButtonPanel = {
       @media (max-width: 768px) {
         .vocab-vertical-button-group {
           left: 100%;
-          transform: translateY(-50%) translateX(15px);
+          transform: translateY(-50%) translateX(12px);
           padding: 0;
-          min-width: 100px;
+          gap: 4px;
+          flex-direction: column;
+        }
+
+        .vocab-vertical-button-group.visible {
+          transform: translateY(-50%) translateX(15px);
         }
 
         .vocab-vertical-btn {
-          padding: 6px 8px;
-          min-height: 36px;
-          font-size: 11px;
+          padding: 3px;
+          width: 36px;
+          height: 36px;
         }
 
         .vocab-vertical-btn-icon {
-          width: 14px;
-          height: 14px;
+          width: 30px;
+          height: 30px;
         }
-
-        .vocab-vertical-btn-text {
-          font-size: 10px;
+        
+        .vocab-vertical-btn-icon svg {
+          width: 30px;
+          height: 30px;
         }
       }
 
@@ -10938,6 +10939,40 @@ const ButtonPanel = {
       console.warn('[ButtonPanel] Import content button not found');
     }
 
+    // Attach tooltips to vertical button group buttons
+    const pdfBtnForTooltip = document.getElementById('vocab-pdf-btn');
+    const imageBtnForTooltip = document.getElementById('vocab-image-btn');
+    const topicsBtnForTooltip = document.getElementById('vocab-topics-btn');
+    const textBtnForTooltip = document.getElementById('vocab-text-btn');
+
+    if (pdfBtnForTooltip) {
+      console.log('[ButtonPanel] Attaching tooltip to PDF button');
+      this.attachTooltipListeners(pdfBtnForTooltip, 'pdf-upload');
+    } else {
+      console.warn('[ButtonPanel] PDF button not found for tooltip');
+    }
+
+    if (imageBtnForTooltip) {
+      console.log('[ButtonPanel] Attaching tooltip to Image button');
+      this.attachTooltipListeners(imageBtnForTooltip, 'image-upload');
+    } else {
+      console.warn('[ButtonPanel] Image button not found for tooltip');
+    }
+
+    if (topicsBtnForTooltip) {
+      console.log('[ButtonPanel] Attaching tooltip to Topics button');
+      this.attachTooltipListeners(topicsBtnForTooltip, 'topics-input');
+    } else {
+      console.warn('[ButtonPanel] Topics button not found for tooltip');
+    }
+
+    if (textBtnForTooltip) {
+      console.log('[ButtonPanel] Attaching tooltip to Text button');
+      this.attachTooltipListeners(textBtnForTooltip, 'text-input');
+    } else {
+      console.warn('[ButtonPanel] Text button not found for tooltip');
+    }
+
     // Close vertical button group when clicking outside
     document.addEventListener('click', (e) => {
       if (this.verticalButtonGroup && this.verticalButtonGroup.classList.contains('visible')) {
@@ -11007,6 +11042,18 @@ const ButtonPanel = {
       } else if (buttonType === 'import-content') {
         message = 'Import content';
         console.log(`[ButtonPanel] Import-content button message: "${message}"`);
+      } else if (buttonType === 'pdf-upload') {
+        message = 'Upload PDF containing text';
+        console.log(`[ButtonPanel] PDF-upload button message: "${message}"`);
+      } else if (buttonType === 'image-upload') {
+        message = 'Upload image containing text';
+        console.log(`[ButtonPanel] Image-upload button message: "${message}"`);
+      } else if (buttonType === 'topics-input') {
+        message = 'Keywords or topics on which you want to learn';
+        console.log(`[ButtonPanel] Topics-input button message: "${message}"`);
+      } else if (buttonType === 'text-input') {
+        message = 'Copy content from elsewhere and paste here';
+        console.log(`[ButtonPanel] Text-input button message: "${message}"`);
       }
 
       console.log(`[ButtonPanel] Final tooltip message: "${message}" (disabled: ${isDisabled})`);
@@ -13803,7 +13850,7 @@ const ButtonPanel = {
     
     const title = document.createElement('h2');
     title.className = 'vocab-topics-modal-title';
-    title.textContent = 'Generate content on topics';
+    title.textContent = 'Enter keywords or topic of your interest';
     
     const closeBtn = document.createElement('button');
     closeBtn.className = 'vocab-topics-modal-close';
@@ -13830,7 +13877,7 @@ const ButtonPanel = {
     const input = document.createElement('input');
     input.type = 'text';
     input.className = 'vocab-topics-input';
-    input.placeholder = 'Enter topic name ...';
+    input.placeholder = 'Type keywords or topic here';
     
     const searchIcon = document.createElement('div');
     searchIcon.className = 'vocab-topics-search-icon disabled';
