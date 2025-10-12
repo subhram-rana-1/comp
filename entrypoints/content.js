@@ -2901,6 +2901,7 @@ const TextSelector = {
         text-decoration-thickness: 1px;
         text-underline-offset: 2px;
         cursor: text;
+        overflow: visible;
       }
       
       /* For block-level elements inside highlight, maintain underline */
@@ -2926,8 +2927,9 @@ const TextSelector = {
         opacity: 0.9;
         transition: opacity 0.2s ease, transform 0.1s ease, background-color 0.2s ease;
         padding: 0;
-        z-index: 999999;
+        z-index: 10000003;
         box-shadow: 0 2px 4px rgba(149, 39, 245, 0.4);
+        pointer-events: auto;
       }
       
       .vocab-text-highlight:hover .vocab-text-remove-btn {
@@ -2960,8 +2962,9 @@ const TextSelector = {
         flex-direction: row;
         align-items: center;
         gap: 4px;
-        z-index: 999999;
+        z-index: 10000003;
         animation: vocab-icon-appear 0.4s ease-out;
+        pointer-events: auto;
       }
       
       /* Chat button - Solid purple circle with white chat icon on top-left (bigger) */
@@ -4241,7 +4244,7 @@ const ChatDialog = {
         <div class="vocab-chat-no-messages-content">
           ${this.createChatEmptyIcon()}
           <span>${promptText}</span>
-          <span class="vocab-chat-regional-lang-text">You can voice record your question in your any language</span>
+          <span class="vocab-chat-regional-lang-text">You can voice record your question in your regional language</span>
         </div>
       `;
       chatContainer.appendChild(noChatsMsg);
@@ -4447,7 +4450,7 @@ const ChatDialog = {
         <div class="vocab-chat-no-messages-content">
           ${this.createChatEmptyIcon()}
           <span>${promptText}</span>
-          <span class="vocab-chat-regional-lang-text">You can voice record your question in your any language</span>
+          <span class="vocab-chat-regional-lang-text">You can voice record your question in your regional language</span>
         </div>
       `;
       chatContainer.appendChild(noChatsMsg);
@@ -4496,7 +4499,7 @@ const ChatDialog = {
         <div class="vocab-chat-no-messages-content">
           ${this.createChatEmptyIcon()}
           <span>${promptText}</span>
-          <span class="vocab-chat-regional-lang-text">You can voice record your question in your any language</span>
+          <span class="vocab-chat-regional-lang-text">You can voice record your question in your regional language</span>
         </div>
       `;
       chatContainer.appendChild(noChatsMsg);
@@ -7494,7 +7497,7 @@ const ChatDialog = {
         color: var(--vocab-text-primary);
         font-size: 16px;
         border-radius: var(--vocab-border-radius-md);
-        overflow: auto;
+        overflow: visible;
         scrollbar-width: thin;
         scrollbar-color: var(--vocab-primary-color) var(--vocab-primary-lighter);
         padding: var(--vocab-spacing-xl) var(--vocab-spacing-xl) var(--vocab-spacing-xl) var(--vocab-spacing-xl);
@@ -16614,12 +16617,15 @@ const ButtonPanel = {
         });
       }
 
-      // Restore simplified texts
+      // Restore simplified texts with additional delay to ensure content is fully rendered
       if (activeContent.analysis.simplifiedMeanings && activeContent.analysis.simplifiedMeanings.length > 0) {
         console.log('[ButtonPanel] Restoring', activeContent.analysis.simplifiedMeanings.length, 'simplified texts');
-        activeContent.analysis.simplifiedMeanings.forEach(simplifiedData => {
-          this.restoreSimplifiedText(simplifiedData);
-        });
+        // Add extra delay for simplified texts to ensure content is fully rendered
+        setTimeout(() => {
+          activeContent.analysis.simplifiedMeanings.forEach(simplifiedData => {
+            this.restoreSimplifiedText(simplifiedData);
+          });
+        }, 200);
       }
 
       // Restore chats
@@ -16763,6 +16769,7 @@ const ButtonPanel = {
    * @param {Object} simplifiedData - Simplified text data
    */
   restoreSimplifiedText(simplifiedData) {
+    console.log('[ButtonPanel] ===== RESTORING SIMPLIFIED TEXT =====');
     console.log('[ButtonPanel] Restoring simplified text for textKey:', simplifiedData.textKey);
     console.log('[ButtonPanel] Simplified data:', simplifiedData);
     
@@ -16786,6 +16793,7 @@ const ButtonPanel = {
     }
 
     console.log('[ButtonPanel] Searching for original text:', originalText.substring(0, 50) + '...');
+    console.log('[ButtonPanel] Content length:', textContent.length);
 
     // Find the text segment in the content using text matching
     const textIndex = textContent.indexOf(originalText);
@@ -16806,6 +16814,7 @@ const ButtonPanel = {
 
     console.log('[ButtonPanel] Found original text at index:', textIndex);
     this.createSimplifiedHighlight(contentElement, textIndex, originalText.length, originalText, simplifiedData);
+    console.log('[ButtonPanel] ===== SIMPLIFIED TEXT RESTORATION COMPLETE =====');
   },
 
   /**
@@ -16817,6 +16826,9 @@ const ButtonPanel = {
    * @param {Object} simplifiedData - The simplified data object
    */
   createSimplifiedHighlight(contentElement, startIndex, length, text, simplifiedData) {
+    console.log('[ButtonPanel] ===== CREATING SIMPLIFIED HIGHLIGHT =====');
+    console.log('[ButtonPanel] Start index:', startIndex, 'Length:', length, 'Text:', text.substring(0, 50) + '...');
+    
     // Check if this text is already highlighted
     const existingHighlight = contentElement.querySelector(`[data-text-highlight="${simplifiedData.textKey}"]`);
     if (existingHighlight) {
@@ -16862,6 +16874,7 @@ const ButtonPanel = {
     });
 
     console.log('[ButtonPanel] Restored simplified text highlight for textKey:', simplifiedData.textKey);
+    console.log('[ButtonPanel] ===== SIMPLIFIED HIGHLIGHT CREATION COMPLETE =====');
   },
 
   /**
