@@ -4241,7 +4241,7 @@ const ChatDialog = {
         <div class="vocab-chat-no-messages-content">
           ${this.createChatEmptyIcon()}
           <span>${promptText}</span>
-          <span class="vocab-chat-regional-lang-text">You can ask in your regional language</span>
+          <span class="vocab-chat-regional-lang-text">You can voice record your question in your any language</span>
         </div>
       `;
       chatContainer.appendChild(noChatsMsg);
@@ -4447,7 +4447,7 @@ const ChatDialog = {
         <div class="vocab-chat-no-messages-content">
           ${this.createChatEmptyIcon()}
           <span>${promptText}</span>
-          <span class="vocab-chat-regional-lang-text">You can ask in your regional language</span>
+          <span class="vocab-chat-regional-lang-text">You can voice record your question in your any language</span>
         </div>
       `;
       chatContainer.appendChild(noChatsMsg);
@@ -4496,7 +4496,7 @@ const ChatDialog = {
         <div class="vocab-chat-no-messages-content">
           ${this.createChatEmptyIcon()}
           <span>${promptText}</span>
-          <span class="vocab-chat-regional-lang-text">You can ask in your regional language</span>
+          <span class="vocab-chat-regional-lang-text">You can voice record your question in your any language</span>
         </div>
       `;
       chatContainer.appendChild(noChatsMsg);
@@ -7527,6 +7527,143 @@ const ChatDialog = {
         border: 2px solid var(--vocab-background-white);
       }
 
+      /* Custom Content Info Banner */
+      .vocab-custom-content-info-banner {
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        background: white;
+        border: 1px solid #9527F5;
+        border-radius: 12px;
+        padding: 16px 20px;
+        box-shadow: 0 4px 12px rgba(149, 39, 245, 0.3);
+        z-index: 10000002;
+        max-width: 400px;
+        opacity: 0;
+        transform: translateX(400px);
+        transition: opacity 0.3s ease, transform 0.3s ease;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+        pointer-events: all;
+      }
+
+      .vocab-custom-content-info-banner.visible {
+        opacity: 1;
+        transform: translateX(0);
+      }
+
+      .vocab-custom-content-info-banner-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 12px;
+        gap: 12px;
+      }
+
+      .vocab-custom-content-info-banner-title {
+        font-size: 16px;
+        font-weight: 600;
+        color: #9527F5;
+        margin: 0;
+        flex: 1;
+      }
+
+      .vocab-custom-content-info-banner-close {
+        background: none;
+        border: none;
+        cursor: pointer;
+        padding: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #9527F5;
+        transition: opacity 0.2s ease, transform 0.1s ease;
+        opacity: 0.6;
+        flex-shrink: 0;
+      }
+
+      .vocab-custom-content-info-banner-close:hover {
+        opacity: 1;
+        transform: scale(1.1);
+      }
+
+      .vocab-custom-content-info-banner-close svg {
+        width: 16px;
+        height: 16px;
+      }
+
+      .vocab-custom-content-info-banner-content {
+        margin-bottom: 14px;
+      }
+
+      .vocab-custom-content-info-banner-list {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+      }
+
+      .vocab-custom-content-info-banner-list li {
+        margin-bottom: 10px;
+        padding-left: 20px;
+        position: relative;
+        color: #333;
+        font-size: 14px;
+        line-height: 1.5;
+        font-weight: 400;
+      }
+
+      .vocab-custom-content-info-banner-list li:last-child {
+        margin-bottom: 0;
+      }
+
+      .vocab-custom-content-info-banner-list li::before {
+        content: '•';
+        position: absolute;
+        left: 6px;
+        color: #9527F5;
+        font-weight: bold;
+        font-size: 16px;
+      }
+
+      .vocab-custom-content-info-banner-highlight {
+        background: rgba(149, 39, 245, 0.15);
+        padding: 2px 6px;
+        border-radius: 4px;
+        font-weight: 500;
+        color: #9527F5;
+      }
+
+      .vocab-custom-content-info-banner-footer {
+        display: flex;
+        justify-content: flex-end;
+        border-top: 1px solid rgba(149, 39, 245, 0.15);
+        padding-top: 10px;
+        margin-top: 2px;
+      }
+
+      .vocab-custom-content-info-banner-dismiss-btn {
+        background: white;
+        color: #9527F5;
+        border: 1px solid #9527F5;
+        padding: 6px 14px;
+        border-radius: 8px;
+        font-size: 13px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        font-family: inherit;
+      }
+
+      .vocab-custom-content-info-banner-dismiss-btn:hover {
+        background: #9527F5;
+        color: white;
+        transform: translateY(-1px);
+        box-shadow: 0 2px 8px rgba(149, 39, 245, 0.3);
+      }
+
+      .vocab-custom-content-info-banner-dismiss-btn:active {
+        transform: translateY(0);
+      }
+
       .vocab-custom-content-editor-content::-webkit-scrollbar-thumb:hover {
         background: #D8C1E8;
         opacity: 0.8;
@@ -10464,6 +10601,11 @@ const ButtonPanel = {
         display: flex;
         justify-content: center;
         padding: 20px 40px;
+        transition: opacity 0.3s ease, max-height 0.3s ease;
+      }
+
+      .vocab-text-input-search.hidden {
+        display: none;
       }
 
       .vocab-text-input-search-input {
@@ -10488,6 +10630,11 @@ const ButtonPanel = {
         flex: 1;
         display: flex;
         flex-direction: column;
+        transition: padding 0.3s ease;
+      }
+
+      .vocab-text-input-content.empty {
+        padding-bottom: 40px;
       }
 
       .vocab-text-input-textarea {
@@ -10503,6 +10650,9 @@ const ButtonPanel = {
         outline: none;
         transition: border-color 0.2s ease;
         box-sizing: border-box;
+        overflow-y: auto;
+        white-space: pre-wrap;
+        word-wrap: break-word;
       }
 
       .vocab-text-input-textarea:focus {
@@ -10511,6 +10661,20 @@ const ButtonPanel = {
 
       .vocab-text-input-textarea::placeholder {
         color: #999;
+      }
+
+      .vocab-text-input-textarea:empty:before {
+        content: attr(data-placeholder);
+        color: #999;
+        pointer-events: none;
+      }
+
+      .vocab-text-input-textarea .vocab-search-highlight {
+        background: linear-gradient(120deg, #FFE066 0%, #FFD700 100%);
+        padding: 2px 4px;
+        border-radius: 4px;
+        font-weight: 600;
+        box-shadow: 0 2px 4px rgba(255, 224, 102, 0.3);
       }
 
       .vocab-text-input-textarea-container {
@@ -10531,6 +10695,10 @@ const ButtonPanel = {
         align-self: center;
         margin: 10px 0 20px 0;
         min-width: 120px;
+      }
+
+      .vocab-text-input-proceed-btn.hidden {
+        display: none;
       }
 
       .vocab-text-input-proceed-btn:hover {
@@ -11049,7 +11217,7 @@ const ButtonPanel = {
         message = 'Upload image containing text';
         console.log(`[ButtonPanel] Image-upload button message: "${message}"`);
       } else if (buttonType === 'topics-input') {
-        message = 'Keywords or topics on which you want to learn';
+        message = 'Keywords or topics which you want to study on';
         console.log(`[ButtonPanel] Topics-input button message: "${message}"`);
       } else if (buttonType === 'text-input') {
         message = 'Copy content from elsewhere and paste here';
@@ -12647,7 +12815,7 @@ const ButtonPanel = {
     
     const title = document.createElement('h2');
     title.className = 'vocab-text-input-title';
-    title.textContent = 'Paste your text';
+    title.textContent = 'Paste content to study';
     
     const closeBtn = document.createElement('button');
     closeBtn.className = 'vocab-text-input-close';
@@ -12663,30 +12831,32 @@ const ButtonPanel = {
     
     // Create search bar
     const searchBar = document.createElement('div');
-    searchBar.className = 'vocab-text-input-search';
+    searchBar.className = 'vocab-text-input-search hidden';
     
     const searchInput = document.createElement('input');
     searchInput.className = 'vocab-text-input-search-input';
     searchInput.type = 'text';
-    searchInput.placeholder = 'Search in text...';
+    searchInput.placeholder = 'Search text';
     
     searchBar.appendChild(searchInput);
     
     // Create content container
     const contentContainer = document.createElement('div');
-    contentContainer.className = 'vocab-text-input-content';
+    contentContainer.className = 'vocab-text-input-content empty';
     
-    // Create textarea
-    const textarea = document.createElement('textarea');
+    // Create textarea (using contenteditable div for highlighting support)
+    const textarea = document.createElement('div');
     textarea.className = 'vocab-text-input-textarea';
-    textarea.placeholder = 'Enter your text content here...';
-    textarea.rows = 10;
+    textarea.setAttribute('contenteditable', 'true');
+    textarea.setAttribute('data-placeholder', 'Paste your content here');
+    textarea.setAttribute('role', 'textbox');
+    textarea.setAttribute('aria-multiline', 'true');
     
     contentContainer.appendChild(textarea);
     
     // Create proceed button
     const proceedBtn = document.createElement('button');
-    proceedBtn.className = 'vocab-text-input-proceed-btn';
+    proceedBtn.className = 'vocab-text-input-proceed-btn hidden';
     proceedBtn.textContent = 'Proceed';
     
     // Assemble modal
@@ -12750,10 +12920,31 @@ const ButtonPanel = {
       this.textInputModal.overlay.classList.remove('visible');
       this.textInputModal.modal.classList.remove('visible');
       
-      // Clear textarea after animation
+      // Clear textarea after animation and hide search bar and proceed button
       setTimeout(() => {
         if (this.textInputModal.textarea) {
-          this.textInputModal.textarea.value = '';
+          this.textInputModal.textarea.textContent = '';
+          this.textInputModal.textarea.innerHTML = '';
+        }
+        
+        // Clear search input
+        if (this.textInputModal.searchInput) {
+          this.textInputModal.searchInput.value = '';
+        }
+        
+        // Hide search bar and proceed button
+        const searchBar = this.textInputModal.modal.querySelector('.vocab-text-input-search');
+        if (searchBar) {
+          searchBar.classList.add('hidden');
+        }
+        if (this.textInputModal.proceedBtn) {
+          this.textInputModal.proceedBtn.classList.add('hidden');
+        }
+        
+        // Add empty class back to content container
+        const contentContainer = this.textInputModal.modal.querySelector('.vocab-text-input-content');
+        if (contentContainer) {
+          contentContainer.classList.add('empty');
         }
       }, 300);
     }
@@ -12792,9 +12983,31 @@ const ButtonPanel = {
       this.performTextSearchInModal(textarea, searchTerm);
     });
     
-    // Update border radius when content changes
+    // Update border radius when content changes and toggle visibility of search bar and proceed button
     textarea.addEventListener('input', () => {
       this.updateTextareaBorderRadius(textarea);
+      
+      // Show/hide search bar and proceed button based on whether there's text
+      const hasText = textarea.textContent.trim().length > 0;
+      const searchBar = this.textInputModal.modal.querySelector('.vocab-text-input-search');
+      const proceedBtn = this.textInputModal.proceedBtn;
+      const contentContainer = this.textInputModal.modal.querySelector('.vocab-text-input-content');
+      
+      if (hasText) {
+        searchBar.classList.remove('hidden');
+        proceedBtn.classList.remove('hidden');
+        contentContainer.classList.remove('empty');
+      } else {
+        searchBar.classList.add('hidden');
+        proceedBtn.classList.add('hidden');
+        contentContainer.classList.add('empty');
+        
+        // Clear search highlights when text is cleared
+        const searchInput = this.textInputModal.searchInput;
+        if (searchInput) {
+          searchInput.value = '';
+        }
+      }
     });
     
     // Update border radius on resize
@@ -12809,17 +13022,17 @@ const ButtonPanel = {
     
     // Proceed button event
     proceedBtn.addEventListener('click', () => {
-      const textContent = textarea.value.trim();
+      const textContent = textarea.textContent.trim();
       if (textContent) {
         this.handleTextProceed(textContent);
       }
     });
     
-    // Enter key to proceed
+    // Enter key to proceed (Ctrl+Enter for contenteditable)
     textarea.addEventListener('keydown', (e) => {
       if (e.key === 'Enter' && e.ctrlKey) {
         e.preventDefault();
-        const textContent = textarea.value.trim();
+        const textContent = textarea.textContent.trim();
         if (textContent) {
           this.handleTextProceed(textContent);
         }
@@ -12831,33 +13044,77 @@ const ButtonPanel = {
    * Perform search in text input modal
    */
   performTextSearchInModal(textarea, searchTerm) {
-    if (!searchTerm || !searchTerm.trim()) {
-      // Remove highlights if any
-      textarea.style.backgroundColor = '';
-      textarea.style.boxShadow = '';
-      this.hideTextSearchPreview();
+    console.log('[ButtonPanel] performTextSearchInModal called with searchTerm:', searchTerm);
+    
+    if (!textarea) {
+      console.error('[ButtonPanel] Textarea element not found!');
       return;
     }
     
-    // Get the text content
-    const text = textarea.value;
-    const regex = new RegExp(`(${searchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gim');
+    if (!searchTerm || !searchTerm.trim()) {
+      console.log('[ButtonPanel] No search term, removing highlights');
+      // Remove all highlights
+      const highlights = textarea.querySelectorAll('.vocab-search-highlight');
+      highlights.forEach(highlight => {
+        const parent = highlight.parentNode;
+        if (parent) {
+          parent.replaceChild(document.createTextNode(highlight.textContent), highlight);
+          parent.normalize();
+        }
+      });
+      return;
+    }
     
-    if (regex.test(text)) {
-      // Found matches - highlight the textarea with a subtle effect
-      textarea.style.backgroundColor = 'rgba(255, 224, 102, 0.05)';
-      textarea.style.boxShadow = 'inset 0 0 0 2px rgba(255, 224, 102, 0.3)';
+    // Get the original content without highlights
+    let content = textarea.innerHTML;
+    console.log('[ButtonPanel] Original content length:', content.length);
+    
+    // Remove existing highlights
+    content = content.replace(/<span class="vocab-search-highlight">(.*?)<\/span>/gim, '$1');
+    
+    // Add new highlights - but only in text nodes, not in HTML tags
+    const regex = new RegExp(`(${searchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gim');
+    const matches = content.match(regex);
+    console.log('[ButtonPanel] Found matches:', matches ? matches.length : 0);
+    
+    content = content.replace(regex, '<span class="vocab-search-highlight">$1</span>');
+    
+    console.log('[ButtonPanel] Updated content with highlights');
+    textarea.innerHTML = content;
+    
+    // Auto-scroll to first match if it exists
+    this.scrollToFirstTextMatch(textarea);
+  },
+
+  /**
+   * Scroll to the first search match in text modal
+   * @param {HTMLElement} textarea - The textarea/contenteditable element
+   */
+  scrollToFirstTextMatch(textarea) {
+    const firstHighlight = textarea.querySelector('.vocab-search-highlight');
+    if (!firstHighlight) {
+      console.log('[ButtonPanel] No search highlights found in text modal');
+      return;
+    }
+    
+    // Get the bounding rectangles
+    const highlightRect = firstHighlight.getBoundingClientRect();
+    const textareaRect = textarea.getBoundingClientRect();
+    
+    // Check if the highlight is outside the visible area
+    const isAboveVisible = highlightRect.top < textareaRect.top;
+    const isBelowVisible = highlightRect.bottom > textareaRect.bottom;
+    
+    if (isAboveVisible || isBelowVisible) {
+      console.log('[ButtonPanel] First match is outside visible area, scrolling to it');
       
-      // Show search preview with highlighted matches
-      this.showTextSearchPreview(textarea, text, searchTerm);
-      
-      // Scroll to first match
-      this.scrollToTextMatch(textarea, searchTerm);
+      // Scroll the highlight into view
+      firstHighlight.scrollIntoView({
+        behavior: 'smooth',
+        block: 'center'
+      });
     } else {
-      // No matches found
-      textarea.style.backgroundColor = '';
-      textarea.style.boxShadow = '';
-      this.hideTextSearchPreview();
+      console.log('[ButtonPanel] First match is already visible');
     }
   },
 
@@ -13592,10 +13849,7 @@ const ButtonPanel = {
           console.log('[ButtonPanel] After removal - Text contents:', this.textContents);
           console.log('[ButtonPanel] ===== END REMOVE CONTENT DEBUG (SUCCESS) =====');
           
-          // Clean up analysis data for this tab
-          this.cleanupAnalysisData(content);
-          
-          return true;
+          return content; // Return the content object so cleanup can be done by caller
         }
         
         console.log('[ButtonPanel] Content not found in array');
@@ -13850,7 +14104,7 @@ const ButtonPanel = {
     
     const title = document.createElement('h2');
     title.className = 'vocab-topics-modal-title';
-    title.textContent = 'Enter keywords or topic of your interest';
+    title.textContent = 'Enter keywords or topic you want to study on';
     
     const closeBtn = document.createElement('button');
     closeBtn.className = 'vocab-topics-modal-close';
@@ -14593,6 +14847,9 @@ const ButtonPanel = {
       
       // Update button states after modal closes
       this.updateButtonStatesFromSelections();
+      
+      // Hide info banner if visible
+      this.hideCustomContentInfoBanner();
     }
     
     console.log('[ButtonPanel] ===== END HIDE CUSTOM CONTENT MODAL DEBUG =====');
@@ -15844,7 +16101,145 @@ const ButtonPanel = {
       
       // Update button states after modal opens to reflect new context
       this.updateButtonStatesFromSelections();
+      
+      // Show info banner after a short delay
+      setTimeout(() => {
+        this.showCustomContentInfoBanner();
+      }, 500);
     }, 100);
+  },
+
+  /**
+   * Create custom content info banner
+   */
+  createCustomContentInfoBanner() {
+    console.log('[ButtonPanel] Creating custom content info banner');
+    
+    // Check if banner already exists
+    if (document.querySelector('.vocab-custom-content-info-banner')) {
+      console.log('[ButtonPanel] Banner already exists');
+      return;
+    }
+    
+    // Create banner
+    const banner = document.createElement('div');
+    banner.className = 'vocab-custom-content-info-banner';
+    
+    // Create header
+    const header = document.createElement('div');
+    header.className = 'vocab-custom-content-info-banner-header';
+    
+    const title = document.createElement('h3');
+    title.className = 'vocab-custom-content-info-banner-title';
+    title.textContent = 'Quick Tips';
+    
+    const closeBtn = document.createElement('button');
+    closeBtn.className = 'vocab-custom-content-info-banner-close';
+    closeBtn.innerHTML = `
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M12 4L4 12M4 4L12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    `;
+    closeBtn.setAttribute('aria-label', 'Close banner');
+    
+    header.appendChild(title);
+    header.appendChild(closeBtn);
+    
+    // Create content
+    const content = document.createElement('div');
+    content.className = 'vocab-custom-content-info-banner-content';
+    
+    const list = document.createElement('ul');
+    list.className = 'vocab-custom-content-info-banner-list';
+    
+    const item1 = document.createElement('li');
+    item1.innerHTML = 'Double click a <span class="vocab-custom-content-info-banner-highlight">word</span> to select';
+    
+    const item2 = document.createElement('li');
+    item2.innerHTML = 'Select a <span class="vocab-custom-content-info-banner-highlight">passage containing multiple words</span> or sentences';
+    
+    list.appendChild(item1);
+    list.appendChild(item2);
+    content.appendChild(list);
+    
+    // Create footer
+    const footer = document.createElement('div');
+    footer.className = 'vocab-custom-content-info-banner-footer';
+    
+    const dismissBtn = document.createElement('button');
+    dismissBtn.className = 'vocab-custom-content-info-banner-dismiss-btn';
+    dismissBtn.textContent = "Don't show this again";
+    
+    footer.appendChild(dismissBtn);
+    
+    // Assemble banner
+    banner.appendChild(header);
+    banner.appendChild(content);
+    banner.appendChild(footer);
+    
+    // Add to document
+    document.body.appendChild(banner);
+    
+    // Attach event listeners
+    closeBtn.addEventListener('click', () => {
+      banner.classList.remove('visible');
+      setTimeout(() => {
+        banner.remove();
+      }, 300);
+    });
+    
+    dismissBtn.addEventListener('click', () => {
+      // Set session storage flag
+      sessionStorage.setItem('vocab-hide-custom-content-info-banner', 'true');
+      banner.classList.remove('visible');
+      setTimeout(() => {
+        banner.remove();
+      }, 300);
+    });
+    
+    console.log('[ButtonPanel] Info banner created successfully');
+  },
+
+  /**
+   * Show custom content info banner
+   */
+  showCustomContentInfoBanner() {
+    console.log('[ButtonPanel] Showing custom content info banner');
+    
+    // Check if user has dismissed the banner
+    const shouldHide = sessionStorage.getItem('vocab-hide-custom-content-info-banner');
+    if (shouldHide === 'true') {
+      console.log('[ButtonPanel] User has dismissed banner, not showing');
+      return;
+    }
+    
+    // Create banner if it doesn't exist
+    let banner = document.querySelector('.vocab-custom-content-info-banner');
+    if (!banner) {
+      this.createCustomContentInfoBanner();
+      banner = document.querySelector('.vocab-custom-content-info-banner');
+    }
+    
+    // Show with animation
+    if (banner) {
+      setTimeout(() => {
+        banner.classList.add('visible');
+      }, 100);
+    }
+  },
+
+  /**
+   * Hide custom content info banner
+   */
+  hideCustomContentInfoBanner() {
+    console.log('[ButtonPanel] Hiding custom content info banner');
+    const banner = document.querySelector('.vocab-custom-content-info-banner');
+    if (banner) {
+      banner.classList.remove('visible');
+      setTimeout(() => {
+        banner.remove();
+      }, 300);
+    }
   },
 
   /**
@@ -15909,6 +16304,11 @@ const ButtonPanel = {
       
       // Add class to body to hide webpage icons
       document.body.classList.add('vocab-custom-content-modal-open');
+      
+      // Show info banner after a short delay
+      setTimeout(() => {
+        this.showCustomContentInfoBanner();
+      }, 500);
     }, 100);
   },
 
@@ -16863,10 +17263,13 @@ const ButtonPanel = {
     console.log('[ButtonPanel] Closing tab of content type:', contentTypeToClose);
     
     // Remove content from new data structure using tabId
-    const removed = this.topicsModal.customContentModal.removeContentByTabId(parseInt(tabId));
-    console.log('[ButtonPanel] Content removed:', removed);
+    const removedContent = this.topicsModal.customContentModal.removeContentByTabId(parseInt(tabId));
+    console.log('[ButtonPanel] Content removed:', removedContent);
     
-    if (!removed) return;
+    if (!removedContent) return;
+    
+    // Clean up analysis data for this tab
+    this.cleanupAnalysisData(removedContent);
     
     // Remove tab element from DOM
     const tabElement = this.topicsModal.customContentModal.modal.querySelector(`[data-tab-id="${tabId}"]`);
@@ -16878,36 +17281,27 @@ const ButtonPanel = {
     // Check if there are any tabs left at all (across all content types)
     const allTabs = this.topicsModal.customContentModal.getAllTabs();
     
-    // Check if there are any tabs left for the specific content type being closed
-    const tabsOfSameType = this.topicsModal.customContentModal.getTabsByType(contentTypeToClose);
+    // Also check DOM to ensure sync
+    const visibleTabs = this.topicsModal.customContentModal.modal.querySelectorAll('.vocab-custom-content-tab');
     
     console.log('[ButtonPanel] ===== TAB CLOSING DEBUG INFO =====');
     console.log('[ButtonPanel] Tab being closed ID:', tabId);
     console.log('[ButtonPanel] Content type being closed:', contentTypeToClose);
     console.log('[ButtonPanel] Active tab ID:', this.topicsModal.customContentModal.activeTabId);
-    console.log('[ButtonPanel] Total remaining tabs:', allTabs.length);
-    console.log('[ButtonPanel] Remaining tabs of same type:', tabsOfSameType.length);
+    console.log('[ButtonPanel] Total remaining tabs (data):', allTabs.length);
+    console.log('[ButtonPanel] Total remaining tabs (DOM):', visibleTabs.length);
     console.log('[ButtonPanel] All remaining tabs:', allTabs);
     console.log('[ButtonPanel] Topic contents:', this.topicsModal.customContentModal.topicContents);
     console.log('[ButtonPanel] Image contents:', this.topicsModal.customContentModal.imageContents);
     console.log('[ButtonPanel] PDF contents:', this.topicsModal.customContentModal.pdfContents);
     console.log('[ButtonPanel] Text contents:', this.topicsModal.customContentModal.textContents);
     
-    // Check if this is the last tab globally OR the last tab of this specific content type
-    const isLastTabGlobally = allTabs.length === 0;
-    const isLastTabOfType = tabsOfSameType.length === 0;
+    // Check if this is the last tab (no tabs remaining in data OR DOM)
+    const isLastTab = allTabs.length === 0 || visibleTabs.length === 0;
     
-    if (isLastTabGlobally) {
-      console.log('-------- I am last tab getting closed globally -------');
-      console.log('[ButtonPanel] LAST TAB DETECTED - Should close modal');
-    } else if (isLastTabOfType) {
-      console.log(`-------- I am last tab of my current content type ${contentTypeToClose} -------`);
-      console.log('[ButtonPanel] LAST TAB OF TYPE DETECTED - Should close modal');
-    }
-    
-    // Check if we should close the modal (either last tab globally or last tab of this content type)
-    if (isLastTabGlobally || isLastTabOfType) {
-      console.log('[ButtonPanel] ===== CLOSING MODAL - Last tab of type or globally =====');
+    if (isLastTab) {
+      console.log('[ButtonPanel] ===== LAST TAB - CLOSING MODAL =====');
+      console.log('[ButtonPanel] No tabs remaining, closing modal');
       console.log('[ButtonPanel] Calling clearTopicsModalInputs()');
       this.clearTopicsModalInputs();
       console.log('[ButtonPanel] Calling hideCustomContentModal()');
@@ -17269,7 +17663,7 @@ const ButtonPanel = {
         'pdf': 'PDF Content',
         'image': 'Image content', 
         'topic': 'Topic content',
-        'text': 'Text content',
+        'text': 'Content',
         'default': 'Generated Content'
       };
       
@@ -17347,7 +17741,7 @@ const ButtonPanel = {
       'pdf': 'PDF Content',
       'image': 'Image content', 
       'topic': 'Topic content',
-      'text': 'Text content',
+      'text': 'Content',
       'default': 'Generated Content'
     };
     
