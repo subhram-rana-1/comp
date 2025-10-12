@@ -7054,7 +7054,6 @@ const ButtonPanel = {
   // State variables for button visibility and enabled states
   state: {
     showRemoveMeanings: false,    // Controls visibility of "Remove meanings" button
-    showDeselectAll: false,        // Controls visibility of "Deselect all" button
     isMagicMeaningEnabled: false,  // Controls enabled/disabled state of "Magic meaning" button
     showAsk: false,                // Controls visibility of "Ask" button
     showVerticalGroup: false       // Controls visibility of vertical button group
@@ -7172,7 +7171,7 @@ const ButtonPanel = {
     const mainButtonGroup = document.createElement('div');
     mainButtonGroup.className = 'vocab-button-group-main';
 
-    // Create upper button group (Remove all meanings, Deselect all)
+    // Create upper button group (Remove all meanings)
     this.upperButtonGroup = document.createElement('div');
     this.upperButtonGroup.className = 'vocab-button-group-upper';
 
@@ -7183,13 +7182,6 @@ const ButtonPanel = {
         icon: this.createTrashIcon('green'),
         text: 'Remove meanings',
         type: 'outline-green'
-      },
-      {
-        id: 'deselect-all',
-        className: 'vocab-btn vocab-btn-outline-purple hidden',
-        icon: this.createTrashIcon('purple'),
-        text: 'Deselect all',
-        type: 'outline-purple'
       }
     ];
 
@@ -7585,6 +7577,8 @@ const ButtonPanel = {
         flex-direction: column;
         gap: 6px;
         padding-top: 0;
+        transition: gap 0.3s ease;
+        overflow: hidden;
       }
 
       /* Drag Handle Styles - Semi-circular (bottom half rounded) */
@@ -7634,27 +7628,77 @@ const ButtonPanel = {
         font-weight: 500;
         border: 2px solid;
         cursor: pointer;
-        transition: all 0.2s ease, opacity 0.3s ease, transform 0.3s ease, max-height 0.3s ease;
+        transition: background 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
         outline: none;
         width: 100px;
         max-height: 100px;
         overflow: hidden;
         opacity: 1;
-        transform: scaleY(1);
-        transform-origin: top;
         min-height: 32px;
         text-decoration: none;
       }
       
+      /* Disable transitions during animations to prevent conflicts */
+      .vocab-btn.showing,
+      .vocab-btn.hiding {
+        transition: none !important;
+      }
+      
       .vocab-btn.hidden {
         display: none !important;
-        max-height: 0;
-        opacity: 0;
-        transform: scaleY(0);
-        padding: 0;
-        margin: 0;
-        border: none;
-        pointer-events: none;
+      }
+      
+      /* Animation classes for smooth transitions */
+      .vocab-btn.hiding {
+        animation: buttonSlideOutRight 0.35s cubic-bezier(0.6, 0, 0.4, 1) forwards;
+        pointer-events: none !important;
+      }
+
+      @keyframes buttonSlideOutRight {
+        0% {
+          opacity: 1;
+          transform: translateX(0) scale(1);
+          max-height: 100px;
+          margin-top: 0;
+          margin-bottom: 0;
+        }
+        100% {
+          opacity: 0;
+          transform: translateX(120px) scale(0.8);
+          max-height: 0;
+          margin-top: 0;
+          margin-bottom: 0;
+          padding-top: 0;
+          padding-bottom: 0;
+        }
+      }
+      
+      .vocab-btn.showing {
+        animation: buttonSlideInRight 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+      }
+
+      @keyframes buttonSlideInRight {
+        0% {
+          opacity: 0;
+          transform: translateX(120px) scale(0.8);
+          max-height: 0;
+          margin-top: 0;
+          margin-bottom: 0;
+          padding-top: 0;
+          padding-bottom: 0;
+        }
+        60% {
+          opacity: 1;
+        }
+        100% {
+          opacity: 1;
+          transform: translateX(0) scale(1);
+          max-height: 100px;
+          margin-top: 0;
+          margin-bottom: 0;
+          padding-top: 8px;
+          padding-bottom: 8px;
+        }
       }
 
       .vocab-btn:active:not(.hidden) {
@@ -9366,7 +9410,6 @@ const ButtonPanel = {
   attachEventListeners() {
     const buttons = {
       removeAllMeanings: document.getElementById('remove-all-meanings'),
-      deselectAll: document.getElementById('deselect-all'),
       magicMeaning: document.getElementById('magic-meaning'),
       ask: document.getElementById('ask'),
       customContent: document.getElementById('custom-content')
@@ -9376,12 +9419,6 @@ const ButtonPanel = {
     buttons.removeAllMeanings?.addEventListener('click', () => {
       console.log('Remove all meanings clicked');
       this.handleRemoveAllMeanings();
-    });
-
-    // Deselect all button
-    buttons.deselectAll?.addEventListener('click', () => {
-      console.log('Deselect all clicked');
-      this.handleDeselectAll();
     });
 
     // Magic meaning button
@@ -9952,18 +9989,6 @@ const ButtonPanel = {
     }
   },
 
-  /**
-   * Handler for Deselect all button
-   */
-  handleDeselectAll() {
-    console.log('Deselect all clicked');
-    // Clear all word selections
-    WordSelector.clearAll();
-    // Clear all text selections
-    TextSelector.clearAll();
-    // Update button states
-    this.updateButtonStatesFromSelections();
-  },
 
   /**
    * Handler for Magic meaning button
@@ -11373,11 +11398,45 @@ const ButtonPanel = {
   },
 
   /**
+   * Smoothly show a button with animation
+   */
+  showButtonSmooth(button) {
+    if (!button) return;
+    
+    if (button.classList.contains('hidden')) {
+      button.classList.remove('hidden');
+      button.classList.add('showing');
+      
+      // Remove showing class after animation (400ms to match animation duration)
+      setTimeout(() => {
+        button.classList.remove('showing');
+      }, 400);
+    }
+  },
+
+  /**
+   * Smoothly hide a button with animation
+   */
+  hideButtonSmooth(button) {
+    if (!button) return;
+    
+    if (!button.classList.contains('hidden')) {
+      button.classList.add('hiding');
+      
+      // Wait for animation to complete, then hide (350ms to match animation duration)
+      setTimeout(() => {
+        button.classList.remove('hiding');
+        button.classList.add('hidden');
+      }, 350);
+    }
+  },
+
+  /**
    * Update button states based on state variables
    */
   updateButtonStates() {
     // Show/hide upper button group based on state with smooth animation
-    const shouldShowUpperGroup = this.state.showRemoveMeanings || this.state.showDeselectAll;
+    const shouldShowUpperGroup = this.state.showRemoveMeanings;
     if (this.upperButtonGroup) {
       if (shouldShowUpperGroup) {
         this.upperButtonGroup.classList.add('visible');
@@ -11388,20 +11447,12 @@ const ButtonPanel = {
 
     // Update individual button visibility in upper group with smooth animation
     const removeMeaningsBtn = document.getElementById('remove-all-meanings');
-    const deselectAllBtn = document.getElementById('deselect-all');
     
     if (removeMeaningsBtn) {
       if (this.state.showRemoveMeanings) {
-        removeMeaningsBtn.classList.remove('hidden');
+        this.showButtonSmooth(removeMeaningsBtn);
       } else {
-        removeMeaningsBtn.classList.add('hidden');
-      }
-    }
-    if (deselectAllBtn) {
-      if (this.state.showDeselectAll) {
-        deselectAllBtn.classList.remove('hidden');
-      } else {
-        deselectAllBtn.classList.add('hidden');
+        this.hideButtonSmooth(removeMeaningsBtn);
       }
     }
 
@@ -11415,13 +11466,13 @@ const ButtonPanel = {
       }
     }
 
-    // Update visibility of Ask button
+    // Update visibility of Ask button with smooth animation
     const askBtn = document.getElementById('ask');
     if (askBtn) {
       if (this.state.showAsk) {
-        askBtn.classList.remove('hidden');
+        this.showButtonSmooth(askBtn);
       } else {
-        askBtn.classList.add('hidden');
+        this.hideButtonSmooth(askBtn);
       }
     }
   },
@@ -11493,9 +11544,6 @@ const ButtonPanel = {
     // Show "Remove all meanings" if there are any asked texts, simplified texts, OR explained words in current context
     this.setShowRemoveMeanings(hasAskedTextsInContext || hasSimplifiedTextsInContext || hasExplainedWordsInContext);
     
-    // Show "Deselect all" if there are any words or texts selected
-    this.setShowDeselectAll(hasWords || hasTexts);
-    
     // Enable "Magic meaning" if there are any words or texts selected
     this.setMagicMeaningEnabled(hasWords || hasTexts);
     
@@ -11512,13 +11560,6 @@ const ButtonPanel = {
     this.updateState({ showRemoveMeanings: show });
   },
 
-  /**
-   * Set visibility of Deselect all button
-   * @param {boolean} show - Whether to show the button
-   */
-  setShowDeselectAll(show) {
-    this.updateState({ showDeselectAll: show });
-  },
 
   /**
    * Set enabled state of Magic meaning button
