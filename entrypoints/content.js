@@ -11065,6 +11065,19 @@ const ButtonPanel = {
         console.log(`[ButtonPanel] No tooltip to remove`);
       }
     });
+
+    button.addEventListener('click', () => {
+      console.log(`[ButtonPanel] Click on ${buttonType} button - hiding tooltip`);
+      if (tooltip) {
+        console.log(`[ButtonPanel] Hiding tooltip on click...`);
+        tooltip.classList.remove('visible');
+        setTimeout(() => {
+          console.log(`[ButtonPanel] Tooltip removed from DOM on click`);
+          tooltip.remove();
+          tooltip = null;
+        }, 200);
+      }
+    });
   },
 
   /**
