@@ -529,8 +529,8 @@ const WordSelector = {
    */
   createCloseIcon() {
     return `
-      <svg width="10" height="10" viewBox="0 0 10 10" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M1 1L9 9M9 1L1 9" stroke="#9527F5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      <svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M2 2L10 10M10 2L2 10" stroke="#9527F5" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
       </svg>
     `;
   },
@@ -902,6 +902,17 @@ const WordSelector = {
     });
     popup.appendChild(speakerBtn);
     
+    // Close button for popup
+    const closeBtn = document.createElement('button');
+    closeBtn.className = 'vocab-word-popup-close';
+    closeBtn.setAttribute('aria-label', 'Close popup');
+    closeBtn.innerHTML = this.createCloseIcon();
+    closeBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.hideAllPopups();
+    });
+    popup.appendChild(closeBtn);
+    
     // Meaning
     const meaningDiv = document.createElement('div');
     meaningDiv.className = 'vocab-word-popup-meaning';
@@ -934,7 +945,7 @@ const WordSelector = {
     // View more button - smaller, bottom-left positioned
     const button = document.createElement('button');
     button.className = 'vocab-word-popup-button';
-    button.textContent = 'View more examples';
+    button.textContent = 'Get more examples';
     button.setAttribute('data-word', word.toLowerCase());
     button.setAttribute('data-meaning', meaning);
     
@@ -1248,7 +1259,15 @@ const WordSelector = {
       this.showWordPopup(wordElement, false);
     });
     
-    // Click event handler removed - green background words no longer respond to clicks
+    // Click: show popup (sticky) - stays visible until closed by close button or outside click
+    wordElement.addEventListener('click', (e) => {
+      if (!wordElement.classList.contains('vocab-word-explained')) return;
+      
+      e.stopPropagation();
+      
+      // Show sticky popup
+      this.showWordPopup(wordElement, true);
+    });
   },
   
   /**
@@ -1281,8 +1300,22 @@ const WordSelector = {
   createSpeakerIcon() {
     return `
       <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M3 9v6h4l5 5V4L7 9H3z" fill="#9F7BDB"/>
-        <path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z" fill="#9F7BDB"/>
+        <path d="M3 9v6h4l5 5V4L7 9H3z" fill="#A020F0"/>
+        <path d="M15.54 8.46c.78.78 1.28 1.86 1.28 3.04s-.5 2.26-1.28 3.04" stroke="#A020F0" stroke-width="2" stroke-linecap="round"/>
+        <path d="M18.36 5.64c1.56 1.56 2.52 3.71 2.52 6.09s-.96 4.53-2.52 6.09" stroke="#A020F0" stroke-width="2" stroke-linecap="round"/>
+        <path d="M21 3c2.28 2.28 3.69 5.43 3.69 8.91S23.28 18.54 21 20.82" stroke="#A020F0" stroke-width="2" stroke-linecap="round" opacity="0.7"/>
+      </svg>
+    `;
+  },
+
+  /**
+   * Create close icon SVG (X icon)
+   * @returns {string} SVG markup
+   */
+  createCloseIcon() {
+    return `
+      <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M18 6L6 18M6 6l12 12" stroke="#A020F0" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
       </svg>
     `;
   },
@@ -1449,8 +1482,8 @@ const WordSelector = {
    */
   createGreenCrossIcon() {
     return `
-      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M2 2L12 12M12 2L2 12" stroke="#22c55e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      <svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M2 2L10 10M10 2L2 10" stroke="#15803d" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
       </svg>
     `;
   },
@@ -1549,8 +1582,9 @@ const WordSelector = {
         display: inline;
         background-color: rgba(149, 39, 245, 0.15);
         padding: 0 4px;
-        border-radius: 4px;
-        transition: background-color 0.2s ease;
+        border-radius: 8px;
+        border: 1px solid rgba(149, 39, 245, 0.4);
+        transition: background-color 0.2s ease, border-color 0.2s ease;
         cursor: pointer;
         line-height: inherit;
         box-decoration-break: clone;
@@ -1559,25 +1593,27 @@ const WordSelector = {
       
       .vocab-word-highlight:hover {
         background-color: rgba(149, 39, 245, 0.25);
+        border-color: rgba(149, 39, 245, 0.6);
       }
       
       /* Remove button - Clean cross icon without circle */
       .vocab-word-remove-btn {
         position: absolute;
-        top: -6px;
-        right: -6px;
-        width: 12px;
-        height: 12px;
+        top: -7px;
+        right: -7px;
+        width: 16px;
+        height: 16px;
         background: none;
         border: none;
         display: flex;
         align-items: center;
         justify-content: center;
         cursor: pointer;
-        opacity: 0.7;
+        opacity: 0.8;
         transition: opacity 0.2s ease, transform 0.1s ease;
         padding: 0;
         z-index: 999999;
+        filter: drop-shadow(0 1px 2px rgba(149, 39, 245, 0.4));
       }
       
       .vocab-word-highlight:hover .vocab-word-remove-btn {
@@ -1596,9 +1632,8 @@ const WordSelector = {
       .vocab-word-remove-btn svg {
         pointer-events: none;
         display: block;
-        width: 10px;
-        height: 10px;
-        filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.2));
+        width: 14px;
+        height: 14px;
       }
       
       /* Make sure highlight doesn't interfere with text flow */
@@ -1624,19 +1659,23 @@ const WordSelector = {
       .vocab-word-explained {
         background-color: rgba(34, 197, 94, 0.20) !important;
         cursor: pointer;
+        border-radius: 8px;
+        border: 1px solid rgba(21, 128, 61, 0.4);
+        padding: 0 2px;
       }
       
       .vocab-word-explained:hover {
         background-color: rgba(34, 197, 94, 0.30) !important;
+        border-color: rgba(21, 128, 61, 0.6);
       }
       
       /* Green cross button for explained words - no circle, just cross */
       .vocab-word-remove-explained-btn {
         position: absolute;
-        top: -8px;
-        right: -8px;
-        width: 16px;
-        height: 16px;
+        top: -6px;
+        right: -6px;
+        width: 14px;
+        height: 14px;
         background: transparent;
         border: none;
         display: flex;
@@ -1666,8 +1705,8 @@ const WordSelector = {
       .vocab-word-remove-explained-btn svg {
         pointer-events: none;
         display: block;
-        width: 14px;
-        height: 14px;
+        width: 12px;
+        height: 12px;
       }
       
       /* Contextual Meaning Popup Card */
@@ -1773,28 +1812,31 @@ const WordSelector = {
         color: #A020F0;
       }
       
-      /* View more button - smaller, bottom-left positioned */
+      /* View more button - smaller, bottom-right positioned */
       .vocab-word-popup-button {
         padding: 6px 14px;
-        border: 1.5px solid #A020F0;
+        border: none;
         border-radius: 10px;
-        background: white;
-        color: #A020F0;
+        background: #A020F0;
+        color: white;
         font-weight: 500;
         font-size: 12px;
         cursor: pointer;
-        transition: background-color 0.2s ease, color 0.2s ease, opacity 0.2s ease;
+        transition: background-color 0.2s ease, opacity 0.2s ease, transform 0.2s ease;
         text-align: center;
-        align-self: flex-start;
-        position: relative;
+        position: absolute;
+        bottom: 12px;
+        right: 12px;
       }
       
       .vocab-word-popup-button:hover:not(.loading) {
-        background: rgba(160, 32, 240, 0.1);
+        background: #8B1AC4;
+        transform: translateY(-1px);
       }
       
       .vocab-word-popup-button:active:not(.loading) {
-        background: rgba(160, 32, 240, 0.2);
+        background: #7016A8;
+        transform: translateY(0);
       }
       
       .vocab-word-popup-button.loading {
@@ -1807,47 +1849,50 @@ const WordSelector = {
         cursor: not-allowed;
       }
       
-      /* Close button for sticky popup */
+      /* Close button for popup */
       .vocab-word-popup-close {
         position: absolute;
         top: 12px;
         right: 12px;
-        width: 24px;
-        height: 24px;
+        width: 22px;
+        height: 22px;
         border: none;
-        background: rgba(160, 32, 240, 0.1);
-        border-radius: 50%;
+        background: transparent;
         display: flex;
         align-items: center;
         justify-content: center;
         cursor: pointer;
-        opacity: 0.7;
-        transition: opacity 0.2s ease, background-color 0.2s ease;
+        opacity: 0.8;
+        transition: opacity 0.2s ease, transform 0.2s ease;
+        z-index: 10;
       }
       
       .vocab-word-popup-close:hover {
         opacity: 1;
-        background: rgba(160, 32, 240, 0.2);
+        transform: scale(1.2);
+      }
+      
+      .vocab-word-popup-close:active {
+        transform: scale(0.9);
       }
       
       .vocab-word-popup-close svg {
-        width: 12px;
-        height: 12px;
+        width: 16px;
+        height: 16px;
       }
       
       /* Speaker icon for pronunciation */
       .vocab-word-popup-speaker {
         position: absolute;
         top: 12px;
-        right: 12px;
-        width: 28px;
-        height: 28px;
-        background: rgba(159, 123, 219, 0.1);
-        border: 1px solid rgba(159, 123, 219, 0.3);
-        border-radius: 50%;
+        left: 12px;
+        width: 36px;
+        height: 36px;
+        background: transparent;
+        border: none;
         cursor: pointer;
-        opacity: 0.8;
-        transition: opacity 0.2s ease, background-color 0.2s ease, transform 0.2s ease;
+        opacity: 1;
+        transition: opacity 0.2s ease, transform 0.2s ease;
         display: flex;
         align-items: center;
         justify-content: center;
@@ -1855,9 +1900,8 @@ const WordSelector = {
       }
       
       .vocab-word-popup-speaker:hover:not(.loading) {
-        opacity: 1;
-        background: rgba(159, 123, 219, 0.2);
-        transform: scale(1.05);
+        opacity: 0.85;
+        transform: scale(1.1);
       }
       
       .vocab-word-popup-speaker:active:not(.loading) {
@@ -1871,8 +1915,8 @@ const WordSelector = {
       }
       
       .vocab-word-popup-speaker svg {
-        width: 16px;
-        height: 16px;
+        width: 28px;
+        height: 28px;
       }
       
       /* Loading spinner animation */
@@ -2390,6 +2434,19 @@ const TextSelector = {
       </svg>
     `;
   },
+
+  /**
+   * Create white cross icon with green circular background for text removal
+   * @returns {string} SVG markup
+   */
+  createGreenRemoveIcon() {
+    return `
+      <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="9" cy="9" r="9" fill="#22c55e"/>
+        <path d="M6 6L12 12M12 6L6 12" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    `;
+  },
   
   /**
    * Remove a highlight element and restore original text
@@ -2510,9 +2567,20 @@ const TextSelector = {
     // Remove underline by changing text-decoration to none
     highlight.style.textDecoration = 'none';
     
-    // Add chat icon button (green color)
+    // Create wrapper for icons
+    const iconsWrapper = document.createElement('div');
+    iconsWrapper.className = 'vocab-text-icons-wrapper';
+    
+    // Add green remove button first (left position)
+    const greenRemoveBtn = this.createGreenRemoveButtonForAskedText(textKey);
+    iconsWrapper.appendChild(greenRemoveBtn);
+    
+    // Add chat icon button (green color) second (right position)
     const chatBtn = this.createChatButton(textKey, true); // true = green color
-    highlight.appendChild(chatBtn);
+    iconsWrapper.appendChild(chatBtn);
+    
+    // Append wrapper to highlight
+    highlight.appendChild(iconsWrapper);
     
     // Pulsate the text once with green color
     this.pulsateText(highlight, true); // true = green pulsate
@@ -2538,21 +2606,161 @@ const TextSelector = {
     
     const highlight = askedData.highlight;
     
-    // Remove chat button
-    const chatBtn = highlight.querySelector('.vocab-text-chat-btn');
-    if (chatBtn) {
-      chatBtn.remove();
+    // Close ChatDialog if it's open for this textKey or related textKey
+    if (typeof ChatDialog !== 'undefined' && ChatDialog.isOpen) {
+      console.log('[TextSelector] ChatDialog is open - currentTextKey:', ChatDialog.currentTextKey, 'removing textKey:', textKey);
+      
+      // Check if the current chat is related to this textKey
+      // ChatDialog might have textKey in format: textKey-selected, textKey-generic, or exact match
+      const shouldClose = ChatDialog.currentTextKey === textKey || 
+                         ChatDialog.currentTextKey?.startsWith(textKey + '-') ||
+                         ChatDialog.currentTextKey?.includes(textKey) ||
+                         textKey?.includes(ChatDialog.currentTextKey?.split('-').slice(0, -1).join('-'));
+      
+      if (shouldClose) {
+        console.log('[TextSelector] Closing ChatDialog for asked text - currentTextKey:', ChatDialog.currentTextKey, 'removing textKey:', textKey);
+        ChatDialog.close();
+      } else {
+        console.log('[TextSelector] ChatDialog open but for different text - currentTextKey:', ChatDialog.currentTextKey, 'removing textKey:', textKey);
+        console.log('[TextSelector] Not closing chat as textKeys do not match');
+      }
+    }
+    
+    // Remove icons wrapper
+    const iconsWrapper = highlight.querySelector('.vocab-text-icons-wrapper');
+    if (iconsWrapper) {
+      iconsWrapper.remove();
     }
     
     // Remove highlight completely
     this.removeHighlight(highlight);
     
-    // Remove from askedTexts
+    // Remove from askedTexts map
     this.askedTexts.delete(textKey);
+    
+    // Remove from textToHighlights map if present
+    this.textToHighlights.delete(textKey);
+    
+    // Remove from analysis data structure for current tab
+    ButtonPanel.removeAskedTextFromAnalysisData(textKey);
+    
+    // Update button states to hide "Remove meanings" if no more data exists
+    ButtonPanel.updateButtonStatesFromSelections();
     
     console.log('[TextSelector] Text removed from askedTexts:', textKey);
   },
+
+  /**
+   * Remove text from simplifiedTexts and restore to normal
+   * @param {string} textKey - The text key
+   */
+  removeFromSimplifiedTexts(textKey) {
+    const simplifiedData = this.simplifiedTexts.get(textKey);
+    
+    if (!simplifiedData) {
+      console.warn('[TextSelector] No simplified text found for textKey:', textKey);
+      return;
+    }
+    
+    const highlight = simplifiedData.highlight;
+    
+    if (!highlight) {
+      console.warn('[TextSelector] No highlight element found for simplified text:', textKey);
+      this.simplifiedTexts.delete(textKey);
+      return;
+    }
+    
+    // Close ChatDialog if it's open for this textKey or related textKey
+    if (typeof ChatDialog !== 'undefined' && ChatDialog.isOpen) {
+      console.log('[TextSelector] ChatDialog is open - currentTextKey:', ChatDialog.currentTextKey, 'removing textKey:', textKey);
+      
+      // Check if the current chat is related to this textKey
+      // ChatDialog might have textKey in format: textKey-selected, textKey-generic, or exact match
+      const shouldClose = ChatDialog.currentTextKey === textKey || 
+                         ChatDialog.currentTextKey?.startsWith(textKey + '-') ||
+                         ChatDialog.currentTextKey?.includes(textKey) ||
+                         textKey?.includes(ChatDialog.currentTextKey?.split('-').slice(0, -1).join('-'));
+      
+      if (shouldClose) {
+        console.log('[TextSelector] Closing ChatDialog for simplified text - currentTextKey:', ChatDialog.currentTextKey, 'removing textKey:', textKey);
+        ChatDialog.close();
+      } else {
+        console.log('[TextSelector] ChatDialog open but for different text - currentTextKey:', ChatDialog.currentTextKey, 'removing textKey:', textKey);
+        console.log('[TextSelector] Not closing chat as textKeys do not match');
+      }
+    }
+    
+    // Remove icons wrapper
+    const iconsWrapper = highlight.querySelector('.vocab-text-icons-wrapper');
+    if (iconsWrapper) {
+      iconsWrapper.remove();
+    }
+    
+    // Remove the simplified class (green underline)
+    highlight.classList.remove('vocab-text-simplified');
+    
+    // Remove highlight completely
+    this.removeHighlight(highlight);
+    
+    // Remove from simplifiedTexts map
+    this.simplifiedTexts.delete(textKey);
+    
+    // Remove from textToHighlights map if present
+    this.textToHighlights.delete(textKey);
+    
+    // Remove from analysis data structure for current tab
+    ButtonPanel.removeSimplifiedTextFromAnalysisData(textKey);
+    
+    // Update button states to hide "Remove meanings" if no more data exists
+    ButtonPanel.updateButtonStatesFromSelections();
+    
+    console.log('[TextSelector] Text removed from simplifiedTexts:', textKey);
+  },
   
+  /**
+   * Create green remove button for asked texts
+   * @param {string} textKey - The text key
+   * @returns {HTMLElement} Button element
+   */
+  createGreenRemoveButtonForAskedText(textKey) {
+    const btn = document.createElement('button');
+    btn.className = 'vocab-text-remove-green-btn';
+    btn.setAttribute('aria-label', 'Remove asked text');
+    btn.innerHTML = this.createGreenRemoveIcon();
+    
+    // Add click handler
+    btn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      console.log('[TextSelector] Green remove button clicked for asked text:', textKey);
+      this.removeFromAskedTexts(textKey);
+    });
+    
+    return btn;
+  },
+
+  /**
+   * Create green remove button for simplified texts
+   * @param {string} textKey - The text key
+   * @returns {HTMLElement} Button element
+   */
+  createGreenRemoveButtonForSimplifiedText(textKey) {
+    const btn = document.createElement('button');
+    btn.className = 'vocab-text-remove-green-btn';
+    btn.setAttribute('aria-label', 'Remove simplified text');
+    btn.innerHTML = this.createGreenRemoveIcon();
+    
+    // Add click handler
+    btn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      console.log('[TextSelector] Green remove button clicked for simplified text:', textKey);
+      this.removeFromSimplifiedTexts(textKey);
+    });
+    
+    return btn;
+  },
+
   /**
    * Create a chat button for the highlight
    * @param {string} textKey - The text key
@@ -2742,6 +2950,19 @@ const TextSelector = {
         height: 8px;
       }
       
+      /* Wrapper containers for icon groups */
+      .vocab-text-icons-wrapper {
+        position: absolute;
+        top: -12px;
+        left: -60px;
+        display: flex;
+        flex-direction: row;
+        align-items: center;
+        gap: 4px;
+        z-index: 999999;
+        animation: vocab-icon-appear 0.4s ease-out;
+      }
+      
       /* Chat button - Solid purple circle with white chat icon on top-left (bigger) */
       /* Smooth icon appearance animation - slide from left */
       @keyframes vocab-icon-appear {
@@ -2759,9 +2980,7 @@ const TextSelector = {
       }
       
       .vocab-text-chat-btn {
-        position: absolute;
-        top: -12px;
-        left: -32px;
+        position: relative;
         width: 24px;
         height: 24px;
         background: transparent;
@@ -2774,11 +2993,10 @@ const TextSelector = {
         opacity: 0.95;
         transition: opacity 0.2s ease, transform 0.1s ease;
         padding: 0;
-        z-index: 999999;
-        animation: vocab-icon-appear 0.4s ease-out;
+        flex-shrink: 0;
       }
       
-      .vocab-text-highlight:hover .vocab-text-chat-btn {
+      .vocab-text-highlight:hover .vocab-text-icons-wrapper {
         opacity: 1;
       }
       
@@ -2800,9 +3018,7 @@ const TextSelector = {
       
       /* Book button - Wireframe open book icon on top-left */
       .vocab-text-book-btn {
-        position: absolute;
-        top: -12px;
-        left: -32px;
+        position: relative;
         width: 24px;
         height: 24px;
         background: transparent;
@@ -2815,12 +3031,7 @@ const TextSelector = {
         opacity: 0.95;
         transition: opacity 0.2s ease, transform 0.15s ease;
         padding: 0;
-        z-index: 999999;
-        animation: vocab-icon-appear 0.4s ease-out;
-      }
-      
-      .vocab-text-highlight:hover .vocab-text-book-btn {
-        opacity: 1;
+        flex-shrink: 0;
       }
       
       .vocab-text-book-btn:hover {
@@ -2840,11 +3051,45 @@ const TextSelector = {
         filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.1));
       }
       
+      /* Green remove button - white cross on green circular background */
+      .vocab-text-remove-green-btn {
+        position: relative;
+        width: 18px;
+        height: 18px;
+        background: transparent;
+        border: none;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        opacity: 0.95;
+        transition: opacity 0.2s ease, transform 0.15s ease;
+        padding: 0;
+        flex-shrink: 0;
+      }
+      
+      .vocab-text-remove-green-btn:hover {
+        transform: scale(1.15);
+        opacity: 1;
+      }
+      
+      .vocab-text-remove-green-btn:active {
+        transform: scale(0.95);
+      }
+      
+      .vocab-text-remove-green-btn svg {
+        pointer-events: none;
+        display: block;
+        width: 18px;
+        height: 18px;
+        filter: drop-shadow(0 2px 3px rgba(34, 197, 94, 0.3));
+      }
+      
       /* Light green dashed underline for simplified texts - same green as chat icon */
       .vocab-text-simplified {
         text-decoration-color: #22c55e !important;
         text-decoration-style: dashed !important;
-        text-decoration-thickness: 1px !important;
+        text-decoration-thickness: 2px !important;
       }
       
       /* Pulsate animation for text highlights - light purple */
@@ -6000,16 +6245,25 @@ const ChatDialog = {
         pointer-events: none !important;
         transition: opacity 0.2s ease, visibility 0.2s ease;
       }
+      
+      body.vocab-custom-content-modal-open .vocab-text-remove-green-btn {
+        opacity: 0 !important;
+        visibility: hidden !important;
+        pointer-events: none !important;
+        transition: opacity 0.2s ease, visibility 0.2s ease;
+      }
 
       /* Override with higher specificity: Ensure icons within the custom content modal remain visible and functional */
       body.vocab-custom-content-modal-open .vocab-custom-content-overlay .vocab-word-remove-explained-btn,
       body.vocab-custom-content-modal-open .vocab-custom-content-overlay .vocab-text-book-btn,
       body.vocab-custom-content-modal-open .vocab-custom-content-overlay .vocab-text-remove-btn,
       body.vocab-custom-content-modal-open .vocab-custom-content-overlay .vocab-text-chat-btn,
+      body.vocab-custom-content-modal-open .vocab-custom-content-overlay .vocab-text-remove-green-btn,
       body.vocab-custom-content-modal-open .vocab-custom-content-overlay * .vocab-word-remove-explained-btn,
       body.vocab-custom-content-modal-open .vocab-custom-content-overlay * .vocab-text-book-btn,
       body.vocab-custom-content-modal-open .vocab-custom-content-overlay * .vocab-text-remove-btn,
-      body.vocab-custom-content-modal-open .vocab-custom-content-overlay * .vocab-text-chat-btn {
+      body.vocab-custom-content-modal-open .vocab-custom-content-overlay * .vocab-text-chat-btn,
+      body.vocab-custom-content-modal-open .vocab-custom-content-overlay * .vocab-text-remove-green-btn {
         opacity: 1 !important;
         visibility: visible !important;
         pointer-events: auto !important;
@@ -10505,6 +10759,101 @@ const ButtonPanel = {
     }
   },
 
+  /**
+   * Remove specific asked text from analysis data structure for current tab
+   * @param {string} textKey - The text key to remove
+   */
+  removeAskedTextFromAnalysisData(textKey) {
+    console.log('[ButtonPanel] Removing asked text from analysis data:', textKey);
+    
+    // Check if custom content modal is open and has active tab
+    if (!this.topicsModal || !this.topicsModal.customContentModal || !this.topicsModal.customContentModal.activeTabId) {
+      console.log('[ButtonPanel] No active tab in custom content modal');
+      return;
+    }
+    
+    const activeTabId = this.topicsModal.customContentModal.activeTabId;
+    const activeContent = this.topicsModal.customContentModal.getContentByTabId(parseInt(activeTabId));
+    
+    if (!activeContent || !activeContent.analysis) {
+      console.log('[ButtonPanel] No analysis data found for tab:', activeTabId);
+      return;
+    }
+    
+    // Remove from chats array if present
+    if (activeContent.analysis.chats && activeContent.analysis.chats.length > 0) {
+      const initialLength = activeContent.analysis.chats.length;
+      activeContent.analysis.chats = activeContent.analysis.chats.filter(chatData => 
+        chatData.textKey !== textKey
+      );
+      
+      const removedCount = initialLength - activeContent.analysis.chats.length;
+      if (removedCount > 0) {
+        console.log('[ButtonPanel] Removed', removedCount, 'chat(s) for textKey:', textKey, 'from analysis data');
+        
+        // Also remove from ChatDialog's chatHistories
+        if (typeof ChatDialog !== 'undefined' && ChatDialog.chatHistories && ChatDialog.chatHistories.has(textKey)) {
+          ChatDialog.chatHistories.delete(textKey);
+          console.log('[ButtonPanel] Removed chat history from ChatDialog for textKey:', textKey);
+        }
+      }
+    }
+  },
+
+  /**
+   * Remove specific simplified text from analysis data structure for current tab
+   * @param {string} textKey - The text key to remove
+   */
+  removeSimplifiedTextFromAnalysisData(textKey) {
+    console.log('[ButtonPanel] Removing simplified text from analysis data:', textKey);
+    
+    // Check if custom content modal is open and has active tab
+    if (!this.topicsModal || !this.topicsModal.customContentModal || !this.topicsModal.customContentModal.activeTabId) {
+      console.log('[ButtonPanel] No active tab in custom content modal');
+      return;
+    }
+    
+    const activeTabId = this.topicsModal.customContentModal.activeTabId;
+    const activeContent = this.topicsModal.customContentModal.getContentByTabId(parseInt(activeTabId));
+    
+    if (!activeContent || !activeContent.analysis || !activeContent.analysis.simplifiedTexts) {
+      console.log('[ButtonPanel] No simplified texts found in analysis data for tab:', activeTabId);
+      return;
+    }
+    
+    // Find and remove the specific text from simplifiedTexts array
+    const initialLength = activeContent.analysis.simplifiedTexts.length;
+    activeContent.analysis.simplifiedTexts = activeContent.analysis.simplifiedTexts.filter(textData => 
+      textData.textKey !== textKey
+    );
+    
+    const removedCount = initialLength - activeContent.analysis.simplifiedTexts.length;
+    if (removedCount > 0) {
+      console.log('[ButtonPanel] Removed', removedCount, 'simplified text(s) for textKey:', textKey, 'from analysis data');
+    } else {
+      console.log('[ButtonPanel] No simplified text found for textKey:', textKey, 'in analysis data');
+    }
+    
+    // Also remove any associated chat history
+    if (activeContent.analysis.chats && activeContent.analysis.chats.length > 0) {
+      const initialChatLength = activeContent.analysis.chats.length;
+      activeContent.analysis.chats = activeContent.analysis.chats.filter(chatData => 
+        chatData.textKey !== textKey
+      );
+      
+      const removedChatCount = initialChatLength - activeContent.analysis.chats.length;
+      if (removedChatCount > 0) {
+        console.log('[ButtonPanel] Also removed', removedChatCount, 'associated chat(s) for textKey:', textKey);
+        
+        // Also remove from ChatDialog's chatHistories
+        if (typeof ChatDialog !== 'undefined' && ChatDialog.chatHistories && ChatDialog.chatHistories.has(textKey)) {
+          ChatDialog.chatHistories.delete(textKey);
+          console.log('[ButtonPanel] Removed chat history from ChatDialog for textKey:', textKey);
+        }
+      }
+    }
+  },
+
 
   /**
    * Handler for Magic meaning button
@@ -10609,8 +10958,20 @@ const ButtonPanel = {
                   existingBtn.remove();
                 }
                 
+                // Create wrapper for icons
+                const iconsWrapper = document.createElement('div');
+                iconsWrapper.className = 'vocab-text-icons-wrapper';
+                
+                // Add green remove button first (left position)
+                const greenRemoveBtn = TextSelector.createGreenRemoveButtonForSimplifiedText(matchingTextKey);
+                iconsWrapper.appendChild(greenRemoveBtn);
+                
+                // Add book icon second (right position)
                 const bookBtn = TextSelector.createBookButton(matchingTextKey);
-                highlight.appendChild(bookBtn);
+                iconsWrapper.appendChild(bookBtn);
+                
+                // Append wrapper to highlight
+                highlight.appendChild(iconsWrapper);
                 
                 // Store simplified text data
                 TextSelector.simplifiedTexts.set(matchingTextKey, {
@@ -10619,7 +10980,8 @@ const ButtonPanel = {
                   text: eventData.text,
                   simplifiedText: eventData.simplifiedText,
                   previousSimplifiedTexts: eventData.previousSimplifiedTexts || [],
-                  shouldAllowSimplifyMore: eventData.shouldAllowSimplifyMore || false
+                  shouldAllowSimplifyMore: eventData.shouldAllowSimplifyMore || false,
+                  highlight: highlight
                 });
                 
                 // Store simplified text in analysis data for persistence
@@ -15333,6 +15695,21 @@ const ButtonPanel = {
     // Replace the text in the DOM
     this.replaceTextInElement(contentElement, startIndex, startIndex + length, highlight);
 
+    // Create wrapper for icons
+    const iconsWrapper = document.createElement('div');
+    iconsWrapper.className = 'vocab-text-icons-wrapper';
+    
+    // Add green remove button first (left position)
+    const greenRemoveBtn = TextSelector.createGreenRemoveButtonForSimplifiedText(simplifiedData.textKey);
+    iconsWrapper.appendChild(greenRemoveBtn);
+    
+    // Add book button second (right position)
+    const bookBtn = TextSelector.createBookButton(simplifiedData.textKey);
+    iconsWrapper.appendChild(bookBtn);
+    
+    // Append wrapper to highlight
+    highlight.appendChild(iconsWrapper);
+
     // Add to TextSelector simplified texts
     TextSelector.simplifiedTexts.set(simplifiedData.textKey, {
       textStartIndex: startIndex,
@@ -15340,12 +15717,9 @@ const ButtonPanel = {
       text: text,
       simplifiedText: simplifiedData.simplifiedText,
       previousSimplifiedTexts: simplifiedData.previousSimplifiedTexts || [],
-      shouldAllowSimplifyMore: simplifiedData.shouldAllowSimplifyMore || false
+      shouldAllowSimplifyMore: simplifiedData.shouldAllowSimplifyMore || false,
+      highlight: highlight
     });
-
-    // Add book button
-    const bookBtn = TextSelector.createBookButton(simplifiedData.textKey);
-    highlight.appendChild(bookBtn);
 
     console.log('[ButtonPanel] Restored simplified text highlight for textKey:', simplifiedData.textKey);
   },
