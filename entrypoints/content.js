@@ -1836,7 +1836,7 @@ const WordSelector = {
       
       .vocab-word-popup-button:active:not(.loading) {
         background: #7016A8;
-        transform: translateY(0);
+        transform: translateY(0) scale(0.95);
       }
       
       .vocab-word-popup-button.loading {
@@ -1983,7 +1983,7 @@ const WordSelector = {
         align-items: center;
         justify-content: center;
         border-radius: 50%;
-        transition: background-color 0.2s ease;
+        transition: background-color 0.2s ease, transform 0.2s ease;
         flex-shrink: 0;
       }
       
@@ -5865,7 +5865,7 @@ const ChatDialog = {
       }
       
       .vocab-chat-simplify-more-btn:active:not(.disabled) {
-        transform: translateY(0);
+        transform: translateY(0) scale(0.95);
       }
       
       .vocab-chat-simplify-more-btn.disabled {
@@ -6487,7 +6487,7 @@ const ChatDialog = {
       }
       
       .vocab-mic-permission-btn-primary:active {
-        transform: translateY(0);
+        transform: translateY(0) scale(0.95);
       }
       
       /* Delete Conversation Button - Wireframe Red Circular */
@@ -7018,62 +7018,105 @@ const ChatDialog = {
         }
       }
 
-      /* Header Component */
-      .vocab-custom-content-header {
-        padding: var(--vocab-spacing-xl) var(--vocab-spacing-xxl);
-        margin: 0;
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        position: relative;
-        cursor: grab;
-        user-select: none;
-        background: #F4F0F5;
-        border-bottom: 0.5px solid rgba(162, 78, 255, 0.3);
-        border-radius: 20px 20px 0 0;
-        transition: none;
-      }
-
-      .vocab-custom-content-header:hover {
-        transform: none;
-        box-shadow: none;
-      }
-
-      .vocab-custom-content-header:active {
-        cursor: grabbing;
-        transform: none;
-      }
-
-      .vocab-custom-content-title {
-        font-size: 28px;
-        font-weight: 600;
-        color: #9F7BDB;
-        margin: 0;
+      /* Minimize Button Component */
+      .vocab-custom-content-minimize {
         position: absolute;
-        left: 50%;
-        transform: translateX(-50%);
-        text-shadow: none;
-        letter-spacing: -0.5px;
-        text-align: center;
-        width: calc(100% - 120px);
-        padding: 0 var(--vocab-spacing-lg);
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
+        top: var(--vocab-spacing-sm);
+        right: var(--vocab-spacing-sm);
+        width: 40px;
+        height: 40px;
+        border: none;
+        background: transparent;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        z-index: 1000;
+        color: #9F7BDB;
+      }
+
+      .vocab-custom-content-minimize:hover {
+        background: rgba(162, 78, 255, 0.1);
+        transform: scale(1.2);
+      }
+
+      .vocab-custom-content-minimize:active {
+        transform: scale(0.9);
+      }
+
+      /* Dragging state */
+      .vocab-custom-content-modal.dragging {
+        cursor: grabbing;
+        user-select: none;
+      }
+
+      .vocab-custom-content-modal.dragging * {
+        pointer-events: none;
+      }
+
+      .vocab-custom-content-modal.dragging .vocab-custom-content-minimize {
+        pointer-events: auto;
+      }
+
+      /* Palm cursor for draggable areas */
+      .vocab-custom-content-modal {
+        cursor: grab;
+      }
+
+      .vocab-custom-content-modal:active {
+        cursor: grabbing;
+      }
+
+      /* Ensure interactive elements don't show palm cursor */
+      .vocab-custom-content-modal input,
+      .vocab-custom-content-modal button,
+      .vocab-custom-content-modal textarea,
+      .vocab-custom-content-modal .vocab-custom-content-search-input,
+      .vocab-custom-content-modal .vocab-custom-content-tab-arrow,
+      .vocab-custom-content-modal .vocab-custom-content-minimize,
+      .vocab-custom-content-modal .vocab-custom-content-editor-content {
+        cursor: default;
+      }
+
+      /* Resize handles should show proper resize cursors */
+      .vocab-custom-content-modal .vocab-custom-content-resize-handle-top,
+      .vocab-custom-content-modal .vocab-custom-content-resize-handle-bottom {
+        cursor: ns-resize !important;
+      }
+      
+      .vocab-custom-content-modal .vocab-custom-content-resize-handle-left,
+      .vocab-custom-content-modal .vocab-custom-content-resize-handle-right {
+        cursor: ew-resize !important;
+      }
+      
+      .vocab-custom-content-modal .vocab-custom-content-resize-handle-top-left {
+        cursor: nw-resize !important;
+      }
+      
+      .vocab-custom-content-modal .vocab-custom-content-resize-handle-top-right {
+        cursor: ne-resize !important;
+      }
+      
+      .vocab-custom-content-modal .vocab-custom-content-resize-handle-bottom-left {
+        cursor: sw-resize !important;
+      }
+      
+      .vocab-custom-content-modal .vocab-custom-content-resize-handle-bottom-right {
+        cursor: se-resize !important;
       }
 
       /* Tabs Component */
       .vocab-custom-content-tabs {
         display: flex;
         align-items: center;
-        padding: 0;
-        padding-top: 0;
-        padding-bottom: 0;
+        padding: var(--vocab-spacing-lg) var(--vocab-spacing-lg) 0 var(--vocab-spacing-lg);
         background: var(--vocab-background-white);
         border-bottom: none;
         min-height: 40px;
         position: relative;
-        margin: 0 var(--vocab-spacing-lg) 0 var(--vocab-spacing-lg);
+        margin: 0;
         margin-bottom: 0;
       }
 
@@ -7304,17 +7347,16 @@ const ChatDialog = {
 
       /* Add Tab Button */
       .vocab-custom-content-add-tab {
-        background: #9527F5;
+        background: rgba(162, 78, 255, 0.1);
         border: none;
-        color: white;
-        cursor: pointer;
+        color: #9527F5;
+        cursor: pointer !important;
         padding: var(--vocab-spacing-xs);
-        border-radius: 50%;
-        transition: all var(--vocab-transition-normal);
+        border-radius: 8px;
+        transition: background-color var(--vocab-transition-normal), transform 0.1s ease;
         display: flex;
         align-items: center;
         justify-content: center;
-        box-shadow: 0 2px 8px rgba(149, 39, 245, 0.3);
         min-width: 32px;
         height: 32px;
         flex-shrink: 0;
@@ -7323,63 +7365,32 @@ const ChatDialog = {
         z-index: 10;
         margin-left: auto;
         outline: none;
+        box-shadow: none;
       }
 
       .vocab-custom-content-add-tab:hover {
-        background: #7B1FD6;
-        color: white;
-        transform: scale(1.05);
-        box-shadow: 0 4px 12px rgba(149, 39, 245, 0.4);
+        background: rgba(162, 78, 255, 0.2);
+        color: #9527F5;
+        cursor: pointer;
       }
 
       .vocab-custom-content-add-tab:active {
-        transform: scale(0.95);
+        background: rgba(162, 78, 255, 0.1);
+        color: #9527F5;
         outline: none;
-        border: none;
-        background: #6A1B9A;
-        box-shadow: 0 2px 6px rgba(149, 39, 245, 0.5);
-      }
-
-      /* Close Button Component */
-      .vocab-custom-content-close {
-        position: absolute;
-        right: var(--vocab-spacing-sm);
-        top: var(--vocab-spacing-sm);
-        background: transparent;
-        border: none;
-        color: var(--vocab-primary-color);
-        cursor: pointer;
-        padding: var(--vocab-spacing-sm);
-        border-radius: 10px;
-        transition: all var(--vocab-transition-normal);
-        display: flex;
-        align-items: center;
-        justify-content: center;
         box-shadow: none;
-        width: 40px;
-        height: 40px;
-        z-index: 10;
+        transform: scale(0.95);
       }
 
-      .vocab-custom-content-close:hover {
-        background: rgba(162, 78, 255, 0.08);
-        border: none;
-        transform: scale(1.2);
+      .vocab-custom-content-add-tab:focus {
+        outline: none;
         box-shadow: none;
-        color: var(--vocab-primary-hover);
       }
 
-      .vocab-custom-content-close:active {
-        transform: scale(1.1);
-      }
-
-      .vocab-custom-content-close svg {
-        stroke-width: 3;
-      }
 
       /* Search Component */
       .vocab-custom-content-search {
-        padding: var(--vocab-spacing-md) var(--vocab-spacing-xl);
+        padding: var(--vocab-spacing-lg) var(--vocab-spacing-xl) var(--vocab-spacing-md) var(--vocab-spacing-xl);
         display: flex;
         justify-content: center;
         align-items: center;
@@ -7456,36 +7467,45 @@ const ChatDialog = {
       .vocab-custom-content-chat-icon {
         position: absolute;
         bottom: 20px;
-        right: 20px;
+        right: 35px;
         width: 50px;
         height: 50px;
-        background: #9527F5;
+        background: transparent;
         border: none;
         border-radius: 50%;
         display: flex;
         align-items: center;
         justify-content: center;
-        cursor: pointer;
-        box-shadow: 0 4px 12px rgba(149, 39, 245, 0.3);
+        cursor: pointer !important;
         transition: all 0.3s ease;
         z-index: 1000;
         pointer-events: auto;
+        outline: none;
       }
 
       .vocab-custom-content-chat-icon:hover {
-        background: #7a1fd9;
+        background: transparent;
         transform: scale(1.1);
-        box-shadow: 0 6px 16px rgba(149, 39, 245, 0.4);
+        cursor: pointer;
       }
 
       .vocab-custom-content-chat-icon:active {
         transform: scale(0.95);
       }
 
+      .vocab-custom-content-chat-icon:focus {
+        outline: none;
+      }
+
+      /* Remove focus outline for mouse clicks, keep for keyboard navigation */
+      .vocab-custom-content-chat-icon:focus:not(:focus-visible) {
+        outline: none;
+      }
+
       .vocab-custom-content-chat-icon svg {
-        width: 24px;
-        height: 24px;
-        fill: white;
+        width: 32px;
+        height: 32px;
+        fill: #9527F5;
       }
 
       /* Scrollbar styling */
@@ -7663,15 +7683,14 @@ const ChatDialog = {
       .vocab-custom-content-info-banner-footer {
         display: flex;
         justify-content: flex-end;
-        border-top: 1px solid rgba(149, 39, 245, 0.15);
         padding-top: 10px;
         margin-top: 2px;
       }
 
       .vocab-custom-content-info-banner-dismiss-btn {
         background: white;
-        color: #9527F5;
-        border: 1px solid #9527F5;
+        color: #B8A3E8;
+        border: none;
         padding: 6px 14px;
         border-radius: 8px;
         font-size: 13px;
@@ -7679,17 +7698,18 @@ const ChatDialog = {
         cursor: pointer;
         transition: all 0.2s ease;
         font-family: inherit;
+        display: flex;
+        align-items: center;
+        gap: 6px;
       }
 
       .vocab-custom-content-info-banner-dismiss-btn:hover {
-        background: #9527F5;
-        color: white;
-        transform: translateY(-1px);
-        box-shadow: 0 2px 8px rgba(149, 39, 245, 0.3);
+        background: white;
+        color: #9527F5;
       }
 
       .vocab-custom-content-info-banner-dismiss-btn:active {
-        transform: translateY(0);
+        transform: translateY(0) scale(0.95);
       }
 
       .vocab-custom-content-editor-content::-webkit-scrollbar-thumb:hover {
@@ -8039,6 +8059,7 @@ const ChatDialog = {
       .vocab-custom-content-resize-handle-top-right:hover::before,
       .vocab-custom-content-resize-handle-bottom-left:hover::before,
       .vocab-custom-content-resize-handle-bottom-right:hover::before {
+        background: transparent !important;
         transform: translate(-50%, -50%) scale(1.1);
         box-shadow: none;
       }
@@ -8059,9 +8080,19 @@ const ChatDialog = {
       .vocab-custom-content-tab:focus,
       .vocab-custom-content-tab-arrow:focus,
       .vocab-custom-content-add-tab:focus,
-      .vocab-custom-content-close:focus {
+      .vocab-custom-content-close:focus,
+      .vocab-custom-content-chat-icon:focus {
         outline: 2px solid var(--vocab-primary-color);
         outline-offset: 2px;
+      }
+
+      /* Remove focus outline for mouse clicks, keep for keyboard navigation */
+      .vocab-custom-content-add-tab:focus:not(:focus-visible) {
+        outline: none;
+      }
+
+      .vocab-custom-content-chat-icon:focus:not(:focus-visible) {
+        outline: none;
       }
 
       .vocab-custom-content-search-input:focus {
@@ -8604,18 +8635,14 @@ const ButtonPanel = {
   createImageIcon() {
     return `
       <svg width="36" height="36" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <!-- Image frame with rounded corners -->
-        <rect x="2" y="3" width="16" height="16" rx="2" fill="#9527F5"/>
-        <!-- Sun/circle in top right -->
-        <circle cx="14" cy="7" r="1.5" fill="white"/>
-        <!-- Mountain/landscape shape -->
-        <path d="M2 15L6 11L10 15L14 11L18 15V17C18 18.1046 17.1046 19 16 19H4C2.89543 19 2 18.1046 2 17V15Z" fill="white"/>
-        <!-- Plus badge circle -->
-        <circle cx="18" cy="18" r="5" fill="#9527F5"/>
-        <circle cx="18" cy="18" r="4" fill="white"/>
-        <circle cx="18" cy="18" r="3.5" fill="#9527F5"/>
-        <!-- Plus sign -->
-        <path d="M18 16V20M16 18H20" stroke="white" stroke-width="1.5" stroke-linecap="round"/>
+        <!-- Purple rounded rectangle background -->
+        <rect x="2" y="4" width="20" height="16" rx="4" fill="#9527F5"/>
+        <!-- Purple border frame with rounded corners -->
+        <rect x="2" y="4" width="20" height="16" rx="4" stroke="#9527F5" stroke-width="2" fill="none"/>
+        <!-- White mountain range with two V-shaped peaks -->
+        <path d="M2 18L6 10L10 14L14 8L18 12L22 18V20C22 20.5523 21.5523 21 21 21H3C2.44772 21 2 20.5523 2 20V18Z" fill="white"/>
+        <!-- White sun/circle in top right -->
+        <circle cx="18" cy="8" r="2" fill="white"/>
       </svg>
     `;
   },
@@ -9030,7 +9057,7 @@ const ButtonPanel = {
       }
 
       .vocab-btn:active:not(.hidden) {
-        transform: scale(0.98) !important;
+        transform: scale(0.95) !important;
       }
 
       /* Button Icon */
@@ -9317,6 +9344,7 @@ const ButtonPanel = {
       .vocab-vertical-btn:active {
         background: #ddc8ff;
         border-color: #7c1fd9;
+        transform: scale(0.95);
       }
 
       .vocab-vertical-btn-icon {
@@ -9659,7 +9687,7 @@ const ButtonPanel = {
         align-items: center;
         justify-content: center;
         border-radius: 50%;
-        transition: background-color 0.2s ease;
+        transition: background-color 0.2s ease, transform 0.2s ease;
       }
 
       .vocab-topics-tag-remove:hover {
@@ -9737,11 +9765,15 @@ const ButtonPanel = {
         display: flex;
         align-items: center;
         justify-content: center;
-        transition: background-color 0.2s ease;
+        transition: background-color 0.2s ease, transform 0.2s ease;
       }
 
       .vocab-topics-word-count-btn:hover {
         background-color: rgba(155, 110, 218, 0.1);
+      }
+
+      .vocab-topics-word-count-btn:active {
+        transform: scale(0.95);
       }
 
       .vocab-topics-word-count-btn.selected {
@@ -9788,11 +9820,15 @@ const ButtonPanel = {
         display: flex;
         align-items: center;
         justify-content: center;
-        transition: background-color 0.2s ease;
+        transition: background-color 0.2s ease, transform 0.2s ease;
       }
 
       .vocab-topics-difficulty-btn:hover {
         background-color: rgba(155, 110, 218, 0.1);
+      }
+
+      .vocab-topics-difficulty-btn:active {
+        transform: scale(0.95);
       }
 
       .vocab-topics-difficulty-btn.easy {
@@ -10121,6 +10157,7 @@ const ButtonPanel = {
 
       .vocab-image-upload-browse-btn:active {
         background: #7A5BC7;
+        transform: scale(0.95);
       }
 
       /* Responsive Design */
@@ -10427,6 +10464,7 @@ const ButtonPanel = {
 
       .vocab-pdf-upload-browse-btn:active {
         background: #7A5BC7;
+        transform: scale(0.95);
       }
 
       /* Responsive styles for PDF upload modal */
@@ -15557,26 +15595,15 @@ const ButtonPanel = {
     const modal = document.createElement('div');
     modal.className = 'vocab-custom-content-modal';
     
-    // Header
-    const header = document.createElement('div');
-    header.className = 'vocab-custom-content-header';
-    header.setAttribute('title', 'Drag to move modal');
-    
-    const title = document.createElement('h2');
-    title.className = 'vocab-custom-content-title';
-    title.textContent = 'Generated Content';
-    
-    const closeBtn = document.createElement('button');
-    closeBtn.className = 'vocab-custom-content-close';
-    closeBtn.innerHTML = `
+    // Create minimize button positioned at top right corner
+    const minimizeBtn = document.createElement('button');
+    minimizeBtn.className = 'vocab-custom-content-minimize';
+    minimizeBtn.innerHTML = `
       <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
         <path d="M4 10H16" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
       </svg>
     `;
-    closeBtn.setAttribute('aria-label', 'Close modal');
-    
-    header.appendChild(title);
-    header.appendChild(closeBtn);
+    minimizeBtn.setAttribute('aria-label', 'Minimize modal');
     
     // Tabs section
     const tabsSection = document.createElement('div');
@@ -15647,8 +15674,20 @@ const ButtonPanel = {
     const chatIcon = document.createElement('button');
     chatIcon.className = 'vocab-custom-content-chat-icon';
     chatIcon.innerHTML = `
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" fill="white">
-        <path d="M12 2C6.48 2 2 6.48 2 12c0 1.54.36 2.98.97 4.29L1 23l6.71-1.97C9.02 21.64 10.46 22 12 22c5.52 0 10-4.48 10-10S17.52 2 12 2zm-1 15h-2v-2h2v2zm0-4h-2v-6h2v6zm4 4h-2v-2h2v2zm0-4h-2v-6h2v6z"/>
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="32" height="32" fill="#9527F5">
+        <!-- Main robot head body -->
+        <rect x="6" y="4" width="12" height="16" rx="2" fill="#9527F5"/>
+        <!-- Antenna -->
+        <rect x="11" y="2" width="2" height="3" rx="1" fill="#9527F5"/>
+        <circle cx="12" cy="1" r="1" fill="#9527F5"/>
+        <!-- Eyes -->
+        <circle cx="9" y="8" r="1" fill="white"/>
+        <circle cx="15" y="8" r="1" fill="white"/>
+        <!-- Mouth -->
+        <rect x="8" y="12" width="8" height="3" rx="1.5" fill="white"/>
+        <!-- Side panels/ears -->
+        <rect x="4" y="6" width="2" height="8" rx="1" fill="#9527F5"/>
+        <rect x="18" y="6" width="2" height="8" rx="1" fill="#9527F5"/>
       </svg>
     `;
     chatIcon.setAttribute('title', 'Ask questions about this content');
@@ -15695,7 +15734,7 @@ const ButtonPanel = {
     observer.observe(editorContent, { childList: true, subtree: true });
     
     // Assemble modal
-    modal.appendChild(header);
+    modal.appendChild(minimizeBtn);
     modal.appendChild(searchSection);
     modal.appendChild(tabsSection);
     modal.appendChild(editorSection);
@@ -15724,6 +15763,7 @@ const ButtonPanel = {
     this.topicsModal.customContentModal.addTabBtn = addTabBtn;
     this.topicsModal.customContentModal.leftArrow = leftArrow;
     this.topicsModal.customContentModal.rightArrow = rightArrow;
+    this.topicsModal.customContentModal.minimizeBtn = minimizeBtn;
     console.log('[ButtonPanel] Stored tabsContainer:', this.topicsModal.customContentModal.tabsContainer);
     
     // Attach event listeners
@@ -15737,7 +15777,7 @@ const ButtonPanel = {
     console.log('[ButtonPanel] Attaching custom content modal listeners...');
     const overlay = this.topicsModal.customContentModal.overlay;
     const modal = this.topicsModal.customContentModal.modal;
-    const closeBtn = modal.querySelector('.vocab-custom-content-close');
+    const minimizeBtn = this.topicsModal.customContentModal.minimizeBtn;
     const searchInput = this.topicsModal.customContentModal.searchInput;
     const panIcon = modal.querySelector('.vocab-custom-content-pan-icon');
     const addTabBtn = this.topicsModal.customContentModal.addTabBtn;
@@ -15745,8 +15785,11 @@ const ButtonPanel = {
     console.log('[ButtonPanel] tabsContainer in attachCustomContentModalListeners:', tabsContainer);
     console.log('[ButtonPanel] searchInput in attachCustomContentModalListeners:', searchInput);
     
-    // Close modal events
-    closeBtn.addEventListener('click', () => this.hideCustomContentModal());
+    // Minimize modal events
+    minimizeBtn.addEventListener('click', () => this.hideCustomContentModal());
+    
+    // Initialize dragging functionality
+    this.initModalDragging(modal);
     
     // Search functionality
     if (searchInput) {
@@ -16119,7 +16162,12 @@ const ButtonPanel = {
     
     const dismissBtn = document.createElement('button');
     dismissBtn.className = 'vocab-custom-content-info-banner-dismiss-btn';
-    dismissBtn.textContent = "Don't show this again";
+    dismissBtn.innerHTML = `
+      <svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M9 3L3 9M3 3L9 9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      Don't show this again
+    `;
     
     footer.appendChild(dismissBtn);
     
@@ -17465,10 +17513,36 @@ const ButtonPanel = {
         const position = handle.getAttribute('data-position');
         const startX = e.clientX;
         const startY = e.clientY;
-        const startWidth = modal.offsetWidth;
-        const startHeight = modal.offsetHeight;
-        const startLeft = modal.offsetLeft;
-        const startTop = modal.offsetTop;
+        // Get current modal dimensions and position using getBoundingClientRect for accuracy
+        const rect = modal.getBoundingClientRect();
+        const startWidth = rect.width;
+        const startHeight = rect.height;
+        const startLeft = rect.left;
+        const startTop = rect.top;
+        
+        // If this is the first resize, ensure we have proper positioning
+        const computedStyle = window.getComputedStyle(modal);
+        let actualStartLeft = startLeft;
+        let actualStartTop = startTop;
+        
+        // Check if modal is centered (either by left: 50% or transform)
+        const isCentered = computedStyle.left === '50%' || 
+                          computedStyle.left === 'auto' || 
+                          computedStyle.transform.includes('translate(-50%');
+        
+        if (isCentered) {
+          // Modal is centered, set absolute positioning immediately
+          modal.style.left = startLeft + 'px';
+          modal.style.top = startTop + 'px';
+          modal.style.transform = 'none';
+          // Update the position values for resize calculation
+          actualStartLeft = startLeft;
+          actualStartTop = startTop;
+        } else {
+          // Modal already has absolute positioning, use computed values
+          actualStartLeft = parseFloat(computedStyle.left) || startLeft;
+          actualStartTop = parseFloat(computedStyle.top) || startTop;
+        }
         
         const handleMouseMove = (e) => {
         const deltaX = e.clientX - startX;
@@ -17476,46 +17550,46 @@ const ButtonPanel = {
         
         let newWidth = startWidth;
         let newHeight = startHeight;
-        let newLeft = startLeft;
-        let newTop = startTop;
+        let newLeft = actualStartLeft;
+        let newTop = actualStartTop;
         
-          // Calculate new dimensions based on position
-        switch (position) {
+          // Calculate new dimensions based on position (1:1 ratio)
+          switch (position) {
             case 'right':
-              newWidth = Math.max(400, startWidth + deltaX);
+              newWidth = startWidth + deltaX;
               break;
             case 'left':
-              newWidth = Math.max(400, startWidth - deltaX);
-            newLeft = startLeft + deltaX;
+              newWidth = startWidth - deltaX;
+              newLeft = actualStartLeft + deltaX;
               break;
             case 'bottom':
-              newHeight = Math.max(300, startHeight + deltaY);
+              newHeight = startHeight + deltaY;
               break;
             case 'top':
-              newHeight = Math.max(300, startHeight - deltaY);
-            newTop = startTop + deltaY;
-            break;
-          case 'top-right':
-              newWidth = Math.max(400, startWidth + deltaX);
-              newHeight = Math.max(300, startHeight - deltaY);
-            newTop = startTop + deltaY;
-            break;
+              newHeight = startHeight - deltaY;
+              newTop = actualStartTop + deltaY;
+              break;
+            case 'top-right':
+              newWidth = startWidth + deltaX;
+              newHeight = startHeight - deltaY;
+              newTop = actualStartTop + deltaY;
+              break;
             case 'top-left':
-              newWidth = Math.max(400, startWidth - deltaX);
-              newHeight = Math.max(300, startHeight - deltaY);
-            newLeft = startLeft + deltaX;
-              newTop = startTop + deltaY;
-            break;
-          case 'bottom-right':
-              newWidth = Math.max(400, startWidth + deltaX);
-              newHeight = Math.max(300, startHeight + deltaY);
+              newWidth = startWidth - deltaX;
+              newHeight = startHeight - deltaY;
+              newLeft = actualStartLeft + deltaX;
+              newTop = actualStartTop + deltaY;
+              break;
+            case 'bottom-right':
+              newWidth = startWidth + deltaX;
+              newHeight = startHeight + deltaY;
               break;
             case 'bottom-left':
-              newWidth = Math.max(400, startWidth - deltaX);
-              newHeight = Math.max(300, startHeight + deltaY);
-              newLeft = startLeft + deltaX;
-            break;
-        }
+              newWidth = startWidth - deltaX;
+              newHeight = startHeight + deltaY;
+              newLeft = actualStartLeft + deltaX;
+              break;
+          }
         
           // Apply viewport constraints
         const minWidth = 400;
@@ -18026,6 +18100,176 @@ const ButtonPanel = {
         <path d="M8 3V13M3 8H13" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
       </svg>
     `;
+  },
+
+  /**
+   * Initialize modal dragging functionality
+   * @param {HTMLElement} modal - The modal element to make draggable
+   */
+  initModalDragging(modal) {
+    let isDragging = false;
+    let startX, startY, initialX, initialY;
+    
+    // Function to check if the clicked element should allow dragging
+    const isDraggableElement = (element) => {
+      // Don't drag if clicking on interactive elements
+      const nonDraggableSelectors = [
+        'input',
+        'button',
+        'textarea',
+        '.vocab-custom-content-search-input',
+        '.vocab-custom-content-tab-arrow',
+        '.vocab-custom-content-add-tab',
+        '.vocab-custom-content-minimize',
+        '.vocab-custom-content-chat-icon',
+        '.vocab-custom-content-resize-handle',
+        '.vocab-custom-content-editor-content',
+        '.vocab-custom-content-tab'
+      ];
+      
+      // Check if the element or any of its parents match non-draggable selectors
+      let currentElement = element;
+      while (currentElement && currentElement !== modal) {
+        for (const selector of nonDraggableSelectors) {
+          if (currentElement.matches && currentElement.matches(selector)) {
+            return false;
+          }
+        }
+        currentElement = currentElement.parentElement;
+      }
+      
+      return true;
+    };
+    
+    // Mouse down event
+    modal.addEventListener('mousedown', (e) => {
+      if (!isDraggableElement(e.target)) {
+        return;
+      }
+      
+      isDragging = true;
+      startX = e.clientX;
+      startY = e.clientY;
+      
+      // Get current modal position - always use getBoundingClientRect for accuracy
+      const rect = modal.getBoundingClientRect();
+      initialX = rect.left;
+      initialY = rect.top;
+      
+      // If this is the first drag, ensure we have proper positioning
+      const computedStyle = window.getComputedStyle(modal);
+      const isCentered = computedStyle.left === '50%' || 
+                        computedStyle.left === 'auto' || 
+                        computedStyle.transform.includes('translate(-50%');
+      
+      if (isCentered) {
+        // Modal is centered, set absolute positioning immediately
+        modal.style.left = initialX + 'px';
+        modal.style.top = initialY + 'px';
+        modal.style.transform = 'none';
+      }
+      
+      // Add dragging class for visual feedback
+      modal.classList.add('dragging');
+      
+      // Prevent text selection during drag
+      e.preventDefault();
+    });
+    
+    // Mouse move event
+    document.addEventListener('mousemove', (e) => {
+      if (!isDragging) return;
+      
+      const deltaX = e.clientX - startX;
+      const deltaY = e.clientY - startY;
+      
+      const newX = initialX + deltaX;
+      const newY = initialY + deltaY;
+      
+      // Constrain to viewport bounds
+      const maxX = window.innerWidth - modal.offsetWidth;
+      const maxY = window.innerHeight - modal.offsetHeight;
+      
+      const constrainedX = Math.max(0, Math.min(newX, maxX));
+      const constrainedY = Math.max(0, Math.min(newY, maxY));
+      
+      // Remove transform and set absolute positioning
+      modal.style.transform = 'none';
+      modal.style.left = constrainedX + 'px';
+      modal.style.top = constrainedY + 'px';
+    });
+    
+    // Mouse up event
+    document.addEventListener('mouseup', () => {
+      if (isDragging) {
+        isDragging = false;
+        modal.classList.remove('dragging');
+      }
+    });
+    
+    // Touch events for mobile support
+    modal.addEventListener('touchstart', (e) => {
+      if (!isDraggableElement(e.target)) {
+        return;
+      }
+      
+      isDragging = true;
+      const touch = e.touches[0];
+      startX = touch.clientX;
+      startY = touch.clientY;
+      
+      // Get current modal position - always use getBoundingClientRect for accuracy
+      const rect = modal.getBoundingClientRect();
+      initialX = rect.left;
+      initialY = rect.top;
+      
+      // If this is the first drag, ensure we have proper positioning
+      const computedStyle = window.getComputedStyle(modal);
+      const isCentered = computedStyle.left === '50%' || 
+                        computedStyle.left === 'auto' || 
+                        computedStyle.transform.includes('translate(-50%');
+      
+      if (isCentered) {
+        // Modal is centered, set absolute positioning immediately
+        modal.style.left = initialX + 'px';
+        modal.style.top = initialY + 'px';
+        modal.style.transform = 'none';
+      }
+      
+      modal.classList.add('dragging');
+      e.preventDefault();
+    });
+    
+    document.addEventListener('touchmove', (e) => {
+      if (!isDragging) return;
+      
+      const touch = e.touches[0];
+      const deltaX = touch.clientX - startX;
+      const deltaY = touch.clientY - startY;
+      
+      const newX = initialX + deltaX;
+      const newY = initialY + deltaY;
+      
+      const maxX = window.innerWidth - modal.offsetWidth;
+      const maxY = window.innerHeight - modal.offsetHeight;
+      
+      const constrainedX = Math.max(0, Math.min(newX, maxX));
+      const constrainedY = Math.max(0, Math.min(newY, maxY));
+      
+      // Remove transform and set absolute positioning
+      modal.style.transform = 'none';
+      modal.style.left = constrainedX + 'px';
+      modal.style.top = constrainedY + 'px';
+      
+      e.preventDefault();
+    });
+    
+    document.addEventListener('touchend', () => {
+      if (isDragging) {
+        isDragging = false;
+        modal.classList.remove('dragging');
+      }
+    });
   },
 
 };
