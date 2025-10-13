@@ -4269,7 +4269,7 @@ const ChatDialog = {
         <div class="vocab-chat-no-messages-content">
           ${this.createChatEmptyIcon()}
           <span>${promptText}</span>
-          <span class="vocab-chat-regional-lang-text">You can voice record your question in your regional language</span>
+          <span class="vocab-chat-regional-lang-text">You can voice record your question in regional language</span>
         </div>
       `;
       chatContainer.appendChild(noChatsMsg);
@@ -4475,7 +4475,7 @@ const ChatDialog = {
         <div class="vocab-chat-no-messages-content">
           ${this.createChatEmptyIcon()}
           <span>${promptText}</span>
-          <span class="vocab-chat-regional-lang-text">You can voice record your question in your regional language</span>
+          <span class="vocab-chat-regional-lang-text">You can voice record your question in regional language</span>
         </div>
       `;
       chatContainer.appendChild(noChatsMsg);
@@ -4524,7 +4524,7 @@ const ChatDialog = {
         <div class="vocab-chat-no-messages-content">
           ${this.createChatEmptyIcon()}
           <span>${promptText}</span>
-          <span class="vocab-chat-regional-lang-text">You can voice record your question in your regional language</span>
+          <span class="vocab-chat-regional-lang-text">You can voice record your question in regional language</span>
         </div>
       `;
       chatContainer.appendChild(noChatsMsg);
@@ -17456,7 +17456,9 @@ const ButtonPanel = {
         this.switchToTab(allTabs[0].id);
       }
     } else {
-      console.log('[ButtonPanel] Tab being closed was not active, no action needed');
+      console.log('[ButtonPanel] Tab being closed was not active, updating visual selection');
+      // Update the visual selection indicator to match the current active tab
+      this.updateTabSelectionVisual();
     }
     
     console.log('[ButtonPanel] ===== END TAB CLOSING DEBUG =====');
@@ -17465,6 +17467,45 @@ const ButtonPanel = {
     setTimeout(() => {
       this.updateTabArrowStates();
     }, 100);
+  },
+
+  /**
+   * Update tab selection visual indicator without switching tabs
+   */
+  updateTabSelectionVisual() {
+    console.log('[ButtonPanel] Updating tab selection visual indicator');
+    
+    const modal = this.topicsModal.customContentModal.modal;
+    if (!modal) {
+      console.log('[ButtonPanel] Modal not found, cannot update visual selection');
+      return;
+    }
+    
+    const tabsContainer = modal.querySelector('.vocab-custom-content-tabs-container');
+    if (!tabsContainer) {
+      console.log('[ButtonPanel] Tabs container not found, cannot update visual selection');
+      return;
+    }
+    
+    const activeTabId = this.topicsModal.customContentModal.activeTabId;
+    if (!activeTabId) {
+      console.log('[ButtonPanel] No active tab ID, cannot update visual selection');
+      return;
+    }
+    
+    // Update sliding background position
+    const activeTabElement = tabsContainer.querySelector(`[data-tab-id="${activeTabId}"]`);
+    if (activeTabElement) {
+      const tabRect = activeTabElement.getBoundingClientRect();
+      const containerRect = tabsContainer.getBoundingClientRect();
+      const left = tabRect.left - containerRect.left;
+      const width = tabRect.width;
+      tabsContainer.style.setProperty('--sliding-bg-left', `${left}px`);
+      tabsContainer.style.setProperty('--sliding-bg-width', `${width}px`);
+      console.log('[ButtonPanel] Updated sliding background position:', { left, width });
+    } else {
+      console.log('[ButtonPanel] Active tab element not found for ID:', activeTabId);
+    }
   },
 
   /**
