@@ -7073,7 +7073,6 @@ const ChatDialog = {
       .vocab-custom-content-modal input,
       .vocab-custom-content-modal button,
       .vocab-custom-content-modal textarea,
-      .vocab-custom-content-modal .vocab-custom-content-search-input,
       .vocab-custom-content-modal .vocab-custom-content-tab-arrow,
       .vocab-custom-content-modal .vocab-custom-content-minimize,
       .vocab-custom-content-modal .vocab-custom-content-editor-content {
@@ -7118,6 +7117,7 @@ const ChatDialog = {
         position: relative;
         margin: 0;
         margin-bottom: 0;
+        gap: 8px;
       }
 
       .vocab-custom-content-tabs::before {
@@ -7135,6 +7135,7 @@ const ChatDialog = {
         border: none;
         margin: 0;
         position: relative;
+        max-width: calc(100% - 80px);
       }
 
       .vocab-custom-content-tabs-container::-webkit-scrollbar {
@@ -7360,10 +7361,8 @@ const ChatDialog = {
         min-width: 32px;
         height: 32px;
         flex-shrink: 0;
-        position: sticky;
-        right: 0;
+        position: relative;
         z-index: 10;
-        margin-left: auto;
         outline: none;
         box-shadow: none;
       }
@@ -7388,55 +7387,6 @@ const ChatDialog = {
       }
 
 
-      /* Search Component */
-      .vocab-custom-content-search {
-        padding: var(--vocab-spacing-lg) var(--vocab-spacing-xl) var(--vocab-spacing-md) var(--vocab-spacing-xl);
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        background: var(--vocab-background-white);
-        position: relative;
-        margin-bottom: 0;
-      }
-
-      .vocab-custom-content-search::before {
-        display: none;
-      }
-
-      .vocab-custom-content-search-input {
-        width: 50%;
-        height: 28px;
-        padding: var(--vocab-spacing-xs) var(--vocab-spacing-md);
-        border: 1px solid rgba(162, 78, 255, 0.3);
-        border-radius: 20px;
-        font-size: 14px;
-        font-family: inherit;
-        outline: none;
-        transition: all var(--vocab-transition-normal);
-        background: var(--vocab-background-white);
-        box-shadow: none;
-        position: relative;
-        text-align: center;
-        color: #666666;
-      }
-
-      .vocab-custom-content-search-input::placeholder {
-        color: rgba(162, 78, 255, 0.5);
-        font-style: italic;
-        font-weight: 300;
-        text-align: center;
-      }
-
-      .vocab-custom-content-search-input:focus {
-        border: 1px solid rgba(162, 78, 255, 0.4);
-        box-shadow: 0 0 0 1px rgba(162, 78, 255, 0.4);
-        transform: none;
-      }
-
-      .vocab-custom-content-search-input:hover:not(:focus) {
-        border-color: rgba(162, 78, 255, 0.4);
-        box-shadow: none;
-      }
 
 
       /* Editor Component */
@@ -7838,9 +7788,6 @@ const ChatDialog = {
           font-size: 20px;
         }
 
-        .vocab-custom-content-search {
-          padding: 15px 20px;
-        }
 
         .vocab-custom-content-editor {
           padding: 20px;
@@ -7863,9 +7810,6 @@ const ChatDialog = {
           font-size: 18px;
         }
 
-        .vocab-custom-content-search {
-          padding: 12px 15px;
-        }
 
         .vocab-custom-content-editor {
           padding: 15px;
@@ -8095,9 +8039,6 @@ const ChatDialog = {
         outline: none;
       }
 
-      .vocab-custom-content-search-input:focus {
-        outline: none;
-      }
 
       /* High contrast mode support */
       @media (prefers-contrast: high) {
@@ -8116,8 +8057,7 @@ const ChatDialog = {
         .vocab-custom-content-tab,
         .vocab-custom-content-tab-arrow,
         .vocab-custom-content-add-tab,
-        .vocab-custom-content-close,
-        .vocab-custom-content-search-input {
+        .vocab-custom-content-close {
           transition: none;
           animation: none;
         }
@@ -15644,22 +15584,8 @@ const ButtonPanel = {
     
     tabsSection.appendChild(leftArrow);
     tabsSection.appendChild(tabsContainer);
+    tabsSection.appendChild(addTabBtn);
     tabsSection.appendChild(rightArrow);
-    
-    // Add the plus button inside the tabs container
-    tabsContainer.appendChild(addTabBtn);
-    
-    // Search section
-    const searchSection = document.createElement('div');
-    searchSection.className = 'vocab-custom-content-search';
-    
-    const searchInput = document.createElement('input');
-    searchInput.className = 'vocab-custom-content-search-input';
-    searchInput.type = 'text';
-    searchInput.placeholder = 'Type here to search...';
-    
-    searchSection.appendChild(searchInput);
-    
     
     // Editor section
     const editorSection = document.createElement('div');
@@ -15735,7 +15661,6 @@ const ButtonPanel = {
     
     // Assemble modal
     modal.appendChild(minimizeBtn);
-    modal.appendChild(searchSection);
     modal.appendChild(tabsSection);
     modal.appendChild(editorSection);
     
@@ -15758,7 +15683,6 @@ const ButtonPanel = {
     this.topicsModal.customContentModal.overlay = overlay;
     this.topicsModal.customContentModal.modal = modal;
     this.topicsModal.customContentModal.editorContent = editorContent;
-    this.topicsModal.customContentModal.searchInput = searchInput;
     this.topicsModal.customContentModal.tabsContainer = tabsContainer;
     this.topicsModal.customContentModal.addTabBtn = addTabBtn;
     this.topicsModal.customContentModal.leftArrow = leftArrow;
@@ -15778,12 +15702,10 @@ const ButtonPanel = {
     const overlay = this.topicsModal.customContentModal.overlay;
     const modal = this.topicsModal.customContentModal.modal;
     const minimizeBtn = this.topicsModal.customContentModal.minimizeBtn;
-    const searchInput = this.topicsModal.customContentModal.searchInput;
     const panIcon = modal.querySelector('.vocab-custom-content-pan-icon');
     const addTabBtn = this.topicsModal.customContentModal.addTabBtn;
     const tabsContainer = this.topicsModal.customContentModal.tabsContainer;
     console.log('[ButtonPanel] tabsContainer in attachCustomContentModalListeners:', tabsContainer);
-    console.log('[ButtonPanel] searchInput in attachCustomContentModalListeners:', searchInput);
     
     // Minimize modal events
     minimizeBtn.addEventListener('click', () => this.hideCustomContentModal());
@@ -15791,27 +15713,6 @@ const ButtonPanel = {
     // Initialize dragging functionality
     this.initModalDragging(modal);
     
-    // Search functionality
-    if (searchInput) {
-      searchInput.addEventListener('input', (e) => {
-        console.log('[ButtonPanel] Search input changed:', e.target.value);
-        const searchTerm = e.target.value;
-        
-        // Store search term for the current active tab
-        if (this.topicsModal.customContentModal.activeTabId) {
-          const tabId = parseInt(this.topicsModal.customContentModal.activeTabId);
-          const activeContent = this.topicsModal.customContentModal.getContentByTabId(tabId);
-          if (activeContent) {
-            activeContent.searchTerm = searchTerm;
-            console.log('[ButtonPanel] Stored search term:', searchTerm, 'for tab:', tabId);
-          }
-        }
-        
-        this.performSearch();
-      });
-    } else {
-      console.error('[ButtonPanel] Search input not found!');
-    }
     
     // Add tab functionality
     addTabBtn.addEventListener('click', () => {
@@ -16428,12 +16329,6 @@ const ButtonPanel = {
     tabElement.appendChild(closeBtn);
     tabsContainer.appendChild(tabElement);
     
-    // Ensure plus icon is always at the end
-    const addTabBtn = tabsContainer.querySelector('.vocab-custom-content-add-tab');
-    if (addTabBtn) {
-      tabsContainer.appendChild(addTabBtn);
-    }
-    
     // Add event listeners
     tabElement.addEventListener('click', (e) => {
       if (e.target !== closeBtn && !closeBtn.contains(e.target)) {
@@ -16539,7 +16434,7 @@ const ButtonPanel = {
     if (activeTabElement) {
       const tabRect = activeTabElement.getBoundingClientRect();
       const containerRect = tabsContainer.getBoundingClientRect();
-      const left = tabRect.left - containerRect.left;
+      const left = tabRect.left - containerRect.left + tabsContainer.scrollLeft;
       const width = tabRect.width;
       tabsContainer.style.setProperty('--sliding-bg-left', `${left}px`);
       tabsContainer.style.setProperty('--sliding-bg-width', `${width}px`);
@@ -16561,10 +16456,6 @@ const ButtonPanel = {
       
       // Update heading based on content type
       this.updateCustomContentHeading(contentType);
-      
-      // Update search input
-      const searchInput = this.topicsModal.customContentModal.searchInput;
-      searchInput.value = '';
       
         // Fade in new content
         editorContent.classList.remove('fade-out');
@@ -17498,7 +17389,7 @@ const ButtonPanel = {
     if (activeTabElement) {
       const tabRect = activeTabElement.getBoundingClientRect();
       const containerRect = tabsContainer.getBoundingClientRect();
-      const left = tabRect.left - containerRect.left;
+      const left = tabRect.left - containerRect.left + tabsContainer.scrollLeft;
       const width = tabRect.width;
       tabsContainer.style.setProperty('--sliding-bg-left', `${left}px`);
       tabsContainer.style.setProperty('--sliding-bg-width', `${width}px`);
@@ -18158,7 +18049,6 @@ const ButtonPanel = {
         'input',
         'button',
         'textarea',
-        '.vocab-custom-content-search-input',
         '.vocab-custom-content-tab-arrow',
         '.vocab-custom-content-add-tab',
         '.vocab-custom-content-minimize',
