@@ -12879,16 +12879,6 @@ const ButtonPanel = {
     header.appendChild(title);
     header.appendChild(closeBtn);
     
-    // Create search bar
-    const searchBar = document.createElement('div');
-    searchBar.className = 'vocab-text-input-search hidden';
-    
-    const searchInput = document.createElement('input');
-    searchInput.className = 'vocab-text-input-search-input';
-    searchInput.type = 'text';
-    searchInput.placeholder = 'Search text';
-    
-    searchBar.appendChild(searchInput);
     
     // Create content container
     const contentContainer = document.createElement('div');
@@ -12911,7 +12901,6 @@ const ButtonPanel = {
     
     // Assemble modal
     modal.appendChild(header);
-    modal.appendChild(searchBar);
     modal.appendChild(contentContainer);
     modal.appendChild(proceedBtn);
     
@@ -12925,7 +12914,6 @@ const ButtonPanel = {
       overlay: overlay,
       modal: modal,
       textarea: textarea,
-      searchInput: searchInput,
       proceedBtn: proceedBtn,
       closeBtn: closeBtn
     };
@@ -13012,9 +13000,8 @@ const ButtonPanel = {
     const closeBtn = this.textInputModal.closeBtn;
     const proceedBtn = this.textInputModal.proceedBtn;
     const textarea = this.textInputModal.textarea;
-    const searchInput = this.textInputModal.searchInput;
     
-    if (!overlay || !modal || !closeBtn || !proceedBtn || !textarea || !searchInput) {
+    if (!overlay || !modal || !closeBtn || !proceedBtn || !textarea) {
       console.error('Text input modal: Missing required elements for event listeners');
       return;
     }
@@ -13027,36 +13014,21 @@ const ButtonPanel = {
       }
     });
     
-    // Search functionality
-    searchInput.addEventListener('input', (e) => {
-      const searchTerm = e.target.value;
-      this.performTextSearchInModal(textarea, searchTerm);
-    });
-    
-    // Update border radius when content changes and toggle visibility of search bar and proceed button
+    // Update border radius when content changes and toggle visibility of proceed button
     textarea.addEventListener('input', () => {
       this.updateTextareaBorderRadius(textarea);
       
-      // Show/hide search bar and proceed button based on whether there's text
+      // Show/hide proceed button based on whether there's text
       const hasText = textarea.textContent.trim().length > 0;
-      const searchBar = this.textInputModal.modal.querySelector('.vocab-text-input-search');
       const proceedBtn = this.textInputModal.proceedBtn;
       const contentContainer = this.textInputModal.modal.querySelector('.vocab-text-input-content');
       
       if (hasText) {
-        searchBar.classList.remove('hidden');
         proceedBtn.classList.remove('hidden');
         contentContainer.classList.remove('empty');
       } else {
-        searchBar.classList.add('hidden');
         proceedBtn.classList.add('hidden');
         contentContainer.classList.add('empty');
-        
-        // Clear search highlights when text is cleared
-        const searchInput = this.textInputModal.searchInput;
-        if (searchInput) {
-          searchInput.value = '';
-        }
       }
     });
     
@@ -13090,83 +13062,6 @@ const ButtonPanel = {
     });
   },
 
-  /**
-   * Perform search in text input modal
-   */
-  performTextSearchInModal(textarea, searchTerm) {
-    console.log('[ButtonPanel] performTextSearchInModal called with searchTerm:', searchTerm);
-    
-    if (!textarea) {
-      console.error('[ButtonPanel] Textarea element not found!');
-      return;
-    }
-    
-    if (!searchTerm || !searchTerm.trim()) {
-      console.log('[ButtonPanel] No search term, removing highlights');
-      // Remove all highlights
-      const highlights = textarea.querySelectorAll('.vocab-search-highlight');
-      highlights.forEach(highlight => {
-        const parent = highlight.parentNode;
-        if (parent) {
-          parent.replaceChild(document.createTextNode(highlight.textContent), highlight);
-          parent.normalize();
-        }
-      });
-      return;
-    }
-    
-    // Get the original content without highlights
-    let content = textarea.innerHTML;
-    console.log('[ButtonPanel] Original content length:', content.length);
-    
-    // Remove existing highlights
-    content = content.replace(/<span class="vocab-search-highlight">(.*?)<\/span>/gim, '$1');
-    
-    // Add new highlights - but only in text nodes, not in HTML tags
-    const regex = new RegExp(`(${searchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gim');
-    const matches = content.match(regex);
-    console.log('[ButtonPanel] Found matches:', matches ? matches.length : 0);
-    
-    content = content.replace(regex, '<span class="vocab-search-highlight">$1</span>');
-    
-    console.log('[ButtonPanel] Updated content with highlights');
-    textarea.innerHTML = content;
-    
-    // Auto-scroll to first match if it exists
-    this.scrollToFirstTextMatch(textarea);
-  },
-
-  /**
-   * Scroll to the first search match in text modal
-   * @param {HTMLElement} textarea - The textarea/contenteditable element
-   */
-  scrollToFirstTextMatch(textarea) {
-    const firstHighlight = textarea.querySelector('.vocab-search-highlight');
-    if (!firstHighlight) {
-      console.log('[ButtonPanel] No search highlights found in text modal');
-      return;
-    }
-    
-    // Get the bounding rectangles
-    const highlightRect = firstHighlight.getBoundingClientRect();
-    const textareaRect = textarea.getBoundingClientRect();
-    
-    // Check if the highlight is outside the visible area
-    const isAboveVisible = highlightRect.top < textareaRect.top;
-    const isBelowVisible = highlightRect.bottom > textareaRect.bottom;
-    
-    if (isAboveVisible || isBelowVisible) {
-      console.log('[ButtonPanel] First match is outside visible area, scrolling to it');
-      
-      // Scroll the highlight into view
-      firstHighlight.scrollIntoView({
-        behavior: 'smooth',
-        block: 'center'
-      });
-    } else {
-      console.log('[ButtonPanel] First match is already visible');
-    }
-  },
 
   /**
    * Show search preview with highlighted matches for textarea
