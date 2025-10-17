@@ -8341,17 +8341,17 @@ const ButtonPanel = {
 
     const lowerButtons = [
       {
-        id: 'magic-meaning',
-        className: 'vocab-btn vocab-btn-solid-purple',
-        icon: this.createSparkleIcon(),
-        text: 'Magic meaning',
-        type: 'solid-purple'
-      },
-      {
         id: 'ask',
         className: 'vocab-btn vocab-btn-solid-purple',
         icon: this.createChatIcon(),
         text: 'Ask anything',
+        type: 'solid-purple'
+      },
+      {
+        id: 'magic-meaning',
+        className: 'vocab-btn vocab-btn-solid-purple',
+        icon: this.createSparkleIcon(),
+        text: 'Magic meaning',
         type: 'solid-purple'
       },
       {
