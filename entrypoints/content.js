@@ -261,8 +261,13 @@ const WordSelector = {
       const clickedInsidePopup = e.target.closest('.vocab-word-popup');
       const clickedOnWord = e.target.closest('.vocab-word-explained');
       
-      // Close popup if clicking outside both popup and word
-      if (!clickedInsidePopup && !clickedOnWord) {
+      // Also check if clicking on popup buttons (speaker, close, get more examples)
+      const clickedOnPopupButton = e.target.closest('.vocab-word-popup-speaker') || 
+                                   e.target.closest('.vocab-word-popup-close') || 
+                                   e.target.closest('.vocab-word-popup-button');
+      
+      // Close popup if clicking outside popup, word, and popup buttons
+      if (!clickedInsidePopup && !clickedOnWord && !clickedOnPopupButton) {
         // Use a longer delay to ensure the click event has fully processed
         setTimeout(() => {
           // Double-check that we still have sticky popups (in case they were closed by other means)
@@ -1178,11 +1183,17 @@ const WordSelector = {
       popup.addEventListener('mouseleave', (e) => {
         e.stopPropagation();
         console.log('[WordSelector] Mouse left sticky popup');
+        // For sticky popups, don't hide on mouseleave - only hide on outside click
       });
       
       popup.addEventListener('click', (e) => {
         e.stopPropagation();
         console.log('[WordSelector] Clicked inside sticky popup');
+      });
+      
+      // Prevent any mouse events from bubbling up that might trigger hide
+      popup.addEventListener('mousemove', (e) => {
+        e.stopPropagation();
       });
     }
     
@@ -1714,7 +1725,7 @@ const WordSelector = {
         position: absolute;
         background: white;
         border-radius: 14px;
-        padding: 18px 20px;
+        padding: 18px 20px 45px 20px; /* Reduced bottom padding for minimal spacing */
         box-shadow: 0 8px 24px rgba(149, 39, 245, 0.15), 0 2px 8px rgba(0, 0, 0, 0.1);
         z-index: 9999999;
         max-width: 380px;
@@ -1760,7 +1771,7 @@ const WordSelector = {
       .vocab-word-popup-examples-container {
         max-height: 200px;
         overflow-y: auto;
-        margin-bottom: 12px;
+        margin-bottom: 30px; /* Reduced margin for minimal spacing */
       }
       
       .vocab-word-popup-examples-container::-webkit-scrollbar {
@@ -1814,7 +1825,7 @@ const WordSelector = {
       
       /* View more button - smaller, bottom-right positioned */
       .vocab-word-popup-button {
-        padding: 6px 14px;
+        padding: 8px 16px;
         border: none;
         border-radius: 10px;
         background: #A020F0;
@@ -1825,8 +1836,10 @@ const WordSelector = {
         transition: background-color 0.2s ease, opacity 0.2s ease, transform 0.2s ease;
         text-align: center;
         position: absolute;
-        bottom: 12px;
-        right: 12px;
+        bottom: 16px;
+        right: 16px;
+        min-width: 120px; /* Ensure button has minimum width */
+        z-index: 10; /* Ensure button is above other content */
       }
       
       .vocab-word-popup-button:hover:not(.loading) {
@@ -2670,53 +2683,47 @@ const TextSelector = {
       return;
     }
     
-    // Close ChatDialog if it's open for this textKey or related textKey
+    // Close ChatDialog if it's open (always close when green cross is clicked)
     if (typeof ChatDialog !== 'undefined' && ChatDialog.isOpen) {
-      console.log('[TextSelector] ChatDialog is open - currentTextKey:', ChatDialog.currentTextKey, 'removing textKey:', textKey);
-      
-      // Check if the current chat is related to this textKey
-      // ChatDialog might have textKey in format: textKey-selected, textKey-generic, or exact match
-      const shouldClose = ChatDialog.currentTextKey === textKey || 
-                         ChatDialog.currentTextKey?.startsWith(textKey + '-') ||
-                         ChatDialog.currentTextKey?.includes(textKey) ||
-                         textKey?.includes(ChatDialog.currentTextKey?.split('-').slice(0, -1).join('-'));
-      
-      if (shouldClose) {
-        console.log('[TextSelector] Closing ChatDialog for simplified text - currentTextKey:', ChatDialog.currentTextKey, 'removing textKey:', textKey);
-        ChatDialog.close();
-      } else {
-        console.log('[TextSelector] ChatDialog open but for different text - currentTextKey:', ChatDialog.currentTextKey, 'removing textKey:', textKey);
-        console.log('[TextSelector] Not closing chat as textKeys do not match');
-      }
+      console.log('[TextSelector] ChatDialog is open - closing it when green cross clicked');
+      console.log('[TextSelector] Current textKey:', ChatDialog.currentTextKey, 'removing textKey:', textKey);
+      ChatDialog.close();
     }
     
-    // Remove icons wrapper - check both inside highlight and in modal overlay
+    // Find icons wrapper
     let iconsWrapper = highlight.querySelector('.vocab-text-icons-wrapper');
-    if (iconsWrapper) {
-      iconsWrapper.remove();
-    } else {
+    if (!iconsWrapper) {
       // Check if icons are in modal overlay (for modal context)
       const modalOverlay = ButtonPanel.topicsModal.customContentModal.overlay;
       if (modalOverlay) {
         iconsWrapper = modalOverlay.querySelector(`[data-text-key="${textKey}"]`);
-        if (iconsWrapper) {
-          iconsWrapper.remove();
-        }
       }
       // Check if icons are in document body (for main webpage context)
       if (!iconsWrapper) {
         iconsWrapper = document.body.querySelector(`[data-text-key="${textKey}"]`);
-        if (iconsWrapper) {
-          iconsWrapper.remove();
-        }
       }
     }
     
-    // Remove the simplified class (green underline)
-    highlight.classList.remove('vocab-text-simplified');
+    // Trigger vanishing animations
+    if (iconsWrapper) {
+      iconsWrapper.classList.add('vocab-icons-vanishing');
+    }
+    // Only animate the underline color, not the text itself
+    highlight.classList.add('vocab-text-vanishing');
     
-    // Remove highlight completely
-    this.removeHighlight(highlight);
+    // Wait for animation to complete before removing elements
+    setTimeout(() => {
+      // Remove icons wrapper
+      if (iconsWrapper) {
+        iconsWrapper.remove();
+      }
+      
+      // Remove the simplified class (green underline)
+      highlight.classList.remove('vocab-text-simplified', 'vocab-text-vanishing');
+      
+      // Remove highlight completely
+      this.removeHighlight(highlight);
+    }, 300); // Match the CSS transition duration
     
     // Remove from simplifiedTexts map
     this.simplifiedTexts.delete(textKey);
@@ -2973,9 +2980,9 @@ const TextSelector = {
       
       /* Wrapper containers for icon groups */
       .vocab-text-icons-wrapper {
-        position: fixed;
+        position: absolute;
         display: flex;
-        flex-direction: row;
+        flex-direction: column;
         align-items: center;
         gap: 4px;
         z-index: 10000003;
@@ -3119,6 +3126,20 @@ const TextSelector = {
         text-decoration-color: #22c55e !important;
         text-decoration-style: dashed !important;
         text-decoration-thickness: 2px !important;
+        transition: text-decoration-color 0.3s ease-out;
+      }
+      
+      /* Vanishing animation for simplified text */
+      .vocab-text-simplified.vocab-text-vanishing {
+        text-decoration-color: transparent !important;
+        transition: text-decoration-color 0.3s ease-out;
+      }
+      
+      /* Vanishing animation for icons wrapper */
+      .vocab-text-icons-wrapper.vocab-icons-vanishing {
+        opacity: 0;
+        transform: scale(0.8) translateY(-10px);
+        pointer-events: none;
       }
       
       /* Pulsate animation for text highlights - light purple */
@@ -7021,8 +7042,8 @@ const ChatDialog = {
       /* Minimize Button Component */
       .vocab-custom-content-minimize {
         position: absolute;
-        top: var(--vocab-spacing-sm);
-        right: var(--vocab-spacing-sm);
+        top: 8px;
+        right: 8px;
         width: 40px;
         height: 40px;
         border: none;
@@ -7110,7 +7131,7 @@ const ChatDialog = {
       .vocab-custom-content-tabs {
         display: flex;
         align-items: center;
-        padding: var(--vocab-spacing-lg) var(--vocab-spacing-lg) 0 var(--vocab-spacing-lg);
+        padding: calc(var(--vocab-spacing-lg) + 20px) var(--vocab-spacing-lg) 0 var(--vocab-spacing-lg);
         background: var(--vocab-background-white);
         border-bottom: none;
         min-height: 40px;
@@ -7453,8 +7474,8 @@ const ChatDialog = {
       }
 
       .vocab-custom-content-chat-icon svg {
-        width: 32px;
-        height: 32px;
+        width: 48px;
+        height: 48px;
         fill: #9527F5;
       }
 
@@ -11897,17 +11918,23 @@ const ButtonPanel = {
                 // Create wrapper for icons
                 const iconsWrapper = document.createElement('div');
                 iconsWrapper.className = 'vocab-text-icons-wrapper';
+                iconsWrapper.setAttribute('data-text-key', matchingTextKey);
                 
-                // Add green remove button first (left position)
-                const greenRemoveBtn = TextSelector.createGreenRemoveButtonForSimplifiedText(matchingTextKey);
-                iconsWrapper.appendChild(greenRemoveBtn);
-                
-                // Add book icon second (right position)
+                // Add book icon first (top position)
                 const bookBtn = TextSelector.createBookButton(matchingTextKey);
                 iconsWrapper.appendChild(bookBtn);
                 
-                // Append wrapper to highlight
+                // Add green remove button second (bottom position)
+                const greenRemoveBtn = TextSelector.createGreenRemoveButtonForSimplifiedText(matchingTextKey);
+                iconsWrapper.appendChild(greenRemoveBtn);
+                
+                // Append icons wrapper directly to highlight for absolute positioning
                 highlight.appendChild(iconsWrapper);
+                
+                // Position icons relative to highlight (aligned with top edge of text)
+                const highlightRect = highlight.getBoundingClientRect();
+                iconsWrapper.style.top = '0px'; // Align with top edge of selected text
+                iconsWrapper.style.left = '-60px'; // 60px to the left of the highlight
                 
                 // Store simplified text data
                 TextSelector.simplifiedTexts.set(matchingTextKey, {
@@ -15600,23 +15627,26 @@ const ButtonPanel = {
     const chatIcon = document.createElement('button');
     chatIcon.className = 'vocab-custom-content-chat-icon';
     chatIcon.innerHTML = `
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="32" height="32" fill="#9527F5">
-        <!-- Main robot head body -->
-        <rect x="6" y="4" width="12" height="16" rx="2" fill="#9527F5"/>
-        <!-- Antenna -->
-        <rect x="11" y="2" width="2" height="3" rx="1" fill="#9527F5"/>
-        <circle cx="12" cy="1" r="1" fill="#9527F5"/>
-        <!-- Eyes -->
-        <circle cx="9" y="8" r="1" fill="white"/>
-        <circle cx="15" y="8" r="1" fill="white"/>
-        <!-- Mouth -->
-        <rect x="8" y="12" width="8" height="3" rx="1.5" fill="white"/>
-        <!-- Side panels/ears -->
-        <rect x="4" y="6" width="2" height="8" rx="1" fill="#9527F5"/>
-        <rect x="18" y="6" width="2" height="8" rx="1" fill="#9527F5"/>
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="48" height="48" fill="#9527F5">
+        <!-- Robot head with speech bubble -->
+        <!-- Main rounded rectangular head -->
+        <rect x="6" y="4" width="12" height="10" rx="4" fill="#9527F5"/>
+        
+        <!-- Speech bubble tail -->
+        <path d="M14 14L16 16L14 18L12 16Z" fill="#9527F5"/>
+        
+        <!-- Two circular eyes -->
+        <circle cx="9" cy="8" r="1.5" fill="white"/>
+        <circle cx="15" cy="8" r="1.5" fill="white"/>
+        
+        <!-- Two antennae with circular tips -->
+        <rect x="8.5" y="2" width="1" height="3" fill="#9527F5"/>
+        <rect x="14.5" y="2" width="1" height="3" fill="#9527F5"/>
+        <circle cx="9" cy="1" r="1" fill="#9527F5"/>
+        <circle cx="15" cy="1" r="1" fill="#9527F5"/>
       </svg>
     `;
-    chatIcon.setAttribute('title', 'Ask questions about this content');
+    chatIcon.setAttribute('title', 'Chat with AI Agent - Ask anything about this content');
     
     // Add click handler for chat icon
     chatIcon.addEventListener('click', () => {
@@ -16493,6 +16523,17 @@ const ButtonPanel = {
 
     // Wait for content to be fully loaded before restoring visual elements
     setTimeout(() => {
+      // Verify content element is ready
+      const contentElement = this.topicsModal.customContentModal.modal.querySelector('.vocab-custom-content-editor-content');
+      if (!contentElement) {
+        console.log('[ButtonPanel] Content element not ready, retrying restoration in 200ms');
+        setTimeout(() => this.restoreAnalysisData(activeContent), 200);
+        return;
+      }
+      
+      console.log('[ButtonPanel] Content element ready, proceeding with restoration');
+      console.log('[ButtonPanel] Content text length:', contentElement.textContent.length);
+      
       // Clear existing highlights first to avoid duplicates
       this.clearExistingHighlights();
       
@@ -16598,8 +16639,9 @@ const ButtonPanel = {
    */
   restoreWordExplanation(wordData) {
     console.log('[ButtonPanel] Restoring word explanation for:', wordData.word);
+    console.log('[ButtonPanel] Word data:', wordData);
     
-    // Find all instances of this word in the current content
+    // Find the content element
     const contentElement = this.topicsModal.customContentModal.modal.querySelector('.vocab-custom-content-editor-content');
     if (!contentElement) {
       console.log('[ButtonPanel] Content element not found for word restoration');
@@ -16612,7 +16654,74 @@ const ButtonPanel = {
       return;
     }
 
-    // Find word positions in the text
+    // Use stored textStartIndex if available, otherwise fall back to regex search
+    if (wordData.textStartIndex !== undefined && wordData.location !== undefined) {
+      console.log('[ButtonPanel] Using stored positioning data - textStartIndex:', wordData.textStartIndex, 'location:', wordData.location);
+      console.log('[ButtonPanel] Text content length:', textContent.length);
+      console.log('[ButtonPanel] Text content preview:', textContent.substring(0, 200));
+      
+      // Use the stored location data to find the word
+      const wordStart = wordData.textStartIndex + wordData.location.index;
+      const wordEnd = wordStart + wordData.location.length;
+      
+      console.log('[ButtonPanel] Calculated word position:', wordStart, '-', wordEnd);
+      
+      // Verify the word matches at this position
+      const wordAtPosition = textContent.substring(wordStart, wordEnd);
+      console.log('[ButtonPanel] Word at calculated position:', wordAtPosition);
+      console.log('[ButtonPanel] Expected word:', wordData.word);
+      
+      if (wordAtPosition.toLowerCase() === wordData.word.toLowerCase()) {
+        console.log('[ButtonPanel] Found word at stored position:', wordAtPosition);
+        
+        // Check if this word is already highlighted
+        const existingHighlight = contentElement.querySelector(`[data-word-highlight="${wordData.normalizedWord}-0"]`);
+        if (existingHighlight) {
+          console.log('[ButtonPanel] Word already highlighted:', wordData.word);
+          return;
+        }
+
+        // Create word highlight element
+        const highlight = document.createElement('span');
+        highlight.className = 'vocab-word-highlight vocab-word-explained';
+        highlight.setAttribute('data-word-highlight', `${wordData.normalizedWord}-0`);
+        highlight.setAttribute('data-meaning', wordData.meaning);
+        highlight.setAttribute('data-examples', JSON.stringify(wordData.examples));
+        highlight.textContent = wordAtPosition;
+
+        // Replace the word in the DOM using stored position
+        this.replaceTextInElement(contentElement, wordStart, wordEnd, highlight);
+
+        // Add to WordSelector explained words
+        if (!WordSelector.explainedWords.has(wordData.normalizedWord)) {
+          WordSelector.explainedWords.set(wordData.normalizedWord, {
+            word: wordData.word,
+            meaning: wordData.meaning,
+            examples: wordData.examples,
+            shouldAllowFetchMoreExamples: wordData.shouldAllowFetchMoreExamples || false,
+            hasCalledGetMoreExamples: false,
+            highlights: new Set()
+          });
+        }
+        WordSelector.explainedWords.get(wordData.normalizedWord).highlights.add(highlight);
+
+        // Add green cross button
+        const greenCrossBtn = WordSelector.createRemoveExplainedButton(wordData.word);
+        highlight.appendChild(greenCrossBtn);
+
+        // Setup word interactions
+        WordSelector.setupWordInteractions(highlight);
+
+        console.log('[ButtonPanel] Restored word highlight for:', wordData.word, 'at position', wordStart, '-', wordEnd);
+        return;
+      } else {
+        console.log('[ButtonPanel] Word mismatch at stored position. Expected:', wordData.word, 'Found:', wordAtPosition);
+        console.log('[ButtonPanel] Falling back to regex search');
+      }
+    }
+
+    // Fallback: Find word positions using regex (original logic)
+    console.log('[ButtonPanel] Using regex search fallback for word:', wordData.word);
     const wordRegex = new RegExp(`\\b${wordData.word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'gi');
     let match;
     const wordPositions = [];
@@ -17098,6 +17207,8 @@ const ButtonPanel = {
    * @param {HTMLElement} newElement - The new element to insert
    */
   replaceTextInElement(element, startIndex, endIndex, newElement) {
+    console.log('[ButtonPanel] replaceTextInElement called with:', { startIndex, endIndex, newElement: newElement.textContent });
+    
     const walker = document.createTreeWalker(
       element,
       NodeFilter.SHOW_TEXT,
@@ -17123,14 +17234,27 @@ const ButtonPanel = {
     }
 
     if (!targetNode) {
-      console.log('[ButtonPanel] Could not find target text node for replacement');
+      console.log('[ButtonPanel] Could not find target text node for replacement at position', startIndex);
+      console.log('[ButtonPanel] Element text content length:', element.textContent.length);
+      console.log('[ButtonPanel] Element text content preview:', element.textContent.substring(0, 100));
       return;
+    }
+
+    // Verify the target text matches what we expect
+    const targetText = targetNode.textContent.substring(targetStart, targetStart + (endIndex - startIndex));
+    const expectedText = newElement.textContent;
+    
+    console.log('[ButtonPanel] Target text at position:', targetText);
+    console.log('[ButtonPanel] Expected text:', expectedText);
+    
+    if (targetText.toLowerCase() !== expectedText.toLowerCase()) {
+      console.warn('[ButtonPanel] Text mismatch at position. Expected:', expectedText, 'Found:', targetText);
+      // Continue anyway, as the text might have slight differences (case, whitespace)
     }
 
     // Split the text node if necessary
     const beforeText = targetNode.textContent.substring(0, targetStart);
     const afterText = targetNode.textContent.substring(targetStart + (endIndex - startIndex));
-    const targetText = targetNode.textContent.substring(targetStart, targetStart + (endIndex - startIndex));
 
     // Create new text nodes
     if (beforeText) {
@@ -17148,6 +17272,8 @@ const ButtonPanel = {
 
     // Remove the original node
     targetNode.remove();
+    
+    console.log('[ButtonPanel] Successfully replaced text at position', startIndex, '-', endIndex);
   },
 
   /**
@@ -17771,8 +17897,8 @@ const ButtonPanel = {
   },
 
   /**
-   * Update custom content editor with markdown content
-   * @param {string} content - The markdown content
+   * Update custom content editor with content
+   * @param {string} content - The content to display
    */
   updateCustomContentEditor(content) {
     console.log('[ButtonPanel] ===== UPDATING CUSTOM CONTENT EDITOR =====');
@@ -17787,30 +17913,51 @@ const ButtonPanel = {
     console.log('[ButtonPanel] Editor content element found:', !!editorContent);
     console.log('[ButtonPanel] Content to load:', content.substring(0, 100) + '...');
     
-    // Simple markdown to HTML conversion (for basic formatting)
-    let htmlContent = content
-      .replace(/^# (.*$)/gim, '<h1>$1</h1>')
-      .replace(/^## (.*$)/gim, '<h2>$1</h2>')
-      .replace(/^### (.*$)/gim, '<h3>$1</h3>')
-      .replace(/^#### (.*$)/gim, '<h4>$1</h4>')
-      .replace(/^##### (.*$)/gim, '<h5>$1</h5>')
-      .replace(/^###### (.*$)/gim, '<h6>$1</h6>')
-      .replace(/\*\*(.*?)\*\*/gim, '<strong>$1</strong>')
-      .replace(/\*(.*?)\*/gim, '<em>$1</em>')
-      .replace(/`(.*?)`/gim, '<code>$1</code>')
-      .replace(/```([\s\S]*?)```/gim, '<pre><code>$1</code></pre>')
-      .replace(/^\* (.*$)/gim, '<li>$1</li>')
-      .replace(/^- (.*$)/gim, '<li>$1</li>')
-      .replace(/^\d+\. (.*$)/gim, '<li>$1</li>')
-      .replace(/\n\n/gim, '</p><p>')
-      .replace(/\n/gim, '<br>');
+    // Check if content contains markdown formatting
+    const hasMarkdownFormatting = /^#+\s|^\*\*|^\*|^```|^`/.test(content.trim());
     
-    // Wrap in paragraphs
-    htmlContent = '<p>' + htmlContent + '</p>';
+    let htmlContent;
     
-    // Clean up empty paragraphs
-    htmlContent = htmlContent.replace(/<p><\/p>/gim, '');
-    htmlContent = htmlContent.replace(/<p><br><\/p>/gim, '');
+    if (hasMarkdownFormatting) {
+      console.log('[ButtonPanel] Content appears to have markdown formatting, converting to HTML');
+      // Simple markdown to HTML conversion (for basic formatting)
+      htmlContent = content
+        .replace(/^# (.*$)/gim, '<h1>$1</h1>')
+        .replace(/^## (.*$)/gim, '<h2>$1</h2>')
+        .replace(/^### (.*$)/gim, '<h3>$1</h3>')
+        .replace(/^#### (.*$)/gim, '<h4>$1</h4>')
+        .replace(/^##### (.*$)/gim, '<h5>$1</h5>')
+        .replace(/^###### (.*$)/gim, '<h6>$1</h6>')
+        .replace(/\*\*(.*?)\*\*/gim, '<strong>$1</strong>')
+        .replace(/\*(.*?)\*/gim, '<em>$1</em>')
+        .replace(/`(.*?)`/gim, '<code>$1</code>')
+        .replace(/```([\s\S]*?)```/gim, '<pre><code>$1</code></pre>')
+        .replace(/^\* (.*$)/gim, '<li>$1</li>')
+        .replace(/^- (.*$)/gim, '<li>$1</li>')
+        .replace(/^\d+\. (.*$)/gim, '<li>$1</li>')
+        .replace(/\n\n/gim, '</p><p>')
+        .replace(/\n/gim, '<br>');
+      
+      // Wrap in paragraphs
+      htmlContent = '<p>' + htmlContent + '</p>';
+      
+      // Clean up empty paragraphs
+      htmlContent = htmlContent.replace(/<p><\/p>/gim, '');
+      htmlContent = htmlContent.replace(/<p><br><\/p>/gim, '');
+    } else {
+      console.log('[ButtonPanel] Content appears to be plain text, displaying as-is');
+      // For plain text, just escape HTML and preserve line breaks
+      htmlContent = content
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;')
+        .replace(/\n/g, '<br>');
+      
+      // Wrap in a single paragraph to maintain proper spacing
+      htmlContent = '<p>' + htmlContent + '</p>';
+    }
     
     console.log('[ButtonPanel] HTML content generated, length:', htmlContent.length);
     console.log('[ButtonPanel] HTML preview:', htmlContent.substring(0, 200) + '...');
