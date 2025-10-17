@@ -2583,6 +2583,11 @@ const TextSelector = {
     // Create wrapper for icons
     const iconsWrapper = document.createElement('div');
     iconsWrapper.className = 'vocab-text-icons-wrapper';
+    iconsWrapper.setAttribute('data-text-key', textKey);
+    
+    // Determine context and set appropriate data attribute
+    const isInModal = highlight.closest('.vocab-custom-content-modal');
+    iconsWrapper.setAttribute('data-icon-context', isInModal ? 'custom-content-modal' : 'main-webpage');
     
     // Add chat icon button first (top position)
     const chatBtn = this.createChatButton(textKey, true); // true = green color
@@ -6951,44 +6956,45 @@ const ChatDialog = {
         visibility: visible;
       }
 
-      /* Hide webpage icons when custom content modal is visible - exclude icons within the modal */
-      body.vocab-custom-content-modal-open .vocab-word-remove-explained-btn {
+      /* Context-aware blurring: Only blur main webpage icons when custom content modal is open */
+      body.vocab-custom-content-modal-open .vocab-text-icons-wrapper[data-icon-context="main-webpage"] {
+        filter: blur(8px) !important;
+        opacity: 0.3 !important;
+        pointer-events: none !important;
+        transition: filter 0.3s ease, opacity 0.3s ease;
+      }
+      
+      /* Ensure custom content modal icons remain visible and functional */
+      body.vocab-custom-content-modal-open .vocab-text-icons-wrapper[data-icon-context="custom-content-modal"] {
+        filter: none !important;
+        opacity: 1 !important;
+        pointer-events: auto !important;
+      }
+      
+      /* Hide main webpage individual buttons when custom content modal is open */
+      body.vocab-custom-content-modal-open .vocab-text-icons-wrapper[data-icon-context="main-webpage"] .vocab-word-remove-explained-btn,
+      body.vocab-custom-content-modal-open .vocab-text-icons-wrapper[data-icon-context="main-webpage"] .vocab-text-book-btn,
+      body.vocab-custom-content-modal-open .vocab-text-icons-wrapper[data-icon-context="main-webpage"] .vocab-text-remove-btn,
+      body.vocab-custom-content-modal-open .vocab-text-icons-wrapper[data-icon-context="main-webpage"] .vocab-text-chat-btn,
+      body.vocab-custom-content-modal-open .vocab-text-icons-wrapper[data-icon-context="main-webpage"] .vocab-text-remove-green-btn {
         opacity: 0 !important;
         visibility: hidden !important;
         pointer-events: none !important;
         transition: opacity 0.2s ease, visibility 0.2s ease;
       }
       
-      body.vocab-custom-content-modal-open .vocab-text-book-btn {
-        opacity: 0 !important;
-        visibility: hidden !important;
-        pointer-events: none !important;
-        transition: opacity 0.2s ease, visibility 0.2s ease;
+      /* Ensure custom content modal individual buttons remain visible and functional */
+      body.vocab-custom-content-modal-open .vocab-text-icons-wrapper[data-icon-context="custom-content-modal"] .vocab-word-remove-explained-btn,
+      body.vocab-custom-content-modal-open .vocab-text-icons-wrapper[data-icon-context="custom-content-modal"] .vocab-text-book-btn,
+      body.vocab-custom-content-modal-open .vocab-text-icons-wrapper[data-icon-context="custom-content-modal"] .vocab-text-remove-btn,
+      body.vocab-custom-content-modal-open .vocab-text-icons-wrapper[data-icon-context="custom-content-modal"] .vocab-text-chat-btn,
+      body.vocab-custom-content-modal-open .vocab-text-icons-wrapper[data-icon-context="custom-content-modal"] .vocab-text-remove-green-btn {
+        opacity: 1 !important;
+        visibility: visible !important;
+        pointer-events: auto !important;
       }
-      
-      body.vocab-custom-content-modal-open .vocab-text-remove-btn {
-        opacity: 0 !important;
-        visibility: hidden !important;
-        pointer-events: none !important;
-        transition: opacity 0.2s ease, visibility 0.2s ease;
-      }
-      
-      body.vocab-custom-content-modal-open .vocab-text-chat-btn {
-        opacity: 0 !important;
-        visibility: hidden !important;
-        pointer-events: none !important;
-        transition: opacity 0.2s ease, visibility 0.2s ease;
-      }
-      
-      body.vocab-custom-content-modal-open .vocab-text-remove-green-btn {
-        opacity: 0 !important;
-        visibility: hidden !important;
-        pointer-events: none !important;
-        transition: opacity 0.2s ease, visibility 0.2s ease;
-      }
-      
-      /* Blur icons wrapper when image modal or custom content modal is open */
-      body.vocab-custom-content-modal-open .vocab-text-icons-wrapper,
+
+      /* Blur icons wrapper when other modals are open (image, pdf, text, topics) */
       body.vocab-image-modal-open .vocab-text-icons-wrapper,
       body.vocab-pdf-modal-open .vocab-text-icons-wrapper,
       body.vocab-text-modal-open .vocab-text-icons-wrapper,
@@ -6999,42 +7005,39 @@ const ChatDialog = {
         transition: filter 0.3s ease, opacity 0.3s ease;
       }
       
-      /* Ensure icons wrapper is blurred even if it's in modal overlay */
-      body.vocab-custom-content-modal-open .vocab-custom-content-overlay .vocab-text-icons-wrapper {
-        filter: blur(8px) !important;
-        opacity: 0.3 !important;
+      /* Hide individual buttons when other modals are open */
+      body.vocab-image-modal-open .vocab-word-remove-explained-btn,
+      body.vocab-image-modal-open .vocab-text-book-btn,
+      body.vocab-image-modal-open .vocab-text-remove-btn,
+      body.vocab-image-modal-open .vocab-text-chat-btn,
+      body.vocab-image-modal-open .vocab-text-remove-green-btn,
+      body.vocab-pdf-modal-open .vocab-word-remove-explained-btn,
+      body.vocab-pdf-modal-open .vocab-text-book-btn,
+      body.vocab-pdf-modal-open .vocab-text-remove-btn,
+      body.vocab-pdf-modal-open .vocab-text-chat-btn,
+      body.vocab-pdf-modal-open .vocab-text-remove-green-btn,
+      body.vocab-text-modal-open .vocab-word-remove-explained-btn,
+      body.vocab-text-modal-open .vocab-text-book-btn,
+      body.vocab-text-modal-open .vocab-text-remove-btn,
+      body.vocab-text-modal-open .vocab-text-chat-btn,
+      body.vocab-text-modal-open .vocab-text-remove-green-btn,
+      body.vocab-topics-modal-open .vocab-word-remove-explained-btn,
+      body.vocab-topics-modal-open .vocab-text-book-btn,
+      body.vocab-topics-modal-open .vocab-text-remove-btn,
+      body.vocab-topics-modal-open .vocab-text-chat-btn,
+      body.vocab-topics-modal-open .vocab-text-remove-green-btn {
+        opacity: 0 !important;
+        visibility: hidden !important;
         pointer-events: none !important;
-      }
-      
-      /* General rule to blur icons wrapper anywhere when custom content modal is open */
-      body.vocab-custom-content-modal-open .vocab-text-icons-wrapper {
-        filter: blur(8px) !important;
-        opacity: 0.3 !important;
-        pointer-events: none !important;
-      }
-      
-      /* Alternative: Blur icons when custom content modal overlay is visible */
-      .vocab-custom-content-overlay.visible ~ * .vocab-text-icons-wrapper,
-      .vocab-custom-content-overlay.visible .vocab-text-icons-wrapper {
-        filter: blur(8px) !important;
-        opacity: 0.3 !important;
-        pointer-events: none !important;
+        transition: opacity 0.2s ease, visibility 0.2s ease;
       }
 
-      /* Override with higher specificity: Ensure icons within the custom content modal remain visible and functional */
-      body.vocab-custom-content-modal-open .vocab-custom-content-overlay .vocab-word-remove-explained-btn,
-      body.vocab-custom-content-modal-open .vocab-custom-content-overlay .vocab-text-book-btn,
-      body.vocab-custom-content-modal-open .vocab-custom-content-overlay .vocab-text-remove-btn,
-      body.vocab-custom-content-modal-open .vocab-custom-content-overlay .vocab-text-chat-btn,
-      body.vocab-custom-content-modal-open .vocab-custom-content-overlay .vocab-text-remove-green-btn,
-      body.vocab-custom-content-modal-open .vocab-custom-content-overlay * .vocab-word-remove-explained-btn,
-      body.vocab-custom-content-modal-open .vocab-custom-content-overlay * .vocab-text-book-btn,
-      body.vocab-custom-content-modal-open .vocab-custom-content-overlay * .vocab-text-remove-btn,
-      body.vocab-custom-content-modal-open .vocab-custom-content-overlay * .vocab-text-chat-btn,
-      body.vocab-custom-content-modal-open .vocab-custom-content-overlay * .vocab-text-remove-green-btn {
-        opacity: 1 !important;
-        visibility: visible !important;
-        pointer-events: auto !important;
+      /* Hide explained words cross icon when custom content modal is open (main webpage only) */
+      body.vocab-custom-content-modal-open .vocab-word-explained .vocab-word-remove-explained-btn {
+        opacity: 0 !important;
+        visibility: hidden !important;
+        pointer-events: none !important;
+        transition: opacity 0.2s ease, visibility 0.2s ease;
       }
 
       @keyframes overlayFadeIn {
@@ -7559,6 +7562,7 @@ const ChatDialog = {
         background: transparent;
         opacity: 1;
         transition: opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        position: relative; /* Enable absolute positioning for icons within editor */
       }
 
       .vocab-custom-content-editor-content.fade-out {
@@ -14829,6 +14833,20 @@ const ButtonPanel = {
   },
 
   /**
+   * Update icon context attributes for existing icons
+   */
+  updateIconContexts() {
+    // Update all existing icon wrappers with proper context
+    const allIconWrappers = document.querySelectorAll('.vocab-text-icons-wrapper');
+    allIconWrappers.forEach(wrapper => {
+      if (!wrapper.hasAttribute('data-icon-context')) {
+        const isInModal = wrapper.closest('.vocab-custom-content-modal');
+        wrapper.setAttribute('data-icon-context', isInModal ? 'custom-content-modal' : 'main-webpage');
+      }
+    });
+  },
+
+  /**
    * Hide custom content modal
    */
   hideCustomContentModal() {
@@ -14852,6 +14870,9 @@ const ButtonPanel = {
       // Hide info banner if visible
       this.hideCustomContentInfoBanner();
       
+      // Update icon contexts for all existing icons
+      this.updateIconContexts();
+      
       // Restore any icon wrappers that were moved to modal overlay back to their original highlights
       const iconWrappers = this.topicsModal.customContentModal.overlay.querySelectorAll('.vocab-text-icons-wrapper');
       iconWrappers.forEach(wrapper => {
@@ -14873,10 +14894,14 @@ const ButtonPanel = {
             // This is a main webpage highlight, move the icons back
             console.log('[ButtonPanel] Restoring icons for textKey:', textKey);
             highlight.appendChild(wrapper);
+            // Update context to main-webpage since it's being restored to main webpage
+            wrapper.setAttribute('data-icon-context', 'main-webpage');
           } else {
             // This is modal content or highlight not found, keep the wrapper in the modal overlay
             // Don't remove it as it might be needed for modal content
             console.log('[ButtonPanel] Keeping modal content icons for textKey:', textKey);
+            // Update context to custom-content-modal since it's staying in modal
+            wrapper.setAttribute('data-icon-context', 'custom-content-modal');
           }
         } else {
           // No textKey, keep the wrapper in the modal overlay
@@ -16116,6 +16141,9 @@ const ButtonPanel = {
     console.log('[ButtonPanel] Added vocab-custom-content-modal-open body class for blur effect');
     console.log('[ButtonPanel] Body classes:', document.body.classList.toString());
     
+    // Update icon contexts for all existing icons
+    this.updateIconContexts();
+    
     // Show the modal
     setTimeout(() => {
       this.topicsModal.customContentModal.overlay.classList.add('visible');
@@ -16967,23 +16995,33 @@ const ButtonPanel = {
     iconsWrapper.className = 'vocab-text-icons-wrapper';
     iconsWrapper.setAttribute('data-text-key', simplifiedData.textKey);
     
-    // Add green remove button first (left position)
-    const greenRemoveBtn = TextSelector.createGreenRemoveButtonForSimplifiedText(simplifiedData.textKey);
-    iconsWrapper.appendChild(greenRemoveBtn);
-    
-    // Add book button second (right position)
+    // Add book button first (top position)
     const bookBtn = TextSelector.createBookButton(simplifiedData.textKey);
     iconsWrapper.appendChild(bookBtn);
+    
+    // Add green remove button second (bottom position)
+    const greenRemoveBtn = TextSelector.createGreenRemoveButtonForSimplifiedText(simplifiedData.textKey);
+    iconsWrapper.appendChild(greenRemoveBtn);
     
     // Check if we're in modal context or main webpage context
     const modalOverlay = this.topicsModal.customContentModal.overlay;
     if (modalOverlay && contentElement.closest('.vocab-custom-content-modal')) {
-      // Modal context: append to modal overlay and position dynamically
-      modalOverlay.appendChild(iconsWrapper);
-      this.positionIconsRelativeToHighlight(iconsWrapper, highlight);
+      // Modal context: append to editor container so icons scroll with text
+      const editorContainer = contentElement.closest('.vocab-custom-content-editor-content');
+      if (editorContainer) {
+        editorContainer.appendChild(iconsWrapper);
+        iconsWrapper.setAttribute('data-icon-context', 'custom-content-modal');
+        this.positionIconsRelativeToHighlight(iconsWrapper, highlight);
+      } else {
+        // Fallback to modal overlay if editor container not found
+        modalOverlay.appendChild(iconsWrapper);
+        iconsWrapper.setAttribute('data-icon-context', 'custom-content-modal');
+        this.positionIconsRelativeToHighlight(iconsWrapper, highlight);
+      }
     } else {
       // Main webpage context: append to document body and position relative to highlight
       document.body.appendChild(iconsWrapper);
+      iconsWrapper.setAttribute('data-icon-context', 'main-webpage');
       this.positionIconsRelativeToHighlight(iconsWrapper, highlight);
     }
 
@@ -17016,24 +17054,37 @@ const ButtonPanel = {
       // Check if highlight has valid dimensions
       if (highlightRect && highlightRect.width > 0 && highlightRect.height > 0) {
         if (isModalContext) {
-          // Modal context: position relative to modal overlay
-          const modalOverlay = this.topicsModal.customContentModal.overlay;
-          if (modalOverlay) {
-            const overlayRect = modalOverlay.getBoundingClientRect();
+          // Modal context: position relative to editor container
+          const editorContainer = highlight.closest('.vocab-custom-content-editor-content');
+          if (editorContainer) {
+            const editorRect = editorContainer.getBoundingClientRect();
             
-            // Position icons above and to the left of the highlight
-            const top = highlightRect.top - overlayRect.top - 40; // 40px above
-            const left = highlightRect.left - overlayRect.left - 60; // 60px to the left
+            // Position icons on the top left of the highlight (like main webpage)
+            const top = highlightRect.top - editorRect.top - 40; // 40px above
+            const left = highlightRect.left - editorRect.left - 60; // 60px to the left
             
-            iconsWrapper.style.top = `${Math.max(10, top)}px`; // Ensure it doesn't go above modal
-            iconsWrapper.style.left = `${Math.max(10, left)}px`; // Ensure it doesn't go left of modal
+            iconsWrapper.style.top = `${Math.max(10, top)}px`; // Ensure it doesn't go above editor
+            iconsWrapper.style.left = `${Math.max(10, left)}px`; // Ensure it doesn't go left of editor
+            iconsWrapper.style.position = 'absolute'; // Ensure absolute positioning within editor
             
-            console.log('[ButtonPanel] Modal context - Positioned icons at:', { 
+            console.log('[ButtonPanel] Modal context - Positioned icons relative to editor:', { 
               top: iconsWrapper.style.top, 
               left: iconsWrapper.style.left,
               highlightRect: { top: highlightRect.top, left: highlightRect.left },
-              overlayRect: { top: overlayRect.top, left: overlayRect.left }
+              editorRect: { top: editorRect.top, left: editorRect.left }
             });
+          } else {
+            // Fallback to modal overlay positioning
+            const modalOverlay = this.topicsModal.customContentModal.overlay;
+            if (modalOverlay) {
+              const overlayRect = modalOverlay.getBoundingClientRect();
+              
+              const top = highlightRect.top - overlayRect.top - 40;
+              const left = highlightRect.left - overlayRect.left - 60;
+              
+              iconsWrapper.style.top = `${Math.max(10, top)}px`;
+              iconsWrapper.style.left = `${Math.max(10, left)}px`;
+            }
           }
         } else {
           // Main webpage context: position relative to viewport (original behavior)
