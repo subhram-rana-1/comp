@@ -2584,16 +2584,21 @@ const TextSelector = {
     const iconsWrapper = document.createElement('div');
     iconsWrapper.className = 'vocab-text-icons-wrapper';
     
-    // Add green remove button first (left position)
-    const greenRemoveBtn = this.createGreenRemoveButtonForAskedText(textKey);
-    iconsWrapper.appendChild(greenRemoveBtn);
-    
-    // Add chat icon button (green color) second (right position)
+    // Add chat icon button first (top position)
     const chatBtn = this.createChatButton(textKey, true); // true = green color
     iconsWrapper.appendChild(chatBtn);
     
+    // Add green remove button second (bottom position)
+    const greenRemoveBtn = this.createGreenRemoveButtonForAskedText(textKey);
+    iconsWrapper.appendChild(greenRemoveBtn);
+    
     // Append wrapper to highlight
     highlight.appendChild(iconsWrapper);
+    
+    // Position icons relative to highlight (aligned with top edge of text)
+    const highlightRect = highlight.getBoundingClientRect();
+    iconsWrapper.style.top = '0px'; // Align with top edge of selected text
+    iconsWrapper.style.left = '-60px'; // 60px to the left of the highlight
     
     // Pulsate the text once with green color
     this.pulsateText(highlight, true); // true = green pulsate
