@@ -6981,6 +6981,40 @@ const ChatDialog = {
         pointer-events: none !important;
         transition: opacity 0.2s ease, visibility 0.2s ease;
       }
+      
+      /* Blur icons wrapper when image modal or custom content modal is open */
+      body.vocab-custom-content-modal-open .vocab-text-icons-wrapper,
+      body.vocab-image-modal-open .vocab-text-icons-wrapper,
+      body.vocab-pdf-modal-open .vocab-text-icons-wrapper,
+      body.vocab-text-modal-open .vocab-text-icons-wrapper,
+      body.vocab-topics-modal-open .vocab-text-icons-wrapper {
+        filter: blur(8px) !important;
+        opacity: 0.3 !important;
+        pointer-events: none !important;
+        transition: filter 0.3s ease, opacity 0.3s ease;
+      }
+      
+      /* Ensure icons wrapper is blurred even if it's in modal overlay */
+      body.vocab-custom-content-modal-open .vocab-custom-content-overlay .vocab-text-icons-wrapper {
+        filter: blur(8px) !important;
+        opacity: 0.3 !important;
+        pointer-events: none !important;
+      }
+      
+      /* General rule to blur icons wrapper anywhere when custom content modal is open */
+      body.vocab-custom-content-modal-open .vocab-text-icons-wrapper {
+        filter: blur(8px) !important;
+        opacity: 0.3 !important;
+        pointer-events: none !important;
+      }
+      
+      /* Alternative: Blur icons when custom content modal overlay is visible */
+      .vocab-custom-content-overlay.visible ~ * .vocab-text-icons-wrapper,
+      .vocab-custom-content-overlay.visible .vocab-text-icons-wrapper {
+        filter: blur(8px) !important;
+        opacity: 0.3 !important;
+        pointer-events: none !important;
+      }
 
       /* Override with higher specificity: Ensure icons within the custom content modal remain visible and functional */
       body.vocab-custom-content-modal-open .vocab-custom-content-overlay .vocab-word-remove-explained-btn,
@@ -12940,6 +12974,9 @@ const ButtonPanel = {
       this.textInputModal.overlay.classList.add('visible');
       this.textInputModal.modal.classList.add('visible');
       
+      // Add class to body to blur webpage icons
+      document.body.classList.add('vocab-text-modal-open');
+      
       // Focus on textarea and check border radius
       setTimeout(() => {
         if (this.textInputModal.textarea) {
@@ -12962,6 +12999,9 @@ const ButtonPanel = {
     if (this.textInputModal && this.textInputModal.overlay) {
       this.textInputModal.overlay.classList.remove('visible');
       this.textInputModal.modal.classList.remove('visible');
+      
+      // Remove class from body to show webpage icons again
+      document.body.classList.remove('vocab-text-modal-open');
       
       // Clear textarea after animation and hide search bar and proceed button
       setTimeout(() => {
@@ -13989,6 +14029,9 @@ const ButtonPanel = {
     this.topicsModal.overlay.classList.add('visible');
     this.topicsModal.modal.classList.add('visible');
     
+    // Add class to body to blur webpage icons
+    document.body.classList.add('vocab-topics-modal-open');
+    
     // Focus on input field
     const input = this.topicsModal.modal.querySelector('.vocab-topics-input');
     if (input) {
@@ -14018,6 +14061,9 @@ const ButtonPanel = {
       this.topicsModal.overlay.classList.remove('visible');
       this.topicsModal.modal.classList.remove('visible');
     }
+    
+    // Remove class from body to show webpage icons again
+    document.body.classList.remove('vocab-topics-modal-open');
     
     // Remove blur from custom content modal if it was blurred
     if (this.topicsModal.customContentModal.overlay) {
@@ -14801,10 +14847,36 @@ const ButtonPanel = {
       // Hide info banner if visible
       this.hideCustomContentInfoBanner();
       
-      // Clean up any remaining icon wrappers from modal overlay only
+      // Restore any icon wrappers that were moved to modal overlay back to their original highlights
       const iconWrappers = this.topicsModal.customContentModal.overlay.querySelectorAll('.vocab-text-icons-wrapper');
       iconWrappers.forEach(wrapper => {
-        wrapper.remove();
+        const textKey = wrapper.getAttribute('data-text-key');
+        if (textKey) {
+          // Try to find the original highlight element
+          let highlight = document.querySelector(`[data-text-highlight="${textKey}"]`);
+          
+          // If not found by data-text-highlight, try to find by checking simplifiedTexts
+          if (!highlight && TextSelector.simplifiedTexts.has(textKey)) {
+            const simplifiedData = TextSelector.simplifiedTexts.get(textKey);
+            if (simplifiedData && simplifiedData.highlight) {
+              highlight = simplifiedData.highlight;
+            }
+          }
+          
+          // Only restore if we found a highlight AND it's definitely from the main webpage (not modal content)
+          if (highlight && !highlight.closest('.vocab-custom-content-modal') && highlight.closest('body')) {
+            // This is a main webpage highlight, move the icons back
+            console.log('[ButtonPanel] Restoring icons for textKey:', textKey);
+            highlight.appendChild(wrapper);
+          } else {
+            // This is modal content or highlight not found, keep the wrapper in the modal overlay
+            // Don't remove it as it might be needed for modal content
+            console.log('[ButtonPanel] Keeping modal content icons for textKey:', textKey);
+          }
+        } else {
+          // No textKey, keep the wrapper in the modal overlay
+          console.log('[ButtonPanel] Keeping icon wrapper without textKey');
+        }
       });
     }
     
@@ -14846,6 +14918,9 @@ const ButtonPanel = {
     if (this.imageUploadModal.modal) {
       this.imageUploadModal.modal.classList.add('visible');
     }
+    
+    // Add class to body to blur webpage icons
+    document.body.classList.add('vocab-image-modal-open');
   },
 
   /**
@@ -14860,6 +14935,9 @@ const ButtonPanel = {
     if (this.imageUploadModal && this.imageUploadModal.modal) {
       this.imageUploadModal.modal.classList.remove('visible');
     }
+    
+    // Remove class from body to show webpage icons again
+    document.body.classList.remove('vocab-image-modal-open');
     
     // Show the custom content button again
     this.showCustomContentButton();
@@ -15264,6 +15342,9 @@ const ButtonPanel = {
     if (this.pdfUploadModal.modal) {
       this.pdfUploadModal.modal.classList.add('visible');
     }
+    
+    // Add class to body to blur webpage icons
+    document.body.classList.add('vocab-pdf-modal-open');
   },
 
   /**
@@ -15346,6 +15427,9 @@ const ButtonPanel = {
       this.pdfUploadModal.modal.classList.remove('visible');
     }
     
+    // Remove class from body to show webpage icons again
+    document.body.classList.remove('vocab-pdf-modal-open');
+    
     // Don't show the custom content button - we want to keep the custom content modal visible
   },
 
@@ -15361,6 +15445,9 @@ const ButtonPanel = {
     if (this.pdfUploadModal && this.pdfUploadModal.modal) {
       this.pdfUploadModal.modal.classList.remove('visible');
     }
+    
+    // Remove class from body to show webpage icons again
+    document.body.classList.remove('vocab-pdf-modal-open');
     
     // Show the custom content button again
     setTimeout(() => {
@@ -16014,6 +16101,16 @@ const ButtonPanel = {
       }
     }
     
+    // Ensure modal is visible and add body class for blur effect
+    if (!this.topicsModal.customContentModal.overlay.classList.contains('visible')) {
+      this.topicsModal.customContentModal.overlay.classList.add('visible');
+    }
+    
+    // Always add body class to blur webpage icons
+    document.body.classList.add('vocab-custom-content-modal-open');
+    console.log('[ButtonPanel] Added vocab-custom-content-modal-open body class for blur effect');
+    console.log('[ButtonPanel] Body classes:', document.body.classList.toString());
+    
     // Show the modal
     setTimeout(() => {
       this.topicsModal.customContentModal.overlay.classList.add('visible');
@@ -16615,7 +16712,7 @@ const ButtonPanel = {
       }
     });
 
-    // Remove all icon wrappers from modal overlay (if in modal context)
+    // Remove only icon wrappers from modal overlay (if in modal context)
     const modalOverlay = this.topicsModal.customContentModal.overlay;
     if (modalOverlay) {
       const iconWrappers = modalOverlay.querySelectorAll('.vocab-text-icons-wrapper');
@@ -16624,11 +16721,8 @@ const ButtonPanel = {
       });
     }
 
-    // Remove all icon wrappers from document body (for main webpage context)
-    const bodyIconWrappers = document.body.querySelectorAll('.vocab-text-icons-wrapper');
-    bodyIconWrappers.forEach(wrapper => {
-      wrapper.remove();
-    });
+    // Don't remove icon wrappers from document body - they should be preserved for main webpage
+    // The main webpage icons should remain visible and functional
 
     console.log('[ButtonPanel] Cleared existing highlights');
   },
