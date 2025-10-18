@@ -2600,10 +2600,19 @@ const TextSelector = {
     // Append wrapper to highlight
     highlight.appendChild(iconsWrapper);
     
-    // Position icons relative to highlight (aligned with top edge of text)
+    // Position icons relative to highlight
     const highlightRect = highlight.getBoundingClientRect();
-    iconsWrapper.style.top = '0px'; // Align with top edge of selected text
-    iconsWrapper.style.left = '-60px'; // 60px to the left of the highlight
+    
+    if (isInModal) {
+      // In modal context: position to the left with sufficient margin to avoid overlap
+      iconsWrapper.style.setProperty('left', '-50px', 'important'); // 50px to the left with !important
+      // Align upper border with text upper border by adjusting top position
+      iconsWrapper.style.setProperty('top', '-2px', 'important'); // Slight adjustment to align upper borders
+    } else {
+      // In main webpage context: position to the left as before
+      iconsWrapper.style.setProperty('left', '-60px', 'important'); // 60px to the left of the highlight
+      iconsWrapper.style.setProperty('top', '0px', 'important'); // Align with top edge of selected text
+    }
     
     // Pulsate the text once with green color
     this.pulsateText(highlight, true); // true = green pulsate
@@ -4528,7 +4537,7 @@ const ChatDialog = {
       console.log('[ChatDialog] Chat container not found, cannot re-render messages');
       return;
     }
-    
+    docdo
     // Clear existing messages
     chatContainer.innerHTML = '';
     
@@ -7543,7 +7552,7 @@ const ChatDialog = {
 
       /* Add extra padding when scrollbar is visible */
       .vocab-custom-content-editor.has-scrollbar .vocab-custom-content-editor-content {
-        padding: calc(var(--vocab-spacing-xl) + var(--vocab-spacing-md)) var(--vocab-spacing-xl) calc(var(--vocab-spacing-xl) + var(--vocab-spacing-md)) var(--vocab-spacing-xl);
+        padding: calc(var(--vocab-spacing-xl) + var(--vocab-spacing-md)) var(--vocab-spacing-xl) calc(var(--vocab-spacing-xl) + var(--vocab-spacing-md)) calc(var(--vocab-spacing-xl) + 40px); /* Extra 40px left padding for icons */
       }
 
       .vocab-custom-content-editor::before {
@@ -7558,7 +7567,7 @@ const ChatDialog = {
         overflow: visible;
         scrollbar-width: thin;
         scrollbar-color: var(--vocab-primary-color) var(--vocab-primary-lighter);
-        padding: var(--vocab-spacing-xl) var(--vocab-spacing-xl) var(--vocab-spacing-xl) var(--vocab-spacing-xl);
+        padding: var(--vocab-spacing-xl) var(--vocab-spacing-xl) var(--vocab-spacing-xl) calc(var(--vocab-spacing-xl) + 40px); /* Extra 40px left padding for icons */
         background: transparent;
         opacity: 1;
         transition: opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1);
@@ -11974,10 +11983,20 @@ const ButtonPanel = {
                 // Append icons wrapper directly to highlight for absolute positioning
                 highlight.appendChild(iconsWrapper);
                 
-                // Position icons relative to highlight (aligned with top edge of text)
+                // Position icons relative to highlight
                 const highlightRect = highlight.getBoundingClientRect();
-                iconsWrapper.style.top = '0px'; // Align with top edge of selected text
-                iconsWrapper.style.left = '-60px'; // 60px to the left of the highlight
+                const isInModal = highlight.closest('.vocab-custom-content-modal');
+                
+                if (isInModal) {
+                  // In modal context: position to the left with sufficient margin to avoid overlap
+                  iconsWrapper.style.setProperty('left', '-50px', 'important'); // 50px to the left with !important
+                  // Align upper border with text upper border by adjusting top position
+                  iconsWrapper.style.setProperty('top', '-2px', 'important'); // Slight adjustment to align upper borders
+                } else {
+                  // In main webpage context: position to the left as before
+                  iconsWrapper.style.setProperty('left', '-60px', 'important'); // 60px to the left of the highlight
+                  iconsWrapper.style.setProperty('top', '0px', 'important'); // Align with top edge of selected text
+                }
                 
                 // Store simplified text data
                 TextSelector.simplifiedTexts.set(matchingTextKey, {
@@ -11989,6 +12008,15 @@ const ButtonPanel = {
                   shouldAllowSimplifyMore: eventData.shouldAllowSimplifyMore || false,
                   highlight: highlight
                 });
+                
+                // Force repositioning after a short delay to ensure DOM is updated
+                setTimeout(() => {
+                  const isInModalAfterDelay = highlight.closest('.vocab-custom-content-modal');
+                  if (isInModalAfterDelay) {
+                    iconsWrapper.style.setProperty('left', '-50px', 'important');
+                    iconsWrapper.style.setProperty('top', '-2px', 'important');
+                  }
+                }, 100);
                 
                 // Store simplified text in analysis data for persistence
                 if (this.topicsModal.customContentModal.activeTabId) {
