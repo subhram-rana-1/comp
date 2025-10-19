@@ -266,8 +266,13 @@ const WordSelector = {
                                    e.target.closest('.vocab-word-popup-close') || 
                                    e.target.closest('.vocab-word-popup-button');
       
-      // Close popup if clicking outside popup, word, and popup buttons
-      if (!clickedInsidePopup && !clickedOnWord && !clickedOnPopupButton) {
+      // Check if any sticky popup has mouse inside it
+      const hasMouseInsidePopup = Array.from(stickyPopups).some(popup => 
+        popup.getAttribute('data-mouse-inside') === 'true'
+      );
+      
+      // Close popup if clicking outside popup, word, popup buttons, and no mouse is inside any popup
+      if (!clickedInsidePopup && !clickedOnWord && !clickedOnPopupButton && !hasMouseInsidePopup) {
         // Use a longer delay to ensure the click event has fully processed
         setTimeout(() => {
           // Double-check that we still have sticky popups (in case they were closed by other means)
@@ -1178,11 +1183,15 @@ const WordSelector = {
       popup.addEventListener('mouseenter', (e) => {
         e.stopPropagation();
         console.log('[WordSelector] Mouse entered sticky popup');
+        // Mark popup as having mouse inside to prevent global click handler from closing it
+        popup.setAttribute('data-mouse-inside', 'true');
       });
       
       popup.addEventListener('mouseleave', (e) => {
         e.stopPropagation();
         console.log('[WordSelector] Mouse left sticky popup');
+        // Mark popup as not having mouse inside
+        popup.setAttribute('data-mouse-inside', 'false');
         // For sticky popups, don't hide on mouseleave - only hide on outside click
       });
       
@@ -1194,6 +1203,8 @@ const WordSelector = {
       // Prevent any mouse events from bubbling up that might trigger hide
       popup.addEventListener('mousemove', (e) => {
         e.stopPropagation();
+        // Ensure mouse inside flag is set when moving inside popup
+        popup.setAttribute('data-mouse-inside', 'true');
       });
     }
     
@@ -7488,11 +7499,11 @@ const ChatDialog = {
       /* Chat Icon */
       .vocab-custom-content-chat-icon {
         position: absolute;
-        bottom: 20px;
+        bottom: 30px;
         right: 35px;
-        width: 50px;
-        height: 50px;
-        background: transparent;
+        width: 40px;
+        height: 40px;
+        background: #9527F5;
         border: none;
         border-radius: 50%;
         display: flex;
@@ -7503,16 +7514,19 @@ const ChatDialog = {
         z-index: 1000;
         pointer-events: auto;
         outline: none;
+        box-shadow: 0 2px 8px rgba(149, 39, 245, 0.3);
       }
 
       .vocab-custom-content-chat-icon:hover {
-        background: transparent;
+        background: #7B1FA2;
         transform: scale(1.1);
         cursor: pointer;
+        box-shadow: 0 4px 12px rgba(149, 39, 245, 0.4);
       }
 
       .vocab-custom-content-chat-icon:active {
         transform: scale(0.95);
+        background: #6A1B9A;
       }
 
       .vocab-custom-content-chat-icon:focus {
@@ -8558,13 +8572,13 @@ const ButtonPanel = {
   createChatIcon() {
     return `
       <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <rect x="4" y="4" width="12" height="10" rx="2" stroke="#9527F5" stroke-width="1.3" fill="none"/>
-        <line x1="10" y1="2" x2="10" y2="4" stroke="#9527F5" stroke-width="1.3" stroke-linecap="round"/>
+        <rect x="4" y="4" width="12" height="10" rx="2" stroke="#9527F5" stroke-width="2" fill="none"/>
+        <line x1="10" y1="2" x2="10" y2="4" stroke="#9527F5" stroke-width="2" stroke-linecap="round"/>
         <circle cx="10" cy="1.5" r="0.8" fill="#9527F5"/>
         <circle cx="7.5" cy="8.5" r="1.2" fill="#9527F5"/>
         <circle cx="12.5" cy="8.5" r="1.2" fill="#9527F5"/>
-        <path d="M7 11C7.5 11.8 8.5 12.5 10 12.5C11.5 12.5 12.5 11.8 13 11" stroke="#9527F5" stroke-width="1.3" stroke-linecap="round" fill="none"/>
-        <path d="M10 14L10 16.5L8 15" stroke="#9527F5" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M7 11C7.5 11.8 8.5 12.5 10 12.5C11.5 12.5 12.5 11.8 13 11" stroke="#9527F5" stroke-width="2" stroke-linecap="round" fill="none"/>
+        <path d="M10 14L10 16.5L8 15" stroke="#9527F5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
       </svg>
     `;
   },
@@ -8576,8 +8590,8 @@ const ButtonPanel = {
   createUploadIcon() {
     return `
       <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M10 14V6M10 6L7 9M10 6L13 9" stroke="#9527F5" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
-        <path d="M4 14V16C4 17.1046 4.89543 18 6 18H14C15.1046 18 16 17.1046 16 16V14" stroke="#9527F5" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M10 14V6M10 6L7 9M10 6L13 9" stroke="#9527F5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M4 14V16C4 17.1046 4.89543 18 6 18H14C15.1046 18 16 17.1046 16 16V14" stroke="#9527F5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
       </svg>
     `;
   },
@@ -9151,39 +9165,57 @@ const ButtonPanel = {
         background: #ddc8ff !important;
       }
 
-      /* Magic Meaning Button - VIBGYOR Flowing Gradient when enabled */
+      /* Magic Meaning Button - VIBGYOROYGBIV Flowing Gradient when enabled */
       #magic-meaning:not(.disabled) {
         background: linear-gradient(
-          45deg,
-          #8B5CF6,
-          #4F46E5,
-          #3B82F6,
-          #10B981,
-          #F59E0B,
-          #F97316,
-          #EF4444,
-          #8B5CF6
+          90deg,
+          #9400D3 0%,   /* Violet */
+          #4B0082 6.25%, /* Indigo */
+          #0000FF 12.5%, /* Blue */
+          #00FF00 18.75%, /* Green */
+          #FFFF00 25%,   /* Yellow */
+          #FF7F00 31.25%, /* Orange */
+          #FF0000 37.5%, /* Red */
+          #FF7F00 43.75%, /* Orange (reverse) */
+          #FFFF00 50%,   /* Yellow (reverse) */
+          #00FF00 56.25%, /* Green (reverse) */
+          #0000FF 62.5%, /* Blue (reverse) */
+          #4B0082 68.75%, /* Indigo (reverse) */
+          #9400D3 75%,   /* Violet (reverse) */
+          #4B0082 81.25%, /* Indigo (forward again) */
+          #0000FF 87.5%, /* Blue (forward again) */
+          #00FF00 93.75%, /* Green (forward again) */
+          #9400D3 100%   /* Violet (seamless loop) */
         );
-        background-size: 400% 400%;
-        border-color: #8B5CF6;
-        animation: vibgyorFlow 3s ease-in-out infinite;
+        background-size: 800% 100%;
+        border-color: #9400D3;
+        animation: vibgyoroygbivFlow 4s linear infinite, vocab-magic-ready 2s ease-in-out infinite;
         position: relative;
         overflow: hidden;
+        isolation: isolate;
       }
       
       #magic-meaning:hover:not(.disabled) {
-        animation: vibgyorFlow 2s ease-in-out infinite;
+        animation: vibgyoroygbivFlow 2.5s linear infinite, vocab-magic-ready 1.5s ease-in-out infinite;
       }
 
-      @keyframes vibgyorFlow {
+      @keyframes vibgyoroygbivFlow {
         0% {
           background-position: 0% 50%;
         }
-        50% {
-          background-position: 100% 50%;
-        }
         100% {
-          background-position: 0% 50%;
+          background-position: 87.5% 50%;
+        }
+      }
+
+      @keyframes vocab-magic-ready {
+        0%, 100% {
+          transform: scale(1);
+          box-shadow: 0 2px 8px rgba(149, 39, 245, 0.3);
+        }
+        50% {
+          transform: scale(1.05);
+          box-shadow: 0 4px 16px rgba(149, 39, 245, 0.5), 0 0 20px rgba(149, 39, 245, 0.3);
         }
       }
 
@@ -11003,7 +11035,6 @@ const ButtonPanel = {
 
       /* Magic Meaning Button - Ready/Enabled State Animation */
       #magic-meaning:not(.disabled):not(.processing):not(.success) {
-        animation: vocab-magic-ready 2s ease-in-out infinite;
         position: relative;
         overflow: hidden;
         isolation: isolate;
@@ -11032,65 +11063,7 @@ const ButtonPanel = {
         }
       }
 
-      #magic-meaning:not(.disabled):not(.processing):not(.success)::before {
-        content: '';
-        position: absolute;
-        top: 50%;
-        left: 50%;
-        width: 120%;
-        height: 120%;
-        transform: translate(-50%, -50%);
-        border-radius: 50%;
-        background: radial-gradient(circle, rgba(149, 39, 245, 0.4), rgba(208, 151, 255, 0.2), transparent 70%);
-        opacity: 0;
-        z-index: -1;
-        animation: vocab-magic-glow 2s ease-in-out infinite;
-        pointer-events: none;
-      }
 
-      @keyframes vocab-magic-ready {
-        0%, 100% {
-          transform: scale(1);
-          box-shadow: 0 2px 8px rgba(149, 39, 245, 0.3);
-        }
-        50% {
-          transform: scale(1.05);
-          box-shadow: 0 4px 16px rgba(149, 39, 245, 0.5), 0 0 20px rgba(149, 39, 245, 0.3);
-        }
-      }
-
-      @keyframes vocab-magic-glow {
-        0%, 100% {
-          opacity: 0;
-          transform: translate(-50%, -50%) scale(1);
-        }
-        50% {
-          opacity: 1;
-          transform: translate(-50%, -50%) scale(1.1);
-        }
-      }
-
-      /* Shimmer effect for magic meaning button */
-      #magic-meaning:not(.disabled):not(.processing):not(.success)::after {
-        content: '';
-        position: absolute;
-        top: 0;
-        left: -100%;
-        width: 100%;
-        height: 100%;
-        background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
-        animation: vocab-magic-shimmer 3s ease-in-out infinite;
-        pointer-events: none;
-      }
-
-      @keyframes vocab-magic-shimmer {
-        0% {
-          left: -100%;
-        }
-        50%, 100% {
-          left: 100%;
-        }
-      }
     `;
 
     document.head.appendChild(style);
@@ -14769,6 +14742,11 @@ const ButtonPanel = {
     this.topicsModal.currentContentType = contentType;
     console.log('[ButtonPanel] Set currentContentType to:', contentType);
     
+    // Synchronize activeContentType for proper plus icon behavior
+    if (this.topicsModal.customContentModal) {
+      this.topicsModal.customContentModal.activeContentType = contentType;
+    }
+    
     // Show modal with only the specified content type, and switch to the new tab
     this.showCustomContentModalWithContents(contentType, newContent.tabId);
     
@@ -15235,6 +15213,11 @@ const ButtonPanel = {
     
     // Set current content type
     this.topicsModal.currentContentType = 'image';
+    
+    // Synchronize activeContentType for proper plus icon behavior
+    if (this.topicsModal.customContentModal) {
+      this.topicsModal.customContentModal.activeContentType = 'image';
+    }
     
     // Create modal if it doesn't exist
     if (!this.topicsModal.customContentModal.overlay) {
@@ -15772,23 +15755,14 @@ const ButtonPanel = {
     const chatIcon = document.createElement('button');
     chatIcon.className = 'vocab-custom-content-chat-icon';
     chatIcon.innerHTML = `
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="48" height="48" fill="#9527F5">
-        <!-- Robot head with speech bubble -->
-        <!-- Main rounded rectangular head -->
-        <rect x="6" y="4" width="12" height="10" rx="4" fill="#9527F5"/>
-        
-        <!-- Speech bubble tail -->
-        <path d="M14 14L16 16L14 18L12 16Z" fill="#9527F5"/>
-        
-        <!-- Two circular eyes -->
-        <circle cx="9" cy="8" r="1.5" fill="white"/>
-        <circle cx="15" cy="8" r="1.5" fill="white"/>
-        
-        <!-- Two antennae with circular tips -->
-        <rect x="8.5" y="2" width="1" height="3" fill="#9527F5"/>
-        <rect x="14.5" y="2" width="1" height="3" fill="#9527F5"/>
-        <circle cx="9" cy="1" r="1" fill="#9527F5"/>
-        <circle cx="15" cy="1" r="1" fill="#9527F5"/>
+      <svg width="16" height="16" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect x="4" y="4" width="12" height="10" rx="2" stroke="white" stroke-width="1.3" fill="none"/>
+        <line x1="10" y1="2" x2="10" y2="4" stroke="white" stroke-width="1.3" stroke-linecap="round"/>
+        <circle cx="10" cy="1.5" r="0.8" fill="white"/>
+        <circle cx="7.5" cy="8.5" r="1.2" fill="white"/>
+        <circle cx="12.5" cy="8.5" r="1.2" fill="white"/>
+        <path d="M7 11C7.5 11.8 8.5 12.5 10 12.5C11.5 12.5 12.5 11.8 13 11" stroke="white" stroke-width="1.3" stroke-linecap="round" fill="none"/>
+        <path d="M10 14L10 16.5L8 15" stroke="white" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
       </svg>
     `;
     chatIcon.setAttribute('title', 'Chat with AI Agent - Ask anything about this content');
@@ -15892,7 +15866,7 @@ const ButtonPanel = {
     // Add tab functionality
     addTabBtn.addEventListener('click', () => {
       // Check current content type to determine which modal to show
-      const currentContentType = this.topicsModal.customContentModal.activeContentType;
+      const currentContentType = this.topicsModal.currentContentType;
       
       if (currentContentType === 'pdf') {
         this.showPDFUploadModal();
