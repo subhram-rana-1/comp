@@ -261,8 +261,18 @@ const WordSelector = {
       const clickedInsidePopup = e.target.closest('.vocab-word-popup');
       const clickedOnWord = e.target.closest('.vocab-word-explained');
       
-      // Close popup if clicking outside both popup and word
-      if (!clickedInsidePopup && !clickedOnWord) {
+      // Also check if clicking on popup buttons (speaker, close, get more examples)
+      const clickedOnPopupButton = e.target.closest('.vocab-word-popup-speaker') || 
+                                   e.target.closest('.vocab-word-popup-close') || 
+                                   e.target.closest('.vocab-word-popup-button');
+      
+      // Check if any sticky popup has mouse inside it
+      const hasMouseInsidePopup = Array.from(stickyPopups).some(popup => 
+        popup.getAttribute('data-mouse-inside') === 'true'
+      );
+      
+      // Close popup if clicking outside popup, word, popup buttons, and no mouse is inside any popup
+      if (!clickedInsidePopup && !clickedOnWord && !clickedOnPopupButton && !hasMouseInsidePopup) {
         // Use a longer delay to ensure the click event has fully processed
         setTimeout(() => {
           // Double-check that we still have sticky popups (in case they were closed by other means)
@@ -529,8 +539,8 @@ const WordSelector = {
    */
   createCloseIcon() {
     return `
-      <svg width="10" height="10" viewBox="0 0 10 10" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M1 1L9 9M9 1L1 9" stroke="#9527F5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      <svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M2 2L10 10M10 2L2 10" stroke="#9527F5" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
       </svg>
     `;
   },
@@ -902,6 +912,17 @@ const WordSelector = {
     });
     popup.appendChild(speakerBtn);
     
+    // Close button for popup
+    const closeBtn = document.createElement('button');
+    closeBtn.className = 'vocab-word-popup-close';
+    closeBtn.setAttribute('aria-label', 'Close popup');
+    closeBtn.innerHTML = this.createCloseIcon();
+    closeBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.hideAllPopups();
+    });
+    popup.appendChild(closeBtn);
+    
     // Meaning
     const meaningDiv = document.createElement('div');
     meaningDiv.className = 'vocab-word-popup-meaning';
@@ -934,7 +955,7 @@ const WordSelector = {
     // View more button - smaller, bottom-left positioned
     const button = document.createElement('button');
     button.className = 'vocab-word-popup-button';
-    button.textContent = 'View more examples';
+    button.textContent = 'Get more examples';
     button.setAttribute('data-word', word.toLowerCase());
     button.setAttribute('data-meaning', meaning);
     
@@ -1162,16 +1183,28 @@ const WordSelector = {
       popup.addEventListener('mouseenter', (e) => {
         e.stopPropagation();
         console.log('[WordSelector] Mouse entered sticky popup');
+        // Mark popup as having mouse inside to prevent global click handler from closing it
+        popup.setAttribute('data-mouse-inside', 'true');
       });
       
       popup.addEventListener('mouseleave', (e) => {
         e.stopPropagation();
         console.log('[WordSelector] Mouse left sticky popup');
+        // Mark popup as not having mouse inside
+        popup.setAttribute('data-mouse-inside', 'false');
+        // For sticky popups, don't hide on mouseleave - only hide on outside click
       });
       
       popup.addEventListener('click', (e) => {
         e.stopPropagation();
         console.log('[WordSelector] Clicked inside sticky popup');
+      });
+      
+      // Prevent any mouse events from bubbling up that might trigger hide
+      popup.addEventListener('mousemove', (e) => {
+        e.stopPropagation();
+        // Ensure mouse inside flag is set when moving inside popup
+        popup.setAttribute('data-mouse-inside', 'true');
       });
     }
     
@@ -1248,7 +1281,15 @@ const WordSelector = {
       this.showWordPopup(wordElement, false);
     });
     
-    // Click event handler removed - green background words no longer respond to clicks
+    // Click: show popup (sticky) - stays visible until closed by close button or outside click
+    wordElement.addEventListener('click', (e) => {
+      if (!wordElement.classList.contains('vocab-word-explained')) return;
+      
+      e.stopPropagation();
+      
+      // Show sticky popup
+      this.showWordPopup(wordElement, true);
+    });
   },
   
   /**
@@ -1280,9 +1321,22 @@ const WordSelector = {
    */
   createSpeakerIcon() {
     return `
+      <svg width="18" height="18" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M2 8v4h3l4 4V4L5 8H2z" fill="white"/>
+        <path d="M13 7c.6.6 1 1.4 1 2.3s-.4 1.7-1 2.3" stroke="white" stroke-width="1.5" stroke-linecap="round"/>
+        <path d="M15.5 4.5c1.2 1.2 2 2.8 2 4.6s-.8 3.4-2 4.6" stroke="white" stroke-width="1.5" stroke-linecap="round"/>
+      </svg>
+    `;
+  },
+
+  /**
+   * Create close icon SVG (X icon)
+   * @returns {string} SVG markup
+   */
+  createCloseIcon() {
+    return `
       <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M3 9v6h4l5 5V4L7 9H3z" fill="#9F7BDB"/>
-        <path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z" fill="#9F7BDB"/>
+        <path d="M18 6L6 18M6 6l12 12" stroke="#A020F0" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
       </svg>
     `;
   },
@@ -1334,7 +1388,7 @@ const WordSelector = {
         },
         body: JSON.stringify({ 
           word: word,
-          voice: 'nova' // Default voice
+          voice: 'alloy' // Default voice
         })
       });
       
@@ -1449,8 +1503,8 @@ const WordSelector = {
    */
   createGreenCrossIcon() {
     return `
-      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M2 2L12 12M12 2L2 12" stroke="#22c55e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      <svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M2 2L10 10M10 2L2 10" stroke="#15803d" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
       </svg>
     `;
   },
@@ -1549,8 +1603,9 @@ const WordSelector = {
         display: inline;
         background-color: rgba(149, 39, 245, 0.15);
         padding: 0 4px;
-        border-radius: 4px;
-        transition: background-color 0.2s ease;
+        border-radius: 8px;
+        border: 1px solid rgba(149, 39, 245, 0.4);
+        transition: background-color 0.2s ease, border-color 0.2s ease;
         cursor: pointer;
         line-height: inherit;
         box-decoration-break: clone;
@@ -1559,25 +1614,27 @@ const WordSelector = {
       
       .vocab-word-highlight:hover {
         background-color: rgba(149, 39, 245, 0.25);
+        border-color: rgba(149, 39, 245, 0.6);
       }
       
       /* Remove button - Clean cross icon without circle */
       .vocab-word-remove-btn {
         position: absolute;
-        top: -6px;
-        right: -6px;
-        width: 12px;
-        height: 12px;
+        top: -7px;
+        right: -7px;
+        width: 16px;
+        height: 16px;
         background: none;
         border: none;
         display: flex;
         align-items: center;
         justify-content: center;
         cursor: pointer;
-        opacity: 0.7;
+        opacity: 0.8;
         transition: opacity 0.2s ease, transform 0.1s ease;
         padding: 0;
         z-index: 999999;
+        filter: drop-shadow(0 1px 2px rgba(149, 39, 245, 0.4));
       }
       
       .vocab-word-highlight:hover .vocab-word-remove-btn {
@@ -1596,9 +1653,8 @@ const WordSelector = {
       .vocab-word-remove-btn svg {
         pointer-events: none;
         display: block;
-        width: 10px;
-        height: 10px;
-        filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.2));
+        width: 14px;
+        height: 14px;
       }
       
       /* Make sure highlight doesn't interfere with text flow */
@@ -1624,19 +1680,23 @@ const WordSelector = {
       .vocab-word-explained {
         background-color: rgba(34, 197, 94, 0.20) !important;
         cursor: pointer;
+        border-radius: 8px;
+        border: 1px solid rgba(21, 128, 61, 0.4);
+        padding: 0 2px;
       }
       
       .vocab-word-explained:hover {
         background-color: rgba(34, 197, 94, 0.30) !important;
+        border-color: rgba(21, 128, 61, 0.6);
       }
       
       /* Green cross button for explained words - no circle, just cross */
       .vocab-word-remove-explained-btn {
         position: absolute;
-        top: -8px;
-        right: -8px;
-        width: 16px;
-        height: 16px;
+        top: -6px;
+        right: -6px;
+        width: 14px;
+        height: 14px;
         background: transparent;
         border: none;
         display: flex;
@@ -1666,8 +1726,8 @@ const WordSelector = {
       .vocab-word-remove-explained-btn svg {
         pointer-events: none;
         display: block;
-        width: 14px;
-        height: 14px;
+        width: 12px;
+        height: 12px;
       }
       
       /* Contextual Meaning Popup Card */
@@ -1675,7 +1735,7 @@ const WordSelector = {
         position: absolute;
         background: white;
         border-radius: 14px;
-        padding: 18px 20px;
+        padding: 18px 20px 45px 20px; /* Reduced bottom padding for minimal spacing */
         box-shadow: 0 8px 24px rgba(149, 39, 245, 0.15), 0 2px 8px rgba(0, 0, 0, 0.1);
         z-index: 9999999;
         max-width: 380px;
@@ -1721,7 +1781,7 @@ const WordSelector = {
       .vocab-word-popup-examples-container {
         max-height: 200px;
         overflow-y: auto;
-        margin-bottom: 12px;
+        margin-bottom: 30px; /* Reduced margin for minimal spacing */
       }
       
       .vocab-word-popup-examples-container::-webkit-scrollbar {
@@ -1773,28 +1833,33 @@ const WordSelector = {
         color: #A020F0;
       }
       
-      /* View more button - smaller, bottom-left positioned */
+      /* View more button - smaller, bottom-right positioned */
       .vocab-word-popup-button {
-        padding: 6px 14px;
-        border: 1.5px solid #A020F0;
+        padding: 8px 16px;
+        border: none;
         border-radius: 10px;
-        background: white;
-        color: #A020F0;
+        background: #A020F0;
+        color: white;
         font-weight: 500;
         font-size: 12px;
         cursor: pointer;
-        transition: background-color 0.2s ease, color 0.2s ease, opacity 0.2s ease;
+        transition: background-color 0.2s ease, opacity 0.2s ease, transform 0.2s ease;
         text-align: center;
-        align-self: flex-start;
-        position: relative;
+        position: absolute;
+        bottom: 16px;
+        right: 16px;
+        min-width: 120px; /* Ensure button has minimum width */
+        z-index: 10; /* Ensure button is above other content */
       }
       
       .vocab-word-popup-button:hover:not(.loading) {
-        background: rgba(160, 32, 240, 0.1);
+        background: #8B1AC4;
+        transform: translateY(-1px);
       }
       
       .vocab-word-popup-button:active:not(.loading) {
-        background: rgba(160, 32, 240, 0.2);
+        background: #7016A8;
+        transform: translateY(0) scale(0.95);
       }
       
       .vocab-word-popup-button.loading {
@@ -1807,72 +1872,79 @@ const WordSelector = {
         cursor: not-allowed;
       }
       
-      /* Close button for sticky popup */
+      /* Close button for popup */
       .vocab-word-popup-close {
         position: absolute;
         top: 12px;
         right: 12px;
-        width: 24px;
-        height: 24px;
+        width: 22px;
+        height: 22px;
         border: none;
-        background: rgba(160, 32, 240, 0.1);
-        border-radius: 50%;
+        background: transparent;
         display: flex;
         align-items: center;
         justify-content: center;
         cursor: pointer;
-        opacity: 0.7;
-        transition: opacity 0.2s ease, background-color 0.2s ease;
+        opacity: 0.8;
+        transition: opacity 0.2s ease, transform 0.2s ease;
+        z-index: 10;
       }
       
       .vocab-word-popup-close:hover {
         opacity: 1;
-        background: rgba(160, 32, 240, 0.2);
+        transform: scale(1.2);
+      }
+      
+      .vocab-word-popup-close:active {
+        transform: scale(0.9);
       }
       
       .vocab-word-popup-close svg {
-        width: 12px;
-        height: 12px;
+        width: 16px;
+        height: 16px;
       }
       
       /* Speaker icon for pronunciation */
       .vocab-word-popup-speaker {
         position: absolute;
         top: 12px;
-        right: 12px;
-        width: 28px;
-        height: 28px;
-        background: rgba(159, 123, 219, 0.1);
-        border: 1px solid rgba(159, 123, 219, 0.3);
+        left: 12px;
+        width: 36px;
+        height: 36px;
+        background: #9527F5;
+        border: none;
         border-radius: 50%;
         cursor: pointer;
-        opacity: 0.8;
-        transition: opacity 0.2s ease, background-color 0.2s ease, transform 0.2s ease;
+        opacity: 1;
+        transition: all 0.3s ease;
         display: flex;
         align-items: center;
         justify-content: center;
         z-index: 10;
+        box-shadow: 0 2px 8px rgba(149, 39, 245, 0.3);
       }
       
       .vocab-word-popup-speaker:hover:not(.loading) {
-        opacity: 1;
-        background: rgba(159, 123, 219, 0.2);
-        transform: scale(1.05);
+        background: #7B1FA2;
+        transform: scale(1.1);
+        box-shadow: 0 4px 12px rgba(149, 39, 245, 0.4);
       }
       
       .vocab-word-popup-speaker:active:not(.loading) {
         transform: scale(0.95);
+        background: #6A1B9A;
       }
       
       .vocab-word-popup-speaker.loading {
-        opacity: 0.6;
+        opacity: 0.7;
         cursor: not-allowed;
         transform: none;
       }
       
       .vocab-word-popup-speaker svg {
-        width: 16px;
-        height: 16px;
+        width: 18px;
+        height: 18px;
+        pointer-events: none;
       }
       
       /* Loading spinner animation */
@@ -1939,7 +2011,7 @@ const WordSelector = {
         align-items: center;
         justify-content: center;
         border-radius: 50%;
-        transition: background-color 0.2s ease;
+        transition: background-color 0.2s ease, transform 0.2s ease;
         flex-shrink: 0;
       }
       
@@ -2390,6 +2462,19 @@ const TextSelector = {
       </svg>
     `;
   },
+
+  /**
+   * Create white cross icon with green circular background for text removal
+   * @returns {string} SVG markup
+   */
+  createGreenRemoveIcon() {
+    return `
+      <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="9" cy="9" r="9" fill="#22c55e"/>
+        <path d="M6 6L12 12M12 6L6 12" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    `;
+  },
   
   /**
    * Remove a highlight element and restore original text
@@ -2510,9 +2595,39 @@ const TextSelector = {
     // Remove underline by changing text-decoration to none
     highlight.style.textDecoration = 'none';
     
-    // Add chat icon button (green color)
+    // Create wrapper for icons
+    const iconsWrapper = document.createElement('div');
+    iconsWrapper.className = 'vocab-text-icons-wrapper';
+    iconsWrapper.setAttribute('data-text-key', textKey);
+    
+    // Determine context and set appropriate data attribute
+    const isInModal = highlight.closest('.vocab-custom-content-modal');
+    iconsWrapper.setAttribute('data-icon-context', isInModal ? 'custom-content-modal' : 'main-webpage');
+    
+    // Add chat icon button first (top position)
     const chatBtn = this.createChatButton(textKey, true); // true = green color
-    highlight.appendChild(chatBtn);
+    iconsWrapper.appendChild(chatBtn);
+    
+    // Add green remove button second (bottom position)
+    const greenRemoveBtn = this.createGreenRemoveButtonForAskedText(textKey);
+    iconsWrapper.appendChild(greenRemoveBtn);
+    
+    // Append wrapper to highlight
+    highlight.appendChild(iconsWrapper);
+    
+    // Position icons relative to highlight
+    const highlightRect = highlight.getBoundingClientRect();
+    
+    if (isInModal) {
+      // In modal context: position to the left with sufficient margin to avoid overlap
+      iconsWrapper.style.setProperty('left', '-50px', 'important'); // 50px to the left with !important
+      // Align upper border with text upper border by adjusting top position
+      iconsWrapper.style.setProperty('top', '-2px', 'important'); // Slight adjustment to align upper borders
+    } else {
+      // In main webpage context: position to the left as before
+      iconsWrapper.style.setProperty('left', '-60px', 'important'); // 60px to the left of the highlight
+      iconsWrapper.style.setProperty('top', '0px', 'important'); // Align with top edge of selected text
+    }
     
     // Pulsate the text once with green color
     this.pulsateText(highlight, true); // true = green pulsate
@@ -2538,21 +2653,173 @@ const TextSelector = {
     
     const highlight = askedData.highlight;
     
-    // Remove chat button
-    const chatBtn = highlight.querySelector('.vocab-text-chat-btn');
-    if (chatBtn) {
-      chatBtn.remove();
+    // Close ChatDialog if it's open for this textKey or related textKey
+    if (typeof ChatDialog !== 'undefined' && ChatDialog.isOpen) {
+      console.log('[TextSelector] ChatDialog is open - currentTextKey:', ChatDialog.currentTextKey, 'removing textKey:', textKey);
+      
+      // Check if the current chat is related to this textKey
+      // ChatDialog might have textKey in format: textKey-selected, textKey-generic, or exact match
+      const shouldClose = ChatDialog.currentTextKey === textKey || 
+                         ChatDialog.currentTextKey?.startsWith(textKey + '-') ||
+                         ChatDialog.currentTextKey?.includes(textKey) ||
+                         textKey?.includes(ChatDialog.currentTextKey?.split('-').slice(0, -1).join('-'));
+      
+      if (shouldClose) {
+        console.log('[TextSelector] Closing ChatDialog for asked text - currentTextKey:', ChatDialog.currentTextKey, 'removing textKey:', textKey);
+        ChatDialog.close();
+      } else {
+        console.log('[TextSelector] ChatDialog open but for different text - currentTextKey:', ChatDialog.currentTextKey, 'removing textKey:', textKey);
+        console.log('[TextSelector] Not closing chat as textKeys do not match');
+      }
+    }
+    
+    // Remove icons wrapper
+    const iconsWrapper = highlight.querySelector('.vocab-text-icons-wrapper');
+    if (iconsWrapper) {
+      iconsWrapper.remove();
     }
     
     // Remove highlight completely
     this.removeHighlight(highlight);
     
-    // Remove from askedTexts
+    // Remove from askedTexts map
     this.askedTexts.delete(textKey);
+    
+    // Remove from textToHighlights map if present
+    this.textToHighlights.delete(textKey);
+    
+    // Remove from analysis data structure for current tab
+    ButtonPanel.removeAskedTextFromAnalysisData(textKey);
+    
+    // Update button states to hide "Remove meanings" if no more data exists
+    ButtonPanel.updateButtonStatesFromSelections();
     
     console.log('[TextSelector] Text removed from askedTexts:', textKey);
   },
+
+  /**
+   * Remove text from simplifiedTexts and restore to normal
+   * @param {string} textKey - The text key
+   */
+  removeFromSimplifiedTexts(textKey) {
+    const simplifiedData = this.simplifiedTexts.get(textKey);
+    
+    if (!simplifiedData) {
+      console.warn('[TextSelector] No simplified text found for textKey:', textKey);
+      return;
+    }
+    
+    const highlight = simplifiedData.highlight;
+    
+    if (!highlight) {
+      console.warn('[TextSelector] No highlight element found for simplified text:', textKey);
+      this.simplifiedTexts.delete(textKey);
+      return;
+    }
+    
+    // Close ChatDialog if it's open (always close when green cross is clicked)
+    if (typeof ChatDialog !== 'undefined' && ChatDialog.isOpen) {
+      console.log('[TextSelector] ChatDialog is open - closing it when green cross clicked');
+      console.log('[TextSelector] Current textKey:', ChatDialog.currentTextKey, 'removing textKey:', textKey);
+      ChatDialog.close();
+    }
+    
+    // Find icons wrapper
+    let iconsWrapper = highlight.querySelector('.vocab-text-icons-wrapper');
+    if (!iconsWrapper) {
+      // Check if icons are in modal overlay (for modal context)
+      const modalOverlay = ButtonPanel.topicsModal.customContentModal.overlay;
+      if (modalOverlay) {
+        iconsWrapper = modalOverlay.querySelector(`[data-text-key="${textKey}"]`);
+      }
+      // Check if icons are in document body (for main webpage context)
+      if (!iconsWrapper) {
+        iconsWrapper = document.body.querySelector(`[data-text-key="${textKey}"]`);
+      }
+    }
+    
+    // Trigger vanishing animations
+    if (iconsWrapper) {
+      iconsWrapper.classList.add('vocab-icons-vanishing');
+    }
+    // Only animate the underline color, not the text itself
+    highlight.classList.add('vocab-text-vanishing');
+    
+    // Wait for animation to complete before removing elements
+    setTimeout(() => {
+      // Remove icons wrapper
+      if (iconsWrapper) {
+        iconsWrapper.remove();
+      }
+      
+      // Remove the simplified class (green underline)
+      highlight.classList.remove('vocab-text-simplified', 'vocab-text-vanishing');
+      
+      // Remove highlight completely
+      this.removeHighlight(highlight);
+    }, 300); // Match the CSS transition duration
+    
+    // Remove from simplifiedTexts map
+    this.simplifiedTexts.delete(textKey);
+    console.log('[TextSelector] Removed from simplifiedTexts map:', textKey);
+    
+    // Remove from textToHighlights map if present
+    this.textToHighlights.delete(textKey);
+    console.log('[TextSelector] Removed from textToHighlights map:', textKey);
+    
+    // Remove from analysis data structure for current tab
+    ButtonPanel.removeSimplifiedTextFromAnalysisData(textKey);
+    
+    // Update button states to hide "Remove meanings" if no more data exists
+    ButtonPanel.updateButtonStatesFromSelections();
+    
+    console.log('[TextSelector] Text removal completed for:', textKey);
+  },
   
+  /**
+   * Create green remove button for asked texts
+   * @param {string} textKey - The text key
+   * @returns {HTMLElement} Button element
+   */
+  createGreenRemoveButtonForAskedText(textKey) {
+    const btn = document.createElement('button');
+    btn.className = 'vocab-text-remove-green-btn';
+    btn.setAttribute('aria-label', 'Remove asked text');
+    btn.innerHTML = this.createGreenRemoveIcon();
+    
+    // Add click handler
+    btn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      console.log('[TextSelector] Green remove button clicked for asked text:', textKey);
+      this.removeFromAskedTexts(textKey);
+    });
+    
+    return btn;
+  },
+
+  /**
+   * Create green remove button for simplified texts
+   * @param {string} textKey - The text key
+   * @returns {HTMLElement} Button element
+   */
+  createGreenRemoveButtonForSimplifiedText(textKey) {
+    const btn = document.createElement('button');
+    btn.className = 'vocab-text-remove-green-btn';
+    btn.setAttribute('aria-label', 'Remove simplified text');
+    btn.innerHTML = this.createGreenRemoveIcon();
+    
+    // Add click handler
+    btn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      console.log('[TextSelector] Green remove button clicked for simplified text:', textKey);
+      this.removeFromSimplifiedTexts(textKey);
+    });
+    
+    return btn;
+  },
+
   /**
    * Create a chat button for the highlight
    * @param {string} textKey - The text key
@@ -2597,10 +2864,10 @@ const TextSelector = {
     return `
       <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
         <circle cx="10" cy="10" r="9" fill="${color}"/>
-        <path d="M10 5C7.239 5 5 6.959 5 9.375C5 10.681 5.494 11.9 6.348 12.856L5.244 14.746C5.164 14.89 5.164 15.069 5.244 15.214C5.325 15.358 5.499 15.451 5.681 15.451C5.741 15.451 5.801 15.439 5.858 15.415L8.071 14.464C8.904 14.656 9.818 14.75 10.75 14.75C13.511 14.75 15.75 12.791 15.75 10.375C15.75 7.959 13.511 5 10 5Z" fill="white"/>
-        <circle cx="7.5" cy="9.75" r="1" fill="${color}"/>
-        <circle cx="10" cy="9.75" r="1" fill="${color}"/>
-        <circle cx="12.5" cy="9.75" r="1" fill="${color}"/>
+        <path d="M10 6C8.239 6 6.5 7.459 6.5 8.875C6.5 9.681 6.994 10.4 7.348 10.856L6.744 12.246C6.664 12.39 6.664 12.569 6.744 12.714C6.825 12.858 6.999 12.951 7.181 12.951C7.241 12.951 7.301 12.939 7.358 12.915L8.571 12.464C9.404 12.656 10.318 12.75 11.25 12.75C12.511 12.75 13.75 11.791 13.75 10.375C13.75 8.959 12.511 6 10 6Z" fill="white"/>
+        <circle cx="8" cy="9.25" r="0.8" fill="${color}"/>
+        <circle cx="10" cy="9.25" r="0.8" fill="${color}"/>
+        <circle cx="12" cy="9.25" r="0.8" fill="${color}"/>
       </svg>
     `;
   },
@@ -2612,7 +2879,7 @@ const TextSelector = {
    */
   createBookButton(textKey) {
     const btn = document.createElement('button');
-    btn.className = 'vocab-text-book-btn';
+    btn.className = 'vocab-text-book-btn book-breathing';
     btn.setAttribute('aria-label', 'View simplified text');
     btn.innerHTML = this.createBookIcon();
     
@@ -2636,6 +2903,11 @@ const TextSelector = {
         ChatDialog.open(simplifiedData.text, textKey, 'simplified', simplifiedData, 'selected');
       }
     });
+    
+    // Remove breathing class after animation completes
+    setTimeout(() => {
+      btn.classList.remove('book-breathing');
+    }, 1600); // Match animation duration
     
     return btn;
   },
@@ -2663,10 +2935,11 @@ const TextSelector = {
     const className = isGreen ? 'vocab-text-pulsate-green' : 'vocab-text-pulsate';
     highlight.classList.add(className);
     
-    // Remove class after animation completes (0.6s)
+    // Remove class after animation completes (0.6s for purple, 1.2s for green)
+    const duration = isGreen ? 1200 : 600;
     setTimeout(() => {
       highlight.classList.remove(className);
-    }, 600);
+    }, duration);
   },
   
   /**
@@ -2692,6 +2965,7 @@ const TextSelector = {
         text-decoration-thickness: 1px;
         text-underline-offset: 2px;
         cursor: text;
+        overflow: visible;
       }
       
       /* For block-level elements inside highlight, maintain underline */
@@ -2717,8 +2991,9 @@ const TextSelector = {
         opacity: 0.9;
         transition: opacity 0.2s ease, transform 0.1s ease, background-color 0.2s ease;
         padding: 0;
-        z-index: 999999;
+        z-index: 10000003;
         box-shadow: 0 2px 4px rgba(149, 39, 245, 0.4);
+        pointer-events: auto;
       }
       
       .vocab-text-highlight:hover .vocab-text-remove-btn {
@@ -2742,6 +3017,27 @@ const TextSelector = {
         height: 8px;
       }
       
+      /* Wrapper containers for icon groups */
+      .vocab-text-icons-wrapper {
+        position: absolute;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 4px;
+        z-index: 10000003;
+        animation: vocab-icon-appear 0.4s ease-out;
+        pointer-events: auto;
+      }
+
+      /* Modal context: enhanced styling */
+      .vocab-custom-content-modal .vocab-text-icons-wrapper {
+        z-index: 10000005;
+        background: rgba(255, 255, 255, 0.9);
+        border-radius: 8px;
+        padding: 4px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+      }
+      
       /* Chat button - Solid purple circle with white chat icon on top-left (bigger) */
       /* Smooth icon appearance animation - slide from left */
       @keyframes vocab-icon-appear {
@@ -2759,9 +3055,7 @@ const TextSelector = {
       }
       
       .vocab-text-chat-btn {
-        position: absolute;
-        top: -12px;
-        left: -32px;
+        position: relative;
         width: 24px;
         height: 24px;
         background: transparent;
@@ -2774,11 +3068,10 @@ const TextSelector = {
         opacity: 0.95;
         transition: opacity 0.2s ease, transform 0.1s ease;
         padding: 0;
-        z-index: 999999;
-        animation: vocab-icon-appear 0.4s ease-out;
+        flex-shrink: 0;
       }
       
-      .vocab-text-highlight:hover .vocab-text-chat-btn {
+      .vocab-text-highlight:hover .vocab-text-icons-wrapper {
         opacity: 1;
       }
       
@@ -2800,9 +3093,7 @@ const TextSelector = {
       
       /* Book button - Wireframe open book icon on top-left */
       .vocab-text-book-btn {
-        position: absolute;
-        top: -12px;
-        left: -32px;
+        position: relative;
         width: 24px;
         height: 24px;
         background: transparent;
@@ -2815,12 +3106,7 @@ const TextSelector = {
         opacity: 0.95;
         transition: opacity 0.2s ease, transform 0.15s ease;
         padding: 0;
-        z-index: 999999;
-        animation: vocab-icon-appear 0.4s ease-out;
-      }
-      
-      .vocab-text-highlight:hover .vocab-text-book-btn {
-        opacity: 1;
+        flex-shrink: 0;
       }
       
       .vocab-text-book-btn:hover {
@@ -2840,11 +3126,87 @@ const TextSelector = {
         filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.1));
       }
       
+      /* Book button breathing animation when first appears */
+      .vocab-text-book-btn.book-breathing {
+        animation: bookBreathing 1.6s ease-in-out;
+      }
+      
+      @keyframes bookBreathing {
+        0% {
+          transform: scale(1);
+          opacity: 0.7;
+        }
+        25% {
+          transform: scale(1.3);
+          opacity: 1;
+        }
+        50% {
+          transform: scale(1);
+          opacity: 0.8;
+        }
+        75% {
+          transform: scale(1.3);
+          opacity: 1;
+        }
+        100% {
+          transform: scale(1);
+          opacity: 1;
+        }
+      }
+      
+      /* Green remove button - white cross on green circular background */
+      .vocab-text-remove-green-btn {
+        position: relative;
+        width: 18px;
+        height: 18px;
+        background: transparent;
+        border: none;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        opacity: 0.95;
+        transition: opacity 0.2s ease, transform 0.15s ease;
+        padding: 0;
+        flex-shrink: 0;
+      }
+      
+      .vocab-text-remove-green-btn:hover {
+        transform: scale(1.15);
+        opacity: 1;
+      }
+      
+      .vocab-text-remove-green-btn:active {
+        transform: scale(0.95);
+      }
+      
+      .vocab-text-remove-green-btn svg {
+        pointer-events: none;
+        display: block;
+        width: 18px;
+        height: 18px;
+        filter: drop-shadow(0 2px 3px rgba(34, 197, 94, 0.3));
+      }
+      
       /* Light green dashed underline for simplified texts - same green as chat icon */
       .vocab-text-simplified {
         text-decoration-color: #22c55e !important;
         text-decoration-style: dashed !important;
-        text-decoration-thickness: 1px !important;
+        text-decoration-thickness: 2px !important;
+        transition: text-decoration-color 0.3s ease-out;
+      }
+      
+      /* Vanishing animation for simplified text */
+      .vocab-text-simplified.vocab-text-vanishing {
+        text-decoration-color: transparent !important;
+        transition: text-decoration-color 0.3s ease-out;
+      }
+      
+      /* Vanishing animation for icons wrapper */
+      .vocab-text-icons-wrapper.vocab-icons-vanishing {
+        opacity: 0;
+        transform: scale(0.8) translateY(-10px);
+        pointer-events: none;
       }
       
       /* Pulsate animation for text highlights - light purple */
@@ -2880,12 +3242,18 @@ const TextSelector = {
         border-radius: 3px;
       }
       
-      /* Pulsate animation for text highlights - light green */
+      /* Pulsate animation for text highlights - light green (pulsates twice) */
       @keyframes vocab-text-pulsate-green {
         0% {
           background-color: transparent;
         }
+        25% {
+          background-color: rgba(34, 197, 94, 0.15);
+        }
         50% {
+          background-color: transparent;
+        }
+        75% {
           background-color: rgba(34, 197, 94, 0.15);
         }
         100% {
@@ -2894,7 +3262,7 @@ const TextSelector = {
       }
       
       .vocab-text-pulsate-green {
-        animation: vocab-text-pulsate-green 0.6s ease-in-out;
+        animation: vocab-text-pulsate-green 1.2s ease-in-out;
       }
       
       /* Notification banner at top right */
@@ -3160,9 +3528,9 @@ const DragHandle = {
    * Reset to default position
    */
   resetPosition() {
-    this.targetElement.style.left = '';
+    this.targetElement.style.left = '0';
     this.targetElement.style.top = '';
-    this.targetElement.style.right = '0';
+    this.targetElement.style.right = '';
     this.targetElement.style.transform = '';
     PositionManager.clearPosition();
   },
@@ -3190,6 +3558,9 @@ const ChatDialog = {
   simplifiedData: null, // For simplified mode
   isSimplifying: false, // Track if currently simplifying more
   chatContext: 'general', // 'general' for content chat, 'selected' for selected text chat
+  isRecording: false, // Track if currently recording voice
+  mediaRecorder: null, // MediaRecorder instance
+  audioChunks: [], // Store audio chunks during recording
   
   /**
    * Initialize chat dialog
@@ -3475,14 +3846,93 @@ const ChatDialog = {
     // Add click handler for focus button
     focusButton.addEventListener('click', () => {
       console.log('[Focus Button] Clicked, currentTextKey:', this.currentTextKey);
+      console.log('[Focus Button] chatContext:', this.chatContext);
       
       if (this.currentTextKey) {
         // For selected text chat, use original textKey to find highlight
         const originalTextKey = this.currentTextKey.replace(/-selected$/, '').replace(/-generic$/, '');
         console.log('[Focus Button] Original textKey:', originalTextKey);
         
-        // Try exact match first
-        let highlight = TextSelector.textToHighlights.get(originalTextKey);
+        // Try exact match first with current key
+        let highlight = TextSelector.textToHighlights.get(this.currentTextKey);
+        let matchedKey = this.currentTextKey;
+        
+        // If no match, try with originalTextKey (after removing suffixes)
+        if (!highlight) {
+          highlight = TextSelector.textToHighlights.get(originalTextKey);
+          matchedKey = originalTextKey;
+          console.log('[Focus Button] Trying with originalTextKey:', originalTextKey, 'Found:', !!highlight);
+        }
+        
+        // If still no match, try checking askedTexts map (for green chat icon texts)
+        if (!highlight) {
+          console.log('[Focus Button] Trying to find in askedTexts...');
+          const askedData = TextSelector.askedTexts.get(originalTextKey);
+          if (askedData && askedData.highlight) {
+            highlight = askedData.highlight;
+            matchedKey = originalTextKey;
+            console.log('[Focus Button] Found in askedTexts:', originalTextKey);
+          } else {
+            // Try iterating through askedTexts to find a partial match
+            console.log('[Focus Button] Trying to find matching asked text by iteration...');
+            for (const [key, data] of TextSelector.askedTexts) {
+              if (key.includes(originalTextKey) || originalTextKey.includes(key)) {
+                highlight = data.highlight;
+                matchedKey = key;
+                console.log('[Focus Button] Found matching asked text:', key);
+                break;
+              }
+            }
+          }
+        }
+        
+        // If still no match, try checking simplifiedTexts map
+        if (!highlight) {
+          console.log('[Focus Button] Trying to find in simplifiedTexts...');
+          const simplifiedData = TextSelector.simplifiedTexts.get(originalTextKey);
+          if (simplifiedData && simplifiedData.highlight) {
+            highlight = simplifiedData.highlight;
+            matchedKey = originalTextKey;
+            console.log('[Focus Button] Found in simplifiedTexts:', originalTextKey);
+          } else {
+            // Try to find a matching key in simplifiedTexts by comparing text positions
+            console.log('[Focus Button] Trying to find matching simplified text by position...');
+            const parts = originalTextKey.split('-');
+            if (parts.length >= 4) {
+              const contentType = parts[0];
+              const tabId = parts[1];
+              const startIndex = parseInt(parts[2]);
+              const textLength = parseInt(parts[3]);
+              
+              // Search through simplifiedTexts for matching position
+              for (const [key, data] of TextSelector.simplifiedTexts) {
+                if (data.textStartIndex === startIndex && data.textLength === textLength) {
+                  highlight = data.highlight;
+                  matchedKey = key;
+                  console.log('[Focus Button] Found matching simplified text by position:', key);
+                  break;
+                }
+              }
+            }
+          }
+        }
+        
+        // If no exact match, try searching by comparing the current text with highlight text
+        if (!highlight && this.currentText) {
+          console.log('[Focus Button] Trying to match by text content...');
+          const currentText = this.currentText.trim();
+          
+          // Search through all highlights
+          for (const [key, element] of TextSelector.textToHighlights) {
+            const elementText = element.textContent.replace(/\s+/g, ' ').trim();
+            if (elementText === currentText || elementText.includes(currentText) || currentText.includes(elementText)) {
+              highlight = element;
+              matchedKey = key;
+              console.log('[Focus Button] Found match by text content:', key.substring(0, 50) + '...');
+              break;
+            }
+          }
+        }
         
         // If no exact match, try fuzzy matching
         if (!highlight) {
@@ -3502,12 +3952,13 @@ const ChatDialog = {
             if (score > bestScore && score > 0.7) { // Require at least 70% similarity
               bestScore = score;
               bestMatch = element;
+              matchedKey = key;
             }
           }
           
           if (bestMatch) {
             highlight = bestMatch;
-            console.log('[Focus Button] Found fuzzy match with score:', bestScore);
+            console.log('[Focus Button] Found fuzzy match with score:', bestScore, 'Key:', matchedKey);
           }
         }
         
@@ -3527,26 +3978,36 @@ const ChatDialog = {
           
           // Check if it's asked text (has green chat icon)
           const hasChatBtn = highlight.querySelector('.vocab-text-chat-btn');
-          console.log('[Focus Button] Checking for chat button:', hasChatBtn);
-          if (hasChatBtn) {
+          const hasGreenChatBtn = highlight.querySelector('.vocab-text-chat-btn-green');
+          console.log('[Focus Button] Checking for chat button:', hasChatBtn, 'Green:', hasGreenChatBtn);
+          if (hasChatBtn || hasGreenChatBtn) {
             isGreenPulsate = true; // Green pulsate for asked text
             console.log('[Focus Button] Detected asked text - using green pulsate');
           }
           
-          // Check if it's explained text (has green dashed underline)
+          // Check if it's explained text (has green dashed underline or book icon)
           const isSimplified = highlight.classList.contains('vocab-text-simplified');
-          console.log('[Focus Button] Checking for simplified class:', isSimplified);
-          if (isSimplified) {
+          const hasBookBtn = highlight.querySelector('.vocab-text-book-btn');
+          console.log('[Focus Button] Checking for simplified class:', isSimplified, 'Book button:', hasBookBtn);
+          if (isSimplified || hasBookBtn) {
             isGreenPulsate = true; // Green pulsate for explained text
             console.log('[Focus Button] Detected explained text - using green pulsate');
           }
           
-          // Additional check: look for asked text in the askedTexts map
-          const isInAskedTexts = TextSelector.askedTexts.has(originalTextKey);
-          console.log('[Focus Button] Checking if text is in askedTexts:', isInAskedTexts);
+          // Additional check: look for asked text in the askedTexts map using matchedKey
+          const isInAskedTexts = TextSelector.askedTexts.has(matchedKey) || TextSelector.askedTexts.has(originalTextKey);
+          console.log('[Focus Button] Checking if text is in askedTexts (matchedKey:', matchedKey, 'originalTextKey:', originalTextKey, '):', isInAskedTexts);
           if (isInAskedTexts) {
             isGreenPulsate = true; // Green pulsate for asked text
             console.log('[Focus Button] Detected asked text via askedTexts map - using green pulsate');
+          }
+          
+          // Additional check: look for simplified text in simplifiedTexts map using matchedKey
+          const isInSimplifiedTexts = TextSelector.simplifiedTexts.has(matchedKey) || TextSelector.simplifiedTexts.has(originalTextKey);
+          console.log('[Focus Button] Checking if text is in simplifiedTexts (matchedKey:', matchedKey, 'originalTextKey:', originalTextKey, '):', isInSimplifiedTexts);
+          if (isInSimplifiedTexts) {
+            isGreenPulsate = true; // Green pulsate for simplified text
+            console.log('[Focus Button] Detected simplified text via simplifiedTexts map - using green pulsate');
           }
           
           console.log('[Focus Button] Using green pulsate:', isGreenPulsate);
@@ -3558,7 +4019,10 @@ const ChatDialog = {
           }, 300); // Small delay to let scroll complete
         } else {
           console.log('[Focus Button] No highlight found for textKey:', originalTextKey);
+          console.log('[Focus Button] Current textKey:', this.currentTextKey);
           console.log('[Focus Button] Available textToHighlights keys:', Array.from(TextSelector.textToHighlights.keys()));
+          console.log('[Focus Button] Available askedTexts keys:', Array.from(TextSelector.askedTexts.keys()));
+          console.log('[Focus Button] Available simplifiedTexts keys:', Array.from(TextSelector.simplifiedTexts.keys()));
         }
       } else {
         console.log('[Focus Button] No currentTextKey available');
@@ -3839,23 +4303,30 @@ const ChatDialog = {
     const buttonContainer = document.createElement('div');
     buttonContainer.className = 'vocab-chat-simplify-more-container';
     
-    const simplifyMoreBtn = document.createElement('button');
-    simplifyMoreBtn.className = 'vocab-chat-simplify-more-btn';
-    simplifyMoreBtn.textContent = 'Simplify more';
-    simplifyMoreBtn.id = 'vocab-chat-simplify-more-btn';
-    
-    // Set initial disabled state based on shouldAllowSimplifyMore
-    if (this.simplifiedData && this.simplifiedData.shouldAllowSimplifyMore) {
-      simplifyMoreBtn.disabled = false;
+    // Only show "Simplify more" button for selected text chat, not for general content chat
+    console.log('[ChatDialog] Creating Simplify more button - chatContext:', this.chatContext, 'mode:', this.mode);
+    if (this.chatContext !== 'general' && this.mode === 'simplified') {
+      console.log('[ChatDialog] Adding Simplify more button');
+      const simplifyMoreBtn = document.createElement('button');
+      simplifyMoreBtn.className = 'vocab-chat-simplify-more-btn';
+      simplifyMoreBtn.textContent = 'Simplify more';
+      simplifyMoreBtn.id = 'vocab-chat-simplify-more-btn';
+      
+      // Set initial disabled state based on shouldAllowSimplifyMore
+      if (this.simplifiedData && this.simplifiedData.shouldAllowSimplifyMore) {
+        simplifyMoreBtn.disabled = false;
+      } else {
+        simplifyMoreBtn.disabled = true;
+        simplifyMoreBtn.classList.add('disabled');
+      }
+      
+      // Add click handler
+      simplifyMoreBtn.addEventListener('click', () => this.handleSimplifyMore());
+      
+      buttonContainer.appendChild(simplifyMoreBtn);
     } else {
-      simplifyMoreBtn.disabled = true;
-      simplifyMoreBtn.classList.add('disabled');
+      console.log('[ChatDialog] NOT adding Simplify more button - chatContext:', this.chatContext, 'mode:', this.mode);
     }
-    
-    // Add click handler
-    simplifyMoreBtn.addEventListener('click', () => this.handleSimplifyMore());
-    
-    buttonContainer.appendChild(simplifyMoreBtn);
     
     // Create chat container below Simplify more button with top margin
     const chatContainer = document.createElement('div');
@@ -3877,7 +4348,7 @@ const ChatDialog = {
     } else {
       // Show appropriate message based on chat context
       const promptText = this.chatContext === 'selected' 
-        ? 'Ask doubts on the selected content' 
+        ? 'Anything to ask on the selected content ?' 
         : 'Ask anything about the content';
       
       const noChatsMsg = document.createElement('div');
@@ -3886,6 +4357,7 @@ const ChatDialog = {
         <div class="vocab-chat-no-messages-content">
           ${this.createChatEmptyIcon()}
           <span>${promptText}</span>
+          <span class="vocab-chat-regional-lang-text">You can voice record your question in regional language</span>
         </div>
       `;
       chatContainer.appendChild(noChatsMsg);
@@ -4082,7 +4554,7 @@ const ChatDialog = {
     } else {
       // Show appropriate message based on chat context
       const promptText = this.chatContext === 'selected' 
-        ? 'Ask doubts on the selected content' 
+        ? 'Anything to ask on the selected content ?' 
         : 'Ask anything about the content';
       
       const noChatsMsg = document.createElement('div');
@@ -4091,6 +4563,7 @@ const ChatDialog = {
         <div class="vocab-chat-no-messages-content">
           ${this.createChatEmptyIcon()}
           <span>${promptText}</span>
+          <span class="vocab-chat-regional-lang-text">You can voice record your question in regional language</span>
         </div>
       `;
       chatContainer.appendChild(noChatsMsg);
@@ -4112,7 +4585,7 @@ const ChatDialog = {
       console.log('[ChatDialog] Chat container not found, cannot re-render messages');
       return;
     }
-    
+    docdo
     // Clear existing messages
     chatContainer.innerHTML = '';
     
@@ -4130,7 +4603,7 @@ const ChatDialog = {
     } else {
       // Show appropriate message based on chat context
       const promptText = this.chatContext === 'selected' 
-        ? 'Ask doubts on the selected content' 
+        ? 'Anything to ask on the selected content ?' 
         : 'Ask anything about the content';
       
       const noChatsMsg = document.createElement('div');
@@ -4139,6 +4612,7 @@ const ChatDialog = {
         <div class="vocab-chat-no-messages-content">
           ${this.createChatEmptyIcon()}
           <span>${promptText}</span>
+          <span class="vocab-chat-regional-lang-text">You can voice record your question in regional language</span>
         </div>
       `;
       chatContainer.appendChild(noChatsMsg);
@@ -4214,6 +4688,15 @@ const ChatDialog = {
       }
     });
     
+    // Create mic button for voice input
+    const micBtn = document.createElement('button');
+    micBtn.className = 'vocab-chat-mic-btn';
+    micBtn.id = 'vocab-chat-mic-btn';
+    micBtn.setAttribute('aria-label', 'Voice input');
+    micBtn.title = 'Record voice';
+    micBtn.innerHTML = this.createMicIcon();
+    micBtn.addEventListener('click', () => this.toggleVoiceRecording());
+    
     // Create send button (restore original styling but same size as delete)
     const sendBtn = document.createElement('button');
     sendBtn.className = 'vocab-chat-send-btn';
@@ -4236,6 +4719,7 @@ const ChatDialog = {
     deleteBtn.addEventListener('click', () => this.deleteConversation());
     
     inputArea.appendChild(inputField);
+    inputArea.appendChild(micBtn);
     inputArea.appendChild(sendBtn);
     inputArea.appendChild(deleteBtn);
     
@@ -4451,6 +4935,219 @@ const ChatDialog = {
   },
   
   /**
+   * Toggle voice recording on/off
+   */
+  async toggleVoiceRecording() {
+    console.log('[ChatDialog] ===== TOGGLE VOICE RECORDING =====');
+    
+    if (!this.isRecording) {
+      // Start recording
+      await this.startVoiceRecording();
+    } else {
+      // Stop recording
+      await this.stopVoiceRecording();
+    }
+  },
+  
+  /**
+   * Start voice recording
+   */
+  async startVoiceRecording() {
+    console.log('[ChatDialog] Starting voice recording...');
+    
+    try {
+      // Request microphone permission - this will trigger browser's native permission prompt
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      
+      console.log('[ChatDialog] Microphone access granted');
+      
+      // Use webm format with opus codec for smallest file size
+      const options = {
+        mimeType: 'audio/webm;codecs=opus'
+      };
+      
+      this.mediaRecorder = new MediaRecorder(stream, options);
+      this.audioChunks = [];
+      
+      this.mediaRecorder.addEventListener('dataavailable', (event) => {
+        if (event.data.size > 0) {
+          this.audioChunks.push(event.data);
+        }
+      });
+      
+      this.mediaRecorder.addEventListener('stop', () => {
+        this.handleRecordingStop();
+      });
+      
+      this.mediaRecorder.start();
+      this.isRecording = true;
+      
+      // Update mic button to show recording state
+      const micBtn = document.getElementById('vocab-chat-mic-btn');
+      if (micBtn) {
+        micBtn.classList.add('recording');
+        micBtn.title = 'Stop recording';
+      }
+      
+      console.log('[ChatDialog] Recording started');
+    } catch (error) {
+      console.error('[ChatDialog] Error starting recording:', error);
+      alert('Failed to access microphone. Please allow microphone access in your browser settings and refresh the page.');
+    }
+  },
+  
+  /**
+   * Stop voice recording
+   */
+  async stopVoiceRecording() {
+    console.log('[ChatDialog] Stopping voice recording...');
+    
+    if (this.mediaRecorder && this.mediaRecorder.state !== 'inactive') {
+      this.mediaRecorder.stop();
+      
+      // Stop all audio tracks
+      const tracks = this.mediaRecorder.stream.getTracks();
+      tracks.forEach(track => track.stop());
+      
+      this.isRecording = false;
+      
+      // Update mic button to show normal state
+      const micBtn = document.getElementById('vocab-chat-mic-btn');
+      if (micBtn) {
+        micBtn.classList.remove('recording');
+        micBtn.title = 'Record voice';
+      }
+      
+      console.log('[ChatDialog] Recording stopped');
+    }
+  },
+  
+  /**
+   * Handle recording stop and process audio
+   */
+  async handleRecordingStop() {
+    console.log('[ChatDialog] Processing recorded audio...');
+    
+    // Create blob from audio chunks
+    const audioBlob = new Blob(this.audioChunks, { type: 'audio/webm' });
+    console.log('[ChatDialog] Audio blob size:', audioBlob.size, 'bytes');
+    
+    // Show loading spinner at the bottom of chat
+    this.showVoiceLoadingSpinner();
+    
+    // Disable mic button during processing
+    const micBtn = document.getElementById('vocab-chat-mic-btn');
+    if (micBtn) {
+      micBtn.disabled = true;
+    }
+    
+    try {
+      // Call voice-to-text API
+      const transcribedText = await this.sendAudioToAPI(audioBlob);
+      
+      // Remove loading spinner
+      this.removeVoiceLoadingSpinner();
+      
+      // Enable mic button
+      if (micBtn) {
+        micBtn.disabled = false;
+      }
+      
+      if (transcribedText) {
+        // Display transcribed text in input field
+        const inputField = document.getElementById('vocab-chat-input');
+        if (inputField) {
+          inputField.value = transcribedText;
+          inputField.style.height = 'auto';
+          inputField.style.height = inputField.scrollHeight + 'px';
+        }
+        
+        // Automatically send the message
+        this.sendMessage();
+      }
+    } catch (error) {
+      console.error('[ChatDialog] Error processing audio:', error);
+      
+      // Remove loading spinner
+      this.removeVoiceLoadingSpinner();
+      
+      // Enable mic button
+      if (micBtn) {
+        micBtn.disabled = false;
+      }
+      
+      // Show error message
+      alert('Failed to transcribe audio. Please try again.');
+    }
+    
+    // Clear audio chunks
+    this.audioChunks = [];
+  },
+  
+  /**
+   * Send audio to voice-to-text API
+   * @param {Blob} audioBlob - Audio blob to send
+   * @returns {Promise<string>} Transcribed text
+   */
+  async sendAudioToAPI(audioBlob) {
+    console.log('[ChatDialog] Sending audio to API...');
+    
+    // Create FormData
+    const formData = new FormData();
+    formData.append('audio_file', audioBlob, 'recording.webm');
+    
+    try {
+      const response = await ApiService.voiceToText(formData);
+      
+      if (response.success && response.data && response.data.text) {
+        console.log('[ChatDialog] Transcription successful:', response.data.text);
+        return response.data.text;
+      } else {
+        console.error('[ChatDialog] API error:', response.error);
+        throw new Error(response.error || 'Failed to transcribe audio');
+      }
+    } catch (error) {
+      console.error('[ChatDialog] Error calling API:', error);
+      throw error;
+    }
+  },
+  
+  /**
+   * Show loading spinner for voice processing
+   */
+  showVoiceLoadingSpinner() {
+    const chatContainer = document.getElementById('vocab-chat-messages');
+    if (!chatContainer) return;
+    
+    // Remove existing spinner if any
+    this.removeVoiceLoadingSpinner();
+    
+    // Create spinner element
+    const spinner = document.createElement('div');
+    spinner.className = 'vocab-chat-voice-spinner';
+    spinner.id = 'vocab-chat-voice-spinner';
+    spinner.innerHTML = `
+      <div class="vocab-spinner-circle"></div>
+      <span>Transcribing...</span>
+    `;
+    
+    chatContainer.appendChild(spinner);
+    
+    // Scroll to bottom
+    chatContainer.scrollTop = chatContainer.scrollHeight;
+  },
+  
+  /**
+   * Remove loading spinner for voice processing
+   */
+  removeVoiceLoadingSpinner() {
+    const spinner = document.getElementById('vocab-chat-voice-spinner');
+    if (spinner) {
+      spinner.remove();
+    }
+  },
+  
+  /**
    * Add message to chat
    * @param {string} type - 'user' or 'ai'
    * @param {string} message - Message content
@@ -4634,7 +5331,7 @@ const ChatDialog = {
     
     // Show appropriate message based on chat context
     const promptText = this.chatContext === 'selected' 
-      ? 'Ask doubts on the selected content' 
+      ? 'Anything to ask on the selected content ?' 
       : 'Ask anything about the content';
     
     const noChatsMsg = document.createElement('div');
@@ -4808,9 +5505,21 @@ const ChatDialog = {
    */
   createTrashIcon() {
     return `
-      <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M2.25 4.5h13.5M6 4.5V3a1.5 1.5 0 0 1 1.5-1.5h3A1.5 1.5 0 0 1 12 3v1.5m2.25 0v10.5a1.5 1.5 0 0 1-1.5 1.5h-7.5a1.5 1.5 0 0 1-1.5-1.5V4.5h10.5Z" stroke="#ef4444" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-        <path d="M7.5 8.25v4.5M10.5 8.25v4.5" stroke="#ef4444" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+      <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M3 5h14M6.5 5V3.5a1.5 1.5 0 0 1 1.5-1.5h4a1.5 1.5 0 0 1 1.5 1.5V5M15 5v10.5a1.5 1.5 0 0 1-1.5 1.5h-7a1.5 1.5 0 0 1-1.5-1.5V5h10Z" stroke="#ef4444" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M8 9v5M12 9v5" stroke="#ef4444" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    `;
+  },
+  
+  /**
+   * Create mic icon for voice input
+   */
+  createMicIcon() {
+    return `
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="#9527F5" xmlns="http://www.w3.org/2000/svg">
+        <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/>
+        <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
       </svg>
     `;
   },
@@ -4819,25 +5528,9 @@ const ChatDialog = {
    * Create chat empty icon (professional purple)
    */
   createChatEmptyIcon() {
-    return `
-      <svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <!-- Background Circle -->
-        <circle cx="32" cy="32" r="30" fill="#f3e8ff" stroke="#9527F5" stroke-width="2"/>
-        
-        <!-- Chat Bubble -->
-        <path d="M32 16C22.059 16 14 22.925 14 31.5C14 35.635 15.785 39.44 18.667 42.385L14.879 48.879C14.585 49.464 14.585 50.166 14.879 50.754C15.17 51.339 15.791 51.702 16.451 51.702C16.67 51.702 16.889 51.657 17.099 51.564L24.371 48.133C26.735 48.7 29.281 49 32 49C41.941 49 50 43.075 50 34.5C50 25.925 41.941 16 32 16Z" fill="#9527F5"/>
-        
-        <!-- Message Dots -->
-        <circle cx="24" cy="34.5" r="2" fill="white"/>
-        <circle cx="32" cy="34.5" r="2" fill="white"/>
-        <circle cx="40" cy="34.5" r="2" fill="white"/>
-        
-        <!-- Decorative Elements -->
-        <circle cx="46" cy="20" r="3" fill="#D097FF" opacity="0.6"/>
-        <circle cx="18" cy="18" r="2" fill="#D097FF" opacity="0.4"/>
-        <circle cx="48" cy="46" r="2.5" fill="#D097FF" opacity="0.5"/>
-      </svg>
-    `;
+    // Use the actual logo PNG file
+    const iconUrl = chrome.runtime.getURL('logo_1-removebg.png');
+    return `<img src="${iconUrl}" alt="Cat with glasses" class="vocab-chat-empty-cat-icon">`;
   },
   
   /**
@@ -4854,11 +5547,11 @@ const ChatDialog = {
     style.id = styleId;
     style.textContent = `
       /* Global button underline prevention */
-      button, .vocab-btn, .vocab-chat-tab, .vocab-chat-focus-btn, .vocab-chat-send-btn, .vocab-chat-delete-conversation-btn, .vocab-chat-collapse-btn, .vocab-chat-simplify-more-btn, .vocab-chat-collapse-btn-small, .vocab-chat-delete-conversation-btn-small, .vocab-chat-focus-btn-top-right {
+      button, .vocab-btn, .vocab-chat-tab, .vocab-chat-focus-btn, .vocab-chat-send-btn, .vocab-chat-mic-btn, .vocab-chat-delete-conversation-btn, .vocab-chat-collapse-btn, .vocab-chat-simplify-more-btn, .vocab-chat-collapse-btn-small, .vocab-chat-delete-conversation-btn-small, .vocab-chat-focus-btn-top-right {
         text-decoration: none !important;
       }
       
-      button:hover, .vocab-btn:hover, .vocab-chat-tab:hover, .vocab-chat-focus-btn:hover, .vocab-chat-send-btn:hover, .vocab-chat-delete-conversation-btn:hover, .vocab-chat-collapse-btn:hover, .vocab-chat-simplify-more-btn:hover, .vocab-chat-collapse-btn-small:hover, .vocab-chat-delete-conversation-btn-small:hover, .vocab-chat-focus-btn-top-right:hover {
+      button:hover, .vocab-btn:hover, .vocab-chat-tab:hover, .vocab-chat-focus-btn:hover, .vocab-chat-send-btn:hover, .vocab-chat-mic-btn:hover, .vocab-chat-delete-conversation-btn:hover, .vocab-chat-collapse-btn:hover, .vocab-chat-simplify-more-btn:hover, .vocab-chat-collapse-btn-small:hover, .vocab-chat-delete-conversation-btn-small:hover, .vocab-chat-focus-btn-top-right:hover {
         text-decoration: none !important;
       }
       
@@ -5260,7 +5953,7 @@ const ChatDialog = {
       }
       
       .vocab-chat-simplify-more-btn:active:not(.disabled) {
-        transform: translateY(0);
+        transform: translateY(0) scale(0.95);
       }
       
       .vocab-chat-simplify-more-btn.disabled {
@@ -5321,9 +6014,49 @@ const ChatDialog = {
       }
       
       .vocab-chat-no-messages-content span {
-        font-size: 14px;
+        font-size: 16px;
         font-weight: 500;
         color: #9527F5;
+      }
+      
+      .vocab-chat-regional-lang-text {
+        font-size: 13px !important;
+        font-weight: 400 !important;
+        color: #9527F5 !important;
+        animation: pulse 2s ease-in-out infinite;
+        text-align: center;
+      }
+      
+      @keyframes pulse {
+        0%, 100% {
+          opacity: 0.6;
+          transform: scale(1);
+        }
+        50% {
+          opacity: 1;
+          transform: scale(1.05);
+        }
+      }
+      
+      /* Cat icon with breathing animation */
+      .vocab-chat-empty-cat-icon {
+        width: 80px;
+        height: 80px;
+        object-fit: contain;
+        animation: catBreathing 2s ease-in-out infinite;
+        display: block;
+        filter: brightness(1.1) saturate(1.4) hue-rotate(5deg);
+      }
+      
+      @keyframes catBreathing {
+        0%, 100% {
+          transform: scale(1);
+          filter: brightness(1.1) saturate(1.4) hue-rotate(5deg) drop-shadow(0 0 8px rgba(160, 32, 240, 0.4));
+        }
+        50% {
+          transform: scale(1.15);
+          filter: brightness(1.1) saturate(1.4) hue-rotate(5deg) drop-shadow(0 0 20px rgba(160, 32, 240, 0.8)) drop-shadow(0 0 30px rgba(160, 32, 240, 0.5));
+        }
       }
       
       /* Message Bubbles */
@@ -5534,6 +6267,314 @@ const ChatDialog = {
       }
       
       .vocab-chat-send-btn:active {
+        transform: translateY(0) scale(0.95);
+      }
+      
+      /* Mic Button - Voice Input */
+      .vocab-chat-mic-btn {
+        width: 44px;
+        height: 44px;
+        background: white;
+        border: 2px solid #9527F5;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        flex-shrink: 0;
+        text-decoration: none;
+      }
+      
+      .vocab-chat-mic-btn:hover {
+        background: #f0e6ff;
+        border-color: #7a1fd9;
+        transform: translateY(-1px);
+        text-decoration: none;
+      }
+      
+      .vocab-chat-mic-btn:active {
+        transform: translateY(0) scale(0.95);
+      }
+      
+      .vocab-chat-mic-btn.recording {
+        background: #9527F5;
+        border-color: #9527F5;
+        animation: recording-pulse 1s ease-in-out infinite;
+      }
+      
+      .vocab-chat-mic-btn.recording svg {
+        fill: white;
+      }
+      
+      .vocab-chat-mic-btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+      
+      @keyframes recording-pulse {
+        0%, 100% {
+          box-shadow: 0 0 0 0 rgba(149, 39, 245, 0.7);
+        }
+        50% {
+          box-shadow: 0 0 0 10px rgba(149, 39, 245, 0);
+        }
+      }
+      
+      /* Voice Loading Spinner */
+      .vocab-chat-voice-spinner {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 12px;
+        margin: 8px 0;
+        background: #f9fafb;
+        border-radius: 10px;
+      }
+      
+      .vocab-spinner-circle {
+        width: 20px;
+        height: 20px;
+        border: 2px solid #e5e7eb;
+        border-top-color: #9527F5;
+        border-radius: 50%;
+        animation: spin 0.6s linear infinite;
+      }
+      
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+      
+      .vocab-chat-voice-spinner span {
+        font-size: 14px;
+        color: #9527F5;
+        font-weight: 500;
+      }
+      
+      /* Microphone Permission Modal */
+      .vocab-mic-permission-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.6);
+        backdrop-filter: blur(4px);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 10000000;
+        animation: fadeIn 0.2s ease;
+      }
+      
+      @keyframes fadeIn {
+        from {
+          opacity: 0;
+        }
+        to {
+          opacity: 1;
+        }
+      }
+      
+      .vocab-mic-permission-modal {
+        background: white;
+        border-radius: 16px;
+        max-width: 480px;
+        width: 90%;
+        box-shadow: 0 20px 60px rgba(149, 39, 245, 0.3);
+        animation: slideUp 0.3s ease;
+        overflow: hidden;
+      }
+      
+      @keyframes slideUp {
+        from {
+          transform: translateY(20px);
+          opacity: 0;
+        }
+        to {
+          transform: translateY(0);
+          opacity: 1;
+        }
+      }
+      
+      .vocab-mic-permission-header {
+        text-align: center;
+        padding: 32px 24px 24px;
+        border-bottom: 1px solid #e5e7eb;
+      }
+      
+      .vocab-mic-permission-header svg {
+        margin-bottom: 16px;
+      }
+      
+      .vocab-mic-permission-header h2 {
+        font-size: 24px;
+        font-weight: 600;
+        color: #1f2937;
+        margin: 0 0 8px 0;
+      }
+      
+      .vocab-mic-permission-header p {
+        font-size: 14px;
+        color: #6b7280;
+        margin: 0;
+      }
+      
+      .vocab-mic-permission-body {
+        padding: 24px;
+      }
+      
+      .vocab-mic-permission-step {
+        display: flex;
+        gap: 16px;
+        margin-bottom: 20px;
+      }
+      
+      .vocab-mic-permission-step:last-of-type {
+        margin-bottom: 24px;
+      }
+      
+      .vocab-mic-step-number {
+        width: 32px;
+        height: 32px;
+        background: #f0e6ff;
+        color: #9527F5;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 600;
+        font-size: 14px;
+        flex-shrink: 0;
+      }
+      
+      .vocab-mic-step-content h3 {
+        font-size: 16px;
+        font-weight: 600;
+        color: #1f2937;
+        margin: 0 0 4px 0;
+      }
+      
+      .vocab-mic-step-content p {
+        font-size: 14px;
+        color: #6b7280;
+        margin: 0;
+        line-height: 1.5;
+      }
+      
+      .vocab-mic-permission-note {
+        background: #fef3c7;
+        border: 1px solid #fcd34d;
+        border-radius: 8px;
+        padding: 12px;
+        font-size: 13px;
+        color: #92400e;
+        line-height: 1.5;
+      }
+      
+      .vocab-mic-permission-note strong {
+        font-weight: 600;
+        color: #78350f;
+      }
+      
+      .vocab-mic-permission-visual-guide {
+        margin: 20px 0;
+      }
+      
+      .vocab-mic-address-bar-demo {
+        background: #f3f4f6;
+        border: 2px solid #d1d5db;
+        border-radius: 8px;
+        padding: 12px 16px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin: 0 auto;
+        max-width: 300px;
+      }
+      
+      .vocab-mic-lock-icon {
+        font-size: 20px;
+        animation: bounce 1s ease-in-out infinite;
+      }
+      
+      @keyframes bounce {
+        0%, 100% {
+          transform: translateY(0);
+        }
+        50% {
+          transform: translateY(-5px);
+        }
+      }
+      
+      .vocab-mic-url-demo {
+        font-size: 14px;
+        color: #374151;
+        font-weight: 500;
+      }
+      
+      .vocab-mic-permission-footer {
+        padding: 16px 24px;
+        background: #f9fafb;
+        display: flex;
+        gap: 12px;
+        justify-content: flex-end;
+        border-top: 1px solid #e5e7eb;
+      }
+      
+      .vocab-mic-permission-btn-secondary,
+      .vocab-mic-permission-btn-primary {
+        padding: 10px 20px;
+        border-radius: 8px;
+        font-size: 14px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        border: none;
+        outline: none;
+        font-family: inherit;
+      }
+      
+      .vocab-mic-permission-btn-secondary {
+        background: white;
+        color: #6b7280;
+        border: 1px solid #d1d5db;
+      }
+      
+      .vocab-mic-permission-btn-secondary:hover {
+        background: #f9fafb;
+        border-color: #9ca3af;
+      }
+      
+      .vocab-mic-permission-btn-primary {
+        background: #9527F5;
+        color: white;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        animation: buttonPulse 2s ease-in-out infinite;
+        box-shadow: 0 4px 12px rgba(149, 39, 245, 0.4);
+      }
+      
+      @keyframes buttonPulse {
+        0%, 100% {
+          box-shadow: 0 4px 12px rgba(149, 39, 245, 0.4);
+        }
+        50% {
+          box-shadow: 0 6px 20px rgba(149, 39, 245, 0.6);
+        }
+      }
+      
+      .vocab-mic-permission-btn-primary:hover {
+        background: #7a1fd9;
+        transform: translateY(-1px);
+        box-shadow: 0 6px 16px rgba(149, 39, 245, 0.5) !important;
+        animation: none;
+      }
+      
+      .vocab-mic-permission-btn-primary:active {
         transform: translateY(0) scale(0.95);
       }
       
@@ -5972,47 +7013,88 @@ const ChatDialog = {
         visibility: visible;
       }
 
-      /* Hide webpage icons when custom content modal is visible - exclude icons within the modal */
-      body.vocab-custom-content-modal-open .vocab-word-remove-explained-btn {
+      /* Context-aware blurring: Only blur main webpage icons when custom content modal is open */
+      body.vocab-custom-content-modal-open .vocab-text-icons-wrapper[data-icon-context="main-webpage"] {
+        filter: blur(8px) !important;
+        opacity: 0.3 !important;
+        pointer-events: none !important;
+        transition: filter 0.3s ease, opacity 0.3s ease;
+      }
+      
+      /* Ensure custom content modal icons remain visible and functional */
+      body.vocab-custom-content-modal-open .vocab-text-icons-wrapper[data-icon-context="custom-content-modal"] {
+        filter: none !important;
+        opacity: 1 !important;
+        pointer-events: auto !important;
+      }
+      
+      /* Hide main webpage individual buttons when custom content modal is open */
+      body.vocab-custom-content-modal-open .vocab-text-icons-wrapper[data-icon-context="main-webpage"] .vocab-word-remove-explained-btn,
+      body.vocab-custom-content-modal-open .vocab-text-icons-wrapper[data-icon-context="main-webpage"] .vocab-text-book-btn,
+      body.vocab-custom-content-modal-open .vocab-text-icons-wrapper[data-icon-context="main-webpage"] .vocab-text-remove-btn,
+      body.vocab-custom-content-modal-open .vocab-text-icons-wrapper[data-icon-context="main-webpage"] .vocab-text-chat-btn,
+      body.vocab-custom-content-modal-open .vocab-text-icons-wrapper[data-icon-context="main-webpage"] .vocab-text-remove-green-btn {
         opacity: 0 !important;
         visibility: hidden !important;
         pointer-events: none !important;
         transition: opacity 0.2s ease, visibility 0.2s ease;
       }
       
-      body.vocab-custom-content-modal-open .vocab-text-book-btn {
-        opacity: 0 !important;
-        visibility: hidden !important;
+      /* Ensure custom content modal individual buttons remain visible and functional */
+      body.vocab-custom-content-modal-open .vocab-text-icons-wrapper[data-icon-context="custom-content-modal"] .vocab-word-remove-explained-btn,
+      body.vocab-custom-content-modal-open .vocab-text-icons-wrapper[data-icon-context="custom-content-modal"] .vocab-text-book-btn,
+      body.vocab-custom-content-modal-open .vocab-text-icons-wrapper[data-icon-context="custom-content-modal"] .vocab-text-remove-btn,
+      body.vocab-custom-content-modal-open .vocab-text-icons-wrapper[data-icon-context="custom-content-modal"] .vocab-text-chat-btn,
+      body.vocab-custom-content-modal-open .vocab-text-icons-wrapper[data-icon-context="custom-content-modal"] .vocab-text-remove-green-btn {
+        opacity: 1 !important;
+        visibility: visible !important;
+        pointer-events: auto !important;
+      }
+
+      /* Blur icons wrapper when other modals are open (image, pdf, text, topics) */
+      body.vocab-image-modal-open .vocab-text-icons-wrapper,
+      body.vocab-pdf-modal-open .vocab-text-icons-wrapper,
+      body.vocab-text-modal-open .vocab-text-icons-wrapper,
+      body.vocab-topics-modal-open .vocab-text-icons-wrapper {
+        filter: blur(8px) !important;
+        opacity: 0.3 !important;
         pointer-events: none !important;
-        transition: opacity 0.2s ease, visibility 0.2s ease;
+        transition: filter 0.3s ease, opacity 0.3s ease;
       }
       
-      body.vocab-custom-content-modal-open .vocab-text-remove-btn {
-        opacity: 0 !important;
-        visibility: hidden !important;
-        pointer-events: none !important;
-        transition: opacity 0.2s ease, visibility 0.2s ease;
-      }
-      
-      body.vocab-custom-content-modal-open .vocab-text-chat-btn {
+      /* Hide individual buttons when other modals are open */
+      body.vocab-image-modal-open .vocab-word-remove-explained-btn,
+      body.vocab-image-modal-open .vocab-text-book-btn,
+      body.vocab-image-modal-open .vocab-text-remove-btn,
+      body.vocab-image-modal-open .vocab-text-chat-btn,
+      body.vocab-image-modal-open .vocab-text-remove-green-btn,
+      body.vocab-pdf-modal-open .vocab-word-remove-explained-btn,
+      body.vocab-pdf-modal-open .vocab-text-book-btn,
+      body.vocab-pdf-modal-open .vocab-text-remove-btn,
+      body.vocab-pdf-modal-open .vocab-text-chat-btn,
+      body.vocab-pdf-modal-open .vocab-text-remove-green-btn,
+      body.vocab-text-modal-open .vocab-word-remove-explained-btn,
+      body.vocab-text-modal-open .vocab-text-book-btn,
+      body.vocab-text-modal-open .vocab-text-remove-btn,
+      body.vocab-text-modal-open .vocab-text-chat-btn,
+      body.vocab-text-modal-open .vocab-text-remove-green-btn,
+      body.vocab-topics-modal-open .vocab-word-remove-explained-btn,
+      body.vocab-topics-modal-open .vocab-text-book-btn,
+      body.vocab-topics-modal-open .vocab-text-remove-btn,
+      body.vocab-topics-modal-open .vocab-text-chat-btn,
+      body.vocab-topics-modal-open .vocab-text-remove-green-btn {
         opacity: 0 !important;
         visibility: hidden !important;
         pointer-events: none !important;
         transition: opacity 0.2s ease, visibility 0.2s ease;
       }
 
-      /* Override with higher specificity: Ensure icons within the custom content modal remain visible and functional */
-      body.vocab-custom-content-modal-open .vocab-custom-content-overlay .vocab-word-remove-explained-btn,
-      body.vocab-custom-content-modal-open .vocab-custom-content-overlay .vocab-text-book-btn,
-      body.vocab-custom-content-modal-open .vocab-custom-content-overlay .vocab-text-remove-btn,
-      body.vocab-custom-content-modal-open .vocab-custom-content-overlay .vocab-text-chat-btn,
-      body.vocab-custom-content-modal-open .vocab-custom-content-overlay * .vocab-word-remove-explained-btn,
-      body.vocab-custom-content-modal-open .vocab-custom-content-overlay * .vocab-text-book-btn,
-      body.vocab-custom-content-modal-open .vocab-custom-content-overlay * .vocab-text-remove-btn,
-      body.vocab-custom-content-modal-open .vocab-custom-content-overlay * .vocab-text-chat-btn {
-        opacity: 1 !important;
-        visibility: visible !important;
-        pointer-events: auto !important;
+      /* Hide explained words cross icon when custom content modal is open (main webpage only) */
+      body.vocab-custom-content-modal-open .vocab-word-explained .vocab-word-remove-explained-btn {
+        opacity: 0 !important;
+        visibility: hidden !important;
+        pointer-events: none !important;
+        transition: opacity 0.2s ease, visibility 0.2s ease;
       }
 
       @keyframes overlayFadeIn {
@@ -6056,63 +7138,106 @@ const ChatDialog = {
         }
       }
 
-      /* Header Component */
-      .vocab-custom-content-header {
-        padding: var(--vocab-spacing-xl) var(--vocab-spacing-xxl);
-        margin: 0;
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        position: relative;
-        cursor: grab;
-        user-select: none;
-        background: #F4F0F5;
-        border-bottom: 0.5px solid rgba(162, 78, 255, 0.3);
-        border-radius: 20px 20px 0 0;
-        transition: none;
-      }
-
-      .vocab-custom-content-header:hover {
-        transform: none;
-        box-shadow: none;
-      }
-
-      .vocab-custom-content-header:active {
-        cursor: grabbing;
-        transform: none;
-      }
-
-      .vocab-custom-content-title {
-        font-size: 28px;
-        font-weight: 600;
-        color: #9F7BDB;
-        margin: 0;
+      /* Minimize Button Component */
+      .vocab-custom-content-minimize {
         position: absolute;
-        left: 50%;
-        transform: translateX(-50%);
-        text-shadow: none;
-        letter-spacing: -0.5px;
-        text-align: center;
-        width: calc(100% - 120px);
-        padding: 0 var(--vocab-spacing-lg);
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
+        top: 8px;
+        right: 8px;
+        width: 40px;
+        height: 40px;
+        border: none;
+        background: transparent;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        z-index: 1000;
+        color: #9F7BDB;
+      }
+
+      .vocab-custom-content-minimize:hover {
+        background: rgba(162, 78, 255, 0.1);
+        transform: scale(1.2);
+      }
+
+      .vocab-custom-content-minimize:active {
+        transform: scale(0.9);
+      }
+
+      /* Dragging state */
+      .vocab-custom-content-modal.dragging {
+        cursor: grabbing;
+        user-select: none;
+      }
+
+      .vocab-custom-content-modal.dragging * {
+        pointer-events: none;
+      }
+
+      .vocab-custom-content-modal.dragging .vocab-custom-content-minimize {
+        pointer-events: auto;
+      }
+
+      /* Palm cursor for draggable areas */
+      .vocab-custom-content-modal {
+        cursor: grab;
+      }
+
+      .vocab-custom-content-modal:active {
+        cursor: grabbing;
+      }
+
+      /* Ensure interactive elements don't show palm cursor */
+      .vocab-custom-content-modal input,
+      .vocab-custom-content-modal button,
+      .vocab-custom-content-modal textarea,
+      .vocab-custom-content-modal .vocab-custom-content-tab-arrow,
+      .vocab-custom-content-modal .vocab-custom-content-minimize,
+      .vocab-custom-content-modal .vocab-custom-content-editor-content {
+        cursor: default;
+      }
+
+      /* Resize handles should show proper resize cursors */
+      .vocab-custom-content-modal .vocab-custom-content-resize-handle-top,
+      .vocab-custom-content-modal .vocab-custom-content-resize-handle-bottom {
+        cursor: ns-resize !important;
+      }
+      
+      .vocab-custom-content-modal .vocab-custom-content-resize-handle-left,
+      .vocab-custom-content-modal .vocab-custom-content-resize-handle-right {
+        cursor: ew-resize !important;
+      }
+      
+      .vocab-custom-content-modal .vocab-custom-content-resize-handle-top-left {
+        cursor: nw-resize !important;
+      }
+      
+      .vocab-custom-content-modal .vocab-custom-content-resize-handle-top-right {
+        cursor: ne-resize !important;
+      }
+      
+      .vocab-custom-content-modal .vocab-custom-content-resize-handle-bottom-left {
+        cursor: sw-resize !important;
+      }
+      
+      .vocab-custom-content-modal .vocab-custom-content-resize-handle-bottom-right {
+        cursor: se-resize !important;
       }
 
       /* Tabs Component */
       .vocab-custom-content-tabs {
         display: flex;
         align-items: center;
-        padding: 0;
-        padding-top: 0;
-        padding-bottom: 0;
+        padding: calc(var(--vocab-spacing-lg) + 20px) var(--vocab-spacing-lg) 0 var(--vocab-spacing-lg);
         background: var(--vocab-background-white);
         border-bottom: none;
         min-height: 40px;
         position: relative;
-        margin: 0 var(--vocab-spacing-lg) 0 var(--vocab-spacing-lg);
+        margin: 0;
         margin-bottom: 0;
+        gap: 8px;
       }
 
       .vocab-custom-content-tabs::before {
@@ -6130,6 +7255,7 @@ const ChatDialog = {
         border: none;
         margin: 0;
         position: relative;
+        max-width: calc(100% - 80px);
       }
 
       .vocab-custom-content-tabs-container::-webkit-scrollbar {
@@ -6342,128 +7468,45 @@ const ChatDialog = {
 
       /* Add Tab Button */
       .vocab-custom-content-add-tab {
-        background: #9527F5;
+        background: rgba(162, 78, 255, 0.1);
         border: none;
-        color: white;
-        cursor: pointer;
+        color: #9527F5;
+        cursor: pointer !important;
         padding: var(--vocab-spacing-xs);
-        border-radius: 50%;
-        transition: all var(--vocab-transition-normal);
+        border-radius: 8px;
+        transition: background-color var(--vocab-transition-normal), transform 0.1s ease;
         display: flex;
         align-items: center;
         justify-content: center;
-        box-shadow: 0 2px 8px rgba(149, 39, 245, 0.3);
         min-width: 32px;
         height: 32px;
         flex-shrink: 0;
-        position: sticky;
-        right: 0;
+        position: relative;
         z-index: 10;
-        margin-left: auto;
         outline: none;
+        box-shadow: none;
       }
 
       .vocab-custom-content-add-tab:hover {
-        background: #7B1FD6;
-        color: white;
-        transform: scale(1.05);
-        box-shadow: 0 4px 12px rgba(149, 39, 245, 0.4);
+        background: rgba(162, 78, 255, 0.2);
+        color: #9527F5;
+        cursor: pointer;
       }
 
       .vocab-custom-content-add-tab:active {
+        background: rgba(162, 78, 255, 0.1);
+        color: #9527F5;
+        outline: none;
+        box-shadow: none;
         transform: scale(0.95);
+      }
+
+      .vocab-custom-content-add-tab:focus {
         outline: none;
-        border: none;
-        background: #6A1B9A;
-        box-shadow: 0 2px 6px rgba(149, 39, 245, 0.5);
-      }
-
-      /* Close Button Component */
-      .vocab-custom-content-close {
-        position: absolute;
-        right: var(--vocab-spacing-sm);
-        top: var(--vocab-spacing-sm);
-        background: transparent;
-        border: none;
-        color: var(--vocab-primary-color);
-        cursor: pointer;
-        padding: var(--vocab-spacing-sm);
-        border-radius: 10px;
-        transition: all var(--vocab-transition-normal);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        box-shadow: none;
-        width: 40px;
-        height: 40px;
-        z-index: 10;
-      }
-
-      .vocab-custom-content-close:hover {
-        background: rgba(162, 78, 255, 0.08);
-        border: none;
-        transform: scale(1.2);
-        box-shadow: none;
-        color: var(--vocab-primary-hover);
-      }
-
-      .vocab-custom-content-close:active {
-        transform: scale(1.1);
-      }
-
-      .vocab-custom-content-close svg {
-        stroke-width: 3;
-      }
-
-      /* Search Component */
-      .vocab-custom-content-search {
-        padding: var(--vocab-spacing-md) var(--vocab-spacing-xl);
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        background: var(--vocab-background-white);
-        position: relative;
-        margin-bottom: 0;
-      }
-
-      .vocab-custom-content-search::before {
-        display: none;
-      }
-
-      .vocab-custom-content-search-input {
-        width: 50%;
-        height: 28px;
-        padding: var(--vocab-spacing-xs) var(--vocab-spacing-md);
-        border: 1px solid rgba(162, 78, 255, 0.3);
-        border-radius: 20px;
-        font-size: 14px;
-        font-family: inherit;
-        outline: none;
-        transition: all var(--vocab-transition-normal);
-        background: var(--vocab-background-white);
-        box-shadow: none;
-        position: relative;
-        text-align: center;
-        color: #666666;
-      }
-
-      .vocab-custom-content-search-input::placeholder {
-        color: rgba(162, 78, 255, 0.5);
-        font-style: italic;
-        font-weight: 300;
-        text-align: center;
-      }
-
-      .vocab-custom-content-search-input:focus {
-        border: 1px solid rgba(162, 78, 255, 0.4);
-        box-shadow: 0 0 0 1px rgba(162, 78, 255, 0.4);
-        transform: none;
-      }
-
-      .vocab-custom-content-search-input:hover:not(:focus) {
-        border-color: rgba(162, 78, 255, 0.4);
         box-shadow: none;
       }
+
+
 
 
       /* Editor Component */
@@ -6493,37 +7536,49 @@ const ChatDialog = {
       /* Chat Icon */
       .vocab-custom-content-chat-icon {
         position: absolute;
-        bottom: 20px;
-        right: 20px;
-        width: 50px;
-        height: 50px;
+        bottom: 30px;
+        right: 35px;
+        width: 40px;
+        height: 40px;
         background: #9527F5;
         border: none;
         border-radius: 50%;
         display: flex;
         align-items: center;
         justify-content: center;
-        cursor: pointer;
-        box-shadow: 0 4px 12px rgba(149, 39, 245, 0.3);
+        cursor: pointer !important;
         transition: all 0.3s ease;
         z-index: 1000;
         pointer-events: auto;
+        outline: none;
+        box-shadow: 0 2px 8px rgba(149, 39, 245, 0.3);
       }
 
       .vocab-custom-content-chat-icon:hover {
-        background: #7a1fd9;
+        background: #7B1FA2;
         transform: scale(1.1);
-        box-shadow: 0 6px 16px rgba(149, 39, 245, 0.4);
+        cursor: pointer;
+        box-shadow: 0 4px 12px rgba(149, 39, 245, 0.4);
       }
 
       .vocab-custom-content-chat-icon:active {
         transform: scale(0.95);
+        background: #6A1B9A;
+      }
+
+      .vocab-custom-content-chat-icon:focus {
+        outline: none;
+      }
+
+      /* Remove focus outline for mouse clicks, keep for keyboard navigation */
+      .vocab-custom-content-chat-icon:focus:not(:focus-visible) {
+        outline: none;
       }
 
       .vocab-custom-content-chat-icon svg {
-        width: 24px;
-        height: 24px;
-        fill: white;
+        width: 48px;
+        height: 48px;
+        fill: #9527F5;
       }
 
       /* Scrollbar styling */
@@ -6548,7 +7603,7 @@ const ChatDialog = {
 
       /* Add extra padding when scrollbar is visible */
       .vocab-custom-content-editor.has-scrollbar .vocab-custom-content-editor-content {
-        padding: calc(var(--vocab-spacing-xl) + var(--vocab-spacing-md)) var(--vocab-spacing-xl) calc(var(--vocab-spacing-xl) + var(--vocab-spacing-md)) var(--vocab-spacing-xl);
+        padding: calc(var(--vocab-spacing-xl) + var(--vocab-spacing-md)) var(--vocab-spacing-xl) calc(var(--vocab-spacing-xl) + var(--vocab-spacing-md)) calc(var(--vocab-spacing-xl) + 40px); /* Extra 40px left padding for icons */
       }
 
       .vocab-custom-content-editor::before {
@@ -6560,13 +7615,14 @@ const ChatDialog = {
         color: var(--vocab-text-primary);
         font-size: 16px;
         border-radius: var(--vocab-border-radius-md);
-        overflow: auto;
+        overflow: visible;
         scrollbar-width: thin;
         scrollbar-color: var(--vocab-primary-color) var(--vocab-primary-lighter);
-        padding: var(--vocab-spacing-xl) var(--vocab-spacing-xl) var(--vocab-spacing-xl) var(--vocab-spacing-xl);
+        padding: var(--vocab-spacing-xl) var(--vocab-spacing-xl) var(--vocab-spacing-xl) calc(var(--vocab-spacing-xl) + 40px); /* Extra 40px left padding for icons */
         background: transparent;
         opacity: 1;
         transition: opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        position: relative; /* Enable absolute positioning for icons within editor */
       }
 
       .vocab-custom-content-editor-content.fade-out {
@@ -6591,6 +7647,162 @@ const ChatDialog = {
         background: #D8C1E8;
         border-radius: 4px;
         border: 2px solid var(--vocab-background-white);
+      }
+
+      /* Custom Content Info Banner */
+      .vocab-custom-content-info-banner {
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        background: white;
+        border: 1px solid #9527F5;
+        border-radius: 12px;
+        padding: 16px 20px;
+        box-shadow: 0 4px 12px rgba(149, 39, 245, 0.3);
+        z-index: 10000002;
+        max-width: 400px;
+        opacity: 0;
+        transform: translateX(400px);
+        transition: opacity 0.3s ease, transform 0.3s ease;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+        pointer-events: all;
+      }
+
+      .vocab-custom-content-info-banner.visible {
+        opacity: 1;
+        transform: translateX(0);
+      }
+
+      .vocab-custom-content-info-banner-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 12px;
+        gap: 12px;
+      }
+
+      .vocab-custom-content-info-banner-title {
+        font-size: 16px;
+        font-weight: 600;
+        color: #9527F5;
+        margin: 0;
+        flex: 1;
+      }
+
+      .vocab-custom-content-info-banner-close {
+        background: none;
+        border: none;
+        cursor: pointer;
+        padding: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #9527F5;
+        transition: opacity 0.2s ease, transform 0.1s ease;
+        opacity: 0.6;
+        flex-shrink: 0;
+      }
+
+      .vocab-custom-content-info-banner-close:hover {
+        opacity: 1;
+        transform: scale(1.1);
+      }
+
+      .vocab-custom-content-info-banner-close svg {
+        width: 16px;
+        height: 16px;
+      }
+
+      .vocab-custom-content-info-banner-content {
+        margin-bottom: 14px;
+      }
+
+      .vocab-custom-content-info-banner-list {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+      }
+
+      .vocab-custom-content-info-banner-list li {
+        margin-bottom: 10px;
+        padding-left: 20px;
+        position: relative;
+        color: #333;
+        font-size: 14px;
+        line-height: 1.5;
+        font-weight: 400;
+      }
+
+      .vocab-custom-content-info-banner-list li:last-child {
+        margin-bottom: 0;
+      }
+
+      .vocab-custom-content-info-banner-list li::before {
+        content: '•';
+        position: absolute;
+        left: 6px;
+        color: #9527F5;
+        font-weight: bold;
+        font-size: 16px;
+      }
+
+      .vocab-custom-content-info-banner-highlight {
+        background: rgba(149, 39, 245, 0.15);
+        padding: 2px 6px;
+        border-radius: 4px;
+        font-weight: 500;
+        color: #9527F5;
+      }
+
+      .vocab-custom-content-info-banner-footer {
+        display: flex;
+        justify-content: flex-end;
+        padding-top: 10px;
+        margin-top: 2px;
+      }
+
+      .vocab-custom-content-info-banner-dismiss-btn {
+        background: white;
+        color: #B8A3E8;
+        border: 2px solid #9527F5;
+        padding: 6px 14px;
+        border-radius: 8px;
+        font-size: 13px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        font-family: inherit;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        position: relative;
+        overflow: hidden;
+      }
+
+      .vocab-custom-content-info-banner-dismiss-btn::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: -100%;
+        width: 100%;
+        height: 100%;
+        background: linear-gradient(90deg, transparent, rgba(149, 39, 245, 0.1), transparent);
+        transition: left 0.5s ease;
+      }
+
+      .vocab-custom-content-info-banner-dismiss-btn:hover {
+        background: #9527F5;
+        color: white;
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(149, 39, 245, 0.3);
+      }
+
+      .vocab-custom-content-info-banner-dismiss-btn:hover::before {
+        left: 100%;
+      }
+
+      .vocab-custom-content-info-banner-dismiss-btn:active {
+        transform: translateY(0) scale(0.95);
       }
 
       .vocab-custom-content-editor-content::-webkit-scrollbar-thumb:hover {
@@ -6719,9 +7931,6 @@ const ChatDialog = {
           font-size: 20px;
         }
 
-        .vocab-custom-content-search {
-          padding: 15px 20px;
-        }
 
         .vocab-custom-content-editor {
           padding: 20px;
@@ -6744,9 +7953,6 @@ const ChatDialog = {
           font-size: 18px;
         }
 
-        .vocab-custom-content-search {
-          padding: 12px 15px;
-        }
 
         .vocab-custom-content-editor {
           padding: 15px;
@@ -6940,6 +8146,7 @@ const ChatDialog = {
       .vocab-custom-content-resize-handle-top-right:hover::before,
       .vocab-custom-content-resize-handle-bottom-left:hover::before,
       .vocab-custom-content-resize-handle-bottom-right:hover::before {
+        background: transparent !important;
         transform: translate(-50%, -50%) scale(1.1);
         box-shadow: none;
       }
@@ -6960,14 +8167,21 @@ const ChatDialog = {
       .vocab-custom-content-tab:focus,
       .vocab-custom-content-tab-arrow:focus,
       .vocab-custom-content-add-tab:focus,
-      .vocab-custom-content-close:focus {
+      .vocab-custom-content-close:focus,
+      .vocab-custom-content-chat-icon:focus {
         outline: 2px solid var(--vocab-primary-color);
         outline-offset: 2px;
       }
 
-      .vocab-custom-content-search-input:focus {
+      /* Remove focus outline for mouse clicks, keep for keyboard navigation */
+      .vocab-custom-content-add-tab:focus:not(:focus-visible) {
         outline: none;
       }
+
+      .vocab-custom-content-chat-icon:focus:not(:focus-visible) {
+        outline: none;
+      }
+
 
       /* High contrast mode support */
       @media (prefers-contrast: high) {
@@ -6986,8 +8200,7 @@ const ChatDialog = {
         .vocab-custom-content-tab,
         .vocab-custom-content-tab-arrow,
         .vocab-custom-content-add-tab,
-        .vocab-custom-content-close,
-        .vocab-custom-content-search-input {
+        .vocab-custom-content-close {
           transition: none;
           animation: none;
         }
@@ -7053,11 +8266,16 @@ const ButtonPanel = {
   
   // State variables for button visibility and enabled states
   state: {
-    showRemoveMeanings: false,    // Controls visibility of "Remove meanings" button
-    showDeselectAll: false,        // Controls visibility of "Deselect all" button
     isMagicMeaningEnabled: false,  // Controls enabled/disabled state of "Magic meaning" button
     showAsk: false,                // Controls visibility of "Ask" button
     showVerticalGroup: false       // Controls visibility of vertical button group
+  },
+
+  // API completion tracking
+  apiCompletionState: {
+    simplifyCompleted: true,
+    wordsExplanationCompleted: true,
+    shouldTrack: false  // Only track when magic meaning is clicked
   },
 
   /**
@@ -7104,11 +8322,19 @@ const ButtonPanel = {
         const constrainedLeft = Math.max(constraints.minX, Math.min(constraints.maxX, savedPosition.left));
         const constrainedTop = Math.max(constraints.minY, Math.min(constraints.maxY, savedPosition.top));
         
+        // Check if saved position is valid (not off-screen on the right)
+        // If left position is too far right, reset to default left position
+        if (constrainedLeft > window.innerWidth / 2) {
+          console.log('[ButtonPanel] Saved position appears to be from right-side config, resetting...');
+          await PositionManager.clearPosition();
+          return; // Let CSS handle default positioning
+        }
+        
         // Apply the position
         this.panelContainer.style.left = `${constrainedLeft}px`;
         this.panelContainer.style.top = `${constrainedTop}px`;
         this.panelContainer.style.right = 'auto';
-        this.panelContainer.style.transform = 'none';
+        this.panelContainer.style.transform = 'translateY(-50%)';
         
         console.log('[ButtonPanel] Applied saved position:', { left: constrainedLeft, top: constrainedTop });
       }
@@ -7172,26 +8398,11 @@ const ButtonPanel = {
     const mainButtonGroup = document.createElement('div');
     mainButtonGroup.className = 'vocab-button-group-main';
 
-    // Create upper button group (Remove all meanings, Deselect all)
+    // Create upper button group (Remove all meanings)
     this.upperButtonGroup = document.createElement('div');
     this.upperButtonGroup.className = 'vocab-button-group-upper';
 
-    const upperButtons = [
-      {
-        id: 'remove-all-meanings',
-        className: 'vocab-btn vocab-btn-outline-green hidden',
-        icon: this.createTrashIcon('green'),
-        text: 'Remove meanings',
-        type: 'outline-green'
-      },
-      {
-        id: 'deselect-all',
-        className: 'vocab-btn vocab-btn-outline-purple hidden',
-        icon: this.createTrashIcon('purple'),
-        text: 'Deselect all',
-        type: 'outline-purple'
-      }
-    ];
+    const upperButtons = [];
 
     upperButtons.forEach(btnConfig => {
       const button = this.createButton(btnConfig);
@@ -7204,13 +8415,6 @@ const ButtonPanel = {
 
     const lowerButtons = [
       {
-        id: 'magic-meaning',
-        className: 'vocab-btn vocab-btn-solid-purple',
-        icon: this.createSparkleIcon(),
-        text: 'Magic meaning',
-        type: 'solid-purple'
-      },
-      {
         id: 'ask',
         className: 'vocab-btn vocab-btn-solid-purple',
         icon: this.createChatIcon(),
@@ -7218,10 +8422,17 @@ const ButtonPanel = {
         type: 'solid-purple'
       },
       {
-        id: 'custom-content',
+        id: 'magic-meaning',
         className: 'vocab-btn vocab-btn-solid-purple',
-        icon: this.createContentIcon(),
-        text: 'Custom content',
+        icon: this.createSparkleIcon(),
+        text: 'Magic meaning',
+        type: 'solid-purple'
+      },
+      {
+        id: 'import-content',
+        className: 'vocab-btn vocab-btn-solid-purple',
+        icon: this.createUploadIcon(),
+        text: 'Import content',
         type: 'solid-purple'
       }
     ];
@@ -7281,15 +8492,15 @@ const ButtonPanel = {
   createPanIcon() {
     return `
       <svg width="20" height="16" viewBox="0 0 20 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <circle cx="6" cy="4" r="1.5" fill="#9527F5"/>
-        <circle cx="10" cy="4" r="1.5" fill="#9527F5"/>
-        <circle cx="14" cy="4" r="1.5" fill="#9527F5"/>
-        <circle cx="6" cy="8" r="1.5" fill="#9527F5"/>
-        <circle cx="10" cy="8" r="1.5" fill="#9527F5"/>
-        <circle cx="14" cy="8" r="1.5" fill="#9527F5"/>
-        <circle cx="6" cy="12" r="1.5" fill="#9527F5"/>
-        <circle cx="10" cy="12" r="1.5" fill="#9527F5"/>
-        <circle cx="14" cy="12" r="1.5" fill="#9527F5"/>
+        <circle cx="6" cy="4" r="1.5" fill="#d4b5f5"/>
+        <circle cx="10" cy="4" r="1.5" fill="#d4b5f5"/>
+        <circle cx="14" cy="4" r="1.5" fill="#d4b5f5"/>
+        <circle cx="6" cy="8" r="1.5" fill="#d4b5f5"/>
+        <circle cx="10" cy="8" r="1.5" fill="#d4b5f5"/>
+        <circle cx="14" cy="8" r="1.5" fill="#d4b5f5"/>
+        <circle cx="6" cy="12" r="1.5" fill="#d4b5f5"/>
+        <circle cx="10" cy="12" r="1.5" fill="#d4b5f5"/>
+        <circle cx="14" cy="12" r="1.5" fill="#d4b5f5"/>
       </svg>
     `;
   },
@@ -7329,6 +8540,7 @@ const ButtonPanel = {
     const group = document.createElement('div');
     group.className = 'vocab-vertical-button-group';
     group.id = 'vocab-vertical-button-group';
+    group.style.pointerEvents = 'none'; // Initially not interactive
 
     // Create PDF button
     const pdfButton = document.createElement('button');
@@ -7336,7 +8548,6 @@ const ButtonPanel = {
     pdfButton.id = 'vocab-pdf-btn';
     pdfButton.innerHTML = `
       <div class="vocab-vertical-btn-icon">${this.createPDFIcon()}</div>
-      <div class="vocab-vertical-btn-text">PDF</div>
     `;
 
     // Create Image button
@@ -7345,7 +8556,6 @@ const ButtonPanel = {
     imageButton.id = 'vocab-image-btn';
     imageButton.innerHTML = `
       <div class="vocab-vertical-btn-icon">${this.createImageIcon()}</div>
-      <div class="vocab-vertical-btn-text">Image</div>
     `;
 
     // Create Topics button
@@ -7354,7 +8564,6 @@ const ButtonPanel = {
     topicsButton.id = 'vocab-topics-btn';
     topicsButton.innerHTML = `
       <div class="vocab-vertical-btn-icon">${this.createTopicsIcon()}</div>
-      <div class="vocab-vertical-btn-text">Topics</div>
     `;
 
     // Create Text button
@@ -7363,7 +8572,6 @@ const ButtonPanel = {
     textButton.id = 'vocab-text-btn';
     textButton.innerHTML = `
       <div class="vocab-vertical-btn-icon">${this.createTextIcon()}</div>
-      <div class="vocab-vertical-btn-text">Text</div>
     `;
 
     // Append buttons to group
@@ -7381,13 +8589,11 @@ const ButtonPanel = {
    * @returns {string} SVG markup
    */
   createTrashIcon(color) {
-    const strokeColor = color === 'green' ? '#22c55e' : '#9527F5';
+    const strokeColor = color === 'green' ? '#16a34a' : '#9527F5';
     return `
-      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M2 4h12M5.333 4V2.667a1.333 1.333 0 0 1 1.334-1.334h2.666a1.333 1.333 0 0 1 1.334 1.334V4m2 0v9.333a1.333 1.333 0 0 1-1.334 1.334H4.667a1.333 1.333 0 0 1-1.334-1.334V4h9.334Z" stroke="${strokeColor}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-        <path d="M6.667 7.333v4M9.333 7.333v4" stroke="${strokeColor}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-        <circle cx="12" cy="4" r="2" fill="white"/>
-        <path d="M10.5 3l1 1m0 0l1 1m-1-1l1-1m-1 1l-1 1" stroke="${strokeColor}" stroke-width="1.2" stroke-linecap="round"/>
+      <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M3 5h14M6.5 5V3.5a1.5 1.5 0 0 1 1.5-1.5h4a1.5 1.5 0 0 1 1.5 1.5V5M15 5v10.5a1.5 1.5 0 0 1-1.5 1.5h-7a1.5 1.5 0 0 1-1.5-1.5V5h10Z" stroke="${strokeColor}" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M8 9v5M12 9v5" stroke="${strokeColor}" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
       </svg>
     `;
   },
@@ -7407,16 +8613,57 @@ const ButtonPanel = {
   },
 
   /**
-   * Create chat bubble icon SVG (solid white)
+   * Create chat bubble icon SVG - Purple wireframe chatbot agent
    * @returns {string} SVG markup
    */
   createChatIcon() {
     return `
-      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M8 1C4.134 1 1 3.91 1 7.5C1 9.09 1.59 10.56 2.586 11.707L1.293 14.293C1.195 14.488 1.195 14.722 1.293 14.918C1.39 15.113 1.597 15.234 1.817 15.234C1.89 15.234 1.963 15.219 2.033 15.188L5.457 13.711C6.245 13.9 7.107 14 8 14C11.866 14 15 11.09 15 7.5C15 3.91 11.866 1 8 1Z" fill="white"/>
-        <circle cx="5" cy="7.5" r="1" fill="#9527F5"/>
-        <circle cx="8" cy="7.5" r="1" fill="#9527F5"/>
-        <circle cx="11" cy="7.5" r="1" fill="#9527F5"/>
+      <svg width="16" height="16" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect x="4" y="4" width="12" height="10" rx="2" stroke="#9527F5" stroke-width="2" fill="none"/>
+        <line x1="10" y1="2" x2="10" y2="4" stroke="#9527F5" stroke-width="2" stroke-linecap="round"/>
+        <circle cx="10" cy="1.5" r="0.8" fill="#9527F5"/>
+        <circle cx="7.5" cy="8.5" r="1.2" fill="#9527F5"/>
+        <circle cx="12.5" cy="8.5" r="1.2" fill="#9527F5"/>
+        <path d="M7 11C7.5 11.8 8.5 12.5 10 12.5C11.5 12.5 12.5 11.8 13 11" stroke="#9527F5" stroke-width="2" stroke-linecap="round" fill="none"/>
+        <path d="M10 14L10 16.5L8 15" stroke="#9527F5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    `;
+  },
+
+  /**
+   * Create upload icon SVG - Purple wireframe
+   * @returns {string} SVG markup
+   */
+  createUploadIcon() {
+    return `
+      <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M10 14V6M10 6L7 9M10 6L13 9" stroke="#9527F5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M4 14V16C4 17.1046 4.89543 18 6 18H14C15.1046 18 16 17.1046 16 16V14" stroke="#9527F5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    `;
+  },
+
+  /**
+   * Create processing spinner icon SVG
+   * @returns {string} SVG markup
+   */
+  createProcessingSpinner() {
+    return `
+      <svg class="vocab-processing-spinner" width="28" height="28" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="14" cy="14" r="10" stroke="white" stroke-width="3" stroke-opacity="0.3" fill="none"/>
+        <path d="M14 4 A10 10 0 0 1 24 14" stroke="white" stroke-width="3" stroke-linecap="round" fill="none"/>
+      </svg>
+    `;
+  },
+
+  /**
+   * Create success check icon SVG
+   * @returns {string} SVG markup
+   */
+  createSuccessCheckIcon() {
+    return `
+      <svg width="28" height="28" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M6 14L11 19L22 8" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
       </svg>
     `;
   },
@@ -7427,10 +8674,10 @@ const ButtonPanel = {
    */
   createContentIcon() {
     return `
-      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M3 2C3 1.448 3.448 1 4 1H12C12.552 1 13 1.448 13 2V14C13 14.552 12.552 15 12 15H4C3.448 15 3 14.552 3 14V2Z" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-        <path d="M5 5H11M5 7H11M5 9H9" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-        <path d="M6 12H10" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+      <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="5" cy="10" r="1.5" fill="#9527F5"/>
+        <circle cx="10" cy="10" r="1.5" fill="#9527F5"/>
+        <circle cx="15" cy="10" r="1.5" fill="#9527F5"/>
       </svg>
     `;
   },
@@ -7441,12 +8688,16 @@ const ButtonPanel = {
    */
   createPDFIcon() {
     return `
-      <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M4 2C4 1.448 4.448 1 5 1H12L16 5V18C16 18.552 15.552 19 15 19H5C4.448 19 4 18.552 4 18V2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-        <path d="M12 1V5H16" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-        <path d="M6 8H14M6 10H12M6 12H10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-        <path d="M10 15L10 13M10 13L8 15M10 13L12 15" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-        <path d="M10 13L10 11" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      <svg width="36" height="36" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <!-- Document body with folded corner -->
+        <path d="M5 2C4.44772 2 4 2.44772 4 3V21C4 21.5523 4.44772 22 5 22H19C19.5523 22 20 21.5523 20 21V8L14 2H5Z" fill="#9527F5"/>
+        <!-- Folded corner -->
+        <path d="M14 2V7C14 7.55228 14.4477 8 15 8H20L14 2Z" fill="#7c1fd9"/>
+        <!-- PDF text -->
+        <text x="6" y="14" font-family="Arial, sans-serif" font-size="7" font-weight="900" letter-spacing="0.5" fill="white">PDF</text>
+        <!-- Upload arrow -->
+        <path d="M17 16V20" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M15 18L17 16L19 18" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
       </svg>
     `;
   },
@@ -7457,12 +8708,15 @@ const ButtonPanel = {
    */
   createImageIcon() {
     return `
-      <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M3 4C3 3.448 3.448 3 4 3H16C16.552 3 17 3.448 17 4V16C17 16.552 16.552 17 16 17H4C3.448 17 3 16.552 3 16V4Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-        <path d="M7 8L10 11L13 8L17 12V16H3V12L7 8Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-        <circle cx="7" cy="8" r="1.5" fill="currentColor"/>
-        <path d="M10 15L10 13M10 13L8 15M10 13L12 15" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-        <path d="M10 13L10 11" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      <svg width="36" height="36" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <!-- Purple rounded rectangle background -->
+        <rect x="2" y="4" width="20" height="16" rx="4" fill="#9527F5"/>
+        <!-- Purple border frame with rounded corners -->
+        <rect x="2" y="4" width="20" height="16" rx="4" stroke="#9527F5" stroke-width="2" fill="none"/>
+        <!-- White mountain range with two V-shaped peaks -->
+        <path d="M2 18L6 10L10 14L14 8L18 12L22 18V20C22 20.5523 21.5523 21 21 21H3C2.44772 21 2 20.5523 2 20V18Z" fill="white"/>
+        <!-- White sun/circle in top right -->
+        <circle cx="18" cy="8" r="2" fill="white"/>
       </svg>
     `;
   },
@@ -7473,16 +8727,8 @@ const ButtonPanel = {
    */
   createTopicsIcon() {
     return `
-      <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M3 3H7V7H3V3Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-        <path d="M10 3H14V7H10V3Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-        <path d="M17 3H21V7H17V3Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-        <path d="M3 10H7V14H3V10Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-        <path d="M10 10H14V14H10V10Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-        <path d="M17 10H21V14H17V10Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-        <path d="M3 17H7V21H3V17Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-        <path d="M10 17H14V21H10V17Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-        <path d="M17 17H21V21H17V17Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      <svg width="36" height="36" viewBox="0 0 28 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <text x="3" y="18" font-family="Arial, sans-serif" font-size="20" font-weight="900" fill="#9527F5">W</text>
       </svg>
     `;
   },
@@ -7493,13 +8739,187 @@ const ButtonPanel = {
    */
   createTextIcon() {
     return `
-      <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M3 4C3 3.448 3.448 3 4 3H16C16.552 3 17 3.448 17 4V16C17 16.552 16.552 17 16 17H4C3.448 17 3 16.552 3 16V4Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-        <path d="M6 7H14M6 9H12M6 11H10M6 13H14" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-        <path d="M10 15L10 13M10 13L8 15M10 13L12 15" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-        <path d="M10 13L10 11" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      <svg width="36" height="36" viewBox="0 0 32 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <text x="2" y="16" font-family="Arial, sans-serif" font-size="14" font-weight="900" fill="#9527F5">Txt</text>
       </svg>
     `;
+  },
+
+  /**
+   * Check if success banner should be shown
+   * @returns {Promise<boolean>}
+   */
+  async shouldShowSuccessBanner() {
+    try {
+      const result = await chrome.storage.local.get(['dontShowSuccessBanner']);
+      return !result.dontShowSuccessBanner; // Show if not set or false
+    } catch (error) {
+      console.error('[ButtonPanel] Error checking success banner preference:', error);
+      return true; // Default to showing
+    }
+  },
+
+  /**
+   * Set success banner preference
+   * @param {boolean} dontShow - Whether to hide banner in future
+   */
+  async setSuccessBannerPreference(dontShow) {
+    try {
+      await chrome.storage.local.set({ dontShowSuccessBanner: dontShow });
+      console.log('[ButtonPanel] Success banner preference saved:', dontShow);
+    } catch (error) {
+      console.error('[ButtonPanel] Error saving success banner preference:', error);
+    }
+  },
+
+  /**
+   * Show success banner after API completion
+   */
+  async showSuccessBanner() {
+    // Check if user has opted out
+    const shouldShow = await this.shouldShowSuccessBanner();
+    if (!shouldShow) {
+      console.log('[ButtonPanel] Success banner hidden by user preference');
+      return;
+    }
+
+    // Create banner element
+    const banner = document.createElement('div');
+    banner.className = 'vocab-success-banner';
+    banner.innerHTML = `
+      <div class="vocab-success-banner-header">
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="10" cy="10" r="9" stroke="#22c55e" stroke-width="2" fill="none"/>
+          <path d="M6 10L9 13L14 8" stroke="#22c55e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <span class="vocab-success-banner-text">Your contextual explanations are ready</span>
+      </div>
+      <div class="vocab-success-banner-footer">
+        <button class="vocab-success-banner-dismiss" title="Don't show again">Don't show again</button>
+      </div>
+    `;
+
+    // Add to body
+    document.body.appendChild(banner);
+
+    // Add dismiss handler
+    const dismissBtn = banner.querySelector('.vocab-success-banner-dismiss');
+    dismissBtn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      await this.setSuccessBannerPreference(true);
+      banner.classList.add('hiding');
+      setTimeout(() => banner.remove(), 300);
+    });
+
+    // Show banner with animation
+    requestAnimationFrame(() => {
+      banner.classList.add('visible');
+    });
+
+    // Auto-hide after 4 seconds
+    setTimeout(() => {
+      banner.classList.add('hiding');
+      setTimeout(() => banner.remove(), 300);
+    }, 4000);
+  },
+
+  /**
+   * Update magic meaning button to show processing state
+   */
+  setMagicMeaningProcessing() {
+    const magicBtn = document.getElementById('magic-meaning');
+    if (magicBtn) {
+      const iconSpan = magicBtn.querySelector('.vocab-btn-icon');
+      if (iconSpan) {
+        iconSpan.innerHTML = this.createProcessingSpinner();
+      }
+      magicBtn.classList.add('processing');
+      magicBtn.disabled = true;
+      
+      // Remove any existing tooltips when state changes
+      this.removeAllTooltips();
+    }
+  },
+
+  /**
+   * Update magic meaning button to show success state
+   */
+  setMagicMeaningSuccess() {
+    const magicBtn = document.getElementById('magic-meaning');
+    if (magicBtn) {
+      const iconSpan = magicBtn.querySelector('.vocab-btn-icon');
+      if (iconSpan) {
+        iconSpan.innerHTML = this.createSuccessCheckIcon();
+      }
+      magicBtn.classList.remove('processing');
+      magicBtn.classList.add('success');
+      // Keep button disabled during success animation
+      magicBtn.disabled = true;
+      
+      // Remove any existing tooltips when state changes
+      this.removeAllTooltips();
+    }
+  },
+
+  /**
+   * Reset magic meaning button to its proper state based on selections
+   */
+  resetMagicMeaningButton() {
+    const magicBtn = document.getElementById('magic-meaning');
+    if (magicBtn) {
+      const iconSpan = magicBtn.querySelector('.vocab-btn-icon');
+      if (iconSpan) {
+        iconSpan.innerHTML = this.createSparkleIcon();
+      }
+      magicBtn.classList.remove('processing', 'success');
+      
+      // Remove any existing tooltips when state changes
+      this.removeAllTooltips();
+      
+      // Update button state based on current selections
+      // This will enable the button if there are new selections, or disable it if there aren't
+      this.updateButtonStatesFromSelections();
+    }
+  },
+
+  /**
+   * Remove all tooltips from the page
+   */
+  removeAllTooltips() {
+    const tooltips = document.querySelectorAll('.vocab-btn-tooltip');
+    tooltips.forEach(tooltip => {
+      tooltip.classList.remove('visible');
+      tooltip.remove();
+    });
+  },
+
+  /**
+   * Check if all APIs have completed
+   */
+  checkAPICompletion() {
+    if (!this.apiCompletionState.shouldTrack) {
+      return;
+    }
+
+    console.log('[ButtonPanel] Checking API completion:', this.apiCompletionState);
+
+    if (this.apiCompletionState.simplifyCompleted && this.apiCompletionState.wordsExplanationCompleted) {
+      console.log('[ButtonPanel] All APIs completed!');
+      
+      // Stop tracking
+      this.apiCompletionState.shouldTrack = false;
+
+      // Show success state
+      this.setMagicMeaningSuccess();
+
+      // Show success banner
+      this.showSuccessBanner();
+
+      // Reset button after 2 seconds
+      setTimeout(() => {
+        this.resetMagicMeaningButton();
+      }, 2000);
+    }
   },
 
   /**
@@ -7519,9 +8939,9 @@ const ButtonPanel = {
       /* Main Panel Container */
       .vocab-helper-panel {
         position: fixed;
-        right: 0;
+        left: 0;
         top: 50%;
-        transform: translateY(-50%) translateX(100%);
+        transform: translateY(-50%) translateX(-100%);
         z-index: 999999;
         font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
         transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
@@ -7533,13 +8953,16 @@ const ButtonPanel = {
         transform: translateY(-50%) translateX(0);
       }
 
-      /* Wrapper Container - Invisible container for button group + pan button */
+      /* Wrapper Container - Unified container for button group + drag handle */
       .vocab-wrapper-container {
         display: flex;
         flex-direction: column;
         align-items: center;
         gap: 0;
         overflow: visible !important;
+        border-radius: 100px;
+        box-shadow: 0 4px 20px rgba(149, 39, 245, 0.3), 0 2px 8px rgba(149, 39, 245, 0.2);
+        background: transparent;
       }
 
       /* Main Button Group with Purple Shadow */
@@ -7548,10 +8971,11 @@ const ButtonPanel = {
         flex-direction: column;
         gap: 0;
         background: white;
-        padding: 6px 6px 6px 6px;
-        border-radius: 16px;
-        box-shadow: 0 4px 20px rgba(149, 39, 245, 0.3), 0 2px 8px rgba(149, 39, 245, 0.2);
+        padding: 0;
+        border-radius: 100px 100px 0 0;
+        box-shadow: none;
         border: 1px solid rgba(149, 39, 245, 0.1);
+        border-bottom: none;
         overflow: visible !important;
       }
 
@@ -7559,7 +8983,7 @@ const ButtonPanel = {
       .vocab-button-group-upper {
         display: flex;
         flex-direction: column;
-        gap: 6px;
+        gap: 0;
         max-height: 0;
         overflow: hidden;
         opacity: 0;
@@ -7567,23 +8991,27 @@ const ButtonPanel = {
         transform-origin: top;
         transition: max-height 0.3s ease, opacity 0.3s ease, transform 0.3s ease, margin 0.3s ease, padding 0.3s ease;
         margin-bottom: 0;
-        padding-top: 0;
+        padding: 0;
+        background: transparent;
       }
       
       .vocab-button-group-upper.visible {
         max-height: 200px;
         opacity: 1;
         transform: scaleY(1);
-        margin-bottom: 6px;
-        padding-top: 0;
+        margin-bottom: 0;
+        padding: 0;
       }
 
       /* Lower Button Group (no additional styling) */
       .vocab-button-group-lower {
         display: flex;
         flex-direction: column;
-        gap: 6px;
-        padding-top: 0;
+        gap: 0;
+        padding: 0;
+        transition: gap 0.3s ease;
+        overflow: visible;
+        background: transparent;
       }
 
       /* Drag Handle Styles - Semi-circular (bottom half rounded) */
@@ -7591,20 +9019,16 @@ const ButtonPanel = {
         display: flex;
         justify-content: center;
         align-items: center;
-        padding: 6px 16px 8px 16px;
+        padding: 8px 6px 10px 6px;
         cursor: grab;
         user-select: none;
-        border-radius: 0 0 20px 20px;
+        border-radius: 0 0 100px 100px;
         background: white;
-        width: fit-content;
-        margin-top: -1px;
-        box-shadow: 
-          2px 4px 4px rgba(149, 39, 245, 0.15),
-          -2px 4px 4px rgba(149, 39, 245, 0.15),
-          0 4px 3px rgba(149, 39, 245, 0.12);
+        width: calc(46px);
+        margin-top: 0;
+        box-shadow: none;
         border: 1px solid rgba(149, 39, 245, 0.1);
         border-top: none;
-        clip-path: inset(0px -10px -10px -10px);
       }
 
       .vocab-drag-handle:hover {
@@ -7621,72 +9045,123 @@ const ButtonPanel = {
         display: block;
       }
 
-      /* Base Button Styles */
+      /* Base Button Styles - Icon Only */
       .vocab-btn {
-        display: grid;
-        grid-template-columns: 20px 1fr;
+        display: flex;
         align-items: center;
+        justify-content: center;
         gap: 6px;
-        padding: 8px 10px;
-        border-radius: 10px;
+        padding: 12px;
+        border-radius: 50%;
         font-size: 11.5px;
         font-weight: 500;
-        border: 2px solid;
+        border: none;
         cursor: pointer;
-        transition: all 0.2s ease, opacity 0.3s ease, transform 0.3s ease, max-height 0.3s ease;
+        transition: background 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
         outline: none;
-        width: 100px;
+        width: 46px;
+        height: 46px;
         max-height: 100px;
         overflow: hidden;
         opacity: 1;
-        transform: scaleY(1);
-        transform-origin: top;
-        min-height: 32px;
         text-decoration: none;
+        margin: 6px;
+        flex-shrink: 0;
+      }
+      
+      /* Disable transitions during animations to prevent conflicts */
+      .vocab-btn.showing,
+      .vocab-btn.hiding {
+        transition: none !important;
       }
       
       .vocab-btn.hidden {
         display: none !important;
-        max-height: 0;
-        opacity: 0;
-        transform: scaleY(0);
-        padding: 0;
-        margin: 0;
-        border: none;
-        pointer-events: none;
+      }
+      
+      /* Animation classes for smooth transitions */
+      .vocab-btn.hiding {
+        animation: buttonSlideOutRight 0.35s cubic-bezier(0.6, 0, 0.4, 1) forwards;
+        pointer-events: none !important;
+      }
+
+      @keyframes buttonSlideOutRight {
+        0% {
+          opacity: 1;
+          transform: translateX(0) scale(1);
+          max-height: 100px;
+          margin-top: 0;
+          margin-bottom: 0;
+        }
+        100% {
+          opacity: 0;
+          transform: translateX(-120px) scale(0.8);
+          max-height: 0;
+          margin-top: 0;
+          margin-bottom: 0;
+          padding-top: 0;
+          padding-bottom: 0;
+        }
+      }
+      
+      .vocab-btn.showing {
+        animation: buttonSlideInRight 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+      }
+
+      @keyframes buttonSlideInRight {
+        0% {
+          opacity: 0;
+          transform: translateX(-120px) scale(0.8);
+          max-height: 0;
+          margin-top: 0;
+          margin-bottom: 0;
+          padding: 0;
+        }
+        60% {
+          opacity: 1;
+        }
+        100% {
+          opacity: 1;
+          transform: translateX(0) scale(1);
+          max-height: 100px;
+          margin-top: 0;
+          margin-bottom: 0;
+          padding: 12px;
+        }
       }
 
       .vocab-btn:active:not(.hidden) {
-        transform: scale(0.98) !important;
+        transform: scale(0.95) !important;
       }
 
       /* Button Icon */
       .vocab-btn-icon {
         display: flex;
         align-items: center;
-        justify-content: flex-start;
-        width: 20px;
-        height: 20px;
+        justify-content: center;
+        width: 22px;
+        height: 22px;
+      }
+      
+      .vocab-btn-icon svg {
+        width: 22px;
+        height: 22px;
       }
 
       .vocab-btn-text {
-        text-align: left;
-        line-height: 1.2;
-        word-wrap: break-word;
-        white-space: normal;
+        display: none !important;
       }
 
-      /* Green Outline Button */
+      /* Green Outline Button - Remove Meanings */
       .vocab-btn-outline-green {
-        background: white;
-        border-color: #22c55e;
-        color: #22c55e;
+        background: #d1fae5 !important;
+        border: none !important;
+        color: #16a34a;
       }
 
       .vocab-btn-outline-green:hover {
-        background: #f0fdf4;
-        border-color: #16a34a;
-        color: #16a34a;
+        background: #a7f3d0 !important;
+        color: #15803d;
         text-decoration: none;
       }
 
@@ -7711,10 +9186,85 @@ const ButtonPanel = {
         color: white;
       }
 
-      .vocab-btn-solid-purple:hover {
+      .vocab-btn-solid-purple:hover:not(.disabled) {
         background: #7a1fd9;
         border-color: #7a1fd9;
         text-decoration: none;
+      }
+
+      /* Import Content Button - Light Purple BG with Upload Icon */
+      #import-content {
+        background: #ede5ff !important;
+        border: none !important;
+      }
+
+      #import-content:hover {
+        background: #ddc8ff !important;
+      }
+      
+      /* Ask Anything Button - Light Purple BG with Purple Wireframe Icon */
+      #ask {
+        background: #ede5ff !important;
+        border: none !important;
+        padding: 8px 12px !important;
+      }
+
+      #ask:hover:not(.disabled) {
+        background: #ddc8ff !important;
+      }
+
+      /* Magic Meaning Button - VIBGYOROYGBIV Flowing Gradient when enabled */
+      #magic-meaning:not(.disabled) {
+        background: linear-gradient(
+          90deg,
+          #9400D3 0%,   /* Violet */
+          #4B0082 6.25%, /* Indigo */
+          #0000FF 12.5%, /* Blue */
+          #00FF00 18.75%, /* Green */
+          #FFFF00 25%,   /* Yellow */
+          #FF7F00 31.25%, /* Orange */
+          #FF0000 37.5%, /* Red */
+          #FF7F00 43.75%, /* Orange (reverse) */
+          #FFFF00 50%,   /* Yellow (reverse) */
+          #00FF00 56.25%, /* Green (reverse) */
+          #0000FF 62.5%, /* Blue (reverse) */
+          #4B0082 68.75%, /* Indigo (reverse) */
+          #9400D3 75%,   /* Violet (reverse) */
+          #4B0082 81.25%, /* Indigo (forward again) */
+          #0000FF 87.5%, /* Blue (forward again) */
+          #00FF00 93.75%, /* Green (forward again) */
+          #9400D3 100%   /* Violet (seamless loop) */
+        );
+        background-size: 800% 100%;
+        border-color: #9400D3;
+        animation: vibgyoroygbivFlow 4s linear infinite, vocab-magic-ready 2s ease-in-out infinite;
+        position: relative;
+        overflow: hidden;
+        isolation: isolate;
+      }
+      
+      #magic-meaning:hover:not(.disabled) {
+        animation: vibgyoroygbivFlow 2.5s linear infinite, vocab-magic-ready 1.5s ease-in-out infinite;
+      }
+
+      @keyframes vibgyoroygbivFlow {
+        0% {
+          background-position: 0% 50%;
+        }
+        100% {
+          background-position: 87.5% 50%;
+        }
+      }
+
+      @keyframes vocab-magic-ready {
+        0%, 100% {
+          transform: scale(1);
+          box-shadow: 0 2px 8px rgba(149, 39, 245, 0.3);
+        }
+        50% {
+          transform: scale(1.05);
+          box-shadow: 0 4px 16px rgba(149, 39, 245, 0.5), 0 0 20px rgba(149, 39, 245, 0.3);
+        }
       }
 
       /* Disabled Button State */
@@ -7794,7 +9344,7 @@ const ButtonPanel = {
         content: '';
         position: absolute;
         top: 100%;
-        right: 20px;
+        left: 20px;
         border: 6px solid transparent;
         border-top-color: white;
         filter: drop-shadow(0 2px 3px rgba(167, 139, 250, 0.2));
@@ -7808,7 +9358,7 @@ const ButtonPanel = {
       /* Responsive adjustments */
       @media (max-width: 768px) {
         .vocab-helper-panel {
-          right: 0;
+          left: 0;
         }
 
         .vocab-button-group-main {
@@ -7816,25 +9366,28 @@ const ButtonPanel = {
         }
 
         .vocab-btn {
-          width: 90px;
-          padding: 6px 8px;
-          font-size: 11px;
-          grid-template-columns: 16px 1fr;
-          gap: 4px;
+          width: 40px;
+          height: 40px;
+          padding: 10px;
         }
 
         .vocab-btn-icon {
-          width: 16px;
-          height: 16px;
+          width: 18px;
+          height: 18px;
+        }
+        
+        .vocab-btn-icon svg {
+          width: 18px;
+          height: 18px;
         }
       }
 
       /* Vertical Button Group Styles */
       .vocab-vertical-button-group {
         position: absolute;
-        right: 100%;
+        left: 100%;
         top: 50%;
-        transform: translateY(-50%) translateX(12px) translateY(23px);
+        transform: translateY(-50%) translateX(4px);
         display: flex;
         flex-direction: column;
         gap: 6px;
@@ -7844,15 +9397,17 @@ const ButtonPanel = {
         box-shadow: none;
         opacity: 0;
         visibility: hidden;
+        pointer-events: none;
         transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         z-index: 1000000;
-        min-width: 120px;
+        min-width: auto;
       }
 
       .vocab-vertical-button-group.visible {
         opacity: 1;
         visibility: visible;
-        transform: translateY(-50%) translateX(16px) translateY(23px);
+        pointer-events: auto;
+        transform: translateY(-50%) translateX(8px);
       }
 
 
@@ -7860,72 +9415,78 @@ const ButtonPanel = {
         display: flex;
         flex-direction: row;
         align-items: center;
-        justify-content: flex-start;
-        padding: 8px 12px;
+        justify-content: center;
+        padding: 4px;
         background: white;
-        border: 2px solid #A24EFF;
-        border-radius: 16px;
-        color: #A24EFF;
+        border: 2px solid #9527F5;
+        border-radius: 12px;
+        color: #9527F5;
         font-size: 12px;
         font-weight: 700;
         cursor: pointer;
         transition: all 0.2s ease;
-        min-height: 40px;
-        width: 90px;
-        gap: 8px;
+        width: 44px;
+        height: 44px;
       }
 
       .vocab-vertical-btn:hover {
-        background: white;
-        transform: scale(1.05);
-        box-shadow: 0 2px 8px rgba(162, 78, 255, 0.2);
+        background: #ede5ff;
+        border-color: #7c1fd9;
       }
 
       .vocab-vertical-btn:active {
-        transform: scale(1.02);
-        box-shadow: 0 1px 4px rgba(162, 78, 255, 0.3);
+        background: #ddc8ff;
+        border-color: #7c1fd9;
+        transform: scale(0.95);
       }
 
       .vocab-vertical-btn-icon {
-        width: 16px;
-        height: 16px;
+        width: 36px;
+        height: 36px;
         display: flex;
         align-items: center;
         justify-content: center;
         flex-shrink: 0;
       }
+      
+      .vocab-vertical-btn-icon svg {
+        width: 36px;
+        height: 36px;
+      }
 
       .vocab-vertical-btn-text {
-        font-size: 12px;
-        font-weight: 700;
-        text-align: left;
-        line-height: 1.2;
-        flex: 1;
+        display: none;
       }
 
 
       /* Responsive adjustments for vertical button group */
       @media (max-width: 768px) {
         .vocab-vertical-button-group {
-          right: 100%;
-          transform: translateY(-50%) translateX(-15px);
+          left: 100%;
+          transform: translateY(-50%) translateX(12px);
           padding: 0;
-          min-width: 100px;
+          gap: 4px;
+          flex-direction: column;
+        }
+
+        .vocab-vertical-button-group.visible {
+          transform: translateY(-50%) translateX(15px);
         }
 
         .vocab-vertical-btn {
-          padding: 6px 8px;
-          min-height: 36px;
-          font-size: 11px;
+          padding: 3px;
+          width: 36px;
+          height: 36px;
         }
 
         .vocab-vertical-btn-icon {
-          width: 14px;
-          height: 14px;
+          width: 30px;
+          height: 30px;
         }
-
-        .vocab-vertical-btn-text {
-          font-size: 10px;
+        
+        .vocab-vertical-btn-icon svg {
+          width: 30px;
+          height: 30px;
         }
       }
 
@@ -8219,7 +9780,7 @@ const ButtonPanel = {
         align-items: center;
         justify-content: center;
         border-radius: 50%;
-        transition: background-color 0.2s ease;
+        transition: background-color 0.2s ease, transform 0.2s ease;
       }
 
       .vocab-topics-tag-remove:hover {
@@ -8297,11 +9858,15 @@ const ButtonPanel = {
         display: flex;
         align-items: center;
         justify-content: center;
-        transition: background-color 0.2s ease;
+        transition: background-color 0.2s ease, transform 0.2s ease;
       }
 
       .vocab-topics-word-count-btn:hover {
         background-color: rgba(155, 110, 218, 0.1);
+      }
+
+      .vocab-topics-word-count-btn:active {
+        transform: scale(0.95);
       }
 
       .vocab-topics-word-count-btn.selected {
@@ -8348,11 +9913,15 @@ const ButtonPanel = {
         display: flex;
         align-items: center;
         justify-content: center;
-        transition: background-color 0.2s ease;
+        transition: background-color 0.2s ease, transform 0.2s ease;
       }
 
       .vocab-topics-difficulty-btn:hover {
         background-color: rgba(155, 110, 218, 0.1);
+      }
+
+      .vocab-topics-difficulty-btn:active {
+        transform: scale(0.95);
       }
 
       .vocab-topics-difficulty-btn.easy {
@@ -8681,6 +10250,7 @@ const ButtonPanel = {
 
       .vocab-image-upload-browse-btn:active {
         background: #7A5BC7;
+        transform: scale(0.95);
       }
 
       /* Responsive Design */
@@ -8987,6 +10557,7 @@ const ButtonPanel = {
 
       .vocab-pdf-upload-browse-btn:active {
         background: #7A5BC7;
+        transform: scale(0.95);
       }
 
       /* Responsive styles for PDF upload modal */
@@ -9189,6 +10760,11 @@ const ButtonPanel = {
         display: flex;
         justify-content: center;
         padding: 20px 40px;
+        transition: opacity 0.3s ease, max-height 0.3s ease;
+      }
+
+      .vocab-text-input-search.hidden {
+        display: none;
       }
 
       .vocab-text-input-search-input {
@@ -9213,11 +10789,17 @@ const ButtonPanel = {
         flex: 1;
         display: flex;
         flex-direction: column;
+        transition: padding 0.3s ease;
+      }
+
+      .vocab-text-input-content.empty {
+        padding-bottom: 40px;
       }
 
       .vocab-text-input-textarea {
         width: 100%;
         min-height: 200px;
+        max-height: 400px;
         padding: 20px;
         border: 1px solid #D1B3FF;
         border-radius: 20px;
@@ -9228,6 +10810,9 @@ const ButtonPanel = {
         outline: none;
         transition: border-color 0.2s ease;
         box-sizing: border-box;
+        overflow-y: auto;
+        white-space: pre-wrap;
+        word-wrap: break-word;
       }
 
       .vocab-text-input-textarea:focus {
@@ -9236,6 +10821,39 @@ const ButtonPanel = {
 
       .vocab-text-input-textarea::placeholder {
         color: #999;
+      }
+
+      .vocab-text-input-textarea:empty:before {
+        content: attr(data-placeholder);
+        color: #999;
+        pointer-events: none;
+      }
+
+      .vocab-text-input-textarea .vocab-search-highlight {
+        background: linear-gradient(120deg, #FFE066 0%, #FFD700 100%);
+        padding: 2px 4px;
+        border-radius: 4px;
+        font-weight: 600;
+        box-shadow: 0 2px 4px rgba(255, 224, 102, 0.3);
+      }
+
+      /* Custom scrollbar for textarea */
+      .vocab-text-input-textarea::-webkit-scrollbar {
+        width: 8px;
+      }
+
+      .vocab-text-input-textarea::-webkit-scrollbar-track {
+        background: #f1f1f1;
+        border-radius: 4px;
+      }
+
+      .vocab-text-input-textarea::-webkit-scrollbar-thumb {
+        background: #D1B3FF;
+        border-radius: 4px;
+      }
+
+      .vocab-text-input-textarea::-webkit-scrollbar-thumb:hover {
+        background: #A24EFF;
       }
 
       .vocab-text-input-textarea-container {
@@ -9256,6 +10874,10 @@ const ButtonPanel = {
         align-self: center;
         margin: 10px 0 20px 0;
         min-width: 120px;
+      }
+
+      .vocab-text-input-proceed-btn.hidden {
+        display: none;
       }
 
       .vocab-text-input-proceed-btn:hover {
@@ -9299,6 +10921,7 @@ const ButtonPanel = {
 
         .vocab-text-input-textarea {
           min-height: 150px;
+          max-height: 300px;
           font-size: 15px;
         }
 
@@ -9343,6 +10966,7 @@ const ButtonPanel = {
 
         .vocab-text-input-textarea {
           min-height: 120px;
+          max-height: 250px;
           font-size: 14px;
         }
 
@@ -9352,6 +10976,142 @@ const ButtonPanel = {
           margin: 10px 0 15px 0;
         }
       }
+
+      /* ===================================
+         Success Banner Styles
+         =================================== */
+      .vocab-success-banner {
+        position: fixed;
+        top: 20px;
+        right: -350px;
+        background: white;
+        border: 2px solid #22c55e;
+        border-radius: 12px;
+        padding: 16px 20px 12px 20px;
+        box-shadow: 0 4px 12px rgba(34, 197, 94, 0.2);
+        z-index: 2147483647;
+        opacity: 0;
+        transition: opacity 0.4s ease, right 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+        pointer-events: all;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        min-width: 300px;
+      }
+
+      .vocab-success-banner.visible {
+        opacity: 1;
+        right: 20px;
+      }
+
+      .vocab-success-banner.hiding {
+        opacity: 0;
+        right: -350px;
+        transition: opacity 0.3s ease, right 0.4s cubic-bezier(0.6, 0, 0.4, 1);
+      }
+
+      .vocab-success-banner-header {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+
+      .vocab-success-banner-text {
+        font-family: 'Inter', 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        font-size: 14px;
+        font-weight: 500;
+        color: #16a34a;
+      }
+
+      .vocab-success-banner-footer {
+        display: flex;
+        justify-content: flex-end;
+        align-items: center;
+      }
+
+      .vocab-success-banner-dismiss {
+        background: transparent;
+        border: 1px solid #22c55e;
+        color: #16a34a;
+        padding: 4px 12px;
+        border-radius: 6px;
+        font-size: 11px;
+        font-family: 'Inter', 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        white-space: nowrap;
+      }
+
+      .vocab-success-banner-dismiss:hover {
+        background: #22c55e;
+        color: white;
+      }
+
+      /* ===================================
+         Processing Spinner Animation
+         =================================== */
+      .vocab-processing-spinner {
+        animation: vocab-spin 1s linear infinite;
+      }
+
+      @keyframes vocab-spin {
+        0% {
+          transform: rotate(0deg);
+        }
+        100% {
+          transform: rotate(360deg);
+        }
+      }
+
+      /* ===================================
+         Magic Meaning Button States
+         =================================== */
+      .vocab-btn.processing {
+        pointer-events: none;
+        opacity: 1;
+      }
+
+      .vocab-btn.success {
+        background: #22c55e !important;
+        border-color: #22c55e !important;
+      }
+
+      .vocab-btn.success:hover {
+        background: #16a34a !important;
+        border-color: #16a34a !important;
+      }
+
+      /* Magic Meaning Button - Ready/Enabled State Animation */
+      #magic-meaning:not(.disabled):not(.processing):not(.success) {
+        position: relative;
+        overflow: hidden;
+        isolation: isolate;
+      }
+
+      /* Attention-grabbing animation when button becomes enabled */
+      #magic-meaning.just-enabled {
+        animation: vocab-magic-attention 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+      }
+
+      @keyframes vocab-magic-attention {
+        0% {
+          transform: scale(1);
+        }
+        30% {
+          transform: scale(1.15);
+        }
+        50% {
+          transform: scale(0.95);
+        }
+        70% {
+          transform: scale(1.05);
+        }
+        100% {
+          transform: scale(1);
+        }
+      }
+
+
     `;
 
     document.head.appendChild(style);
@@ -9362,24 +11122,10 @@ const ButtonPanel = {
    */
   attachEventListeners() {
     const buttons = {
-      removeAllMeanings: document.getElementById('remove-all-meanings'),
-      deselectAll: document.getElementById('deselect-all'),
       magicMeaning: document.getElementById('magic-meaning'),
       ask: document.getElementById('ask'),
-      customContent: document.getElementById('custom-content')
+      importContent: document.getElementById('import-content')
     };
-
-    // Remove all meanings button
-    buttons.removeAllMeanings?.addEventListener('click', () => {
-      console.log('Remove all meanings clicked');
-      this.handleRemoveAllMeanings();
-    });
-
-    // Deselect all button
-    buttons.deselectAll?.addEventListener('click', () => {
-      console.log('Deselect all clicked');
-      this.handleDeselectAll();
-    });
 
     // Magic meaning button
     buttons.magicMeaning?.addEventListener('click', (e) => {
@@ -9403,30 +11149,11 @@ const ButtonPanel = {
       this.handleAsk();
     });
 
-    // Custom content button
-    buttons.customContent?.addEventListener('click', (e) => {
-      console.log('Custom content clicked');
+    // Import content button
+    buttons.importContent?.addEventListener('click', (e) => {
+      e.stopPropagation(); // Prevent event from bubbling up
+      console.log('Import content clicked');
       this.toggleVerticalButtonGroup();
-    });
-
-    // Add hover events for custom content button
-    buttons.customContent?.addEventListener('mouseenter', () => {
-      this.showVerticalButtonGroup();
-    });
-
-    buttons.customContent?.addEventListener('mouseleave', () => {
-      // Only hide if not hovering over the vertical group
-      setTimeout(() => {
-        if (!this.verticalButtonGroup?.matches(':hover')) {
-          this.hideVerticalButtonGroup();
-        }
-      }, 100);
-    });
-
-    // Add hover events for vertical button group
-    // Hide buttons when moving away from the group
-    this.verticalButtonGroup?.addEventListener('mouseleave', () => {
-      this.hideVerticalButtonGroup();
     });
 
     // Add event listeners for vertical button group buttons
@@ -9461,7 +11188,13 @@ const ButtonPanel = {
       this.handleTextButton();
     });
 
+    // Prevent clicks inside vertical button group from closing it
+    this.verticalButtonGroup?.addEventListener('click', (e) => {
+      e.stopPropagation();
+    });
+
     // Add tooltip event listeners
+    
     if (buttons.magicMeaning) {
       console.log('[ButtonPanel] Attaching tooltip to Magic meaning button');
       this.attachTooltipListeners(buttons.magicMeaning, 'magic-meaning');
@@ -9475,6 +11208,60 @@ const ButtonPanel = {
     } else {
       console.warn('[ButtonPanel] Ask button not found');
     }
+    
+    if (buttons.importContent) {
+      console.log('[ButtonPanel] Attaching tooltip to Import content button');
+      this.attachTooltipListeners(buttons.importContent, 'import-content');
+    } else {
+      console.warn('[ButtonPanel] Import content button not found');
+    }
+
+    // Attach tooltips to vertical button group buttons
+    const pdfBtnForTooltip = document.getElementById('vocab-pdf-btn');
+    const imageBtnForTooltip = document.getElementById('vocab-image-btn');
+    const topicsBtnForTooltip = document.getElementById('vocab-topics-btn');
+    const textBtnForTooltip = document.getElementById('vocab-text-btn');
+
+    if (pdfBtnForTooltip) {
+      console.log('[ButtonPanel] Attaching tooltip to PDF button');
+      this.attachTooltipListeners(pdfBtnForTooltip, 'pdf-upload');
+    } else {
+      console.warn('[ButtonPanel] PDF button not found for tooltip');
+    }
+
+    if (imageBtnForTooltip) {
+      console.log('[ButtonPanel] Attaching tooltip to Image button');
+      this.attachTooltipListeners(imageBtnForTooltip, 'image-upload');
+    } else {
+      console.warn('[ButtonPanel] Image button not found for tooltip');
+    }
+
+    if (topicsBtnForTooltip) {
+      console.log('[ButtonPanel] Attaching tooltip to Topics button');
+      this.attachTooltipListeners(topicsBtnForTooltip, 'topics-input');
+    } else {
+      console.warn('[ButtonPanel] Topics button not found for tooltip');
+    }
+
+    if (textBtnForTooltip) {
+      console.log('[ButtonPanel] Attaching tooltip to Text button');
+      this.attachTooltipListeners(textBtnForTooltip, 'text-input');
+    } else {
+      console.warn('[ButtonPanel] Text button not found for tooltip');
+    }
+
+    // Close vertical button group when clicking outside
+    document.addEventListener('click', (e) => {
+      if (this.verticalButtonGroup && this.verticalButtonGroup.classList.contains('visible')) {
+        // Check if click is outside both the import content button and the vertical group
+        const clickedInsideButton = buttons.importContent?.contains(e.target);
+        const clickedInsideGroup = this.verticalButtonGroup?.contains(e.target);
+        
+        if (!clickedInsideButton && !clickedInsideGroup) {
+          this.hideVerticalButtonGroup();
+        }
+      }
+    });
   },
 
   /**
@@ -9497,6 +11284,9 @@ const ButtonPanel = {
       console.log(`[ButtonPanel] Button element:`, button);
       console.log(`[ButtonPanel] Button classes:`, button.className);
       
+      // Clean up any existing tooltips first
+      this.removeAllTooltips();
+      
       const isDisabled = button.classList.contains('disabled');
       console.log(`[ButtonPanel] Is disabled: ${isDisabled}`);
       
@@ -9506,7 +11296,7 @@ const ButtonPanel = {
       if (buttonType === 'magic-meaning') {
         message = isDisabled 
           ? 'Select words or passages first' 
-          : 'Get meanings and explanations';
+          : 'Get contextual explanations';
         console.log(`[ButtonPanel] Magic-meaning button message: "${message}"`);
       } else if (buttonType === 'ask') {
         if (isDisabled) {
@@ -9523,6 +11313,21 @@ const ButtonPanel = {
           message = 'Ask anything about the selected content';
         }
         console.log(`[ButtonPanel] Ask button message: "${message}" (textCount: ${TextSelector.selectedTexts.size})`);
+      } else if (buttonType === 'import-content') {
+        message = 'Import content';
+        console.log(`[ButtonPanel] Import-content button message: "${message}"`);
+      } else if (buttonType === 'pdf-upload') {
+        message = 'Upload PDF containing text';
+        console.log(`[ButtonPanel] PDF-upload button message: "${message}"`);
+      } else if (buttonType === 'image-upload') {
+        message = 'Upload image containing text';
+        console.log(`[ButtonPanel] Image-upload button message: "${message}"`);
+      } else if (buttonType === 'topics-input') {
+        message = 'Keywords or topics which you want to study on';
+        console.log(`[ButtonPanel] Topics-input button message: "${message}"`);
+      } else if (buttonType === 'text-input') {
+        message = 'Copy content from elsewhere and paste here';
+        console.log(`[ButtonPanel] Text-input button message: "${message}"`);
       }
 
       console.log(`[ButtonPanel] Final tooltip message: "${message}" (disabled: ${isDisabled})`);
@@ -9536,13 +11341,12 @@ const ButtonPanel = {
       document.body.appendChild(tooltip);
       console.log(`[ButtonPanel] Tooltip appended to body`);
       
-      // Position tooltip relative to button (top-left)
+      // Position tooltip relative to button (top-right since panel is on left)
       const buttonRect = button.getBoundingClientRect();
       tooltip.style.position = 'fixed';
       tooltip.style.top = (buttonRect.top - 50) + 'px';
-      // Position tooltip to the left of the button, accounting for tooltip width
-      const tooltipWidth = 200; // Approximate tooltip width
-      tooltip.style.left = (buttonRect.left - tooltipWidth - 10) + 'px';
+      // Position tooltip to the right of the button
+      tooltip.style.left = (buttonRect.right + 10) + 'px';
       tooltip.style.zIndex = '9999999';
       console.log(`[ButtonPanel] Tooltip positioned at:`, tooltip.style.top, tooltip.style.left);
       console.log(`[ButtonPanel] Button rect:`, buttonRect);
@@ -9582,6 +11386,19 @@ const ButtonPanel = {
         console.log(`[ButtonPanel] No tooltip to remove`);
       }
     });
+
+    button.addEventListener('click', () => {
+      console.log(`[ButtonPanel] Click on ${buttonType} button - hiding tooltip`);
+      if (tooltip) {
+        console.log(`[ButtonPanel] Hiding tooltip on click...`);
+        tooltip.classList.remove('visible');
+        setTimeout(() => {
+          console.log(`[ButtonPanel] Tooltip removed from DOM on click`);
+          tooltip.remove();
+          tooltip = null;
+        }, 200);
+      }
+    });
   },
 
   /**
@@ -9600,189 +11417,6 @@ const ButtonPanel = {
     return tooltip;
   },
 
-  /**
-   * Handler for Remove all meanings button
-   */
-  handleRemoveAllMeanings() {
-    console.log('[ButtonPanel] Remove all meanings clicked');
-    
-    // Get current context
-    const context = this.getCurrentContentContext();
-    console.log('[ButtonPanel] Current context:', context);
-    
-    // Get all asked texts, simplified texts, and explained words
-    const askedTextsMap = TextSelector.askedTexts;
-    const simplifiedTextsMap = TextSelector.simplifiedTexts;
-    const explainedWordsMap = WordSelector.explainedWords;
-    
-    // Filter items to only those in current context
-    const contextAskedTexts = Array.from(askedTextsMap.keys()).filter(textKey => 
-      this.isTextKeyInCurrentContext(textKey, context)
-    );
-    const contextSimplifiedTexts = Array.from(simplifiedTextsMap.keys()).filter(textKey => 
-      this.isTextKeyInCurrentContext(textKey, context)
-    );
-    const contextExplainedWords = Array.from(explainedWordsMap.keys()).filter(word => 
-      this.isWordInCurrentContext(word, context)
-    );
-    
-    if (contextAskedTexts.length === 0 && contextSimplifiedTexts.length === 0 && contextExplainedWords.length === 0) {
-      console.warn('[ButtonPanel] No meanings to remove in current context');
-      return;
-    }
-    
-    console.log(`[ButtonPanel] Removing meanings from ${context.type}:`, {
-      askedTexts: contextAskedTexts.length,
-      simplifiedTexts: contextSimplifiedTexts.length,
-      explainedWords: contextExplainedWords.length
-    });
-    
-    // Process asked texts in current context
-    if (contextAskedTexts.length > 0) {
-      console.log(`[ButtonPanel] Removing ${contextAskedTexts.length} asked texts from current context`);
-      
-      contextAskedTexts.forEach(textKey => {
-        const askedData = askedTextsMap.get(textKey);
-        
-        if (askedData && askedData.highlight) {
-          const highlight = askedData.highlight;
-          
-          // Remove the chat icon button (green)
-          const chatBtn = highlight.querySelector('.vocab-text-chat-btn');
-          if (chatBtn) {
-            chatBtn.remove();
-          }
-          
-          // Remove the highlight wrapper completely
-          const parent = highlight.parentNode;
-          if (parent) {
-            // Move all child nodes out of the highlight wrapper
-            while (highlight.firstChild) {
-              parent.insertBefore(highlight.firstChild, highlight);
-            }
-            // Remove the empty highlight wrapper
-            highlight.remove();
-          }
-        }
-        
-        // Remove from askedTexts Map
-        askedTextsMap.delete(textKey);
-        
-        // Also remove from textToHighlights Map
-        TextSelector.textToHighlights.delete(textKey);
-      });
-    }
-    
-    // Process simplified texts in current context
-    if (contextSimplifiedTexts.length > 0) {
-      console.log(`[ButtonPanel] Removing ${contextSimplifiedTexts.length} simplified texts from current context`);
-      
-      contextSimplifiedTexts.forEach(textKey => {
-        const highlight = TextSelector.textToHighlights.get(textKey);
-        
-        if (highlight) {
-          // Remove the book icon button
-          const bookBtn = highlight.querySelector('.vocab-text-book-btn');
-          if (bookBtn) {
-            bookBtn.remove();
-          }
-          
-          // Remove the simplified class (green underline)
-          highlight.classList.remove('vocab-text-simplified');
-          
-          // Remove the highlight wrapper completely
-          const parent = highlight.parentNode;
-          if (parent) {
-            // Move all child nodes out of the highlight wrapper
-            while (highlight.firstChild) {
-              parent.insertBefore(highlight.firstChild, highlight);
-            }
-            // Remove the empty highlight wrapper
-            highlight.remove();
-          }
-        }
-        
-        // Remove from simplifiedTexts Map
-        simplifiedTextsMap.delete(textKey);
-        
-        // Also remove from textToHighlights Map
-        TextSelector.textToHighlights.delete(textKey);
-        
-        // Also remove from textPositions Map
-        TextSelector.textPositions.delete(textKey);
-      });
-    }
-    
-    // Process explained words in current context
-    if (contextExplainedWords.length > 0) {
-      console.log(`[ButtonPanel] Removing ${contextExplainedWords.length} explained words from current context`);
-      
-      contextExplainedWords.forEach(word => {
-        const normalizedWord = word.toLowerCase().trim();
-        const wordData = explainedWordsMap.get(word);
-        
-        console.log(`[ButtonPanel] Removing explained word: "${word}" (normalized: "${normalizedWord}")`);
-        
-        if (wordData && wordData.highlights) {
-          // Filter highlights to only those in current context
-          const contextHighlights = Array.from(wordData.highlights).filter(highlight => {
-            if (context.type === 'main-page') {
-              // For main page, check if highlight is in main document
-              return highlight.closest('.vocab-custom-content-modal') === null;
-            } else {
-              // For custom content, check if highlight is in current tab
-              const activeContentElement = this.topicsModal.customContentModal.modal.querySelector('.vocab-custom-content-editor-content');
-              return activeContentElement && activeContentElement.contains(highlight);
-            }
-          });
-          
-          // Remove only context-specific highlights
-          contextHighlights.forEach(highlight => {
-            // Remove the green explained class
-            highlight.classList.remove('vocab-word-explained');
-            
-            // Remove data attributes
-            highlight.removeAttribute('data-meaning');
-            highlight.removeAttribute('data-examples');
-            highlight.removeAttribute('data-popup-id');
-            
-            // Remove the highlight wrapper completely
-            const parent = highlight.parentNode;
-            if (parent) {
-              // Move all child nodes out of the highlight wrapper
-              while (highlight.firstChild) {
-                parent.insertBefore(highlight.firstChild, highlight);
-              }
-              // Remove the empty highlight wrapper
-              highlight.remove();
-            }
-          });
-          
-          // Remove highlights from the word's highlight set
-          contextHighlights.forEach(highlight => {
-            wordData.highlights.delete(highlight);
-          });
-          
-          // If no highlights remain for this word, remove it completely
-          if (wordData.highlights.size === 0) {
-            explainedWordsMap.delete(word);
-            WordSelector.wordToHighlights.delete(normalizedWord);
-          }
-        }
-      });
-      
-      // Hide any open popups
-      WordSelector.hideAllPopups();
-    }
-    
-    console.log(`[ButtonPanel] Meanings removed from ${context.type} context`);
-    
-    // Also remove data from analysis structure for current tab
-    this.removeMeaningsFromAnalysisData();
-    
-    // Update button states
-    this.updateButtonStatesFromSelections();
-  },
 
   /**
    * Get the current content context (main page or specific custom content tab)
@@ -9872,11 +11506,13 @@ const ButtonPanel = {
     }
   },
 
+
   /**
-   * Remove meanings from analysis data structure for current tab
+   * Remove specific asked text from analysis data structure for current tab
+   * @param {string} textKey - The text key to remove
    */
-  removeMeaningsFromAnalysisData() {
-    console.log('[ButtonPanel] Removing meanings from analysis data for current tab');
+  removeAskedTextFromAnalysisData(textKey) {
+    console.log('[ButtonPanel] Removing asked text from analysis data:', textKey);
     
     // Check if custom content modal is open and has active tab
     if (!this.topicsModal || !this.topicsModal.customContentModal || !this.topicsModal.customContentModal.activeTabId) {
@@ -9888,39 +11524,36 @@ const ButtonPanel = {
     const activeContent = this.topicsModal.customContentModal.getContentByTabId(parseInt(activeTabId));
     
     if (!activeContent || !activeContent.analysis) {
-      console.log('[ButtonPanel] No analysis data found for active tab:', activeTabId);
+      console.log('[ButtonPanel] No analysis data found for tab:', activeTabId);
       return;
     }
     
-    console.log('[ButtonPanel] Removing meanings from analysis data for tab:', activeTabId);
-    
-    // Clear word meanings
-    if (activeContent.analysis.wordMeanings && activeContent.analysis.wordMeanings.length > 0) {
-      console.log('[ButtonPanel] Clearing', activeContent.analysis.wordMeanings.length, 'word meanings from analysis data');
-      activeContent.analysis.wordMeanings = [];
-    }
-    
-    // Clear simplified meanings
-    if (activeContent.analysis.simplifiedMeanings && activeContent.analysis.simplifiedMeanings.length > 0) {
-      console.log('[ButtonPanel] Clearing', activeContent.analysis.simplifiedMeanings.length, 'simplified meanings from analysis data');
-      activeContent.analysis.simplifiedMeanings = [];
-    }
-    
-    // Clear chats
+    // Remove from chats array if present
     if (activeContent.analysis.chats && activeContent.analysis.chats.length > 0) {
-      console.log('[ButtonPanel] Clearing', activeContent.analysis.chats.length, 'chats from analysis data');
-      activeContent.analysis.chats = [];
+      const initialLength = activeContent.analysis.chats.length;
+      activeContent.analysis.chats = activeContent.analysis.chats.filter(chatData => 
+        chatData.textKey !== textKey
+      );
+      
+      const removedCount = initialLength - activeContent.analysis.chats.length;
+      if (removedCount > 0) {
+        console.log('[ButtonPanel] Removed', removedCount, 'chat(s) for textKey:', textKey, 'from analysis data');
+        
+        // Also remove from ChatDialog's chatHistories
+        if (typeof ChatDialog !== 'undefined' && ChatDialog.chatHistories && ChatDialog.chatHistories.has(textKey)) {
+          ChatDialog.chatHistories.delete(textKey);
+          console.log('[ButtonPanel] Removed chat history from ChatDialog for textKey:', textKey);
+        }
+      }
     }
-    
-    console.log('[ButtonPanel] Analysis data cleared for tab:', activeTabId);
   },
 
   /**
-   * Remove specific word from analysis data structure for current tab
-   * @param {string} normalizedWord - The normalized word to remove
+   * Remove specific simplified text from analysis data structure for current tab
+   * @param {string} textKey - The text key to remove
    */
-  removeWordFromAnalysisData(normalizedWord) {
-    console.log('[ButtonPanel] Removing word from analysis data:', normalizedWord);
+  removeSimplifiedTextFromAnalysisData(textKey) {
+    console.log('[ButtonPanel] Removing simplified text from analysis data:', textKey);
     
     // Check if custom content modal is open and has active tab
     if (!this.topicsModal || !this.topicsModal.customContentModal || !this.topicsModal.customContentModal.activeTabId) {
@@ -9931,37 +11564,44 @@ const ButtonPanel = {
     const activeTabId = this.topicsModal.customContentModal.activeTabId;
     const activeContent = this.topicsModal.customContentModal.getContentByTabId(parseInt(activeTabId));
     
-    if (!activeContent || !activeContent.analysis || !activeContent.analysis.wordMeanings) {
-      console.log('[ButtonPanel] No word meanings found in analysis data for tab:', activeTabId);
+    if (!activeContent || !activeContent.analysis || !activeContent.analysis.simplifiedMeanings) {
+      console.log('[ButtonPanel] No simplified meanings found in analysis data for tab:', activeTabId);
       return;
     }
     
-    // Find and remove the specific word from wordMeanings array
-    const initialLength = activeContent.analysis.wordMeanings.length;
-    activeContent.analysis.wordMeanings = activeContent.analysis.wordMeanings.filter(wordData => 
-      wordData.normalizedWord !== normalizedWord
+    // Find and remove the specific text from simplifiedMeanings array
+    const initialLength = activeContent.analysis.simplifiedMeanings.length;
+    activeContent.analysis.simplifiedMeanings = activeContent.analysis.simplifiedMeanings.filter(textData => 
+      textData.textKey !== textKey
     );
     
-    const removedCount = initialLength - activeContent.analysis.wordMeanings.length;
+    const removedCount = initialLength - activeContent.analysis.simplifiedMeanings.length;
     if (removedCount > 0) {
-      console.log('[ButtonPanel] Removed', removedCount, 'word explanation(s) for word:', normalizedWord, 'from analysis data');
+      console.log('[ButtonPanel] Removed', removedCount, 'simplified text(s) for textKey:', textKey, 'from analysis data');
     } else {
-      console.log('[ButtonPanel] No word explanation found for word:', normalizedWord, 'in analysis data');
+      console.log('[ButtonPanel] No simplified text found for textKey:', textKey, 'in analysis data');
+    }
+    
+    // Also remove any associated chat history
+    if (activeContent.analysis.chats && activeContent.analysis.chats.length > 0) {
+      const initialChatLength = activeContent.analysis.chats.length;
+      activeContent.analysis.chats = activeContent.analysis.chats.filter(chatData => 
+        chatData.textKey !== textKey
+      );
+      
+      const removedChatCount = initialChatLength - activeContent.analysis.chats.length;
+      if (removedChatCount > 0) {
+        console.log('[ButtonPanel] Also removed', removedChatCount, 'associated chat(s) for textKey:', textKey);
+        
+        // Also remove from ChatDialog's chatHistories
+        if (typeof ChatDialog !== 'undefined' && ChatDialog.chatHistories && ChatDialog.chatHistories.has(textKey)) {
+          ChatDialog.chatHistories.delete(textKey);
+          console.log('[ButtonPanel] Removed chat history from ChatDialog for textKey:', textKey);
+        }
+      }
     }
   },
 
-  /**
-   * Handler for Deselect all button
-   */
-  handleDeselectAll() {
-    console.log('Deselect all clicked');
-    // Clear all word selections
-    WordSelector.clearAll();
-    // Clear all text selections
-    TextSelector.clearAll();
-    // Update button states
-    this.updateButtonStatesFromSelections();
-  },
 
   /**
    * Handler for Magic meaning button
@@ -9977,6 +11617,16 @@ const ButtonPanel = {
       console.warn('[ButtonPanel] No text or words selected');
       return;
     }
+
+    // Initialize API completion tracking
+    this.apiCompletionState.simplifyCompleted = selectedTexts.size === 0; // If no texts, mark as completed
+    this.apiCompletionState.wordsExplanationCompleted = selectedWords.size === 0; // If no words, mark as completed
+    this.apiCompletionState.shouldTrack = true;
+
+    // Set button to processing state
+    this.setMagicMeaningProcessing();
+
+    console.log('[ButtonPanel] API tracking initialized:', this.apiCompletionState);
     
     // ========== Process Text Segments (existing functionality) ==========
     if (selectedTexts.size > 0) {
@@ -10056,8 +11706,36 @@ const ButtonPanel = {
                   existingBtn.remove();
                 }
                 
+                // Create wrapper for icons
+                const iconsWrapper = document.createElement('div');
+                iconsWrapper.className = 'vocab-text-icons-wrapper';
+                iconsWrapper.setAttribute('data-text-key', matchingTextKey);
+                
+                // Add book icon first (top position)
                 const bookBtn = TextSelector.createBookButton(matchingTextKey);
-                highlight.appendChild(bookBtn);
+                iconsWrapper.appendChild(bookBtn);
+                
+                // Add green remove button second (bottom position)
+                const greenRemoveBtn = TextSelector.createGreenRemoveButtonForSimplifiedText(matchingTextKey);
+                iconsWrapper.appendChild(greenRemoveBtn);
+                
+                // Append icons wrapper directly to highlight for absolute positioning
+                highlight.appendChild(iconsWrapper);
+                
+                // Position icons relative to highlight
+                const highlightRect = highlight.getBoundingClientRect();
+                const isInModal = highlight.closest('.vocab-custom-content-modal');
+                
+                if (isInModal) {
+                  // In modal context: position to the left with sufficient margin to avoid overlap
+                  iconsWrapper.style.setProperty('left', '-50px', 'important'); // 50px to the left with !important
+                  // Align upper border with text upper border by adjusting top position
+                  iconsWrapper.style.setProperty('top', '-2px', 'important'); // Slight adjustment to align upper borders
+                } else {
+                  // In main webpage context: position to the left as before
+                  iconsWrapper.style.setProperty('left', '-60px', 'important'); // 60px to the left of the highlight
+                  iconsWrapper.style.setProperty('top', '0px', 'important'); // Align with top edge of selected text
+                }
                 
                 // Store simplified text data
                 TextSelector.simplifiedTexts.set(matchingTextKey, {
@@ -10066,8 +11744,18 @@ const ButtonPanel = {
                   text: eventData.text,
                   simplifiedText: eventData.simplifiedText,
                   previousSimplifiedTexts: eventData.previousSimplifiedTexts || [],
-                  shouldAllowSimplifyMore: eventData.shouldAllowSimplifyMore || false
+                  shouldAllowSimplifyMore: eventData.shouldAllowSimplifyMore || false,
+                  highlight: highlight
                 });
+                
+                // Force repositioning after a short delay to ensure DOM is updated
+                setTimeout(() => {
+                  const isInModalAfterDelay = highlight.closest('.vocab-custom-content-modal');
+                  if (isInModalAfterDelay) {
+                    iconsWrapper.style.setProperty('left', '-50px', 'important');
+                    iconsWrapper.style.setProperty('top', '-2px', 'important');
+                  }
+                }, 100);
                 
                 // Store simplified text in analysis data for persistence
                 if (this.topicsModal.customContentModal.activeTabId) {
@@ -10119,6 +11807,13 @@ const ButtonPanel = {
                 highlight.classList.remove('vocab-text-loading');
               }
             }
+
+            // Mark simplify API as completed
+            this.apiCompletionState.simplifyCompleted = true;
+            console.log('[ButtonPanel] Simplify API marked as completed');
+            
+            // Check if all APIs are complete
+            this.checkAPICompletion();
           },
           // onError callback
           (error) => {
@@ -10134,6 +11829,13 @@ const ButtonPanel = {
             
             // Show error notification
             TextSelector.showNotification('Error simplifying text. Please try again.');
+
+            // Mark simplify API as completed (even on error)
+            this.apiCompletionState.simplifyCompleted = true;
+            console.log('[ButtonPanel] Simplify API marked as completed (with error)');
+            
+            // Check if all APIs are complete
+            this.checkAPICompletion();
           }
         );
       }
@@ -10150,6 +11852,13 @@ const ButtonPanel = {
       
       if (wordPayload.length === 0) {
         console.warn('[ButtonPanel] No word segments with position data');
+        
+        // Mark words explanation API as completed (no payload to process)
+        this.apiCompletionState.wordsExplanationCompleted = true;
+        console.log('[ButtonPanel] Words explanation API marked as completed (no payload)');
+        
+        // Check if all APIs are complete
+        this.checkAPICompletion();
         return;
       }
       
@@ -10587,6 +12296,13 @@ const ButtonPanel = {
           }
           
           console.log('[ButtonPanel] ===== MAGIC MEANING: Complete =====');
+
+          // Mark words explanation API as completed
+          this.apiCompletionState.wordsExplanationCompleted = true;
+          console.log('[ButtonPanel] Words explanation API marked as completed');
+          
+          // Check if all APIs are complete
+          this.checkAPICompletion();
         },
         // onError callback
         (error) => {
@@ -10602,6 +12318,13 @@ const ButtonPanel = {
           
           // Show error notification
           TextSelector.showNotification('Error getting word meanings. Please try again.');
+
+          // Mark words explanation API as completed (even on error)
+          this.apiCompletionState.wordsExplanationCompleted = true;
+          console.log('[ButtonPanel] Words explanation API marked as completed (with error)');
+          
+          // Check if all APIs are complete
+          this.checkAPICompletion();
         }
       );
     }
@@ -10689,6 +12412,7 @@ const ButtonPanel = {
       }
       
       this.verticalButtonGroup.classList.add('visible');
+      this.verticalButtonGroup.style.pointerEvents = 'auto';
       this.updateState({ showVerticalGroup: true });
     }
   },
@@ -10758,76 +12482,65 @@ const ButtonPanel = {
       this.showAllVerticalButtons();
       
       this.verticalButtonGroup.classList.remove('visible');
+      this.verticalButtonGroup.style.pointerEvents = 'none';
       this.updateState({ showVerticalGroup: false });
     }
   },
 
   /**
-   * Hide the custom content button
+   * Hide the import content button
    */
   hideCustomContentButton() {
-    const customContentBtn = document.getElementById('custom-content');
-    console.log('[ButtonPanel] Attempting to hide custom content button:', customContentBtn);
+    const importContentBtn = document.getElementById('import-content');
+    console.log('[ButtonPanel] Attempting to hide import content button:', importContentBtn);
     
-    if (customContentBtn) {
+    if (importContentBtn) {
       // Store the button's parent and next sibling for reinsertion
-      this.customContentButtonParent = customContentBtn.parentNode;
-      this.customContentButtonNextSibling = customContentBtn.nextSibling;
+      this.importContentButtonParent = importContentBtn.parentNode;
+      this.importContentButtonNextSibling = importContentBtn.nextSibling;
       
-      console.log('[ButtonPanel] Stored parent:', this.customContentButtonParent);
-      console.log('[ButtonPanel] Stored next sibling:', this.customContentButtonNextSibling);
+      console.log('[ButtonPanel] Stored parent:', this.importContentButtonParent);
+      console.log('[ButtonPanel] Stored next sibling:', this.importContentButtonNextSibling);
       
       // Simply remove from DOM - this will immediately fix the layout
-      customContentBtn.remove();
-      console.log('[ButtonPanel] Custom content button removed from DOM');
+      importContentBtn.remove();
+      console.log('[ButtonPanel] Import content button removed from DOM');
     } else {
-      console.log('[ButtonPanel] Custom content button not found!');
+      console.log('[ButtonPanel] Import content button not found!');
     }
   },
 
   /**
-   * Show the custom content button
+   * Show the import content button
    */
   showCustomContentButton() {
     // Only recreate if we have the stored references
-    if (this.customContentButtonParent) {
+    if (this.importContentButtonParent) {
       // Recreate the button
-      const customContentBtn = this.createButton({
-        id: 'custom-content',
+      const importContentBtn = this.createButton({
+        id: 'import-content',
         className: 'vocab-btn vocab-btn-solid-purple',
-        icon: this.createContentIcon(),
-        text: 'Custom content',
+        icon: this.createUploadIcon(),
+        text: 'Import content',
         type: 'solid-purple'
       });
       
       // Reattach event listeners
-      customContentBtn.addEventListener('click', (e) => {
-        console.log('Custom content clicked');
+      importContentBtn.addEventListener('click', (e) => {
+        e.stopPropagation(); // Prevent event from bubbling up
+        console.log('Import content clicked');
         this.toggleVerticalButtonGroup();
       });
       
-      customContentBtn.addEventListener('mouseenter', () => {
-        this.showVerticalButtonGroup();
-      });
-      
-      customContentBtn.addEventListener('mouseleave', () => {
-        // Only hide if not hovering over the vertical group
-        setTimeout(() => {
-          if (!this.verticalButtonGroup?.matches(':hover')) {
-            this.hideVerticalButtonGroup();
-          }
-        }, 100);
-      });
-      
       // Insert back into the DOM
-      if (this.customContentButtonNextSibling) {
-        this.customContentButtonParent.insertBefore(customContentBtn, this.customContentButtonNextSibling);
+      if (this.importContentButtonNextSibling) {
+        this.importContentButtonParent.insertBefore(importContentBtn, this.importContentButtonNextSibling);
       } else {
-        this.customContentButtonParent.appendChild(customContentBtn);
+        this.importContentButtonParent.appendChild(importContentBtn);
       }
       
       // Store reference for future removal
-      this.customContentButton = customContentBtn;
+      this.importContentButton = importContentBtn;
     }
   },
 
@@ -10967,7 +12680,7 @@ const ButtonPanel = {
     
     const title = document.createElement('h2');
     title.className = 'vocab-text-input-title';
-    title.textContent = 'Paste your text';
+    title.textContent = 'Paste content to study';
     
     const closeBtn = document.createElement('button');
     closeBtn.className = 'vocab-text-input-close';
@@ -10981,37 +12694,28 @@ const ButtonPanel = {
     header.appendChild(title);
     header.appendChild(closeBtn);
     
-    // Create search bar
-    const searchBar = document.createElement('div');
-    searchBar.className = 'vocab-text-input-search';
-    
-    const searchInput = document.createElement('input');
-    searchInput.className = 'vocab-text-input-search-input';
-    searchInput.type = 'text';
-    searchInput.placeholder = 'Search in text...';
-    
-    searchBar.appendChild(searchInput);
     
     // Create content container
     const contentContainer = document.createElement('div');
-    contentContainer.className = 'vocab-text-input-content';
+    contentContainer.className = 'vocab-text-input-content empty';
     
-    // Create textarea
-    const textarea = document.createElement('textarea');
+    // Create textarea (using contenteditable div for highlighting support)
+    const textarea = document.createElement('div');
     textarea.className = 'vocab-text-input-textarea';
-    textarea.placeholder = 'Enter your text content here...';
-    textarea.rows = 10;
+    textarea.setAttribute('contenteditable', 'true');
+    textarea.setAttribute('data-placeholder', 'Paste your content here');
+    textarea.setAttribute('role', 'textbox');
+    textarea.setAttribute('aria-multiline', 'true');
     
     contentContainer.appendChild(textarea);
     
     // Create proceed button
     const proceedBtn = document.createElement('button');
-    proceedBtn.className = 'vocab-text-input-proceed-btn';
+    proceedBtn.className = 'vocab-text-input-proceed-btn hidden';
     proceedBtn.textContent = 'Proceed';
     
     // Assemble modal
     modal.appendChild(header);
-    modal.appendChild(searchBar);
     modal.appendChild(contentContainer);
     modal.appendChild(proceedBtn);
     
@@ -11025,7 +12729,6 @@ const ButtonPanel = {
       overlay: overlay,
       modal: modal,
       textarea: textarea,
-      searchInput: searchInput,
       proceedBtn: proceedBtn,
       closeBtn: closeBtn
     };
@@ -11046,6 +12749,9 @@ const ButtonPanel = {
     if (this.textInputModal && this.textInputModal.overlay) {
       this.textInputModal.overlay.classList.add('visible');
       this.textInputModal.modal.classList.add('visible');
+      
+      // Add class to body to blur webpage icons
+      document.body.classList.add('vocab-text-modal-open');
       
       // Focus on textarea and check border radius
       setTimeout(() => {
@@ -11070,10 +12776,34 @@ const ButtonPanel = {
       this.textInputModal.overlay.classList.remove('visible');
       this.textInputModal.modal.classList.remove('visible');
       
-      // Clear textarea after animation
+      // Remove class from body to show webpage icons again
+      document.body.classList.remove('vocab-text-modal-open');
+      
+      // Clear textarea after animation and hide search bar and proceed button
       setTimeout(() => {
         if (this.textInputModal.textarea) {
-          this.textInputModal.textarea.value = '';
+          this.textInputModal.textarea.textContent = '';
+          this.textInputModal.textarea.innerHTML = '';
+        }
+        
+        // Clear search input
+        if (this.textInputModal.searchInput) {
+          this.textInputModal.searchInput.value = '';
+        }
+        
+        // Hide search bar and proceed button
+        const searchBar = this.textInputModal.modal.querySelector('.vocab-text-input-search');
+        if (searchBar) {
+          searchBar.classList.add('hidden');
+        }
+        if (this.textInputModal.proceedBtn) {
+          this.textInputModal.proceedBtn.classList.add('hidden');
+        }
+        
+        // Add empty class back to content container
+        const contentContainer = this.textInputModal.modal.querySelector('.vocab-text-input-content');
+        if (contentContainer) {
+          contentContainer.classList.add('empty');
         }
       }, 300);
     }
@@ -11091,9 +12821,8 @@ const ButtonPanel = {
     const closeBtn = this.textInputModal.closeBtn;
     const proceedBtn = this.textInputModal.proceedBtn;
     const textarea = this.textInputModal.textarea;
-    const searchInput = this.textInputModal.searchInput;
     
-    if (!overlay || !modal || !closeBtn || !proceedBtn || !textarea || !searchInput) {
+    if (!overlay || !modal || !closeBtn || !proceedBtn || !textarea) {
       console.error('Text input modal: Missing required elements for event listeners');
       return;
     }
@@ -11106,15 +12835,22 @@ const ButtonPanel = {
       }
     });
     
-    // Search functionality
-    searchInput.addEventListener('input', (e) => {
-      const searchTerm = e.target.value;
-      this.performTextSearchInModal(textarea, searchTerm);
-    });
-    
-    // Update border radius when content changes
+    // Update border radius when content changes and toggle visibility of proceed button
     textarea.addEventListener('input', () => {
       this.updateTextareaBorderRadius(textarea);
+      
+      // Show/hide proceed button based on whether there's text
+      const hasText = textarea.textContent.trim().length > 0;
+      const proceedBtn = this.textInputModal.proceedBtn;
+      const contentContainer = this.textInputModal.modal.querySelector('.vocab-text-input-content');
+      
+      if (hasText) {
+        proceedBtn.classList.remove('hidden');
+        contentContainer.classList.remove('empty');
+      } else {
+        proceedBtn.classList.add('hidden');
+        contentContainer.classList.add('empty');
+      }
     });
     
     // Update border radius on resize
@@ -11129,17 +12865,17 @@ const ButtonPanel = {
     
     // Proceed button event
     proceedBtn.addEventListener('click', () => {
-      const textContent = textarea.value.trim();
+      const textContent = textarea.textContent.trim();
       if (textContent) {
         this.handleTextProceed(textContent);
       }
     });
     
-    // Enter key to proceed
+    // Enter key to proceed (Ctrl+Enter for contenteditable)
     textarea.addEventListener('keydown', (e) => {
       if (e.key === 'Enter' && e.ctrlKey) {
         e.preventDefault();
-        const textContent = textarea.value.trim();
+        const textContent = textarea.textContent.trim();
         if (textContent) {
           this.handleTextProceed(textContent);
         }
@@ -11147,39 +12883,6 @@ const ButtonPanel = {
     });
   },
 
-  /**
-   * Perform search in text input modal
-   */
-  performTextSearchInModal(textarea, searchTerm) {
-    if (!searchTerm || !searchTerm.trim()) {
-      // Remove highlights if any
-      textarea.style.backgroundColor = '';
-      textarea.style.boxShadow = '';
-      this.hideTextSearchPreview();
-      return;
-    }
-    
-    // Get the text content
-    const text = textarea.value;
-    const regex = new RegExp(`(${searchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gim');
-    
-    if (regex.test(text)) {
-      // Found matches - highlight the textarea with a subtle effect
-      textarea.style.backgroundColor = 'rgba(255, 224, 102, 0.05)';
-      textarea.style.boxShadow = 'inset 0 0 0 2px rgba(255, 224, 102, 0.3)';
-      
-      // Show search preview with highlighted matches
-      this.showTextSearchPreview(textarea, text, searchTerm);
-      
-      // Scroll to first match
-      this.scrollToTextMatch(textarea, searchTerm);
-    } else {
-      // No matches found
-      textarea.style.backgroundColor = '';
-      textarea.style.boxShadow = '';
-      this.hideTextSearchPreview();
-    }
-  },
 
   /**
    * Show search preview with highlighted matches for textarea
@@ -11354,9 +13057,14 @@ const ButtonPanel = {
   show() {
     if (this.panelContainer) {
       this.panelContainer.style.display = 'block';
-      // Add visible class for initial slide-in animation if at default position
+      // Ensure left-side positioning if no custom position is set
+      if (!this.panelContainer.style.left || this.panelContainer.style.left === '') {
+        this.panelContainer.style.left = '0';
+        this.panelContainer.style.right = 'auto';
+      }
+      // Add visible class for initial slide-in animation
       this.panelContainer.classList.add('visible');
-      console.log('[ButtonPanel] Panel shown');
+      console.log('[ButtonPanel] Panel shown at left:', this.panelContainer.style.left);
     }
   },
 
@@ -11381,55 +13089,78 @@ const ButtonPanel = {
   },
 
   /**
+   * Smoothly show a button with animation
+   */
+  showButtonSmooth(button) {
+    if (!button) return;
+    
+    if (button.classList.contains('hidden')) {
+      button.classList.remove('hidden');
+      button.classList.add('showing');
+      
+      // Remove showing class after animation (400ms to match animation duration)
+      setTimeout(() => {
+        button.classList.remove('showing');
+      }, 400);
+    }
+  },
+
+  /**
+   * Smoothly hide a button with animation
+   */
+  hideButtonSmooth(button) {
+    if (!button) return;
+    
+    if (!button.classList.contains('hidden')) {
+      button.classList.add('hiding');
+      
+      // Wait for animation to complete, then hide (350ms to match animation duration)
+      setTimeout(() => {
+        button.classList.remove('hiding');
+        button.classList.add('hidden');
+      }, 350);
+    }
+  },
+
+  /**
    * Update button states based on state variables
    */
   updateButtonStates() {
-    // Show/hide upper button group based on state with smooth animation
-    const shouldShowUpperGroup = this.state.showRemoveMeanings || this.state.showDeselectAll;
+    // Hide upper button group since it's now empty
     if (this.upperButtonGroup) {
-      if (shouldShowUpperGroup) {
-        this.upperButtonGroup.classList.add('visible');
-      } else {
-        this.upperButtonGroup.classList.remove('visible');
-      }
-    }
-
-    // Update individual button visibility in upper group with smooth animation
-    const removeMeaningsBtn = document.getElementById('remove-all-meanings');
-    const deselectAllBtn = document.getElementById('deselect-all');
-    
-    if (removeMeaningsBtn) {
-      if (this.state.showRemoveMeanings) {
-        removeMeaningsBtn.classList.remove('hidden');
-      } else {
-        removeMeaningsBtn.classList.add('hidden');
-      }
-    }
-    if (deselectAllBtn) {
-      if (this.state.showDeselectAll) {
-        deselectAllBtn.classList.remove('hidden');
-      } else {
-        deselectAllBtn.classList.add('hidden');
-      }
+      this.upperButtonGroup.classList.remove('visible');
     }
 
     // Update enabled/disabled state of magic meaning button
     const magicMeaningBtn = document.getElementById('magic-meaning');
     if (magicMeaningBtn) {
+      const wasDisabled = magicMeaningBtn.classList.contains('disabled');
+      
       if (this.state.isMagicMeaningEnabled) {
         magicMeaningBtn.classList.remove('disabled');
+        magicMeaningBtn.disabled = false; // Remove disabled attribute
+        
+        // If button was previously disabled and is now enabled, trigger attention animation
+        if (wasDisabled && !magicMeaningBtn.classList.contains('processing') && !magicMeaningBtn.classList.contains('success')) {
+          magicMeaningBtn.classList.add('just-enabled');
+          // Remove the class after animation completes
+          setTimeout(() => {
+            magicMeaningBtn.classList.remove('just-enabled');
+          }, 600);
+        }
       } else {
         magicMeaningBtn.classList.add('disabled');
+        magicMeaningBtn.disabled = true; // Add disabled attribute
       }
     }
 
-    // Update visibility of Ask button
+    // Update visibility of Ask button with smooth animation
     const askBtn = document.getElementById('ask');
     if (askBtn) {
       if (this.state.showAsk) {
-        askBtn.classList.remove('hidden');
+        this.showButtonSmooth(askBtn);
       } else {
-        askBtn.classList.add('hidden');
+        this.hideButtonSmooth(askBtn);
       }
     }
   },
@@ -11494,15 +13225,9 @@ const ButtonPanel = {
       hasTexts,
       hasAskedTextsInContext,
       hasSimplifiedTextsInContext,
-      hasExplainedWordsInContext,
-      showRemoveMeanings: hasAskedTextsInContext || hasSimplifiedTextsInContext || hasExplainedWordsInContext
+      hasExplainedWordsInContext
     });
     
-    // Show "Remove all meanings" if there are any asked texts, simplified texts, OR explained words in current context
-    this.setShowRemoveMeanings(hasAskedTextsInContext || hasSimplifiedTextsInContext || hasExplainedWordsInContext);
-    
-    // Show "Deselect all" if there are any words or texts selected
-    this.setShowDeselectAll(hasWords || hasTexts);
     
     // Enable "Magic meaning" if there are any words or texts selected
     this.setMagicMeaningEnabled(hasWords || hasTexts);
@@ -11512,21 +13237,7 @@ const ButtonPanel = {
     this.setAskVisible(hasExactlyOneText && !isCustomModalOpen);
   },
 
-  /**
-   * Set visibility of Remove meanings button
-   * @param {boolean} show - Whether to show the button
-   */
-  setShowRemoveMeanings(show) {
-    this.updateState({ showRemoveMeanings: show });
-  },
 
-  /**
-   * Set visibility of Deselect all button
-   * @param {boolean} show - Whether to show the button
-   */
-  setShowDeselectAll(show) {
-    this.updateState({ showDeselectAll: show });
-  },
 
   /**
    * Set enabled state of Magic meaning button
@@ -11878,10 +13589,7 @@ const ButtonPanel = {
           console.log('[ButtonPanel] After removal - Text contents:', this.textContents);
           console.log('[ButtonPanel] ===== END REMOVE CONTENT DEBUG (SUCCESS) =====');
           
-          // Clean up analysis data for this tab
-          this.cleanupAnalysisData(content);
-          
-          return true;
+          return content; // Return the content object so cleanup can be done by caller
         }
         
         console.log('[ButtonPanel] Content not found in array');
@@ -12071,6 +13779,9 @@ const ButtonPanel = {
     this.topicsModal.overlay.classList.add('visible');
     this.topicsModal.modal.classList.add('visible');
     
+    // Add class to body to blur webpage icons
+    document.body.classList.add('vocab-topics-modal-open');
+    
     // Focus on input field
     const input = this.topicsModal.modal.querySelector('.vocab-topics-input');
     if (input) {
@@ -12100,6 +13811,9 @@ const ButtonPanel = {
       this.topicsModal.overlay.classList.remove('visible');
       this.topicsModal.modal.classList.remove('visible');
     }
+    
+    // Remove class from body to show webpage icons again
+    document.body.classList.remove('vocab-topics-modal-open');
     
     // Remove blur from custom content modal if it was blurred
     if (this.topicsModal.customContentModal.overlay) {
@@ -12136,7 +13850,7 @@ const ButtonPanel = {
     
     const title = document.createElement('h2');
     title.className = 'vocab-topics-modal-title';
-    title.textContent = 'Generate content on topics';
+    title.textContent = 'Enter keywords or topic you want to study on';
     
     const closeBtn = document.createElement('button');
     closeBtn.className = 'vocab-topics-modal-close';
@@ -12163,7 +13877,7 @@ const ButtonPanel = {
     const input = document.createElement('input');
     input.type = 'text';
     input.className = 'vocab-topics-input';
-    input.placeholder = 'Enter topic name ...';
+    input.placeholder = 'Type keywords or topic here';
     
     const searchIcon = document.createElement('div');
     searchIcon.className = 'vocab-topics-search-icon disabled';
@@ -12768,6 +14482,11 @@ const ButtonPanel = {
     this.topicsModal.currentContentType = contentType;
     console.log('[ButtonPanel] Set currentContentType to:', contentType);
     
+    // Synchronize activeContentType for proper plus icon behavior
+    if (this.topicsModal.customContentModal) {
+      this.topicsModal.customContentModal.activeContentType = contentType;
+    }
+    
     // Show modal with only the specified content type, and switch to the new tab
     this.showCustomContentModalWithContents(contentType, newContent.tabId);
     
@@ -12860,6 +14579,20 @@ const ButtonPanel = {
   },
 
   /**
+   * Update icon context attributes for existing icons
+   */
+  updateIconContexts() {
+    // Update all existing icon wrappers with proper context
+    const allIconWrappers = document.querySelectorAll('.vocab-text-icons-wrapper');
+    allIconWrappers.forEach(wrapper => {
+      if (!wrapper.hasAttribute('data-icon-context')) {
+        const isInModal = wrapper.closest('.vocab-custom-content-modal');
+        wrapper.setAttribute('data-icon-context', isInModal ? 'custom-content-modal' : 'main-webpage');
+      }
+    });
+  },
+
+  /**
    * Hide custom content modal
    */
   hideCustomContentModal() {
@@ -12877,8 +14610,57 @@ const ButtonPanel = {
       console.log('[ButtonPanel] Overlay classes after removal:', this.topicsModal.customContentModal.overlay.classList.toString());
       console.log('[ButtonPanel] Overlay is now visible:', this.topicsModal.customContentModal.overlay.classList.contains('visible'));
       
+      // Close ChatDialog if it's open when modal is minimized/closed
+      if (typeof ChatDialog !== 'undefined' && ChatDialog.isOpen) {
+        console.log('[ButtonPanel] ChatDialog is open - closing it when custom content modal is minimized/closed');
+        console.log('[ButtonPanel] Current ChatDialog textKey:', ChatDialog.currentTextKey);
+        ChatDialog.close();
+      }
+      
       // Update button states after modal closes
       this.updateButtonStatesFromSelections();
+      
+      // Hide info banner if visible
+      this.hideCustomContentInfoBanner();
+      
+      // Update icon contexts for all existing icons
+      this.updateIconContexts();
+      
+      // Restore any icon wrappers that were moved to modal overlay back to their original highlights
+      const iconWrappers = this.topicsModal.customContentModal.overlay.querySelectorAll('.vocab-text-icons-wrapper');
+      iconWrappers.forEach(wrapper => {
+        const textKey = wrapper.getAttribute('data-text-key');
+        if (textKey) {
+          // Try to find the original highlight element
+          let highlight = document.querySelector(`[data-text-highlight="${textKey}"]`);
+          
+          // If not found by data-text-highlight, try to find by checking simplifiedTexts
+          if (!highlight && TextSelector.simplifiedTexts.has(textKey)) {
+            const simplifiedData = TextSelector.simplifiedTexts.get(textKey);
+            if (simplifiedData && simplifiedData.highlight) {
+              highlight = simplifiedData.highlight;
+            }
+          }
+          
+          // Only restore if we found a highlight AND it's definitely from the main webpage (not modal content)
+          if (highlight && !highlight.closest('.vocab-custom-content-modal') && highlight.closest('body')) {
+            // This is a main webpage highlight, move the icons back
+            console.log('[ButtonPanel] Restoring icons for textKey:', textKey);
+            highlight.appendChild(wrapper);
+            // Update context to main-webpage since it's being restored to main webpage
+            wrapper.setAttribute('data-icon-context', 'main-webpage');
+          } else {
+            // This is modal content or highlight not found, keep the wrapper in the modal overlay
+            // Don't remove it as it might be needed for modal content
+            console.log('[ButtonPanel] Keeping modal content icons for textKey:', textKey);
+            // Update context to custom-content-modal since it's staying in modal
+            wrapper.setAttribute('data-icon-context', 'custom-content-modal');
+          }
+        } else {
+          // No textKey, keep the wrapper in the modal overlay
+          console.log('[ButtonPanel] Keeping icon wrapper without textKey');
+        }
+      });
     }
     
     console.log('[ButtonPanel] ===== END HIDE CUSTOM CONTENT MODAL DEBUG =====');
@@ -12919,6 +14701,9 @@ const ButtonPanel = {
     if (this.imageUploadModal.modal) {
       this.imageUploadModal.modal.classList.add('visible');
     }
+    
+    // Add class to body to blur webpage icons
+    document.body.classList.add('vocab-image-modal-open');
   },
 
   /**
@@ -12933,6 +14718,9 @@ const ButtonPanel = {
     if (this.imageUploadModal && this.imageUploadModal.modal) {
       this.imageUploadModal.modal.classList.remove('visible');
     }
+    
+    // Remove class from body to show webpage icons again
+    document.body.classList.remove('vocab-image-modal-open');
     
     // Show the custom content button again
     this.showCustomContentButton();
@@ -13173,6 +14961,11 @@ const ButtonPanel = {
     // Set current content type
     this.topicsModal.currentContentType = 'image';
     
+    // Synchronize activeContentType for proper plus icon behavior
+    if (this.topicsModal.customContentModal) {
+      this.topicsModal.customContentModal.activeContentType = 'image';
+    }
+    
     // Create modal if it doesn't exist
     if (!this.topicsModal.customContentModal.overlay) {
       console.log('[ButtonPanel] Creating custom content modal...');
@@ -13337,6 +15130,9 @@ const ButtonPanel = {
     if (this.pdfUploadModal.modal) {
       this.pdfUploadModal.modal.classList.add('visible');
     }
+    
+    // Add class to body to blur webpage icons
+    document.body.classList.add('vocab-pdf-modal-open');
   },
 
   /**
@@ -13419,6 +15215,9 @@ const ButtonPanel = {
       this.pdfUploadModal.modal.classList.remove('visible');
     }
     
+    // Remove class from body to show webpage icons again
+    document.body.classList.remove('vocab-pdf-modal-open');
+    
     // Don't show the custom content button - we want to keep the custom content modal visible
   },
 
@@ -13434,6 +15233,9 @@ const ButtonPanel = {
     if (this.pdfUploadModal && this.pdfUploadModal.modal) {
       this.pdfUploadModal.modal.classList.remove('visible');
     }
+    
+    // Remove class from body to show webpage icons again
+    document.body.classList.remove('vocab-pdf-modal-open');
     
     // Show the custom content button again
     setTimeout(() => {
@@ -13635,26 +15437,15 @@ const ButtonPanel = {
     const modal = document.createElement('div');
     modal.className = 'vocab-custom-content-modal';
     
-    // Header
-    const header = document.createElement('div');
-    header.className = 'vocab-custom-content-header';
-    header.setAttribute('title', 'Drag to move modal');
-    
-    const title = document.createElement('h2');
-    title.className = 'vocab-custom-content-title';
-    title.textContent = 'Generated Content';
-    
-    const closeBtn = document.createElement('button');
-    closeBtn.className = 'vocab-custom-content-close';
-    closeBtn.innerHTML = `
+    // Create minimize button positioned at top right corner
+    const minimizeBtn = document.createElement('button');
+    minimizeBtn.className = 'vocab-custom-content-minimize';
+    minimizeBtn.innerHTML = `
       <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
         <path d="M4 10H16" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
       </svg>
     `;
-    closeBtn.setAttribute('aria-label', 'Close modal');
-    
-    header.appendChild(title);
-    header.appendChild(closeBtn);
+    minimizeBtn.setAttribute('aria-label', 'Minimize modal');
     
     // Tabs section
     const tabsSection = document.createElement('div');
@@ -13695,22 +15486,8 @@ const ButtonPanel = {
     
     tabsSection.appendChild(leftArrow);
     tabsSection.appendChild(tabsContainer);
+    tabsSection.appendChild(addTabBtn);
     tabsSection.appendChild(rightArrow);
-    
-    // Add the plus button inside the tabs container
-    tabsContainer.appendChild(addTabBtn);
-    
-    // Search section
-    const searchSection = document.createElement('div');
-    searchSection.className = 'vocab-custom-content-search';
-    
-    const searchInput = document.createElement('input');
-    searchInput.className = 'vocab-custom-content-search-input';
-    searchInput.type = 'text';
-    searchInput.placeholder = 'Type here to search...';
-    
-    searchSection.appendChild(searchInput);
-    
     
     // Editor section
     const editorSection = document.createElement('div');
@@ -13725,11 +15502,17 @@ const ButtonPanel = {
     const chatIcon = document.createElement('button');
     chatIcon.className = 'vocab-custom-content-chat-icon';
     chatIcon.innerHTML = `
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" fill="white">
-        <path d="M12 2C6.48 2 2 6.48 2 12c0 1.54.36 2.98.97 4.29L1 23l6.71-1.97C9.02 21.64 10.46 22 12 22c5.52 0 10-4.48 10-10S17.52 2 12 2zm-1 15h-2v-2h2v2zm0-4h-2v-6h2v6zm4 4h-2v-2h2v2zm0-4h-2v-6h2v6z"/>
+      <svg width="16" height="16" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect x="4" y="4" width="12" height="10" rx="2" stroke="white" stroke-width="1.3" fill="none"/>
+        <line x1="10" y1="2" x2="10" y2="4" stroke="white" stroke-width="1.3" stroke-linecap="round"/>
+        <circle cx="10" cy="1.5" r="0.8" fill="white"/>
+        <circle cx="7.5" cy="8.5" r="1.2" fill="white"/>
+        <circle cx="12.5" cy="8.5" r="1.2" fill="white"/>
+        <path d="M7 11C7.5 11.8 8.5 12.5 10 12.5C11.5 12.5 12.5 11.8 13 11" stroke="white" stroke-width="1.3" stroke-linecap="round" fill="none"/>
+        <path d="M10 14L10 16.5L8 15" stroke="white" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
       </svg>
     `;
-    chatIcon.setAttribute('title', 'Ask questions about this content');
+    chatIcon.setAttribute('title', 'Chat with AI Agent - Ask anything about this content');
     
     // Add click handler for chat icon
     chatIcon.addEventListener('click', () => {
@@ -13773,8 +15556,7 @@ const ButtonPanel = {
     observer.observe(editorContent, { childList: true, subtree: true });
     
     // Assemble modal
-    modal.appendChild(header);
-    modal.appendChild(searchSection);
+    modal.appendChild(minimizeBtn);
     modal.appendChild(tabsSection);
     modal.appendChild(editorSection);
     
@@ -13797,11 +15579,11 @@ const ButtonPanel = {
     this.topicsModal.customContentModal.overlay = overlay;
     this.topicsModal.customContentModal.modal = modal;
     this.topicsModal.customContentModal.editorContent = editorContent;
-    this.topicsModal.customContentModal.searchInput = searchInput;
     this.topicsModal.customContentModal.tabsContainer = tabsContainer;
     this.topicsModal.customContentModal.addTabBtn = addTabBtn;
     this.topicsModal.customContentModal.leftArrow = leftArrow;
     this.topicsModal.customContentModal.rightArrow = rightArrow;
+    this.topicsModal.customContentModal.minimizeBtn = minimizeBtn;
     console.log('[ButtonPanel] Stored tabsContainer:', this.topicsModal.customContentModal.tabsContainer);
     
     // Attach event listeners
@@ -13815,43 +15597,23 @@ const ButtonPanel = {
     console.log('[ButtonPanel] Attaching custom content modal listeners...');
     const overlay = this.topicsModal.customContentModal.overlay;
     const modal = this.topicsModal.customContentModal.modal;
-    const closeBtn = modal.querySelector('.vocab-custom-content-close');
-    const searchInput = this.topicsModal.customContentModal.searchInput;
+    const minimizeBtn = this.topicsModal.customContentModal.minimizeBtn;
     const panIcon = modal.querySelector('.vocab-custom-content-pan-icon');
     const addTabBtn = this.topicsModal.customContentModal.addTabBtn;
     const tabsContainer = this.topicsModal.customContentModal.tabsContainer;
     console.log('[ButtonPanel] tabsContainer in attachCustomContentModalListeners:', tabsContainer);
-    console.log('[ButtonPanel] searchInput in attachCustomContentModalListeners:', searchInput);
     
-    // Close modal events
-    closeBtn.addEventListener('click', () => this.hideCustomContentModal());
+    // Minimize modal events
+    minimizeBtn.addEventListener('click', () => this.hideCustomContentModal());
     
-    // Search functionality
-    if (searchInput) {
-      searchInput.addEventListener('input', (e) => {
-        console.log('[ButtonPanel] Search input changed:', e.target.value);
-        const searchTerm = e.target.value;
-        
-        // Store search term for the current active tab
-        if (this.topicsModal.customContentModal.activeTabId) {
-          const tabId = parseInt(this.topicsModal.customContentModal.activeTabId);
-          const activeContent = this.topicsModal.customContentModal.getContentByTabId(tabId);
-          if (activeContent) {
-            activeContent.searchTerm = searchTerm;
-            console.log('[ButtonPanel] Stored search term:', searchTerm, 'for tab:', tabId);
-          }
-        }
-        
-        this.performSearch();
-      });
-    } else {
-      console.error('[ButtonPanel] Search input not found!');
-    }
+    // Initialize dragging functionality
+    this.initModalDragging(modal);
+    
     
     // Add tab functionality
     addTabBtn.addEventListener('click', () => {
       // Check current content type to determine which modal to show
-      const currentContentType = this.topicsModal.customContentModal.activeContentType;
+      const currentContentType = this.topicsModal.currentContentType;
       
       if (currentContentType === 'pdf') {
         this.showPDFUploadModal();
@@ -14118,6 +15880,19 @@ const ButtonPanel = {
       }
     }
     
+    // Ensure modal is visible and add body class for blur effect
+    if (!this.topicsModal.customContentModal.overlay.classList.contains('visible')) {
+      this.topicsModal.customContentModal.overlay.classList.add('visible');
+    }
+    
+    // Always add body class to blur webpage icons
+    document.body.classList.add('vocab-custom-content-modal-open');
+    console.log('[ButtonPanel] Added vocab-custom-content-modal-open body class for blur effect');
+    console.log('[ButtonPanel] Body classes:', document.body.classList.toString());
+    
+    // Update icon contexts for all existing icons
+    this.updateIconContexts();
+    
     // Show the modal
     setTimeout(() => {
       this.topicsModal.customContentModal.overlay.classList.add('visible');
@@ -14130,7 +15905,150 @@ const ButtonPanel = {
       
       // Update button states after modal opens to reflect new context
       this.updateButtonStatesFromSelections();
+      
+      // Show info banner after a short delay
+      setTimeout(() => {
+        this.showCustomContentInfoBanner();
+      }, 500);
     }, 100);
+  },
+
+  /**
+   * Create custom content info banner
+   */
+  createCustomContentInfoBanner() {
+    console.log('[ButtonPanel] Creating custom content info banner');
+    
+    // Check if banner already exists
+    if (document.querySelector('.vocab-custom-content-info-banner')) {
+      console.log('[ButtonPanel] Banner already exists');
+      return;
+    }
+    
+    // Create banner
+    const banner = document.createElement('div');
+    banner.className = 'vocab-custom-content-info-banner';
+    
+    // Create header
+    const header = document.createElement('div');
+    header.className = 'vocab-custom-content-info-banner-header';
+    
+    const title = document.createElement('h3');
+    title.className = 'vocab-custom-content-info-banner-title';
+    title.textContent = 'Quick Tips';
+    
+    const closeBtn = document.createElement('button');
+    closeBtn.className = 'vocab-custom-content-info-banner-close';
+    closeBtn.innerHTML = `
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M12 4L4 12M4 4L12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    `;
+    closeBtn.setAttribute('aria-label', 'Close banner');
+    
+    header.appendChild(title);
+    header.appendChild(closeBtn);
+    
+    // Create content
+    const content = document.createElement('div');
+    content.className = 'vocab-custom-content-info-banner-content';
+    
+    const list = document.createElement('ul');
+    list.className = 'vocab-custom-content-info-banner-list';
+    
+    const item1 = document.createElement('li');
+    item1.innerHTML = 'Double click a <span class="vocab-custom-content-info-banner-highlight">word</span> to select';
+    
+    const item2 = document.createElement('li');
+    item2.innerHTML = 'Select a <span class="vocab-custom-content-info-banner-highlight">passage containing multiple words</span> or sentences';
+    
+    list.appendChild(item1);
+    list.appendChild(item2);
+    content.appendChild(list);
+    
+    // Create footer
+    const footer = document.createElement('div');
+    footer.className = 'vocab-custom-content-info-banner-footer';
+    
+    const dismissBtn = document.createElement('button');
+    dismissBtn.className = 'vocab-custom-content-info-banner-dismiss-btn';
+    dismissBtn.innerHTML = `
+      <svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M9 3L3 9M3 3L9 9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      Don't show this again
+    `;
+    
+    footer.appendChild(dismissBtn);
+    
+    // Assemble banner
+    banner.appendChild(header);
+    banner.appendChild(content);
+    banner.appendChild(footer);
+    
+    // Add to document
+    document.body.appendChild(banner);
+    
+    // Attach event listeners
+    closeBtn.addEventListener('click', () => {
+      banner.classList.remove('visible');
+      setTimeout(() => {
+        banner.remove();
+      }, 300);
+    });
+    
+    dismissBtn.addEventListener('click', () => {
+      // Set session storage flag
+      sessionStorage.setItem('vocab-hide-custom-content-info-banner', 'true');
+      banner.classList.remove('visible');
+      setTimeout(() => {
+        banner.remove();
+      }, 300);
+    });
+    
+    console.log('[ButtonPanel] Info banner created successfully');
+  },
+
+  /**
+   * Show custom content info banner
+   */
+  showCustomContentInfoBanner() {
+    console.log('[ButtonPanel] Showing custom content info banner');
+    
+    // Check if user has dismissed the banner
+    const shouldHide = sessionStorage.getItem('vocab-hide-custom-content-info-banner');
+    if (shouldHide === 'true') {
+      console.log('[ButtonPanel] User has dismissed banner, not showing');
+      return;
+    }
+    
+    // Create banner if it doesn't exist
+    let banner = document.querySelector('.vocab-custom-content-info-banner');
+    if (!banner) {
+      this.createCustomContentInfoBanner();
+      banner = document.querySelector('.vocab-custom-content-info-banner');
+    }
+    
+    // Show with animation
+    if (banner) {
+      setTimeout(() => {
+        banner.classList.add('visible');
+      }, 100);
+    }
+  },
+
+  /**
+   * Hide custom content info banner
+   */
+  hideCustomContentInfoBanner() {
+    console.log('[ButtonPanel] Hiding custom content info banner');
+    const banner = document.querySelector('.vocab-custom-content-info-banner');
+    if (banner) {
+      banner.classList.remove('visible');
+      setTimeout(() => {
+        banner.remove();
+      }, 300);
+    }
   },
 
   /**
@@ -14195,6 +16113,11 @@ const ButtonPanel = {
       
       // Add class to body to hide webpage icons
       document.body.classList.add('vocab-custom-content-modal-open');
+      
+      // Show info banner after a short delay
+      setTimeout(() => {
+        this.showCustomContentInfoBanner();
+      }, 500);
     }, 100);
   },
 
@@ -14315,12 +16238,6 @@ const ButtonPanel = {
     tabElement.appendChild(closeBtn);
     tabsContainer.appendChild(tabElement);
     
-    // Ensure plus icon is always at the end
-    const addTabBtn = tabsContainer.querySelector('.vocab-custom-content-add-tab');
-    if (addTabBtn) {
-      tabsContainer.appendChild(addTabBtn);
-    }
-    
     // Add event listeners
     tabElement.addEventListener('click', (e) => {
       if (e.target !== closeBtn && !closeBtn.contains(e.target)) {
@@ -14426,7 +16343,7 @@ const ButtonPanel = {
     if (activeTabElement) {
       const tabRect = activeTabElement.getBoundingClientRect();
       const containerRect = tabsContainer.getBoundingClientRect();
-      const left = tabRect.left - containerRect.left;
+      const left = tabRect.left - containerRect.left + tabsContainer.scrollLeft;
       const width = tabRect.width;
       tabsContainer.style.setProperty('--sliding-bg-left', `${left}px`);
       tabsContainer.style.setProperty('--sliding-bg-width', `${width}px`);
@@ -14448,10 +16365,6 @@ const ButtonPanel = {
       
       // Update heading based on content type
       this.updateCustomContentHeading(contentType);
-      
-      // Update search input
-      const searchInput = this.topicsModal.customContentModal.searchInput;
-      searchInput.value = '';
       
         // Fade in new content
         editorContent.classList.remove('fade-out');
@@ -14489,6 +16402,17 @@ const ButtonPanel = {
 
     // Wait for content to be fully loaded before restoring visual elements
     setTimeout(() => {
+      // Verify content element is ready
+      const contentElement = this.topicsModal.customContentModal.modal.querySelector('.vocab-custom-content-editor-content');
+      if (!contentElement) {
+        console.log('[ButtonPanel] Content element not ready, retrying restoration in 200ms');
+        setTimeout(() => this.restoreAnalysisData(activeContent), 200);
+        return;
+      }
+      
+      console.log('[ButtonPanel] Content element ready, proceeding with restoration');
+      console.log('[ButtonPanel] Content text length:', contentElement.textContent.length);
+      
       // Clear existing highlights first to avoid duplicates
       this.clearExistingHighlights();
       
@@ -14500,12 +16424,20 @@ const ButtonPanel = {
         });
       }
 
-      // Restore simplified texts
+      // Restore simplified texts with additional delay to ensure content is fully rendered
       if (activeContent.analysis.simplifiedMeanings && activeContent.analysis.simplifiedMeanings.length > 0) {
         console.log('[ButtonPanel] Restoring', activeContent.analysis.simplifiedMeanings.length, 'simplified texts');
-        activeContent.analysis.simplifiedMeanings.forEach(simplifiedData => {
-          this.restoreSimplifiedText(simplifiedData);
-        });
+        // Add extra delay for simplified texts to ensure content is fully rendered
+        setTimeout(() => {
+          activeContent.analysis.simplifiedMeanings.forEach(simplifiedData => {
+            this.restoreSimplifiedText(simplifiedData);
+          });
+          
+          // Additional repositioning after all simplified texts are restored
+          setTimeout(() => {
+            this.repositionAllSimplifiedIcons();
+          }, 100);
+        }, 200);
       }
 
       // Restore chats
@@ -14562,6 +16494,18 @@ const ButtonPanel = {
       }
     });
 
+    // Remove only icon wrappers from modal overlay (if in modal context)
+    const modalOverlay = this.topicsModal.customContentModal.overlay;
+    if (modalOverlay) {
+      const iconWrappers = modalOverlay.querySelectorAll('.vocab-text-icons-wrapper');
+      iconWrappers.forEach(wrapper => {
+        wrapper.remove();
+      });
+    }
+
+    // Don't remove icon wrappers from document body - they should be preserved for main webpage
+    // The main webpage icons should remain visible and functional
+
     console.log('[ButtonPanel] Cleared existing highlights');
   },
 
@@ -14571,8 +16515,9 @@ const ButtonPanel = {
    */
   restoreWordExplanation(wordData) {
     console.log('[ButtonPanel] Restoring word explanation for:', wordData.word);
+    console.log('[ButtonPanel] Word data:', wordData);
     
-    // Find all instances of this word in the current content
+    // Find the content element
     const contentElement = this.topicsModal.customContentModal.modal.querySelector('.vocab-custom-content-editor-content');
     if (!contentElement) {
       console.log('[ButtonPanel] Content element not found for word restoration');
@@ -14585,7 +16530,74 @@ const ButtonPanel = {
       return;
     }
 
-    // Find word positions in the text
+    // Use stored textStartIndex if available, otherwise fall back to regex search
+    if (wordData.textStartIndex !== undefined && wordData.location !== undefined) {
+      console.log('[ButtonPanel] Using stored positioning data - textStartIndex:', wordData.textStartIndex, 'location:', wordData.location);
+      console.log('[ButtonPanel] Text content length:', textContent.length);
+      console.log('[ButtonPanel] Text content preview:', textContent.substring(0, 200));
+      
+      // Use the stored location data to find the word
+      const wordStart = wordData.textStartIndex + wordData.location.index;
+      const wordEnd = wordStart + wordData.location.length;
+      
+      console.log('[ButtonPanel] Calculated word position:', wordStart, '-', wordEnd);
+      
+      // Verify the word matches at this position
+      const wordAtPosition = textContent.substring(wordStart, wordEnd);
+      console.log('[ButtonPanel] Word at calculated position:', wordAtPosition);
+      console.log('[ButtonPanel] Expected word:', wordData.word);
+      
+      if (wordAtPosition.toLowerCase() === wordData.word.toLowerCase()) {
+        console.log('[ButtonPanel] Found word at stored position:', wordAtPosition);
+        
+        // Check if this word is already highlighted
+        const existingHighlight = contentElement.querySelector(`[data-word-highlight="${wordData.normalizedWord}-0"]`);
+        if (existingHighlight) {
+          console.log('[ButtonPanel] Word already highlighted:', wordData.word);
+          return;
+        }
+
+        // Create word highlight element
+        const highlight = document.createElement('span');
+        highlight.className = 'vocab-word-highlight vocab-word-explained';
+        highlight.setAttribute('data-word-highlight', `${wordData.normalizedWord}-0`);
+        highlight.setAttribute('data-meaning', wordData.meaning);
+        highlight.setAttribute('data-examples', JSON.stringify(wordData.examples));
+        highlight.textContent = wordAtPosition;
+
+        // Replace the word in the DOM using stored position
+        this.replaceTextInElement(contentElement, wordStart, wordEnd, highlight);
+
+        // Add to WordSelector explained words
+        if (!WordSelector.explainedWords.has(wordData.normalizedWord)) {
+          WordSelector.explainedWords.set(wordData.normalizedWord, {
+            word: wordData.word,
+            meaning: wordData.meaning,
+            examples: wordData.examples,
+            shouldAllowFetchMoreExamples: wordData.shouldAllowFetchMoreExamples || false,
+            hasCalledGetMoreExamples: false,
+            highlights: new Set()
+          });
+        }
+        WordSelector.explainedWords.get(wordData.normalizedWord).highlights.add(highlight);
+
+        // Add green cross button
+        const greenCrossBtn = WordSelector.createRemoveExplainedButton(wordData.word);
+        highlight.appendChild(greenCrossBtn);
+
+        // Setup word interactions
+        WordSelector.setupWordInteractions(highlight);
+
+        console.log('[ButtonPanel] Restored word highlight for:', wordData.word, 'at position', wordStart, '-', wordEnd);
+        return;
+      } else {
+        console.log('[ButtonPanel] Word mismatch at stored position. Expected:', wordData.word, 'Found:', wordAtPosition);
+        console.log('[ButtonPanel] Falling back to regex search');
+      }
+    }
+
+    // Fallback: Find word positions using regex (original logic)
+    console.log('[ButtonPanel] Using regex search fallback for word:', wordData.word);
     const wordRegex = new RegExp(`\\b${wordData.word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'gi');
     let match;
     const wordPositions = [];
@@ -14649,6 +16661,7 @@ const ButtonPanel = {
    * @param {Object} simplifiedData - Simplified text data
    */
   restoreSimplifiedText(simplifiedData) {
+    console.log('[ButtonPanel] ===== RESTORING SIMPLIFIED TEXT =====');
     console.log('[ButtonPanel] Restoring simplified text for textKey:', simplifiedData.textKey);
     console.log('[ButtonPanel] Simplified data:', simplifiedData);
     
@@ -14672,6 +16685,7 @@ const ButtonPanel = {
     }
 
     console.log('[ButtonPanel] Searching for original text:', originalText.substring(0, 50) + '...');
+    console.log('[ButtonPanel] Content length:', textContent.length);
 
     // Find the text segment in the content using text matching
     const textIndex = textContent.indexOf(originalText);
@@ -14692,6 +16706,7 @@ const ButtonPanel = {
 
     console.log('[ButtonPanel] Found original text at index:', textIndex);
     this.createSimplifiedHighlight(contentElement, textIndex, originalText.length, originalText, simplifiedData);
+    console.log('[ButtonPanel] ===== SIMPLIFIED TEXT RESTORATION COMPLETE =====');
   },
 
   /**
@@ -14703,6 +16718,9 @@ const ButtonPanel = {
    * @param {Object} simplifiedData - The simplified data object
    */
   createSimplifiedHighlight(contentElement, startIndex, length, text, simplifiedData) {
+    console.log('[ButtonPanel] ===== CREATING SIMPLIFIED HIGHLIGHT =====');
+    console.log('[ButtonPanel] Start index:', startIndex, 'Length:', length, 'Text:', text.substring(0, 50) + '...');
+    
     // Check if this text is already highlighted
     const existingHighlight = contentElement.querySelector(`[data-text-highlight="${simplifiedData.textKey}"]`);
     if (existingHighlight) {
@@ -14721,6 +16739,41 @@ const ButtonPanel = {
     // Replace the text in the DOM
     this.replaceTextInElement(contentElement, startIndex, startIndex + length, highlight);
 
+    // Create wrapper for icons
+    const iconsWrapper = document.createElement('div');
+    iconsWrapper.className = 'vocab-text-icons-wrapper';
+    iconsWrapper.setAttribute('data-text-key', simplifiedData.textKey);
+    
+    // Add book button first (top position)
+    const bookBtn = TextSelector.createBookButton(simplifiedData.textKey);
+    iconsWrapper.appendChild(bookBtn);
+    
+    // Add green remove button second (bottom position)
+    const greenRemoveBtn = TextSelector.createGreenRemoveButtonForSimplifiedText(simplifiedData.textKey);
+    iconsWrapper.appendChild(greenRemoveBtn);
+    
+    // Check if we're in modal context or main webpage context
+    const modalOverlay = this.topicsModal.customContentModal.overlay;
+    if (modalOverlay && contentElement.closest('.vocab-custom-content-modal')) {
+      // Modal context: append to editor container so icons scroll with text
+      const editorContainer = contentElement.closest('.vocab-custom-content-editor-content');
+      if (editorContainer) {
+        editorContainer.appendChild(iconsWrapper);
+        iconsWrapper.setAttribute('data-icon-context', 'custom-content-modal');
+        this.positionIconsRelativeToHighlight(iconsWrapper, highlight);
+      } else {
+        // Fallback to modal overlay if editor container not found
+        modalOverlay.appendChild(iconsWrapper);
+        iconsWrapper.setAttribute('data-icon-context', 'custom-content-modal');
+        this.positionIconsRelativeToHighlight(iconsWrapper, highlight);
+      }
+    } else {
+      // Main webpage context: append to document body and position relative to highlight
+      document.body.appendChild(iconsWrapper);
+      iconsWrapper.setAttribute('data-icon-context', 'main-webpage');
+      this.positionIconsRelativeToHighlight(iconsWrapper, highlight);
+    }
+
     // Add to TextSelector simplified texts
     TextSelector.simplifiedTexts.set(simplifiedData.textKey, {
       textStartIndex: startIndex,
@@ -14728,14 +16781,127 @@ const ButtonPanel = {
       text: text,
       simplifiedText: simplifiedData.simplifiedText,
       previousSimplifiedTexts: simplifiedData.previousSimplifiedTexts || [],
-      shouldAllowSimplifyMore: simplifiedData.shouldAllowSimplifyMore || false
+      shouldAllowSimplifyMore: simplifiedData.shouldAllowSimplifyMore || false,
+      highlight: highlight
     });
 
-    // Add book button
-    const bookBtn = TextSelector.createBookButton(simplifiedData.textKey);
-    highlight.appendChild(bookBtn);
-
     console.log('[ButtonPanel] Restored simplified text highlight for textKey:', simplifiedData.textKey);
+    console.log('[ButtonPanel] ===== SIMPLIFIED HIGHLIGHT CREATION COMPLETE =====');
+  },
+
+  /**
+   * Position icons relative to a text highlight
+   * @param {HTMLElement} iconsWrapper - The icons wrapper element
+   * @param {HTMLElement} highlight - The text highlight element
+   */
+  positionIconsRelativeToHighlight(iconsWrapper, highlight) {
+    // Function to perform the actual positioning
+    const performPositioning = () => {
+      const highlightRect = highlight.getBoundingClientRect();
+      const isModalContext = highlight.closest('.vocab-custom-content-modal');
+      
+      // Check if highlight has valid dimensions
+      if (highlightRect && highlightRect.width > 0 && highlightRect.height > 0) {
+        if (isModalContext) {
+          // Modal context: position relative to editor container
+          const editorContainer = highlight.closest('.vocab-custom-content-editor-content');
+          if (editorContainer) {
+            const editorRect = editorContainer.getBoundingClientRect();
+            
+            // Position icons on the top left of the highlight (like main webpage)
+            const top = highlightRect.top - editorRect.top - 40; // 40px above
+            const left = highlightRect.left - editorRect.left - 60; // 60px to the left
+            
+            iconsWrapper.style.top = `${Math.max(10, top)}px`; // Ensure it doesn't go above editor
+            iconsWrapper.style.left = `${Math.max(10, left)}px`; // Ensure it doesn't go left of editor
+            iconsWrapper.style.position = 'absolute'; // Ensure absolute positioning within editor
+            
+            console.log('[ButtonPanel] Modal context - Positioned icons relative to editor:', { 
+              top: iconsWrapper.style.top, 
+              left: iconsWrapper.style.left,
+              highlightRect: { top: highlightRect.top, left: highlightRect.left },
+              editorRect: { top: editorRect.top, left: editorRect.left }
+            });
+          } else {
+            // Fallback to modal overlay positioning
+            const modalOverlay = this.topicsModal.customContentModal.overlay;
+            if (modalOverlay) {
+              const overlayRect = modalOverlay.getBoundingClientRect();
+              
+              const top = highlightRect.top - overlayRect.top - 40;
+              const left = highlightRect.left - overlayRect.left - 60;
+              
+              iconsWrapper.style.top = `${Math.max(10, top)}px`;
+              iconsWrapper.style.left = `${Math.max(10, left)}px`;
+            }
+          }
+        } else {
+          // Main webpage context: position relative to viewport (original behavior)
+          const top = highlightRect.top - 40; // 40px above
+          const left = highlightRect.left - 60; // 60px to the left
+          
+          iconsWrapper.style.top = `${Math.max(10, top)}px`; // Ensure it doesn't go above viewport
+          iconsWrapper.style.left = `${Math.max(10, left)}px`; // Ensure it doesn't go left of viewport
+          
+          console.log('[ButtonPanel] Main webpage context - Positioned icons at:', { 
+            top: iconsWrapper.style.top, 
+            left: iconsWrapper.style.left,
+            highlightRect: { top: highlightRect.top, left: highlightRect.left }
+          });
+        }
+        return true; // Successfully positioned
+      }
+      return false; // Not ready yet
+    };
+
+    // Try positioning immediately
+    if (performPositioning()) {
+      return;
+    }
+
+    // If not ready, try with increasing delays
+    const delays = [50, 100, 200, 300];
+    delays.forEach(delay => {
+      setTimeout(() => {
+        if (!performPositioning()) {
+          console.log('[ButtonPanel] Positioning attempt failed at delay:', delay);
+        }
+      }, delay);
+    });
+  },
+
+  /**
+   * Reposition all simplified text icons after restoration
+   */
+  repositionAllSimplifiedIcons() {
+    console.log('[ButtonPanel] Repositioning all simplified text icons');
+    
+    // Get all simplified text highlights
+    const contentElement = this.topicsModal.customContentModal.modal.querySelector('.vocab-custom-content-editor-content');
+    if (!contentElement) {
+      console.log('[ButtonPanel] No content element found for repositioning');
+      return;
+    }
+    
+    const simplifiedHighlights = contentElement.querySelectorAll('.vocab-text-highlight.vocab-text-simplified');
+    console.log('[ButtonPanel] Found', simplifiedHighlights.length, 'simplified highlights to reposition');
+    
+    simplifiedHighlights.forEach(highlight => {
+      const textKey = highlight.getAttribute('data-text-highlight');
+      if (textKey) {
+        // Find the corresponding icon wrapper
+        const modalOverlay = this.topicsModal.customContentModal.overlay;
+        if (modalOverlay) {
+          const iconsWrapper = modalOverlay.querySelector(`[data-text-key="${textKey}"]`);
+          if (iconsWrapper) {
+            console.log('[ButtonPanel] Repositioning icons for textKey:', textKey);
+            this.positionIconsRelativeToHighlight(iconsWrapper, highlight);
+          }
+        }
+      }
+    });
+    
+    console.log('[ButtonPanel] Completed repositioning all simplified text icons');
   },
 
   /**
@@ -14940,6 +17106,8 @@ const ButtonPanel = {
    * @param {HTMLElement} newElement - The new element to insert
    */
   replaceTextInElement(element, startIndex, endIndex, newElement) {
+    console.log('[ButtonPanel] replaceTextInElement called with:', { startIndex, endIndex, newElement: newElement.textContent });
+    
     const walker = document.createTreeWalker(
       element,
       NodeFilter.SHOW_TEXT,
@@ -14965,14 +17133,27 @@ const ButtonPanel = {
     }
 
     if (!targetNode) {
-      console.log('[ButtonPanel] Could not find target text node for replacement');
+      console.log('[ButtonPanel] Could not find target text node for replacement at position', startIndex);
+      console.log('[ButtonPanel] Element text content length:', element.textContent.length);
+      console.log('[ButtonPanel] Element text content preview:', element.textContent.substring(0, 100));
       return;
+    }
+
+    // Verify the target text matches what we expect
+    const targetText = targetNode.textContent.substring(targetStart, targetStart + (endIndex - startIndex));
+    const expectedText = newElement.textContent;
+    
+    console.log('[ButtonPanel] Target text at position:', targetText);
+    console.log('[ButtonPanel] Expected text:', expectedText);
+    
+    if (targetText.toLowerCase() !== expectedText.toLowerCase()) {
+      console.warn('[ButtonPanel] Text mismatch at position. Expected:', expectedText, 'Found:', targetText);
+      // Continue anyway, as the text might have slight differences (case, whitespace)
     }
 
     // Split the text node if necessary
     const beforeText = targetNode.textContent.substring(0, targetStart);
     const afterText = targetNode.textContent.substring(targetStart + (endIndex - startIndex));
-    const targetText = targetNode.textContent.substring(targetStart, targetStart + (endIndex - startIndex));
 
     // Create new text nodes
     if (beforeText) {
@@ -14990,6 +17171,8 @@ const ButtonPanel = {
 
     // Remove the original node
     targetNode.remove();
+    
+    console.log('[ButtonPanel] Successfully replaced text at position', startIndex, '-', endIndex);
   },
 
   /**
@@ -15137,10 +17320,13 @@ const ButtonPanel = {
     console.log('[ButtonPanel] Closing tab of content type:', contentTypeToClose);
     
     // Remove content from new data structure using tabId
-    const removed = this.topicsModal.customContentModal.removeContentByTabId(parseInt(tabId));
-    console.log('[ButtonPanel] Content removed:', removed);
+    const removedContent = this.topicsModal.customContentModal.removeContentByTabId(parseInt(tabId));
+    console.log('[ButtonPanel] Content removed:', removedContent);
     
-    if (!removed) return;
+    if (!removedContent) return;
+    
+    // Clean up analysis data for this tab
+    this.cleanupAnalysisData(removedContent);
     
     // Remove tab element from DOM
     const tabElement = this.topicsModal.customContentModal.modal.querySelector(`[data-tab-id="${tabId}"]`);
@@ -15152,36 +17338,27 @@ const ButtonPanel = {
     // Check if there are any tabs left at all (across all content types)
     const allTabs = this.topicsModal.customContentModal.getAllTabs();
     
-    // Check if there are any tabs left for the specific content type being closed
-    const tabsOfSameType = this.topicsModal.customContentModal.getTabsByType(contentTypeToClose);
+    // Also check DOM to ensure sync
+    const visibleTabs = this.topicsModal.customContentModal.modal.querySelectorAll('.vocab-custom-content-tab');
     
     console.log('[ButtonPanel] ===== TAB CLOSING DEBUG INFO =====');
     console.log('[ButtonPanel] Tab being closed ID:', tabId);
     console.log('[ButtonPanel] Content type being closed:', contentTypeToClose);
     console.log('[ButtonPanel] Active tab ID:', this.topicsModal.customContentModal.activeTabId);
-    console.log('[ButtonPanel] Total remaining tabs:', allTabs.length);
-    console.log('[ButtonPanel] Remaining tabs of same type:', tabsOfSameType.length);
+    console.log('[ButtonPanel] Total remaining tabs (data):', allTabs.length);
+    console.log('[ButtonPanel] Total remaining tabs (DOM):', visibleTabs.length);
     console.log('[ButtonPanel] All remaining tabs:', allTabs);
     console.log('[ButtonPanel] Topic contents:', this.topicsModal.customContentModal.topicContents);
     console.log('[ButtonPanel] Image contents:', this.topicsModal.customContentModal.imageContents);
     console.log('[ButtonPanel] PDF contents:', this.topicsModal.customContentModal.pdfContents);
     console.log('[ButtonPanel] Text contents:', this.topicsModal.customContentModal.textContents);
     
-    // Check if this is the last tab globally OR the last tab of this specific content type
-    const isLastTabGlobally = allTabs.length === 0;
-    const isLastTabOfType = tabsOfSameType.length === 0;
+    // Check if this is the last tab (no tabs remaining in data OR DOM)
+    const isLastTab = allTabs.length === 0 || visibleTabs.length === 0;
     
-    if (isLastTabGlobally) {
-      console.log('-------- I am last tab getting closed globally -------');
-      console.log('[ButtonPanel] LAST TAB DETECTED - Should close modal');
-    } else if (isLastTabOfType) {
-      console.log(`-------- I am last tab of my current content type ${contentTypeToClose} -------`);
-      console.log('[ButtonPanel] LAST TAB OF TYPE DETECTED - Should close modal');
-    }
-    
-    // Check if we should close the modal (either last tab globally or last tab of this content type)
-    if (isLastTabGlobally || isLastTabOfType) {
-      console.log('[ButtonPanel] ===== CLOSING MODAL - Last tab of type or globally =====');
+    if (isLastTab) {
+      console.log('[ButtonPanel] ===== LAST TAB - CLOSING MODAL =====');
+      console.log('[ButtonPanel] No tabs remaining, closing modal');
       console.log('[ButtonPanel] Calling clearTopicsModalInputs()');
       this.clearTopicsModalInputs();
       console.log('[ButtonPanel] Calling hideCustomContentModal()');
@@ -15195,7 +17372,9 @@ const ButtonPanel = {
         this.switchToTab(allTabs[0].id);
       }
     } else {
-      console.log('[ButtonPanel] Tab being closed was not active, no action needed');
+      console.log('[ButtonPanel] Tab being closed was not active, updating visual selection');
+      // Update the visual selection indicator to match the current active tab
+      this.updateTabSelectionVisual();
     }
     
     console.log('[ButtonPanel] ===== END TAB CLOSING DEBUG =====');
@@ -15204,6 +17383,45 @@ const ButtonPanel = {
     setTimeout(() => {
       this.updateTabArrowStates();
     }, 100);
+  },
+
+  /**
+   * Update tab selection visual indicator without switching tabs
+   */
+  updateTabSelectionVisual() {
+    console.log('[ButtonPanel] Updating tab selection visual indicator');
+    
+    const modal = this.topicsModal.customContentModal.modal;
+    if (!modal) {
+      console.log('[ButtonPanel] Modal not found, cannot update visual selection');
+      return;
+    }
+    
+    const tabsContainer = modal.querySelector('.vocab-custom-content-tabs-container');
+    if (!tabsContainer) {
+      console.log('[ButtonPanel] Tabs container not found, cannot update visual selection');
+      return;
+    }
+    
+    const activeTabId = this.topicsModal.customContentModal.activeTabId;
+    if (!activeTabId) {
+      console.log('[ButtonPanel] No active tab ID, cannot update visual selection');
+      return;
+    }
+    
+    // Update sliding background position
+    const activeTabElement = tabsContainer.querySelector(`[data-tab-id="${activeTabId}"]`);
+    if (activeTabElement) {
+      const tabRect = activeTabElement.getBoundingClientRect();
+      const containerRect = tabsContainer.getBoundingClientRect();
+      const left = tabRect.left - containerRect.left + tabsContainer.scrollLeft;
+      const width = tabRect.width;
+      tabsContainer.style.setProperty('--sliding-bg-left', `${left}px`);
+      tabsContainer.style.setProperty('--sliding-bg-width', `${width}px`);
+      console.log('[ButtonPanel] Updated sliding background position:', { left, width });
+    } else {
+      console.log('[ButtonPanel] Active tab element not found for ID:', activeTabId);
+    }
   },
 
   /**
@@ -15252,10 +17470,36 @@ const ButtonPanel = {
         const position = handle.getAttribute('data-position');
         const startX = e.clientX;
         const startY = e.clientY;
-        const startWidth = modal.offsetWidth;
-        const startHeight = modal.offsetHeight;
-        const startLeft = modal.offsetLeft;
-        const startTop = modal.offsetTop;
+        // Get current modal dimensions and position using getBoundingClientRect for accuracy
+        const rect = modal.getBoundingClientRect();
+        const startWidth = rect.width;
+        const startHeight = rect.height;
+        const startLeft = rect.left;
+        const startTop = rect.top;
+        
+        // If this is the first resize, ensure we have proper positioning
+        const computedStyle = window.getComputedStyle(modal);
+        let actualStartLeft = startLeft;
+        let actualStartTop = startTop;
+        
+        // Check if modal is centered (either by left: 50% or transform)
+        const isCentered = computedStyle.left === '50%' || 
+                          computedStyle.left === 'auto' || 
+                          computedStyle.transform.includes('translate(-50%');
+        
+        if (isCentered) {
+          // Modal is centered, set absolute positioning immediately
+          modal.style.left = startLeft + 'px';
+          modal.style.top = startTop + 'px';
+          modal.style.transform = 'none';
+          // Update the position values for resize calculation
+          actualStartLeft = startLeft;
+          actualStartTop = startTop;
+        } else {
+          // Modal already has absolute positioning, use computed values
+          actualStartLeft = parseFloat(computedStyle.left) || startLeft;
+          actualStartTop = parseFloat(computedStyle.top) || startTop;
+        }
         
         const handleMouseMove = (e) => {
         const deltaX = e.clientX - startX;
@@ -15263,46 +17507,46 @@ const ButtonPanel = {
         
         let newWidth = startWidth;
         let newHeight = startHeight;
-        let newLeft = startLeft;
-        let newTop = startTop;
+        let newLeft = actualStartLeft;
+        let newTop = actualStartTop;
         
-          // Calculate new dimensions based on position
-        switch (position) {
+          // Calculate new dimensions based on position (1:1 ratio)
+          switch (position) {
             case 'right':
-              newWidth = Math.max(400, startWidth + deltaX);
+              newWidth = startWidth + deltaX;
               break;
             case 'left':
-              newWidth = Math.max(400, startWidth - deltaX);
-            newLeft = startLeft + deltaX;
+              newWidth = startWidth - deltaX;
+              newLeft = actualStartLeft + deltaX;
               break;
             case 'bottom':
-              newHeight = Math.max(300, startHeight + deltaY);
+              newHeight = startHeight + deltaY;
               break;
             case 'top':
-              newHeight = Math.max(300, startHeight - deltaY);
-            newTop = startTop + deltaY;
-            break;
-          case 'top-right':
-              newWidth = Math.max(400, startWidth + deltaX);
-              newHeight = Math.max(300, startHeight - deltaY);
-            newTop = startTop + deltaY;
-            break;
+              newHeight = startHeight - deltaY;
+              newTop = actualStartTop + deltaY;
+              break;
+            case 'top-right':
+              newWidth = startWidth + deltaX;
+              newHeight = startHeight - deltaY;
+              newTop = actualStartTop + deltaY;
+              break;
             case 'top-left':
-              newWidth = Math.max(400, startWidth - deltaX);
-              newHeight = Math.max(300, startHeight - deltaY);
-            newLeft = startLeft + deltaX;
-              newTop = startTop + deltaY;
-            break;
-          case 'bottom-right':
-              newWidth = Math.max(400, startWidth + deltaX);
-              newHeight = Math.max(300, startHeight + deltaY);
+              newWidth = startWidth - deltaX;
+              newHeight = startHeight - deltaY;
+              newLeft = actualStartLeft + deltaX;
+              newTop = actualStartTop + deltaY;
+              break;
+            case 'bottom-right':
+              newWidth = startWidth + deltaX;
+              newHeight = startHeight + deltaY;
               break;
             case 'bottom-left':
-              newWidth = Math.max(400, startWidth - deltaX);
-              newHeight = Math.max(300, startHeight + deltaY);
-              newLeft = startLeft + deltaX;
-            break;
-        }
+              newWidth = startWidth - deltaX;
+              newHeight = startHeight + deltaY;
+              newLeft = actualStartLeft + deltaX;
+              break;
+          }
         
           // Apply viewport constraints
         const minWidth = 400;
@@ -15543,7 +17787,7 @@ const ButtonPanel = {
         'pdf': 'PDF Content',
         'image': 'Image content', 
         'topic': 'Topic content',
-        'text': 'Text content',
+        'text': 'Content',
         'default': 'Generated Content'
       };
       
@@ -15552,8 +17796,8 @@ const ButtonPanel = {
   },
 
   /**
-   * Update custom content editor with markdown content
-   * @param {string} content - The markdown content
+   * Update custom content editor with content
+   * @param {string} content - The content to display
    */
   updateCustomContentEditor(content) {
     console.log('[ButtonPanel] ===== UPDATING CUSTOM CONTENT EDITOR =====');
@@ -15568,30 +17812,51 @@ const ButtonPanel = {
     console.log('[ButtonPanel] Editor content element found:', !!editorContent);
     console.log('[ButtonPanel] Content to load:', content.substring(0, 100) + '...');
     
-    // Simple markdown to HTML conversion (for basic formatting)
-    let htmlContent = content
-      .replace(/^# (.*$)/gim, '<h1>$1</h1>')
-      .replace(/^## (.*$)/gim, '<h2>$1</h2>')
-      .replace(/^### (.*$)/gim, '<h3>$1</h3>')
-      .replace(/^#### (.*$)/gim, '<h4>$1</h4>')
-      .replace(/^##### (.*$)/gim, '<h5>$1</h5>')
-      .replace(/^###### (.*$)/gim, '<h6>$1</h6>')
-      .replace(/\*\*(.*?)\*\*/gim, '<strong>$1</strong>')
-      .replace(/\*(.*?)\*/gim, '<em>$1</em>')
-      .replace(/`(.*?)`/gim, '<code>$1</code>')
-      .replace(/```([\s\S]*?)```/gim, '<pre><code>$1</code></pre>')
-      .replace(/^\* (.*$)/gim, '<li>$1</li>')
-      .replace(/^- (.*$)/gim, '<li>$1</li>')
-      .replace(/^\d+\. (.*$)/gim, '<li>$1</li>')
-      .replace(/\n\n/gim, '</p><p>')
-      .replace(/\n/gim, '<br>');
+    // Check if content contains markdown formatting
+    const hasMarkdownFormatting = /^#+\s|^\*\*|^\*|^```|^`/.test(content.trim());
     
-    // Wrap in paragraphs
-    htmlContent = '<p>' + htmlContent + '</p>';
+    let htmlContent;
     
-    // Clean up empty paragraphs
-    htmlContent = htmlContent.replace(/<p><\/p>/gim, '');
-    htmlContent = htmlContent.replace(/<p><br><\/p>/gim, '');
+    if (hasMarkdownFormatting) {
+      console.log('[ButtonPanel] Content appears to have markdown formatting, converting to HTML');
+      // Simple markdown to HTML conversion (for basic formatting)
+      htmlContent = content
+        .replace(/^# (.*$)/gim, '<h1>$1</h1>')
+        .replace(/^## (.*$)/gim, '<h2>$1</h2>')
+        .replace(/^### (.*$)/gim, '<h3>$1</h3>')
+        .replace(/^#### (.*$)/gim, '<h4>$1</h4>')
+        .replace(/^##### (.*$)/gim, '<h5>$1</h5>')
+        .replace(/^###### (.*$)/gim, '<h6>$1</h6>')
+        .replace(/\*\*(.*?)\*\*/gim, '<strong>$1</strong>')
+        .replace(/\*(.*?)\*/gim, '<em>$1</em>')
+        .replace(/`(.*?)`/gim, '<code>$1</code>')
+        .replace(/```([\s\S]*?)```/gim, '<pre><code>$1</code></pre>')
+        .replace(/^\* (.*$)/gim, '<li>$1</li>')
+        .replace(/^- (.*$)/gim, '<li>$1</li>')
+        .replace(/^\d+\. (.*$)/gim, '<li>$1</li>')
+        .replace(/\n\n/gim, '</p><p>')
+        .replace(/\n/gim, '<br>');
+      
+      // Wrap in paragraphs
+      htmlContent = '<p>' + htmlContent + '</p>';
+      
+      // Clean up empty paragraphs
+      htmlContent = htmlContent.replace(/<p><\/p>/gim, '');
+      htmlContent = htmlContent.replace(/<p><br><\/p>/gim, '');
+    } else {
+      console.log('[ButtonPanel] Content appears to be plain text, displaying as-is');
+      // For plain text, just escape HTML and preserve line breaks
+      htmlContent = content
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;')
+        .replace(/\n/g, '<br>');
+      
+      // Wrap in a single paragraph to maintain proper spacing
+      htmlContent = '<p>' + htmlContent + '</p>';
+    }
     
     console.log('[ButtonPanel] HTML content generated, length:', htmlContent.length);
     console.log('[ButtonPanel] HTML preview:', htmlContent.substring(0, 200) + '...');
@@ -15621,7 +17886,7 @@ const ButtonPanel = {
       'pdf': 'PDF Content',
       'image': 'Image content', 
       'topic': 'Topic content',
-      'text': 'Text content',
+      'text': 'Content',
       'default': 'Generated Content'
     };
     
@@ -15813,6 +18078,175 @@ const ButtonPanel = {
         <path d="M8 3V13M3 8H13" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
       </svg>
     `;
+  },
+
+  /**
+   * Initialize modal dragging functionality
+   * @param {HTMLElement} modal - The modal element to make draggable
+   */
+  initModalDragging(modal) {
+    let isDragging = false;
+    let startX, startY, initialX, initialY;
+    
+    // Function to check if the clicked element should allow dragging
+    const isDraggableElement = (element) => {
+      // Don't drag if clicking on interactive elements
+      const nonDraggableSelectors = [
+        'input',
+        'button',
+        'textarea',
+        '.vocab-custom-content-tab-arrow',
+        '.vocab-custom-content-add-tab',
+        '.vocab-custom-content-minimize',
+        '.vocab-custom-content-chat-icon',
+        '.vocab-custom-content-resize-handle',
+        '.vocab-custom-content-editor-content',
+        '.vocab-custom-content-tab'
+      ];
+      
+      // Check if the element or any of its parents match non-draggable selectors
+      let currentElement = element;
+      while (currentElement && currentElement !== modal) {
+        for (const selector of nonDraggableSelectors) {
+          if (currentElement.matches && currentElement.matches(selector)) {
+            return false;
+          }
+        }
+        currentElement = currentElement.parentElement;
+      }
+      
+      return true;
+    };
+    
+    // Mouse down event
+    modal.addEventListener('mousedown', (e) => {
+      if (!isDraggableElement(e.target)) {
+        return;
+      }
+      
+      isDragging = true;
+      startX = e.clientX;
+      startY = e.clientY;
+      
+      // Get current modal position - always use getBoundingClientRect for accuracy
+      const rect = modal.getBoundingClientRect();
+      initialX = rect.left;
+      initialY = rect.top;
+      
+      // If this is the first drag, ensure we have proper positioning
+      const computedStyle = window.getComputedStyle(modal);
+      const isCentered = computedStyle.left === '50%' || 
+                        computedStyle.left === 'auto' || 
+                        computedStyle.transform.includes('translate(-50%');
+      
+      if (isCentered) {
+        // Modal is centered, set absolute positioning immediately
+        modal.style.left = initialX + 'px';
+        modal.style.top = initialY + 'px';
+        modal.style.transform = 'none';
+      }
+      
+      // Add dragging class for visual feedback
+      modal.classList.add('dragging');
+      
+      // Prevent text selection during drag
+      e.preventDefault();
+    });
+    
+    // Mouse move event
+    document.addEventListener('mousemove', (e) => {
+      if (!isDragging) return;
+      
+      const deltaX = e.clientX - startX;
+      const deltaY = e.clientY - startY;
+      
+      const newX = initialX + deltaX;
+      const newY = initialY + deltaY;
+      
+      // Constrain to viewport bounds
+      const maxX = window.innerWidth - modal.offsetWidth;
+      const maxY = window.innerHeight - modal.offsetHeight;
+      
+      const constrainedX = Math.max(0, Math.min(newX, maxX));
+      const constrainedY = Math.max(0, Math.min(newY, maxY));
+      
+      // Remove transform and set absolute positioning
+      modal.style.transform = 'none';
+      modal.style.left = constrainedX + 'px';
+      modal.style.top = constrainedY + 'px';
+    });
+    
+    // Mouse up event
+    document.addEventListener('mouseup', () => {
+      if (isDragging) {
+        isDragging = false;
+        modal.classList.remove('dragging');
+      }
+    });
+    
+    // Touch events for mobile support
+    modal.addEventListener('touchstart', (e) => {
+      if (!isDraggableElement(e.target)) {
+        return;
+      }
+      
+      isDragging = true;
+      const touch = e.touches[0];
+      startX = touch.clientX;
+      startY = touch.clientY;
+      
+      // Get current modal position - always use getBoundingClientRect for accuracy
+      const rect = modal.getBoundingClientRect();
+      initialX = rect.left;
+      initialY = rect.top;
+      
+      // If this is the first drag, ensure we have proper positioning
+      const computedStyle = window.getComputedStyle(modal);
+      const isCentered = computedStyle.left === '50%' || 
+                        computedStyle.left === 'auto' || 
+                        computedStyle.transform.includes('translate(-50%');
+      
+      if (isCentered) {
+        // Modal is centered, set absolute positioning immediately
+        modal.style.left = initialX + 'px';
+        modal.style.top = initialY + 'px';
+        modal.style.transform = 'none';
+      }
+      
+      modal.classList.add('dragging');
+      e.preventDefault();
+    });
+    
+    document.addEventListener('touchmove', (e) => {
+      if (!isDragging) return;
+      
+      const touch = e.touches[0];
+      const deltaX = touch.clientX - startX;
+      const deltaY = touch.clientY - startY;
+      
+      const newX = initialX + deltaX;
+      const newY = initialY + deltaY;
+      
+      const maxX = window.innerWidth - modal.offsetWidth;
+      const maxY = window.innerHeight - modal.offsetHeight;
+      
+      const constrainedX = Math.max(0, Math.min(newX, maxX));
+      const constrainedY = Math.max(0, Math.min(newY, maxY));
+      
+      // Remove transform and set absolute positioning
+      modal.style.transform = 'none';
+      modal.style.left = constrainedX + 'px';
+      modal.style.top = constrainedY + 'px';
+      
+      e.preventDefault();
+    });
+    
+    document.addEventListener('touchend', () => {
+      if (isDragging) {
+        isDragging = false;
+        modal.classList.remove('dragging');
+      }
+    });
   },
 
 };
