@@ -1321,11 +1321,10 @@ const WordSelector = {
    */
   createSpeakerIcon() {
     return `
-      <svg viewBox="0 0 26 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M3 9v6h4l5 5V4L7 9H3z" fill="#A020F0"/>
-        <path d="M15.54 8.46c.78.78 1.28 1.86 1.28 3.04s-.5 2.26-1.28 3.04" stroke="#A020F0" stroke-width="2" stroke-linecap="round"/>
-        <path d="M18.36 5.64c1.56 1.56 2.52 3.71 2.52 6.09s-.96 4.53-2.52 6.09" stroke="#A020F0" stroke-width="2" stroke-linecap="round"/>
-        <path d="M21 3c2.28 2.28 3.69 5.43 3.69 8.91S23.28 18.54 21 20.82" stroke="#A020F0" stroke-width="2" stroke-linecap="round" opacity="0.7"/>
+      <svg width="18" height="18" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M2 8v4h3l4 4V4L5 8H2z" fill="white"/>
+        <path d="M13 7c.6.6 1 1.4 1 2.3s-.4 1.7-1 2.3" stroke="white" stroke-width="1.5" stroke-linecap="round"/>
+        <path d="M15.5 4.5c1.2 1.2 2 2.8 2 4.6s-.8 3.4-2 4.6" stroke="white" stroke-width="1.5" stroke-linecap="round"/>
       </svg>
     `;
   },
@@ -1912,35 +1911,40 @@ const WordSelector = {
         left: 12px;
         width: 36px;
         height: 36px;
-        background: transparent;
+        background: #9527F5;
         border: none;
+        border-radius: 50%;
         cursor: pointer;
         opacity: 1;
-        transition: opacity 0.2s ease, transform 0.2s ease;
+        transition: all 0.3s ease;
         display: flex;
         align-items: center;
         justify-content: center;
         z-index: 10;
+        box-shadow: 0 2px 8px rgba(149, 39, 245, 0.3);
       }
       
       .vocab-word-popup-speaker:hover:not(.loading) {
-        opacity: 0.85;
+        background: #7B1FA2;
         transform: scale(1.1);
+        box-shadow: 0 4px 12px rgba(149, 39, 245, 0.4);
       }
       
       .vocab-word-popup-speaker:active:not(.loading) {
         transform: scale(0.95);
+        background: #6A1B9A;
       }
       
       .vocab-word-popup-speaker.loading {
-        opacity: 0.6;
+        opacity: 0.7;
         cursor: not-allowed;
         transform: none;
       }
       
       .vocab-word-popup-speaker svg {
-        width: 28px;
-        height: 28px;
+        width: 18px;
+        height: 18px;
+        pointer-events: none;
       }
       
       /* Loading spinner animation */
@@ -2860,10 +2864,10 @@ const TextSelector = {
     return `
       <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
         <circle cx="10" cy="10" r="9" fill="${color}"/>
-        <path d="M10 5C7.239 5 5 6.959 5 9.375C5 10.681 5.494 11.9 6.348 12.856L5.244 14.746C5.164 14.89 5.164 15.069 5.244 15.214C5.325 15.358 5.499 15.451 5.681 15.451C5.741 15.451 5.801 15.439 5.858 15.415L8.071 14.464C8.904 14.656 9.818 14.75 10.75 14.75C13.511 14.75 15.75 12.791 15.75 10.375C15.75 7.959 13.511 5 10 5Z" fill="white"/>
-        <circle cx="7.5" cy="9.75" r="1" fill="${color}"/>
-        <circle cx="10" cy="9.75" r="1" fill="${color}"/>
-        <circle cx="12.5" cy="9.75" r="1" fill="${color}"/>
+        <path d="M10 6C8.239 6 6.5 7.459 6.5 8.875C6.5 9.681 6.994 10.4 7.348 10.856L6.744 12.246C6.664 12.39 6.664 12.569 6.744 12.714C6.825 12.858 6.999 12.951 7.181 12.951C7.241 12.951 7.301 12.939 7.358 12.915L8.571 12.464C9.404 12.656 10.318 12.75 11.25 12.75C12.511 12.75 13.75 11.791 13.75 10.375C13.75 8.959 12.511 6 10 6Z" fill="white"/>
+        <circle cx="8" cy="9.25" r="0.8" fill="${color}"/>
+        <circle cx="10" cy="9.25" r="0.8" fill="${color}"/>
+        <circle cx="12" cy="9.25" r="0.8" fill="${color}"/>
       </svg>
     `;
   },
@@ -2875,7 +2879,7 @@ const TextSelector = {
    */
   createBookButton(textKey) {
     const btn = document.createElement('button');
-    btn.className = 'vocab-text-book-btn';
+    btn.className = 'vocab-text-book-btn book-breathing';
     btn.setAttribute('aria-label', 'View simplified text');
     btn.innerHTML = this.createBookIcon();
     
@@ -2899,6 +2903,11 @@ const TextSelector = {
         ChatDialog.open(simplifiedData.text, textKey, 'simplified', simplifiedData, 'selected');
       }
     });
+    
+    // Remove breathing class after animation completes
+    setTimeout(() => {
+      btn.classList.remove('book-breathing');
+    }, 1600); // Match animation duration
     
     return btn;
   },
@@ -3115,6 +3124,34 @@ const TextSelector = {
         width: 24px;
         height: 24px;
         filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.1));
+      }
+      
+      /* Book button breathing animation when first appears */
+      .vocab-text-book-btn.book-breathing {
+        animation: bookBreathing 1.6s ease-in-out;
+      }
+      
+      @keyframes bookBreathing {
+        0% {
+          transform: scale(1);
+          opacity: 0.7;
+        }
+        25% {
+          transform: scale(1.3);
+          opacity: 1;
+        }
+        50% {
+          transform: scale(1);
+          opacity: 0.8;
+        }
+        75% {
+          transform: scale(1.3);
+          opacity: 1;
+        }
+        100% {
+          transform: scale(1);
+          opacity: 1;
+        }
       }
       
       /* Green remove button - white cross on green circular background */
@@ -7727,22 +7764,41 @@ const ChatDialog = {
       .vocab-custom-content-info-banner-dismiss-btn {
         background: white;
         color: #B8A3E8;
-        border: none;
+        border: 2px solid #9527F5;
         padding: 6px 14px;
         border-radius: 8px;
         font-size: 13px;
         font-weight: 500;
         cursor: pointer;
-        transition: all 0.2s ease;
+        transition: all 0.3s ease;
         font-family: inherit;
         display: flex;
         align-items: center;
         gap: 6px;
+        position: relative;
+        overflow: hidden;
+      }
+
+      .vocab-custom-content-info-banner-dismiss-btn::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: -100%;
+        width: 100%;
+        height: 100%;
+        background: linear-gradient(90deg, transparent, rgba(149, 39, 245, 0.1), transparent);
+        transition: left 0.5s ease;
       }
 
       .vocab-custom-content-info-banner-dismiss-btn:hover {
-        background: white;
-        color: #9527F5;
+        background: #9527F5;
+        color: white;
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(149, 39, 245, 0.3);
+      }
+
+      .vocab-custom-content-info-banner-dismiss-btn:hover::before {
+        left: 100%;
       }
 
       .vocab-custom-content-info-banner-dismiss-btn:active {
@@ -8210,7 +8266,6 @@ const ButtonPanel = {
   
   // State variables for button visibility and enabled states
   state: {
-    showRemoveMeanings: false,    // Controls visibility of "Remove meanings" button
     isMagicMeaningEnabled: false,  // Controls enabled/disabled state of "Magic meaning" button
     showAsk: false,                // Controls visibility of "Ask" button
     showVerticalGroup: false       // Controls visibility of vertical button group
@@ -8347,15 +8402,7 @@ const ButtonPanel = {
     this.upperButtonGroup = document.createElement('div');
     this.upperButtonGroup.className = 'vocab-button-group-upper';
 
-    const upperButtons = [
-      {
-        id: 'remove-explanations',
-        className: 'vocab-btn vocab-btn-outline-green hidden',
-        icon: this.createTrashIcon('green'),
-        text: 'Remove explanations',
-        type: 'outline-green'
-      }
-    ];
+    const upperButtons = [];
 
     upperButtons.forEach(btnConfig => {
       const button = this.createButton(btnConfig);
@@ -8571,7 +8618,7 @@ const ButtonPanel = {
    */
   createChatIcon() {
     return `
-      <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <svg width="16" height="16" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
         <rect x="4" y="4" width="12" height="10" rx="2" stroke="#9527F5" stroke-width="2" fill="none"/>
         <line x1="10" y1="2" x2="10" y2="4" stroke="#9527F5" stroke-width="2" stroke-linecap="round"/>
         <circle cx="10" cy="1.5" r="0.8" fill="#9527F5"/>
@@ -9159,6 +9206,7 @@ const ButtonPanel = {
       #ask {
         background: #ede5ff !important;
         border: none !important;
+        padding: 8px 12px !important;
       }
 
       #ask:hover:not(.disabled) {
@@ -11074,17 +11122,10 @@ const ButtonPanel = {
    */
   attachEventListeners() {
     const buttons = {
-      removeExplanations: document.getElementById('remove-explanations'),
       magicMeaning: document.getElementById('magic-meaning'),
       ask: document.getElementById('ask'),
       importContent: document.getElementById('import-content')
     };
-
-    // Remove explanations button
-    buttons.removeExplanations?.addEventListener('click', () => {
-      console.log('Remove explanations clicked');
-      this.handleRemoveAllMeanings();
-    });
 
     // Magic meaning button
     buttons.magicMeaning?.addEventListener('click', (e) => {
@@ -11153,12 +11194,6 @@ const ButtonPanel = {
     });
 
     // Add tooltip event listeners
-    if (buttons.removeExplanations) {
-      console.log('[ButtonPanel] Attaching tooltip to Remove explanations button');
-      this.attachTooltipListeners(buttons.removeExplanations, 'remove-explanations');
-    } else {
-      console.warn('[ButtonPanel] Remove explanations button not found');
-    }
     
     if (buttons.magicMeaning) {
       console.log('[ButtonPanel] Attaching tooltip to Magic meaning button');
@@ -11258,10 +11293,7 @@ const ButtonPanel = {
       let message = '';
 
       // Determine tooltip message based on button type and state
-      if (buttonType === 'remove-explanations') {
-        message = 'Remove all explanations';
-        console.log(`[ButtonPanel] Remove-explanations button message: "${message}"`);
-      } else if (buttonType === 'magic-meaning') {
+      if (buttonType === 'magic-meaning') {
         message = isDisabled 
           ? 'Select words or passages first' 
           : 'Get contextual explanations';
@@ -11385,195 +11417,6 @@ const ButtonPanel = {
     return tooltip;
   },
 
-  /**
-   * Handler for Remove all meanings button
-   */
-  handleRemoveAllMeanings() {
-    console.log('[ButtonPanel] Remove all meanings clicked');
-    
-    // Close any open right-side popups (chat dialog, etc.)
-    if (ChatDialog && ChatDialog.isOpen) {
-      console.log('[ButtonPanel] Closing chat dialog before removing meanings');
-      ChatDialog.close();
-    }
-    
-    // Get current context
-    const context = this.getCurrentContentContext();
-    console.log('[ButtonPanel] Current context:', context);
-    
-    // Get all asked texts, simplified texts, and explained words
-    const askedTextsMap = TextSelector.askedTexts;
-    const simplifiedTextsMap = TextSelector.simplifiedTexts;
-    const explainedWordsMap = WordSelector.explainedWords;
-    
-    // Filter items to only those in current context
-    const contextAskedTexts = Array.from(askedTextsMap.keys()).filter(textKey => 
-      this.isTextKeyInCurrentContext(textKey, context)
-    );
-    const contextSimplifiedTexts = Array.from(simplifiedTextsMap.keys()).filter(textKey => 
-      this.isTextKeyInCurrentContext(textKey, context)
-    );
-    const contextExplainedWords = Array.from(explainedWordsMap.keys()).filter(word => 
-      this.isWordInCurrentContext(word, context)
-    );
-    
-    if (contextAskedTexts.length === 0 && contextSimplifiedTexts.length === 0 && contextExplainedWords.length === 0) {
-      console.warn('[ButtonPanel] No meanings to remove in current context');
-      return;
-    }
-    
-    console.log(`[ButtonPanel] Removing meanings from ${context.type}:`, {
-      askedTexts: contextAskedTexts.length,
-      simplifiedTexts: contextSimplifiedTexts.length,
-      explainedWords: contextExplainedWords.length
-    });
-    
-    // Process asked texts in current context
-    if (contextAskedTexts.length > 0) {
-      console.log(`[ButtonPanel] Removing ${contextAskedTexts.length} asked texts from current context`);
-      
-      contextAskedTexts.forEach(textKey => {
-        const askedData = askedTextsMap.get(textKey);
-        
-        if (askedData && askedData.highlight) {
-          const highlight = askedData.highlight;
-          
-          // Remove the chat icon button (green)
-          const chatBtn = highlight.querySelector('.vocab-text-chat-btn');
-          if (chatBtn) {
-            chatBtn.remove();
-          }
-          
-          // Remove the highlight wrapper completely
-          const parent = highlight.parentNode;
-          if (parent) {
-            // Move all child nodes out of the highlight wrapper
-            while (highlight.firstChild) {
-              parent.insertBefore(highlight.firstChild, highlight);
-            }
-            // Remove the empty highlight wrapper
-            highlight.remove();
-          }
-        }
-        
-        // Remove from askedTexts Map
-        askedTextsMap.delete(textKey);
-        
-        // Also remove from textToHighlights Map
-        TextSelector.textToHighlights.delete(textKey);
-      });
-    }
-    
-    // Process simplified texts in current context
-    if (contextSimplifiedTexts.length > 0) {
-      console.log(`[ButtonPanel] Removing ${contextSimplifiedTexts.length} simplified texts from current context`);
-      
-      contextSimplifiedTexts.forEach(textKey => {
-        const highlight = TextSelector.textToHighlights.get(textKey);
-        
-        if (highlight) {
-          // Remove the book icon button
-          const bookBtn = highlight.querySelector('.vocab-text-book-btn');
-          if (bookBtn) {
-            bookBtn.remove();
-          }
-          
-          // Remove the simplified class (green underline)
-          highlight.classList.remove('vocab-text-simplified');
-          
-          // Remove the highlight wrapper completely
-          const parent = highlight.parentNode;
-          if (parent) {
-            // Move all child nodes out of the highlight wrapper
-            while (highlight.firstChild) {
-              parent.insertBefore(highlight.firstChild, highlight);
-            }
-            // Remove the empty highlight wrapper
-            highlight.remove();
-          }
-        }
-        
-        // Remove from simplifiedTexts Map
-        simplifiedTextsMap.delete(textKey);
-        
-        // Also remove from textToHighlights Map
-        TextSelector.textToHighlights.delete(textKey);
-        
-        // Also remove from textPositions Map
-        TextSelector.textPositions.delete(textKey);
-      });
-    }
-    
-    // Process explained words in current context
-    if (contextExplainedWords.length > 0) {
-      console.log(`[ButtonPanel] Removing ${contextExplainedWords.length} explained words from current context`);
-      
-      contextExplainedWords.forEach(word => {
-        const normalizedWord = word.toLowerCase().trim();
-        const wordData = explainedWordsMap.get(word);
-        
-        console.log(`[ButtonPanel] Removing explained word: "${word}" (normalized: "${normalizedWord}")`);
-        
-        if (wordData && wordData.highlights) {
-          // Filter highlights to only those in current context
-          const contextHighlights = Array.from(wordData.highlights).filter(highlight => {
-            if (context.type === 'main-page') {
-              // For main page, check if highlight is in main document
-              return highlight.closest('.vocab-custom-content-modal') === null;
-            } else {
-              // For custom content, check if highlight is in current tab
-              const activeContentElement = this.topicsModal.customContentModal.modal.querySelector('.vocab-custom-content-editor-content');
-              return activeContentElement && activeContentElement.contains(highlight);
-            }
-          });
-          
-          // Remove only context-specific highlights
-          contextHighlights.forEach(highlight => {
-            // Remove the green explained class
-            highlight.classList.remove('vocab-word-explained');
-            
-            // Remove data attributes
-            highlight.removeAttribute('data-meaning');
-            highlight.removeAttribute('data-examples');
-            highlight.removeAttribute('data-popup-id');
-            
-            // Remove the highlight wrapper completely
-            const parent = highlight.parentNode;
-            if (parent) {
-              // Move all child nodes out of the highlight wrapper
-              while (highlight.firstChild) {
-                parent.insertBefore(highlight.firstChild, highlight);
-              }
-              // Remove the empty highlight wrapper
-              highlight.remove();
-            }
-          });
-          
-          // Remove highlights from the word's highlight set
-          contextHighlights.forEach(highlight => {
-            wordData.highlights.delete(highlight);
-          });
-          
-          // If no highlights remain for this word, remove it completely
-          if (wordData.highlights.size === 0) {
-            explainedWordsMap.delete(word);
-            WordSelector.wordToHighlights.delete(normalizedWord);
-          }
-        }
-      });
-      
-      // Hide any open popups
-      WordSelector.hideAllPopups();
-    }
-    
-    console.log(`[ButtonPanel] Meanings removed from ${context.type} context`);
-    
-    // Also remove data from analysis structure for current tab
-    this.removeMeaningsFromAnalysisData();
-    
-    // Update button states
-    this.updateButtonStatesFromSelections();
-  },
 
   /**
    * Get the current content context (main page or specific custom content tab)
@@ -11663,83 +11506,6 @@ const ButtonPanel = {
     }
   },
 
-  /**
-   * Remove meanings from analysis data structure for current tab
-   */
-  removeMeaningsFromAnalysisData() {
-    console.log('[ButtonPanel] Removing meanings from analysis data for current tab');
-    
-    // Check if custom content modal is open and has active tab
-    if (!this.topicsModal || !this.topicsModal.customContentModal || !this.topicsModal.customContentModal.activeTabId) {
-      console.log('[ButtonPanel] No active tab in custom content modal');
-      return;
-    }
-    
-    const activeTabId = this.topicsModal.customContentModal.activeTabId;
-    const activeContent = this.topicsModal.customContentModal.getContentByTabId(parseInt(activeTabId));
-    
-    if (!activeContent || !activeContent.analysis) {
-      console.log('[ButtonPanel] No analysis data found for active tab:', activeTabId);
-      return;
-    }
-    
-    console.log('[ButtonPanel] Removing meanings from analysis data for tab:', activeTabId);
-    
-    // Clear word meanings
-    if (activeContent.analysis.wordMeanings && activeContent.analysis.wordMeanings.length > 0) {
-      console.log('[ButtonPanel] Clearing', activeContent.analysis.wordMeanings.length, 'word meanings from analysis data');
-      activeContent.analysis.wordMeanings = [];
-    }
-    
-    // Clear simplified meanings
-    if (activeContent.analysis.simplifiedMeanings && activeContent.analysis.simplifiedMeanings.length > 0) {
-      console.log('[ButtonPanel] Clearing', activeContent.analysis.simplifiedMeanings.length, 'simplified meanings from analysis data');
-      activeContent.analysis.simplifiedMeanings = [];
-    }
-    
-    // Clear chats
-    if (activeContent.analysis.chats && activeContent.analysis.chats.length > 0) {
-      console.log('[ButtonPanel] Clearing', activeContent.analysis.chats.length, 'chats from analysis data');
-      activeContent.analysis.chats = [];
-    }
-    
-    console.log('[ButtonPanel] Analysis data cleared for tab:', activeTabId);
-  },
-
-  /**
-   * Remove specific word from analysis data structure for current tab
-   * @param {string} normalizedWord - The normalized word to remove
-   */
-  removeWordFromAnalysisData(normalizedWord) {
-    console.log('[ButtonPanel] Removing word from analysis data:', normalizedWord);
-    
-    // Check if custom content modal is open and has active tab
-    if (!this.topicsModal || !this.topicsModal.customContentModal || !this.topicsModal.customContentModal.activeTabId) {
-      console.log('[ButtonPanel] No active tab in custom content modal');
-      return;
-    }
-    
-    const activeTabId = this.topicsModal.customContentModal.activeTabId;
-    const activeContent = this.topicsModal.customContentModal.getContentByTabId(parseInt(activeTabId));
-    
-    if (!activeContent || !activeContent.analysis || !activeContent.analysis.wordMeanings) {
-      console.log('[ButtonPanel] No word meanings found in analysis data for tab:', activeTabId);
-      return;
-    }
-    
-    // Find and remove the specific word from wordMeanings array
-    const initialLength = activeContent.analysis.wordMeanings.length;
-    activeContent.analysis.wordMeanings = activeContent.analysis.wordMeanings.filter(wordData => 
-      wordData.normalizedWord !== normalizedWord
-    );
-    
-    const removedCount = initialLength - activeContent.analysis.wordMeanings.length;
-    if (removedCount > 0) {
-      console.log('[ButtonPanel] Removed', removedCount, 'word explanation(s) for word:', normalizedWord, 'from analysis data');
-    } else {
-      console.log('[ButtonPanel] No word explanation found for word:', normalizedWord, 'in analysis data');
-    }
-  },
 
   /**
    * Remove specific asked text from analysis data structure for current tab
@@ -13360,25 +13126,9 @@ const ButtonPanel = {
    * Update button states based on state variables
    */
   updateButtonStates() {
-    // Show/hide upper button group based on state with smooth animation
-    const shouldShowUpperGroup = this.state.showRemoveMeanings;
+    // Hide upper button group since it's now empty
     if (this.upperButtonGroup) {
-      if (shouldShowUpperGroup) {
-        this.upperButtonGroup.classList.add('visible');
-      } else {
-        this.upperButtonGroup.classList.remove('visible');
-      }
-    }
-
-    // Update individual button visibility in upper group with smooth animation
-    const removeMeaningsBtn = document.getElementById('remove-explanations');
-    
-    if (removeMeaningsBtn) {
-      if (this.state.showRemoveMeanings) {
-        this.showButtonSmooth(removeMeaningsBtn);
-      } else {
-        this.hideButtonSmooth(removeMeaningsBtn);
-      }
+      this.upperButtonGroup.classList.remove('visible');
     }
 
     // Update enabled/disabled state of magic meaning button
@@ -13475,12 +13225,9 @@ const ButtonPanel = {
       hasTexts,
       hasAskedTextsInContext,
       hasSimplifiedTextsInContext,
-      hasExplainedWordsInContext,
-      showRemoveMeanings: hasAskedTextsInContext || hasSimplifiedTextsInContext || hasExplainedWordsInContext
+      hasExplainedWordsInContext
     });
     
-    // Show "Remove all meanings" if there are any asked texts, simplified texts, OR explained words in current context
-    this.setShowRemoveMeanings(hasAskedTextsInContext || hasSimplifiedTextsInContext || hasExplainedWordsInContext);
     
     // Enable "Magic meaning" if there are any words or texts selected
     this.setMagicMeaningEnabled(hasWords || hasTexts);
@@ -13490,13 +13237,6 @@ const ButtonPanel = {
     this.setAskVisible(hasExactlyOneText && !isCustomModalOpen);
   },
 
-  /**
-   * Set visibility of Remove meanings button
-   * @param {boolean} show - Whether to show the button
-   */
-  setShowRemoveMeanings(show) {
-    this.updateState({ showRemoveMeanings: show });
-  },
 
 
   /**
