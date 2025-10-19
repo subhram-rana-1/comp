@@ -14610,6 +14610,13 @@ const ButtonPanel = {
       console.log('[ButtonPanel] Overlay classes after removal:', this.topicsModal.customContentModal.overlay.classList.toString());
       console.log('[ButtonPanel] Overlay is now visible:', this.topicsModal.customContentModal.overlay.classList.contains('visible'));
       
+      // Close ChatDialog if it's open when modal is minimized/closed
+      if (typeof ChatDialog !== 'undefined' && ChatDialog.isOpen) {
+        console.log('[ButtonPanel] ChatDialog is open - closing it when custom content modal is minimized/closed');
+        console.log('[ButtonPanel] Current ChatDialog textKey:', ChatDialog.currentTextKey);
+        ChatDialog.close();
+      }
+      
       // Update button states after modal closes
       this.updateButtonStatesFromSelections();
       
