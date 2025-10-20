@@ -4,9 +4,6 @@
  */
 
 export const API_CONFIG = {
-  // Development URL
-  DEV_BASE_URL: 'http://localhost:8000',
-  
   // Production URL  
   PROD_BASE_URL: 'https://caten-production.up.railway.app',
   
@@ -18,7 +15,6 @@ export const API_CONFIG = {
 
 export const getHostPermissions = () => {
   return [
-    `${API_CONFIG.DEV_BASE_URL}/*`,
     `${API_CONFIG.PROD_BASE_URL}/*`,
     ...API_CONFIG.ADDITIONAL_URLS
   ];
