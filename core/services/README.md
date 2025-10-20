@@ -11,10 +11,12 @@ All API base URLs and endpoints are now managed through a centralized configurat
 // In core/config/apiConfig.js
 class ApiConfig {
   static get BASE_URL() {
-    // Automatically detects development vs production
-    if (window.location.hostname === 'localhost') {
+    // Check for development environment variables or flags
+    if (typeof process !== 'undefined' && process.env.NODE_ENV === 'development') {
       return 'http://localhost:8000';
     }
+    
+    // Default to production URL
     return 'https://caten-production.up.railway.app';
   }
 }
