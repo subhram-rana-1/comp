@@ -26,7 +26,7 @@ export default defineContentScript({
       
       showAllIndicators: () => {
         console.log('[DEBUG] Forcing all indicators to be visible...');
-        const indicators = ['pdf-content-indicator', 'image-content-indicator', 'topics-content-indicator', 'text-content-indicator'];
+        const indicators = ['pdf-content-indicator', 'image-content-indicator', 'topics-content-indicator', 'text-content-indicator', 'import-content-indicator'];
         indicators.forEach(id => {
           const element = document.getElementById(id);
           if (element) {
@@ -126,7 +126,8 @@ export default defineContentScript({
         { id: 'pdf-content-indicator', name: 'PDF' },
         { id: 'image-content-indicator', name: 'Image' },
         { id: 'topics-content-indicator', name: 'Topics' },
-        { id: 'text-content-indicator', name: 'Text' }
+        { id: 'text-content-indicator', name: 'Text' },
+        { id: 'import-content-indicator', name: 'Import Content' }
       ];
       
       indicators.forEach(indicator => {
@@ -141,8 +142,8 @@ export default defineContentScript({
           element.style.backgroundColor = '#16a34a';
           element.style.border = '1px solid white';
           element.style.position = 'absolute';
-          element.style.top = '4px';
-          element.style.right = '4px';
+          element.style.top = '6px';
+          element.style.right = '6px';
           element.style.width = '8px';
           element.style.height = '8px';
           element.style.borderRadius = '50%';
@@ -8798,6 +8799,14 @@ const ButtonPanel = {
     button.appendChild(iconSpan);
     button.appendChild(textSpan);
 
+    // Add content indicator for import-content button
+    if (config.id === 'import-content') {
+      const indicator = document.createElement('div');
+      indicator.className = 'vocab-content-indicator';
+      indicator.id = 'import-content-indicator';
+      button.appendChild(indicator);
+    }
+
     return button;
   },
 
@@ -8885,6 +8894,7 @@ const ButtonPanel = {
     console.log('[ButtonPanel] textContents length:', this.topicsModal.customContentModal.textContents.length);
 
     const contentTypes = ['pdf', 'image', 'topics', 'text'];
+    let hasAnyContent = false;
     
     contentTypes.forEach(contentType => {
       const indicatorId = `${contentType}-content-indicator`;
@@ -8907,6 +8917,7 @@ const ButtonPanel = {
           indicator.style.display = 'block';
           indicator.style.visibility = 'visible';
           indicator.style.opacity = '1';
+          hasAnyContent = true;
           console.log(`[ButtonPanel] - Showing indicator for ${contentType}`);
         } else {
           indicator.style.display = 'none';
@@ -8918,6 +8929,24 @@ const ButtonPanel = {
         console.log(`[ButtonPanel] - Indicator element not found for ${contentType}`);
       }
     });
+    
+    // Update import-content indicator based on whether any content exists
+    const importIndicator = document.getElementById('import-content-indicator');
+    if (importIndicator) {
+      if (hasAnyContent) {
+        importIndicator.style.display = 'block';
+        importIndicator.style.visibility = 'visible';
+        importIndicator.style.opacity = '1';
+        console.log(`[ButtonPanel] - Showing import-content indicator (hasAnyContent: ${hasAnyContent})`);
+      } else {
+        importIndicator.style.display = 'none';
+        importIndicator.style.visibility = 'hidden';
+        importIndicator.style.opacity = '0';
+        console.log(`[ButtonPanel] - Hiding import-content indicator (hasAnyContent: ${hasAnyContent})`);
+      }
+    } else {
+      console.log(`[ButtonPanel] - Import-content indicator element not found`);
+    }
     
     console.log('[ButtonPanel] ===== END UPDATE CONTENT INDICATORS DEBUG =====');
   },
@@ -9896,8 +9925,8 @@ const ButtonPanel = {
       /* Content indicator styles */
       .vocab-content-indicator {
         position: absolute;
-        top: 4px;
-        right: 4px;
+        top: 6px;
+        right: 6px;
         width: 8px;
         height: 8px;
         background-color: #16a34a;
@@ -9942,8 +9971,8 @@ const ButtonPanel = {
         .vocab-content-indicator {
           width: 6px;
           height: 6px;
-          top: 3px;
-          right: 3px;
+          top: 4px;
+          right: 4px;
         }
       }
 
