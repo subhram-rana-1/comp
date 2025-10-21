@@ -7474,6 +7474,14 @@ const ChatDialog = {
         background: var(--vocab-background-white);
         border-radius: 20px;
         box-shadow: var(--vocab-shadow-heavy), 0 0 0 1px var(--vocab-border-light);
+        /* Animation properties for smooth minimize effect */
+        transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1), 
+                    height 0.3s cubic-bezier(0.4, 0, 0.2, 1), 
+                    left 0.3s cubic-bezier(0.4, 0, 0.2, 1), 
+                    top 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+                    opacity 0.2s ease;
+        /* Ensure smooth animation during minimize */
+        will-change: width, height, left, top, opacity;
         width: 90%;
         max-width: 900px;
         max-height: 90vh;
@@ -7531,6 +7539,14 @@ const ChatDialog = {
       .vocab-custom-content-modal.dragging {
         cursor: grabbing;
         user-select: none;
+      }
+      
+      /* Minimizing animation state */
+      .vocab-custom-content-modal.minimizing {
+        pointer-events: none;
+        z-index: 999999;
+        /* Disable transitions during manual animation to avoid conflicts */
+        transition: none !important;
       }
 
       .vocab-custom-content-modal.dragging * {
@@ -15184,6 +15200,17 @@ const ButtonPanel = {
       this.createCustomContentModal();
     }
     
+    // Reset modal styles in case it was minimized with animation
+    const modal = this.topicsModal.customContentModal.modal;
+    if (modal) {
+      modal.style.width = '';
+      modal.style.height = '';
+      modal.style.left = '';
+      modal.style.top = '';
+      modal.style.opacity = '';
+      modal.classList.remove('minimizing');
+    }
+    
     // Create new content using the new data structure
     const tabTitle = this.generateTabTitle(contentType, metadata);
     const newContent = this.topicsModal.customContentModal.addContent(contentType, tabTitle, content, metadata);
@@ -15309,75 +15336,197 @@ const ButtonPanel = {
   },
 
   /**
-   * Hide custom content modal
+   * Hide custom content modal with smooth animation towards import-content button
    */
   hideCustomContentModal() {
-    console.log('[ButtonPanel] ===== HIDE CUSTOM CONTENT MODAL DEBUG =====');
-    console.log('[ButtonPanel] Hiding custom content modal');
+    console.log('[ButtonPanel] ===== HIDE CUSTOM CONTENT MODAL WITH ANIMATION =====');
+    console.log('[ButtonPanel] Starting minimize animation');
     console.log('[ButtonPanel] Modal overlay exists:', !!this.topicsModal.customContentModal.overlay);
     
     if (this.topicsModal.customContentModal.overlay) {
-      console.log('[ButtonPanel] Overlay classes before removal:', this.topicsModal.customContentModal.overlay.classList.toString());
-      this.topicsModal.customContentModal.overlay.classList.remove('visible');
+      const overlay = this.topicsModal.customContentModal.overlay;
+      const modal = this.topicsModal.customContentModal.modal;
       
-      // Remove class from body to show webpage icons again
-      document.body.classList.remove('vocab-custom-content-modal-open');
-      
-      console.log('[ButtonPanel] Overlay classes after removal:', this.topicsModal.customContentModal.overlay.classList.toString());
-      console.log('[ButtonPanel] Overlay is now visible:', this.topicsModal.customContentModal.overlay.classList.contains('visible'));
-      
-      // Close ChatDialog if it's open when modal is minimized/closed
-      if (typeof ChatDialog !== 'undefined' && ChatDialog.isOpen) {
-        console.log('[ButtonPanel] ChatDialog is open - closing it when custom content modal is minimized/closed');
-        console.log('[ButtonPanel] Current ChatDialog textKey:', ChatDialog.currentTextKey);
-        ChatDialog.close();
+      // Get import-content button position
+      const importButton = document.getElementById('import-content');
+      if (!importButton) {
+        console.log('[ButtonPanel] Import-content button not found, using fallback animation');
+        this.hideCustomContentModalFallback();
+        return;
       }
       
-      // Update button states after modal closes
-      this.updateButtonStatesFromSelections();
+      const importButtonRect = importButton.getBoundingClientRect();
+      const modalRect = modal.getBoundingClientRect();
       
-      // Hide info banner if visible
-      this.hideCustomContentInfoBanner();
+      console.log('[ButtonPanel] Import button position:', importButtonRect);
+      console.log('[ButtonPanel] Modal position:', modalRect);
       
-      // Update icon contexts for all existing icons
-      this.updateIconContexts();
+      // Calculate target position (center of import button)
+      const targetX = importButtonRect.left + importButtonRect.width / 2;
+      const targetY = importButtonRect.top + importButtonRect.height / 2;
       
-      // Restore any icon wrappers that were moved to modal overlay back to their original highlights
-      const iconWrappers = this.topicsModal.customContentModal.overlay.querySelectorAll('.vocab-text-icons-wrapper');
-      iconWrappers.forEach(wrapper => {
-        const textKey = wrapper.getAttribute('data-text-key');
-        if (textKey) {
-          // Try to find the original highlight element
-          let highlight = document.querySelector(`[data-text-highlight="${textKey}"]`);
-          
-          // If not found by data-text-highlight, try to find by checking simplifiedTexts
-          if (!highlight && TextSelector.simplifiedTexts.has(textKey)) {
-            const simplifiedData = TextSelector.simplifiedTexts.get(textKey);
-            if (simplifiedData && simplifiedData.highlight) {
-              highlight = simplifiedData.highlight;
-            }
-          }
-          
-          // Only restore if we found a highlight AND it's definitely from the main webpage (not modal content)
-          if (highlight && !highlight.closest('.vocab-custom-content-modal') && highlight.closest('body')) {
-            // This is a main webpage highlight, move the icons back
-            console.log('[ButtonPanel] Restoring icons for textKey:', textKey);
-            highlight.appendChild(wrapper);
-            // Update context to main-webpage since it's being restored to main webpage
-            wrapper.setAttribute('data-icon-context', 'main-webpage');
-          } else {
-            // This is modal content or highlight not found, keep the wrapper in the modal overlay
-            // Don't remove it as it might be needed for modal content
-            console.log('[ButtonPanel] Keeping modal content icons for textKey:', textKey);
-            // Update context to custom-content-modal since it's staying in modal
-            wrapper.setAttribute('data-icon-context', 'custom-content-modal');
-          }
-        } else {
-          // No textKey, keep the wrapper in the modal overlay
-          console.log('[ButtonPanel] Keeping icon wrapper without textKey');
-        }
+      // Calculate current modal center
+      const currentX = modalRect.left + modalRect.width / 2;
+      const currentY = modalRect.top + modalRect.height / 2;
+      
+      // Calculate distance and direction
+      const deltaX = targetX - currentX;
+      const deltaY = targetY - currentY;
+      
+      console.log('[ButtonPanel] Animation target:', { targetX, targetY });
+      console.log('[ButtonPanel] Animation delta:', { deltaX, deltaY });
+      
+      // Start animation
+      this.animateModalMinimize(modal, deltaX, deltaY, () => {
+        // Animation complete - hide modal
+        overlay.classList.remove('visible');
+        document.body.classList.remove('vocab-custom-content-modal-open');
+        this.cleanupAfterModalHide();
       });
     }
+  },
+  
+  /**
+   * Fallback method for hiding modal without animation
+   */
+  hideCustomContentModalFallback() {
+    console.log('[ButtonPanel] Using fallback hide method');
+    if (this.topicsModal.customContentModal.overlay) {
+      this.topicsModal.customContentModal.overlay.classList.remove('visible');
+      document.body.classList.remove('vocab-custom-content-modal-open');
+      this.cleanupAfterModalHide();
+    }
+  },
+  
+  /**
+   * Animate modal minimize with continuous resizing and movement
+   */
+  animateModalMinimize(modal, deltaX, deltaY, onComplete) {
+    const duration = 300; // Animation duration in milliseconds - much faster!
+    const startTime = performance.now();
+    
+    // Add minimizing class to disable transitions and interactions
+    modal.classList.add('minimizing');
+    
+    // Store initial values
+    const initialWidth = modal.offsetWidth;
+    const initialHeight = modal.offsetHeight;
+    const initialLeft = modal.offsetLeft;
+    const initialTop = modal.offsetTop;
+    
+    // Target values (minimize to 20px x 20px)
+    const targetWidth = 20;
+    const targetHeight = 20;
+    
+    console.log('[ButtonPanel] Starting animation:', {
+      initialWidth, initialHeight, initialLeft, initialTop,
+      targetWidth, targetHeight, deltaX, deltaY
+    });
+    
+    // Animation function
+    const animate = (currentTime) => {
+      const elapsed = currentTime - startTime;
+      const progress = Math.min(elapsed / duration, 1);
+      
+      // Use easing function for smooth animation
+      const easeProgress = this.easeInOutCubic(progress);
+      
+      // Calculate current values
+      const currentWidth = initialWidth - (initialWidth - targetWidth) * easeProgress;
+      const currentHeight = initialHeight - (initialHeight - targetHeight) * easeProgress;
+      const currentLeft = initialLeft + deltaX * easeProgress;
+      const currentTop = initialTop + deltaY * easeProgress;
+      
+      // Apply transformations
+      modal.style.width = `${currentWidth}px`;
+      modal.style.height = `${currentHeight}px`;
+      modal.style.left = `${currentLeft}px`;
+      modal.style.top = `${currentTop}px`;
+      
+      // Add opacity fade for smoother effect
+      const opacity = 1 - (easeProgress * 0.3); // Fade to 70% opacity
+      modal.style.opacity = opacity;
+      
+      // Continue animation or complete
+      if (progress < 1) {
+        requestAnimationFrame(animate);
+      } else {
+        console.log('[ButtonPanel] Animation completed');
+        // Remove minimizing class
+        modal.classList.remove('minimizing');
+        // Don't reset styles - just call onComplete immediately to hide modal
+        onComplete();
+      }
+    };
+    
+    // Start animation
+    requestAnimationFrame(animate);
+  },
+  
+  /**
+   * Easing function for smooth animation
+   */
+  easeInOutCubic(t) {
+    return t < 0.5 ? 4 * t * t * t : (t - 1) * (2 * t - 2) * (2 * t - 2) + 1;
+  },
+  
+  /**
+   * Cleanup after modal is hidden
+   */
+  cleanupAfterModalHide() {
+    console.log('[ButtonPanel] Cleaning up after modal hide');
+    
+    // Close ChatDialog if it's open when modal is minimized/closed
+    if (typeof ChatDialog !== 'undefined' && ChatDialog.isOpen) {
+      console.log('[ButtonPanel] ChatDialog is open - closing it when custom content modal is minimized/closed');
+      console.log('[ButtonPanel] Current ChatDialog textKey:', ChatDialog.currentTextKey);
+      ChatDialog.close();
+    }
+    
+    // Update button states after modal closes
+    this.updateButtonStatesFromSelections();
+    
+    // Hide info banner if visible
+    this.hideCustomContentInfoBanner();
+    
+    // Update icon contexts for all existing icons
+    this.updateIconContexts();
+    
+    // Restore any icon wrappers that were moved to modal overlay back to their original highlights
+    const iconWrappers = this.topicsModal.customContentModal.overlay.querySelectorAll('.vocab-text-icons-wrapper');
+    iconWrappers.forEach(wrapper => {
+      const textKey = wrapper.getAttribute('data-text-key');
+      if (textKey) {
+        // Try to find the original highlight element
+        let highlight = document.querySelector(`[data-text-highlight="${textKey}"]`);
+        
+        // If not found by data-text-highlight, try to find by checking simplifiedTexts
+        if (!highlight && TextSelector.simplifiedTexts.has(textKey)) {
+          const simplifiedData = TextSelector.simplifiedTexts.get(textKey);
+          if (simplifiedData && simplifiedData.highlight) {
+            highlight = simplifiedData.highlight;
+          }
+        }
+        
+        // Only restore if we found a highlight AND it's definitely from the main webpage (not modal content)
+        if (highlight && !highlight.closest('.vocab-custom-content-modal') && highlight.closest('body')) {
+          // This is a main webpage highlight, move the icons back
+          console.log('[ButtonPanel] Restoring icons for textKey:', textKey);
+          highlight.appendChild(wrapper);
+          // Update context to main-webpage since it's being restored to main webpage
+          wrapper.setAttribute('data-icon-context', 'main-webpage');
+        } else {
+          // This is modal content or highlight not found, keep the wrapper in the modal overlay
+          // Don't remove it as it might be needed for modal content
+          console.log('[ButtonPanel] Keeping modal content icons for textKey:', textKey);
+          // Update context to custom-content-modal since it's staying in modal
+          wrapper.setAttribute('data-icon-context', 'custom-content-modal');
+        }
+      } else {
+        // No textKey, keep the wrapper in the modal overlay
+        console.log('[ButtonPanel] Keeping icon wrapper without textKey');
+      }
+    });
     
     console.log('[ButtonPanel] ===== END HIDE CUSTOM CONTENT MODAL DEBUG =====');
   },
@@ -16594,6 +16743,17 @@ const ButtonPanel = {
         console.log('[ButtonPanel] No specific tab specified, switching to first tab');
         this.switchToTab(contents[0].tabId.toString());
       }
+    }
+    
+    // Reset modal styles in case it was minimized with animation
+    const modal = this.topicsModal.customContentModal.modal;
+    if (modal) {
+      modal.style.width = '';
+      modal.style.height = '';
+      modal.style.left = '';
+      modal.style.top = '';
+      modal.style.opacity = '';
+      modal.classList.remove('minimizing');
     }
     
     // Ensure modal is visible and add body class for blur effect
@@ -18963,7 +19123,7 @@ const ButtonPanel = {
         modal.classList.remove('dragging');
       }
     });
-  },
+  }
 
 };
 
