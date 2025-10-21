@@ -7,6 +7,194 @@ export default defineContentScript({
   matches: ['<all_urls>'],
   
   async main() {
+    // Add global debugging functions immediately
+    window.debugExtension = {
+      checkTopicsContent: () => {
+        console.log('[DEBUG] Checking topics content...');
+        // Try to find ButtonPanel in different ways
+        if (window.ButtonPanel && window.ButtonPanel.topicsModal && window.ButtonPanel.topicsModal.customContentModal) {
+          const topics = window.ButtonPanel.topicsModal.customContentModal.topicContents;
+          console.log('[DEBUG] Topics content:', topics);
+          console.log('[DEBUG] Topics count:', topics.length);
+          return topics;
+        } else {
+          console.log('[DEBUG] ButtonPanel not found, trying alternative...');
+          // Try to find the content directly in DOM or other ways
+          return null;
+        }
+      },
+      
+      showAllIndicators: () => {
+        console.log('[DEBUG] Forcing all indicators to be visible...');
+        const indicators = ['pdf-content-indicator', 'image-content-indicator', 'topics-content-indicator', 'text-content-indicator'];
+        indicators.forEach(id => {
+          const element = document.getElementById(id);
+          if (element) {
+            element.style.display = 'block';
+            element.style.visibility = 'visible';
+            element.style.opacity = '1';
+            element.style.backgroundColor = '#16a34a';
+            element.style.border = '1px solid white';
+            console.log(`[DEBUG] Made ${id} visible`);
+          } else {
+            console.log(`[DEBUG] ${id} not found`);
+          }
+        });
+      },
+      
+      checkStorage: () => {
+        console.log('[DEBUG] Checking all possible storage locations...');
+        // Check if we can find any content in the page
+        const allElements = document.querySelectorAll('*');
+        console.log('[DEBUG] Total elements on page:', allElements.length);
+        
+        // Look for any elements that might contain content
+        const contentElements = document.querySelectorAll('[class*="content"], [id*="content"], [class*="topic"], [id*="topic"]');
+        console.log('[DEBUG] Content-related elements found:', contentElements.length);
+        contentElements.forEach((el, i) => {
+          if (i < 10) { // Only log first 10
+            console.log(`[DEBUG] Element ${i}:`, el.className, el.id);
+          }
+        });
+      }
+    };
+    
+    console.log('[DEBUG] Global debug functions added to window.debugExtension');
+    
+    // Add immediate debugging functions that work right away
+    window.debugTopics = () => {
+      console.log('[DEBUG] === IMMEDIATE TOPICS DEBUG ===');
+      
+      // Check if we can find any topics-related elements
+      const topicsElements = document.querySelectorAll('[class*="topic"], [id*="topic"], [class*="content"]');
+      console.log('[DEBUG] Found topics-related elements:', topicsElements.length);
+      
+      // Check if vertical button group exists
+      const buttonGroup = document.getElementById('vocab-vertical-button-group');
+      console.log('[DEBUG] Button group exists:', !!buttonGroup);
+      
+      // Check if topics button exists
+      const topicsButton = document.getElementById('vocab-topics-btn');
+      console.log('[DEBUG] Topics button exists:', !!topicsButton);
+      
+      // Check if topics indicator exists
+      const topicsIndicator = document.getElementById('topics-content-indicator');
+      console.log('[DEBUG] Topics indicator exists:', !!topicsIndicator);
+      
+      if (topicsIndicator) {
+        console.log('[DEBUG] Topics indicator current styles:', {
+          display: topicsIndicator.style.display,
+          visibility: topicsIndicator.style.visibility,
+          opacity: topicsIndicator.style.opacity,
+          backgroundColor: topicsIndicator.style.backgroundColor
+        });
+        
+        // Force it to be visible
+        topicsIndicator.style.display = 'block';
+        topicsIndicator.style.visibility = 'visible';
+        topicsIndicator.style.opacity = '1';
+        topicsIndicator.style.backgroundColor = '#16a34a';
+        topicsIndicator.style.border = '1px solid white';
+        topicsIndicator.style.position = 'absolute';
+        topicsIndicator.style.top = '4px';
+        topicsIndicator.style.right = '4px';
+        topicsIndicator.style.width = '8px';
+        topicsIndicator.style.height = '8px';
+        topicsIndicator.style.borderRadius = '50%';
+        topicsIndicator.style.zIndex = '10';
+        
+        console.log('[DEBUG] Topics indicator forced to be visible');
+      }
+      
+      console.log('[DEBUG] === END IMMEDIATE TOPICS DEBUG ===');
+    };
+    
+    // Add a simple function to check and show indicators
+    window.fixGreenDots = () => {
+      console.log('[DEBUG] === FIXING GREEN DOTS ===');
+      
+      // First, check if the vertical button group exists
+      const buttonGroup = document.getElementById('vocab-vertical-button-group');
+      console.log('[DEBUG] Button group found:', !!buttonGroup);
+      
+      if (buttonGroup) {
+        console.log('[DEBUG] Button group is visible:', buttonGroup.classList.contains('visible'));
+      }
+      
+      // Check each indicator
+      const indicators = [
+        { id: 'pdf-content-indicator', name: 'PDF' },
+        { id: 'image-content-indicator', name: 'Image' },
+        { id: 'topics-content-indicator', name: 'Topics' },
+        { id: 'text-content-indicator', name: 'Text' }
+      ];
+      
+      indicators.forEach(indicator => {
+        const element = document.getElementById(indicator.id);
+        console.log(`[DEBUG] ${indicator.name} indicator:`, !!element);
+        
+        if (element) {
+          // Force it to be visible
+          element.style.display = 'block';
+          element.style.visibility = 'visible';
+          element.style.opacity = '1';
+          element.style.backgroundColor = '#16a34a';
+          element.style.border = '1px solid white';
+          element.style.position = 'absolute';
+          element.style.top = '4px';
+          element.style.right = '4px';
+          element.style.width = '8px';
+          element.style.height = '8px';
+          element.style.borderRadius = '50%';
+          element.style.zIndex = '10';
+          
+          console.log(`[DEBUG] ${indicator.name} indicator forced to be visible`);
+        } else {
+          console.log(`[DEBUG] ${indicator.name} indicator NOT FOUND in DOM`);
+        }
+      });
+      
+      console.log('[DEBUG] === END FIXING GREEN DOTS ===');
+    };
+    
+    // Add function to check topics content specifically
+    window.checkTopicsContent = () => {
+      console.log('[DEBUG] === CHECKING TOPICS CONTENT ===');
+      
+      // Try to find ButtonPanel
+      if (window.ButtonPanel && window.ButtonPanel.topicsModal && window.ButtonPanel.topicsModal.customContentModal) {
+        const topics = window.ButtonPanel.topicsModal.customContentModal.topicContents;
+        console.log('[DEBUG] Topics content found:', topics);
+        console.log('[DEBUG] Topics count:', topics.length);
+        
+        if (topics.length > 0) {
+          console.log('[DEBUG] Topics content details:', topics.map(t => ({
+            tabId: t.tabId,
+            tabName: t.tabName,
+            contentType: t.contentType,
+            contentLength: t.content ? t.content.length : 0
+          })));
+          
+          // Force topics indicator to be visible
+          const topicsIndicator = document.getElementById('topics-content-indicator');
+          if (topicsIndicator) {
+            topicsIndicator.style.display = 'block';
+            topicsIndicator.style.visibility = 'visible';
+            topicsIndicator.style.opacity = '1';
+            topicsIndicator.style.backgroundColor = '#16a34a';
+            console.log('[DEBUG] Topics indicator forced to be visible');
+          } else {
+            console.log('[DEBUG] Topics indicator element not found');
+          }
+        } else {
+          console.log('[DEBUG] No topics content found');
+        }
+      } else {
+        console.log('[DEBUG] ButtonPanel not accessible');
+      }
+      
+      console.log('[DEBUG] === END CHECKING TOPICS CONTENT ===');
+    };
     // Get current domain
     const currentDomain = window.location.hostname;
     const storageKey = `isExtensionEnabledFor_${currentDomain}`;
@@ -16,6 +204,52 @@ export default defineContentScript({
     
     // Initialize the button panel when content script loads
     await ButtonPanel.init();
+    
+    // SIMPLE FIX - Force topics indicator to be visible
+    window.fixTopicsDot = () => {
+      console.log('[FIX] Forcing topics green dot to be visible...');
+      const indicator = document.getElementById('topics-content-indicator');
+      if (indicator) {
+        indicator.style.cssText = `
+          display: block !important;
+          visibility: visible !important;
+          opacity: 1 !important;
+          background-color: #16a34a !important;
+          border: 1px solid white !important;
+          position: absolute !important;
+          top: 4px !important;
+          right: 4px !important;
+          width: 8px !important;
+          height: 8px !important;
+          border-radius: 50% !important;
+          z-index: 10 !important;
+        `;
+        console.log('[FIX] Topics green dot should now be visible!');
+      } else {
+        console.log('[FIX] Topics indicator element not found - creating one...');
+        const topicsButton = document.getElementById('vocab-topics-btn');
+        if (topicsButton) {
+          const newIndicator = document.createElement('div');
+          newIndicator.id = 'topics-content-indicator';
+          newIndicator.style.cssText = `
+            display: block !important;
+            visibility: visible !important;
+            opacity: 1 !important;
+            background-color: #16a34a !important;
+            border: 1px solid white !important;
+            position: absolute !important;
+            top: 4px !important;
+            right: 4px !important;
+            width: 8px !important;
+            height: 8px !important;
+            border-radius: 50% !important;
+            z-index: 10 !important;
+          `;
+          topicsButton.appendChild(newIndicator);
+          console.log('[FIX] Created and added topics green dot!');
+        }
+      }
+    };
     
     // Initialize the word selector functionality
     await WordSelector.init();
@@ -8308,6 +8542,41 @@ const ButtonPanel = {
     }
     
     console.log('Button panel initialized. Enabled:', isEnabled);
+    
+    // Expose ButtonPanel to window for debugging
+    window.ButtonPanel = ButtonPanel;
+    console.log('[ButtonPanel] Exposed to window.ButtonPanel for debugging');
+    
+    // Add simple global functions for debugging
+    window.checkTopicsContent = () => {
+      console.log('[DEBUG] Checking topics content...');
+      if (ButtonPanel.topicsModal && ButtonPanel.topicsModal.customContentModal) {
+        const topics = ButtonPanel.topicsModal.customContentModal.topicContents;
+        console.log('[DEBUG] Topics content:', topics);
+        console.log('[DEBUG] Topics count:', topics.length);
+        return topics;
+      } else {
+        console.log('[DEBUG] No topicsModal found');
+        return null;
+      }
+    };
+    
+    window.showAllIndicators = () => {
+      console.log('[DEBUG] Forcing all indicators to be visible...');
+      const indicators = ['pdf-content-indicator', 'image-content-indicator', 'topics-content-indicator', 'text-content-indicator'];
+      indicators.forEach(id => {
+        const element = document.getElementById(id);
+        if (element) {
+          element.style.display = 'block';
+          element.style.visibility = 'visible';
+          element.style.opacity = '1';
+          element.style.backgroundColor = '#16a34a';
+          console.log(`[DEBUG] Made ${id} visible`);
+        } else {
+          console.log(`[DEBUG] ${id} not found`);
+        }
+      });
+    };
   },
 
   /**
@@ -8548,6 +8817,7 @@ const ButtonPanel = {
     pdfButton.id = 'vocab-pdf-btn';
     pdfButton.innerHTML = `
       <div class="vocab-vertical-btn-icon">${this.createPDFIcon()}</div>
+      <div class="vocab-content-indicator" id="pdf-content-indicator"></div>
     `;
 
     // Create Image button
@@ -8556,6 +8826,7 @@ const ButtonPanel = {
     imageButton.id = 'vocab-image-btn';
     imageButton.innerHTML = `
       <div class="vocab-vertical-btn-icon">${this.createImageIcon()}</div>
+      <div class="vocab-content-indicator" id="image-content-indicator"></div>
     `;
 
     // Create Topics button
@@ -8564,6 +8835,7 @@ const ButtonPanel = {
     topicsButton.id = 'vocab-topics-btn';
     topicsButton.innerHTML = `
       <div class="vocab-vertical-btn-icon">${this.createTopicsIcon()}</div>
+      <div class="vocab-content-indicator" id="topics-content-indicator"></div>
     `;
 
     // Create Text button
@@ -8572,6 +8844,7 @@ const ButtonPanel = {
     textButton.id = 'vocab-text-btn';
     textButton.innerHTML = `
       <div class="vocab-vertical-btn-icon">${this.createTextIcon()}</div>
+      <div class="vocab-content-indicator" id="text-content-indicator"></div>
     `;
 
     // Append buttons to group
@@ -8580,7 +8853,168 @@ const ButtonPanel = {
     group.appendChild(topicsButton);
     group.appendChild(textButton);
 
+    // Update content indicators after creating buttons
+    // Add a delay to ensure DOM is fully ready
+    setTimeout(() => {
+      this.updateContentIndicators();
+    }, 50);
+
     return group;
+  },
+
+  /**
+   * Update content indicators for all content import buttons
+   */
+  updateContentIndicators() {
+    console.log('[ButtonPanel] ===== UPDATE CONTENT INDICATORS DEBUG =====');
+    
+    if (!this.topicsModal || !this.topicsModal.customContentModal) {
+      console.log('[ButtonPanel] No topicsModal or customContentModal found');
+      return;
+    }
+
+    // Check the actual storage arrays directly
+    console.log('[ButtonPanel] === CHECKING STORAGE ARRAYS ===');
+    console.log('[ButtonPanel] topicContents:', this.topicsModal.customContentModal.topicContents);
+    console.log('[ButtonPanel] imageContents:', this.topicsModal.customContentModal.imageContents);
+    console.log('[ButtonPanel] pdfContents:', this.topicsModal.customContentModal.pdfContents);
+    console.log('[ButtonPanel] textContents:', this.topicsModal.customContentModal.textContents);
+    console.log('[ButtonPanel] topicContents length:', this.topicsModal.customContentModal.topicContents.length);
+    console.log('[ButtonPanel] imageContents length:', this.topicsModal.customContentModal.imageContents.length);
+    console.log('[ButtonPanel] pdfContents length:', this.topicsModal.customContentModal.pdfContents.length);
+    console.log('[ButtonPanel] textContents length:', this.topicsModal.customContentModal.textContents.length);
+
+    const contentTypes = ['pdf', 'image', 'topics', 'text'];
+    
+    contentTypes.forEach(contentType => {
+      const indicatorId = `${contentType}-content-indicator`;
+      const indicator = document.getElementById(indicatorId);
+      
+      console.log(`[ButtonPanel] Checking ${contentType}:`);
+      console.log(`[ButtonPanel] - Indicator element:`, indicator);
+      
+      if (indicator) {
+        // Check if content exists for this type
+        const contents = this.topicsModal.customContentModal.getContentByType(contentType);
+        const hasContent = contents && contents.length > 0;
+        
+        console.log(`[ButtonPanel] - Contents array:`, contents);
+        console.log(`[ButtonPanel] - Has content:`, hasContent);
+        console.log(`[ButtonPanel] - Content count:`, contents ? contents.length : 0);
+        
+        // Show or hide indicator based on content existence
+        if (hasContent) {
+          indicator.style.display = 'block';
+          indicator.style.visibility = 'visible';
+          indicator.style.opacity = '1';
+          console.log(`[ButtonPanel] - Showing indicator for ${contentType}`);
+        } else {
+          indicator.style.display = 'none';
+          indicator.style.visibility = 'hidden';
+          indicator.style.opacity = '0';
+          console.log(`[ButtonPanel] - Hiding indicator for ${contentType}`);
+        }
+      } else {
+        console.log(`[ButtonPanel] - Indicator element not found for ${contentType}`);
+      }
+    });
+    
+    console.log('[ButtonPanel] ===== END UPDATE CONTENT INDICATORS DEBUG =====');
+  },
+
+  /**
+   * Manual function to check storage and update indicators (for debugging)
+   * Call this from browser console: window.ButtonPanel.debugCheckStorage()
+   */
+  debugCheckStorage() {
+    console.log('[ButtonPanel] ===== MANUAL STORAGE CHECK =====');
+    
+    if (!this.topicsModal || !this.topicsModal.customContentModal) {
+      console.log('[ButtonPanel] No topicsModal or customContentModal found');
+      return;
+    }
+
+    console.log('[ButtonPanel] === DIRECT STORAGE ARRAY CHECK ===');
+    console.log('[ButtonPanel] topicContents:', this.topicsModal.customContentModal.topicContents);
+    console.log('[ButtonPanel] imageContents:', this.topicsModal.customContentModal.imageContents);
+    console.log('[ButtonPanel] pdfContents:', this.topicsModal.customContentModal.pdfContents);
+    console.log('[ButtonPanel] textContents:', this.topicsModal.customContentModal.textContents);
+    
+    console.log('[ButtonPanel] === ARRAY LENGTHS ===');
+    console.log('[ButtonPanel] topicContents.length:', this.topicsModal.customContentModal.topicContents.length);
+    console.log('[ButtonPanel] imageContents.length:', this.topicsModal.customContentModal.imageContents.length);
+    console.log('[ButtonPanel] pdfContents.length:', this.topicsModal.customContentModal.pdfContents.length);
+    console.log('[ButtonPanel] textContents.length:', this.topicsModal.customContentModal.textContents.length);
+    
+    console.log('[ButtonPanel] === INDICATOR ELEMENTS CHECK ===');
+    const indicators = ['pdf-content-indicator', 'image-content-indicator', 'topics-content-indicator', 'text-content-indicator'];
+    indicators.forEach(id => {
+      const element = document.getElementById(id);
+      console.log(`[ButtonPanel] ${id}:`, element);
+      if (element) {
+        console.log(`[ButtonPanel] ${id} display style:`, element.style.display);
+        console.log(`[ButtonPanel] ${id} computed display:`, window.getComputedStyle(element).display);
+      }
+    });
+    
+    // Force update indicators
+    console.log('[ButtonPanel] === FORCING INDICATOR UPDATE ===');
+    this.updateContentIndicators();
+    
+    console.log('[ButtonPanel] ===== END MANUAL STORAGE CHECK =====');
+  },
+
+  /**
+   * Force show all indicators for testing (call from console: window.ButtonPanel.forceShowIndicators())
+   */
+  forceShowIndicators() {
+    console.log('[ButtonPanel] ===== FORCE SHOWING ALL INDICATORS =====');
+    const indicators = ['pdf-content-indicator', 'image-content-indicator', 'topics-content-indicator', 'text-content-indicator'];
+    indicators.forEach(id => {
+      const element = document.getElementById(id);
+      if (element) {
+        element.style.display = 'block';
+        element.style.visibility = 'visible';
+        element.style.opacity = '1';
+        console.log(`[ButtonPanel] Forced ${id} to be visible`);
+      } else {
+        console.log(`[ButtonPanel] ${id} not found`);
+      }
+    });
+    console.log('[ButtonPanel] ===== END FORCE SHOWING INDICATORS =====');
+  },
+
+  /**
+   * Quick fix function to manually check and update topics indicator
+   * Call this from console: window.ButtonPanel.fixTopicsIndicator()
+   */
+  fixTopicsIndicator() {
+    console.log('[ButtonPanel] ===== FIXING TOPICS INDICATOR =====');
+    
+    // Check if topics content exists
+    const topicsContent = this.topicsModal.customContentModal.topicContents;
+    console.log('[ButtonPanel] Topics content:', topicsContent);
+    console.log('[ButtonPanel] Topics content length:', topicsContent.length);
+    
+    // Find the topics indicator
+    const indicator = document.getElementById('topics-content-indicator');
+    console.log('[ButtonPanel] Topics indicator element:', indicator);
+    
+    if (indicator) {
+      if (topicsContent.length > 0) {
+        indicator.style.display = 'block';
+        indicator.style.visibility = 'visible';
+        indicator.style.opacity = '1';
+        console.log('[ButtonPanel] Topics indicator should now be visible');
+      } else {
+        indicator.style.display = 'none';
+        console.log('[ButtonPanel] No topics content found, hiding indicator');
+      }
+    } else {
+      console.log('[ButtonPanel] Topics indicator element not found!');
+    }
+    
+    console.log('[ButtonPanel] ===== END FIXING TOPICS INDICATOR =====');
   },
 
   /**
@@ -9412,6 +9846,7 @@ const ButtonPanel = {
 
 
       .vocab-vertical-btn {
+        position: relative;
         display: flex;
         flex-direction: row;
         align-items: center;
@@ -9458,6 +9893,20 @@ const ButtonPanel = {
         display: none;
       }
 
+      /* Content indicator styles */
+      .vocab-content-indicator {
+        position: absolute;
+        top: 4px;
+        right: 4px;
+        width: 8px;
+        height: 8px;
+        background-color: #16a34a;
+        border-radius: 50%;
+        display: none;
+        z-index: 10;
+        border: 1px solid white;
+      }
+
 
       /* Responsive adjustments for vertical button group */
       @media (max-width: 768px) {
@@ -9487,6 +9936,14 @@ const ButtonPanel = {
         .vocab-vertical-btn-icon svg {
           width: 30px;
           height: 30px;
+        }
+
+        /* Adjust content indicator size for mobile */
+        .vocab-content-indicator {
+          width: 6px;
+          height: 6px;
+          top: 3px;
+          right: 3px;
         }
       }
 
@@ -11317,17 +11774,33 @@ const ButtonPanel = {
         message = 'Import content';
         console.log(`[ButtonPanel] Import-content button message: "${message}"`);
       } else if (buttonType === 'pdf-upload') {
-        message = 'Upload PDF containing text';
-        console.log(`[ButtonPanel] PDF-upload button message: "${message}"`);
+        // Check if PDF content exists
+        const hasContent = this.topicsModal && this.topicsModal.customContentModal && 
+                          this.topicsModal.customContentModal.pdfContents && 
+                          this.topicsModal.customContentModal.pdfContents.length > 0;
+        message = hasContent ? 'View PDF content' : 'Upload PDF containing text';
+        console.log(`[ButtonPanel] PDF-upload button message: "${message}" (hasContent: ${hasContent})`);
       } else if (buttonType === 'image-upload') {
-        message = 'Upload image containing text';
-        console.log(`[ButtonPanel] Image-upload button message: "${message}"`);
+        // Check if image content exists
+        const hasContent = this.topicsModal && this.topicsModal.customContentModal && 
+                          this.topicsModal.customContentModal.imageContents && 
+                          this.topicsModal.customContentModal.imageContents.length > 0;
+        message = hasContent ? 'View image content' : 'Upload image containing text';
+        console.log(`[ButtonPanel] Image-upload button message: "${message}" (hasContent: ${hasContent})`);
       } else if (buttonType === 'topics-input') {
-        message = 'Keywords or topics which you want to study on';
-        console.log(`[ButtonPanel] Topics-input button message: "${message}"`);
+        // Check if topics content exists
+        const hasContent = this.topicsModal && this.topicsModal.customContentModal && 
+                          this.topicsModal.customContentModal.topicContents && 
+                          this.topicsModal.customContentModal.topicContents.length > 0;
+        message = hasContent ? 'View keyword content' : 'Keywords or topics which you want to study on';
+        console.log(`[ButtonPanel] Topics-input button message: "${message}" (hasContent: ${hasContent})`);
       } else if (buttonType === 'text-input') {
-        message = 'Copy content from elsewhere and paste here';
-        console.log(`[ButtonPanel] Text-input button message: "${message}"`);
+        // Check if text content exists
+        const hasContent = this.topicsModal && this.topicsModal.customContentModal && 
+                          this.topicsModal.customContentModal.textContents && 
+                          this.topicsModal.customContentModal.textContents.length > 0;
+        message = hasContent ? 'View text content' : 'Copy content from elsewhere and paste here';
+        console.log(`[ButtonPanel] Text-input button message: "${message}" (hasContent: ${hasContent})`);
       }
 
       console.log(`[ButtonPanel] Final tooltip message: "${message}" (disabled: ${isDisabled})`);
@@ -12414,6 +12887,27 @@ const ButtonPanel = {
       this.verticalButtonGroup.classList.add('visible');
       this.verticalButtonGroup.style.pointerEvents = 'auto';
       this.updateState({ showVerticalGroup: true });
+      
+      // Update content indicators when showing the button group
+      // Add a small delay to ensure DOM is ready
+      setTimeout(() => {
+        this.updateContentIndicators();
+        
+        // FORCE topics indicator to be visible if topics content exists
+        if (this.topicsModal && this.topicsModal.customContentModal && 
+            this.topicsModal.customContentModal.topicContents && 
+            this.topicsModal.customContentModal.topicContents.length > 0) {
+          const topicsIndicator = document.getElementById('topics-content-indicator');
+          if (topicsIndicator) {
+            topicsIndicator.style.display = 'block';
+            topicsIndicator.style.visibility = 'visible';
+            topicsIndicator.style.opacity = '1';
+            topicsIndicator.style.backgroundColor = '#16a34a';
+            topicsIndicator.style.border = '1px solid white';
+            console.log('[ButtonPanel] FORCED topics indicator to be visible when showing button group');
+          }
+        }
+      }, 100);
     }
   },
 
@@ -13589,6 +14083,11 @@ const ButtonPanel = {
           console.log('[ButtonPanel] After removal - Text contents:', this.textContents);
           console.log('[ButtonPanel] ===== END REMOVE CONTENT DEBUG (SUCCESS) =====');
           
+          // Update content indicators after removing content
+          if (window.ButtonPanel && window.ButtonPanel.updateContentIndicators) {
+            window.ButtonPanel.updateContentIndicators();
+          }
+          
           return content; // Return the content object so cleanup can be done by caller
         }
         
@@ -13673,6 +14172,26 @@ const ButtonPanel = {
             return null;
         }
         
+        // Update content indicators after adding content
+        if (window.ButtonPanel && window.ButtonPanel.updateContentIndicators) {
+          window.ButtonPanel.updateContentIndicators();
+        }
+        
+        // FORCE topics indicator to be visible if topics content was added
+        if (contentType === 'topic') {
+          setTimeout(() => {
+            const topicsIndicator = document.getElementById('topics-content-indicator');
+            if (topicsIndicator) {
+              topicsIndicator.style.display = 'block';
+              topicsIndicator.style.visibility = 'visible';
+              topicsIndicator.style.opacity = '1';
+              topicsIndicator.style.backgroundColor = '#16a34a';
+              topicsIndicator.style.border = '1px solid white';
+              console.log('[ButtonPanel] FORCED topics indicator to be visible after content added');
+            }
+          }, 100);
+        }
+        
         return newContent;
       },
       
@@ -13680,6 +14199,12 @@ const ButtonPanel = {
         const contents = this.getContentByType(contentType);
         if (index >= 0 && index < contents.length) {
           contents.splice(index, 1);
+          
+          // Update content indicators after removing content
+          if (window.ButtonPanel && window.ButtonPanel.updateContentIndicators) {
+            window.ButtonPanel.updateContentIndicators();
+          }
+          
           return true;
         }
         return false;
