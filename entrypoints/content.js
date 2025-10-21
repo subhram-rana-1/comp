@@ -196,6 +196,105 @@ export default defineContentScript({
       
       console.log('[DEBUG] === END CHECKING TOPICS CONTENT ===');
     };
+    
+    // Add function to debug import-content indicator issue
+    window.debugImportContentIndicator = () => {
+      console.log('[DEBUG] === DEBUGGING IMPORT-CONTENT INDICATOR ===');
+      
+      if (window.ButtonPanel && window.ButtonPanel.topicsModal && window.ButtonPanel.topicsModal.customContentModal) {
+        const modal = window.ButtonPanel.topicsModal.customContentModal;
+        
+        console.log('[DEBUG] Content counts:');
+        console.log('- Topics:', modal.topicContents.length);
+        console.log('- Images:', modal.imageContents.length);
+        console.log('- PDFs:', modal.pdfContents.length);
+        console.log('- Texts:', modal.textContents.length);
+        
+        // Check if any content exists
+        const hasAnyContent = modal.topicContents.length > 0 || 
+                             modal.imageContents.length > 0 || 
+                             modal.pdfContents.length > 0 || 
+                             modal.textContents.length > 0;
+        
+        console.log('[DEBUG] hasAnyContent:', hasAnyContent);
+        
+        // Check import-content button and indicator
+        const importButton = document.getElementById('import-content');
+        const importIndicator = document.getElementById('import-content-indicator');
+        
+        console.log('[DEBUG] import-content button element:', importButton);
+        console.log('[DEBUG] import-content indicator element:', importIndicator);
+        
+        // If button exists but no indicator, create one
+        if (importButton && !importIndicator) {
+          console.log('[DEBUG] Creating missing import-content indicator...');
+          const indicator = document.createElement('div');
+          indicator.className = 'vocab-content-indicator';
+          indicator.id = 'import-content-indicator';
+          importButton.appendChild(indicator);
+          console.log('[DEBUG] Import-content indicator created!');
+        }
+        
+        if (importIndicator) {
+          console.log('[DEBUG] Current indicator styles:');
+          console.log('- display:', importIndicator.style.display);
+          console.log('- visibility:', importIndicator.style.visibility);
+          console.log('- opacity:', importIndicator.style.opacity);
+        }
+        
+        // Force update
+        console.log('[DEBUG] Forcing updateContentIndicators...');
+        window.ButtonPanel.updateContentIndicators();
+        
+      } else {
+        console.log('[DEBUG] ButtonPanel or topicsModal not found');
+      }
+      
+      console.log('[DEBUG] === END DEBUGGING ===');
+    };
+    
+    // Add function to force fix import-content indicator
+    window.fixImportContentIndicator = () => {
+      console.log('[FIX] === FIXING IMPORT-CONTENT INDICATOR ===');
+      
+      const importButton = document.getElementById('import-content');
+      let importIndicator = document.getElementById('import-content-indicator');
+      
+      if (!importButton) {
+        console.log('[FIX] Import-content button not found!');
+        return;
+      }
+      
+      // Create indicator if it doesn't exist
+      if (!importIndicator) {
+        console.log('[FIX] Creating missing import-content indicator...');
+        importIndicator = document.createElement('div');
+        importIndicator.className = 'vocab-content-indicator';
+        importIndicator.id = 'import-content-indicator';
+        importButton.appendChild(importIndicator);
+        console.log('[FIX] Import-content indicator created!');
+      }
+      
+      // Force it to be visible
+      importIndicator.style.cssText = `
+        display: block !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+        background-color: #16a34a !important;
+        border: 1px solid white !important;
+        position: absolute !important;
+        top: 6px !important;
+        right: 6px !important;
+        width: 8px !important;
+        height: 8px !important;
+        border-radius: 50% !important;
+        z-index: 10 !important;
+      `;
+      
+      console.log('[FIX] Import-content indicator should now be visible!');
+      console.log('[FIX] === END FIXING ===');
+    };
+    
     // Get current domain
     const currentDomain = window.location.hostname;
     const storageKey = `isExtensionEnabledFor_${currentDomain}`;
@@ -205,6 +304,33 @@ export default defineContentScript({
     
     // Initialize the button panel when content script loads
     await ButtonPanel.init();
+    
+    // PERMANENT FIX: Ensure import-content button always has indicator
+    setTimeout(() => {
+      const ensureImportContentIndicator = () => {
+        const importButton = document.getElementById('import-content');
+        const importIndicator = document.getElementById('import-content-indicator');
+        
+        if (importButton && !importIndicator) {
+          console.log('[PERMANENT FIX] Creating missing import-content indicator...');
+          const indicator = document.createElement('div');
+          indicator.className = 'vocab-content-indicator';
+          indicator.id = 'import-content-indicator';
+          importButton.appendChild(indicator);
+          
+          // Update indicators to show/hide based on content
+          if (window.ButtonPanel && window.ButtonPanel.updateContentIndicators) {
+            window.ButtonPanel.updateContentIndicators();
+          }
+        }
+      };
+      
+      // Run immediately
+      ensureImportContentIndicator();
+      
+      // Also run periodically to catch any recreated buttons
+      setInterval(ensureImportContentIndicator, 2000);
+    }, 1000);
     
     // SIMPLE FIX - Force topics indicator to be visible
     window.fixTopicsDot = () => {
@@ -8893,19 +9019,23 @@ const ButtonPanel = {
     console.log('[ButtonPanel] pdfContents length:', this.topicsModal.customContentModal.pdfContents.length);
     console.log('[ButtonPanel] textContents length:', this.topicsModal.customContentModal.textContents.length);
 
-    const contentTypes = ['pdf', 'image', 'topics', 'text'];
+    const contentTypes = [
+      { type: 'pdf', indicatorId: 'pdf-content-indicator' },
+      { type: 'image', indicatorId: 'image-content-indicator' },
+      { type: 'topic', indicatorId: 'topics-content-indicator' },
+      { type: 'text', indicatorId: 'text-content-indicator' }
+    ];
     let hasAnyContent = false;
     
-    contentTypes.forEach(contentType => {
-      const indicatorId = `${contentType}-content-indicator`;
+    contentTypes.forEach(({ type, indicatorId }) => {
       const indicator = document.getElementById(indicatorId);
       
-      console.log(`[ButtonPanel] Checking ${contentType}:`);
+      console.log(`[ButtonPanel] Checking ${type}:`);
       console.log(`[ButtonPanel] - Indicator element:`, indicator);
       
       if (indicator) {
         // Check if content exists for this type
-        const contents = this.topicsModal.customContentModal.getContentByType(contentType);
+        const contents = this.topicsModal.customContentModal.getContentByType(type);
         const hasContent = contents && contents.length > 0;
         
         console.log(`[ButtonPanel] - Contents array:`, contents);
@@ -8918,20 +9048,25 @@ const ButtonPanel = {
           indicator.style.visibility = 'visible';
           indicator.style.opacity = '1';
           hasAnyContent = true;
-          console.log(`[ButtonPanel] - Showing indicator for ${contentType}`);
+          console.log(`[ButtonPanel] - Showing indicator for ${type}`);
         } else {
           indicator.style.display = 'none';
           indicator.style.visibility = 'hidden';
           indicator.style.opacity = '0';
-          console.log(`[ButtonPanel] - Hiding indicator for ${contentType}`);
+          console.log(`[ButtonPanel] - Hiding indicator for ${type}`);
         }
       } else {
-        console.log(`[ButtonPanel] - Indicator element not found for ${contentType}`);
+        console.log(`[ButtonPanel] - Indicator element not found for ${type}`);
       }
     });
     
     // Update import-content indicator based on whether any content exists
+    console.log(`[ButtonPanel] === IMPORT-CONTENT INDICATOR UPDATE ===`);
+    console.log(`[ButtonPanel] hasAnyContent: ${hasAnyContent}`);
+    
     const importIndicator = document.getElementById('import-content-indicator');
+    console.log(`[ButtonPanel] importIndicator element:`, importIndicator);
+    
     if (importIndicator) {
       if (hasAnyContent) {
         importIndicator.style.display = 'block';
@@ -13064,6 +13199,23 @@ const ButtonPanel = {
       
       // Store reference for future removal
       this.importContentButton = importContentBtn;
+      
+      // SAFETY CHECK: Ensure indicator exists after button recreation
+      setTimeout(() => {
+        const indicator = document.getElementById('import-content-indicator');
+        if (!indicator) {
+          console.log('[ButtonPanel] Creating missing import-content indicator after button recreation...');
+          const newIndicator = document.createElement('div');
+          newIndicator.className = 'vocab-content-indicator';
+          newIndicator.id = 'import-content-indicator';
+          importContentBtn.appendChild(newIndicator);
+          
+          // Update indicators to show/hide based on content
+          if (this.updateContentIndicators) {
+            this.updateContentIndicators();
+          }
+        }
+      }, 100);
     }
   },
 
@@ -14254,6 +14406,11 @@ const ButtonPanel = {
             this.textContents = [];
             break;
         }
+        
+        // Update content indicators after clearing content
+        if (window.ButtonPanel && window.ButtonPanel.updateContentIndicators) {
+          window.ButtonPanel.updateContentIndicators();
+        }
       },
       
       clearAllContents: function() {
@@ -14261,6 +14418,11 @@ const ButtonPanel = {
         this.imageContents = [];
         this.pdfContents = [];
         this.textContents = [];
+        
+        // Update content indicators after clearing all content
+        if (window.ButtonPanel && window.ButtonPanel.updateContentIndicators) {
+          window.ButtonPanel.updateContentIndicators();
+        }
       },
       
       getAllTabs: function() {
