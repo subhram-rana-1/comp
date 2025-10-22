@@ -3189,7 +3189,7 @@ const TextSelector = {
    */
   createChatButton(textKey, isGreen = false) {
     const btn = document.createElement('button');
-    btn.className = isGreen ? 'vocab-text-chat-btn vocab-text-chat-btn-green' : 'vocab-text-chat-btn';
+    btn.className = isGreen ? 'vocab-text-chat-btn vocab-text-chat-btn-green chat-breathing' : 'vocab-text-chat-btn chat-breathing';
     btn.setAttribute('aria-label', 'Open chat');
     btn.innerHTML = this.createChatIcon(isGreen);
     
@@ -3211,6 +3211,11 @@ const TextSelector = {
         ChatDialog.open(originalText, textKey, 'ask', null, 'selected');
       }
     });
+    
+    // Remove breathing class after animation completes
+    setTimeout(() => {
+      btn.classList.remove('chat-breathing');
+    }, 1600); // Match animation duration
     
     return btn;
   },
@@ -3417,8 +3422,8 @@ const TextSelector = {
       
       .vocab-text-chat-btn {
         position: relative;
-        width: 24px;
-        height: 24px;
+        width: 28px;
+        height: 28px;
         background: transparent;
         border: none;
         border-radius: 50%;
@@ -3448,8 +3453,8 @@ const TextSelector = {
       .vocab-text-chat-btn svg {
         pointer-events: none;
         display: block;
-        width: 24px;
-        height: 24px;
+        width: 28px;
+        height: 28px;
       }
       
       /* Book button - Wireframe open book icon on top-left */
@@ -3507,6 +3512,34 @@ const TextSelector = {
         }
         75% {
           transform: scale(1.3);
+          opacity: 1;
+        }
+        100% {
+          transform: scale(1);
+          opacity: 1;
+        }
+      }
+      
+      /* Chat button breathing animation when first appears */
+      .vocab-text-chat-btn.chat-breathing {
+        animation: chatBreathing 1.6s ease-in-out;
+      }
+      
+      @keyframes chatBreathing {
+        0% {
+          transform: scale(1);
+          opacity: 0.7;
+        }
+        25% {
+          transform: scale(2.0);
+          opacity: 1;
+        }
+        50% {
+          transform: scale(1);
+          opacity: 0.8;
+        }
+        75% {
+          transform: scale(2.0);
           opacity: 1;
         }
         100% {
@@ -6386,6 +6419,7 @@ const ChatDialog = {
         color: #9527F5 !important;
         animation: pulse 2s ease-in-out infinite;
         text-align: center;
+        display: none; /* Hidden for now - voice recording feature not implemented yet */
       }
       
       @keyframes pulse {
@@ -6638,7 +6672,7 @@ const ChatDialog = {
         background: white;
         border: 2px solid #9527F5;
         border-radius: 50%;
-        display: flex;
+        display: none; /* Hidden for now - voice recording feature not implemented yet */
         align-items: center;
         justify-content: center;
         cursor: pointer;
@@ -7846,9 +7880,9 @@ const ChatDialog = {
 
       /* Add Tab Button */
       .vocab-custom-content-add-tab {
-        background: rgba(162, 78, 255, 0.1);
+        background: #9527F5;
         border: none;
-        color: #9527F5;
+        color: white;
         cursor: pointer !important;
         padding: var(--vocab-spacing-xs);
         border-radius: 8px;
@@ -7866,14 +7900,14 @@ const ChatDialog = {
       }
 
       .vocab-custom-content-add-tab:hover {
-        background: rgba(162, 78, 255, 0.2);
-        color: #9527F5;
+        background: #7a1fd9;
+        color: white;
         cursor: pointer;
       }
 
       .vocab-custom-content-add-tab:active {
-        background: rgba(162, 78, 255, 0.1);
-        color: #9527F5;
+        background: #6a1b9a;
+        color: white;
         outline: none;
         box-shadow: none;
         transform: scale(0.95);
@@ -16332,16 +16366,16 @@ const ButtonPanel = {
     chatIcon.className = 'vocab-custom-content-chat-icon';
     chatIcon.innerHTML = `
       <svg width="16" height="16" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <rect x="4" y="4" width="12" height="10" rx="2" stroke="white" stroke-width="1.3" fill="none"/>
-        <line x1="10" y1="2" x2="10" y2="4" stroke="white" stroke-width="1.3" stroke-linecap="round"/>
-        <circle cx="10" cy="1.5" r="0.8" fill="white"/>
-        <circle cx="7.5" cy="8.5" r="1.2" fill="white"/>
-        <circle cx="12.5" cy="8.5" r="1.2" fill="white"/>
-        <path d="M7 11C7.5 11.8 8.5 12.5 10 12.5C11.5 12.5 12.5 11.8 13 11" stroke="white" stroke-width="1.3" stroke-linecap="round" fill="none"/>
-        <path d="M10 14L10 16.5L8 15" stroke="white" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
+        <rect x="5" y="5" width="10" height="8" rx="1.5" stroke="white" stroke-width="1.1" fill="none"/>
+        <line x1="10" y1="2.5" x2="10" y2="5" stroke="white" stroke-width="1.1" stroke-linecap="round"/>
+        <circle cx="10" cy="2" r="0.6" fill="white"/>
+        <circle cx="8" cy="9" r="0.8" fill="white"/>
+        <circle cx="12" cy="9" r="0.8" fill="white"/>
+        <path d="M8 11.5C8.3 12 9 12.3 10 12.3C11 12.3 11.7 12 12 11.5" stroke="white" stroke-width="1.1" stroke-linecap="round" fill="none"/>
+        <path d="M10 13L10 15L8.5 14" stroke="white" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round"/>
       </svg>
     `;
-    chatIcon.setAttribute('title', 'Chat with AI Agent - Ask anything about this content');
+    chatIcon.setAttribute('title', 'Ask me anything !!!');
     
     // Add click handler for chat icon
     chatIcon.addEventListener('click', () => {
