@@ -17132,15 +17132,7 @@ const ButtonPanel = {
       // Clear existing highlights first to avoid duplicates
       this.clearExistingHighlights();
       
-      // Restore word meanings
-      if (activeContent.analysis.wordMeanings && activeContent.analysis.wordMeanings.length > 0) {
-        console.log('[ButtonPanel] Restoring', activeContent.analysis.wordMeanings.length, 'word meanings');
-        activeContent.analysis.wordMeanings.forEach(wordData => {
-          this.restoreWordExplanation(wordData);
-        });
-      }
-
-      // Restore simplified texts with additional delay to ensure content is fully rendered
+      // Restore simplified texts FIRST to establish text highlight containers
       if (activeContent.analysis.simplifiedMeanings && activeContent.analysis.simplifiedMeanings.length > 0) {
         console.log('[ButtonPanel] Restoring', activeContent.analysis.simplifiedMeanings.length, 'simplified texts');
         // Add extra delay for simplified texts to ensure content is fully rendered
@@ -17149,11 +17141,29 @@ const ButtonPanel = {
             this.restoreSimplifiedText(simplifiedData);
           });
           
-          // Additional repositioning after all simplified texts are restored
+          // After text highlights are restored, restore word meanings
           setTimeout(() => {
-            this.repositionAllSimplifiedIcons();
+            if (activeContent.analysis.wordMeanings && activeContent.analysis.wordMeanings.length > 0) {
+              console.log('[ButtonPanel] Restoring', activeContent.analysis.wordMeanings.length, 'word meanings');
+              activeContent.analysis.wordMeanings.forEach(wordData => {
+                this.restoreWordExplanationWithHierarchy(wordData);
+              });
+            }
+            
+            // Additional repositioning after all highlights are restored
+            setTimeout(() => {
+              this.repositionAllSimplifiedIcons();
+            }, 100);
           }, 100);
         }, 200);
+      } else {
+        // If no simplified texts, restore word meanings directly
+        if (activeContent.analysis.wordMeanings && activeContent.analysis.wordMeanings.length > 0) {
+          console.log('[ButtonPanel] Restoring', activeContent.analysis.wordMeanings.length, 'word meanings');
+          activeContent.analysis.wordMeanings.forEach(wordData => {
+            this.restoreWordExplanation(wordData);
+          });
+        }
       }
 
       // Restore chats
@@ -17226,7 +17236,196 @@ const ButtonPanel = {
   },
 
   /**
-   * Restore visual word explanation elements
+   * Restore visual word explanation elements with hierarchy awareness
+   * @param {Object} wordData - Word explanation data
+   */
+  restoreWordExplanationWithHierarchy(wordData) {
+    console.log('[ButtonPanel] Restoring word explanation with hierarchy for:', wordData.word);
+    console.log('[ButtonPanel] Word data:', wordData);
+    
+    // Find the content element
+    const contentElement = this.topicsModal.customContentModal.modal.querySelector('.vocab-custom-content-editor-content');
+    if (!contentElement) {
+      console.log('[ButtonPanel] Content element not found for word restoration');
+      return;
+    }
+
+    const textContent = contentElement.textContent || contentElement.innerText;
+    if (!textContent) {
+      console.log('[ButtonPanel] No text content found for word restoration');
+      return;
+    }
+
+    // Use stored textStartIndex if available, otherwise fall back to regex search
+    if (wordData.textStartIndex !== undefined && wordData.location !== undefined) {
+      console.log('[ButtonPanel] Using stored positioning data - textStartIndex:', wordData.textStartIndex, 'location:', wordData.location);
+      console.log('[ButtonPanel] Text content length:', textContent.length);
+      console.log('[ButtonPanel] Text content preview:', textContent.substring(0, 200));
+      
+      // Use the stored location data to find the word
+      const wordStart = wordData.textStartIndex + wordData.location.index;
+      const wordEnd = wordStart + wordData.location.length;
+      
+      console.log('[ButtonPanel] Calculated word position:', wordStart, '-', wordEnd);
+      
+      // Verify the word matches at this position
+      const wordAtPosition = textContent.substring(wordStart, wordEnd);
+      console.log('[ButtonPanel] Word at calculated position:', wordAtPosition);
+      
+      if (wordAtPosition.toLowerCase() === wordData.normalizedWord) {
+        console.log('[ButtonPanel] Word matches at calculated position');
+        
+        // Check if this word is inside an existing text highlight
+        const textHighlights = contentElement.querySelectorAll('.vocab-text-highlight');
+        let targetTextHighlight = null;
+        
+        for (const textHighlight of textHighlights) {
+          const textHighlightStart = this.getTextNodeOffset(textHighlight);
+          const textHighlightEnd = textHighlightStart + textHighlight.textContent.length;
+          
+          console.log('[ButtonPanel] Checking text highlight:', textHighlightStart, '-', textHighlightEnd);
+          
+          // Check if word position is within this text highlight
+          if (wordStart >= textHighlightStart && wordEnd <= textHighlightEnd) {
+            console.log('[ButtonPanel] Word is inside text highlight, will nest it');
+            targetTextHighlight = textHighlight;
+            break;
+          }
+        }
+        
+        if (targetTextHighlight) {
+          // Word should be nested inside the text highlight
+          this.createNestedWordHighlight(targetTextHighlight, wordStart, wordEnd, wordData);
+        } else {
+          // Word is not inside any text highlight, create standalone highlight
+          this.createStandaloneWordHighlight(contentElement, wordStart, wordEnd, wordData);
+        }
+      } else {
+        console.log('[ButtonPanel] Word does not match at calculated position, falling back to regex search');
+        this.restoreWordExplanation(wordData);
+      }
+    } else {
+      console.log('[ButtonPanel] No stored positioning data, falling back to regex search');
+      this.restoreWordExplanation(wordData);
+    }
+  },
+
+  /**
+   * Create a word highlight nested inside a text highlight
+   * @param {HTMLElement} textHighlight - The parent text highlight element
+   * @param {number} wordStart - Start position of the word
+   * @param {number} wordEnd - End position of the word
+   * @param {Object} wordData - Word explanation data
+   */
+  createNestedWordHighlight(textHighlight, wordStart, wordEnd, wordData) {
+    console.log('[ButtonPanel] Creating nested word highlight for:', wordData.word);
+    
+    const textHighlightStart = this.getTextNodeOffset(textHighlight);
+    const relativeWordStart = wordStart - textHighlightStart;
+    const relativeWordEnd = wordEnd - textHighlightStart;
+    
+    console.log('[ButtonPanel] Text highlight start:', textHighlightStart);
+    console.log('[ButtonPanel] Relative word position:', relativeWordStart, '-', relativeWordEnd);
+    
+    // Create word highlight element
+    const wordHighlight = document.createElement('span');
+    wordHighlight.className = 'vocab-word-highlight vocab-word-explained';
+    wordHighlight.setAttribute('data-word-highlight', `${wordData.normalizedWord}-0`);
+    wordHighlight.setAttribute('data-meaning', wordData.meaning);
+    wordHighlight.setAttribute('data-examples', JSON.stringify(wordData.examples));
+    
+    // Replace the word text within the text highlight
+    this.replaceTextInElement(textHighlight, relativeWordStart, relativeWordEnd, wordHighlight);
+    
+    // Add to WordSelector explained words
+    if (!WordSelector.explainedWords.has(wordData.normalizedWord)) {
+      WordSelector.explainedWords.set(wordData.normalizedWord, {
+        word: wordData.word,
+        meaning: wordData.meaning,
+        examples: wordData.examples,
+        shouldAllowFetchMoreExamples: wordData.shouldAllowFetchMoreExamples || false,
+        hasCalledGetMoreExamples: false,
+        highlights: new Set()
+      });
+    }
+    WordSelector.explainedWords.get(wordData.normalizedWord).highlights.add(wordHighlight);
+
+    // Add green cross button
+    const greenCrossBtn = WordSelector.createRemoveExplainedButton(wordData.word);
+    wordHighlight.appendChild(greenCrossBtn);
+
+    // Setup word interactions
+    WordSelector.setupWordInteractions(wordHighlight);
+
+    console.log('[ButtonPanel] Created nested word highlight for:', wordData.word);
+  },
+
+  /**
+   * Create a standalone word highlight (not nested)
+   * @param {HTMLElement} contentElement - The content element
+   * @param {number} wordStart - Start position of the word
+   * @param {number} wordEnd - End position of the word
+   * @param {Object} wordData - Word explanation data
+   */
+  createStandaloneWordHighlight(contentElement, wordStart, wordEnd, wordData) {
+    console.log('[ButtonPanel] Creating standalone word highlight for:', wordData.word);
+    
+    // Create word highlight element
+    const wordHighlight = document.createElement('span');
+    wordHighlight.className = 'vocab-word-highlight vocab-word-explained';
+    wordHighlight.setAttribute('data-word-highlight', `${wordData.normalizedWord}-0`);
+    wordHighlight.setAttribute('data-meaning', wordData.meaning);
+    wordHighlight.setAttribute('data-examples', JSON.stringify(wordData.examples));
+    
+    // Replace the word text in the content
+    this.replaceTextInElement(contentElement, wordStart, wordEnd, wordHighlight);
+    
+    // Add to WordSelector explained words
+    if (!WordSelector.explainedWords.has(wordData.normalizedWord)) {
+      WordSelector.explainedWords.set(wordData.normalizedWord, {
+        word: wordData.word,
+        meaning: wordData.meaning,
+        examples: wordData.examples,
+        shouldAllowFetchMoreExamples: wordData.shouldAllowFetchMoreExamples || false,
+        hasCalledGetMoreExamples: false,
+        highlights: new Set()
+      });
+    }
+    WordSelector.explainedWords.get(wordData.normalizedWord).highlights.add(wordHighlight);
+
+    // Add green cross button
+    const greenCrossBtn = WordSelector.createRemoveExplainedButton(wordData.word);
+    wordHighlight.appendChild(greenCrossBtn);
+
+    // Setup word interactions
+    WordSelector.setupWordInteractions(wordHighlight);
+
+    console.log('[ButtonPanel] Created standalone word highlight for:', wordData.word);
+  },
+
+  /**
+   * Get the text node offset of an element within its parent
+   * @param {HTMLElement} element - The element to get offset for
+   * @returns {number} The offset position
+   */
+  getTextNodeOffset(element) {
+    let offset = 0;
+    let node = element.previousSibling;
+    
+    while (node) {
+      if (node.nodeType === Node.TEXT_NODE) {
+        offset += node.textContent.length;
+      } else if (node.nodeType === Node.ELEMENT_NODE) {
+        offset += node.textContent.length;
+      }
+      node = node.previousSibling;
+    }
+    
+    return offset;
+  },
+
+  /**
+   * Restore visual word explanation elements (original function for fallback)
    * @param {Object} wordData - Word explanation data
    */
   restoreWordExplanation(wordData) {
