@@ -3189,7 +3189,7 @@ const TextSelector = {
    */
   createChatButton(textKey, isGreen = false) {
     const btn = document.createElement('button');
-    btn.className = isGreen ? 'vocab-text-chat-btn vocab-text-chat-btn-green' : 'vocab-text-chat-btn';
+    btn.className = isGreen ? 'vocab-text-chat-btn vocab-text-chat-btn-green chat-breathing' : 'vocab-text-chat-btn chat-breathing';
     btn.setAttribute('aria-label', 'Open chat');
     btn.innerHTML = this.createChatIcon(isGreen);
     
@@ -3211,6 +3211,11 @@ const TextSelector = {
         ChatDialog.open(originalText, textKey, 'ask', null, 'selected');
       }
     });
+    
+    // Remove breathing class after animation completes
+    setTimeout(() => {
+      btn.classList.remove('chat-breathing');
+    }, 1600); // Match animation duration
     
     return btn;
   },
@@ -3417,8 +3422,8 @@ const TextSelector = {
       
       .vocab-text-chat-btn {
         position: relative;
-        width: 24px;
-        height: 24px;
+        width: 28px;
+        height: 28px;
         background: transparent;
         border: none;
         border-radius: 50%;
@@ -3448,8 +3453,8 @@ const TextSelector = {
       .vocab-text-chat-btn svg {
         pointer-events: none;
         display: block;
-        width: 24px;
-        height: 24px;
+        width: 28px;
+        height: 28px;
       }
       
       /* Book button - Wireframe open book icon on top-left */
@@ -3507,6 +3512,34 @@ const TextSelector = {
         }
         75% {
           transform: scale(1.3);
+          opacity: 1;
+        }
+        100% {
+          transform: scale(1);
+          opacity: 1;
+        }
+      }
+      
+      /* Chat button breathing animation when first appears */
+      .vocab-text-chat-btn.chat-breathing {
+        animation: chatBreathing 1.6s ease-in-out;
+      }
+      
+      @keyframes chatBreathing {
+        0% {
+          transform: scale(1);
+          opacity: 0.7;
+        }
+        25% {
+          transform: scale(2.0);
+          opacity: 1;
+        }
+        50% {
+          transform: scale(1);
+          opacity: 0.8;
+        }
+        75% {
+          transform: scale(2.0);
           opacity: 1;
         }
         100% {
@@ -6386,6 +6419,7 @@ const ChatDialog = {
         color: #9527F5 !important;
         animation: pulse 2s ease-in-out infinite;
         text-align: center;
+        display: none; /* Hidden for now - voice recording feature not implemented yet */
       }
       
       @keyframes pulse {
@@ -6638,7 +6672,7 @@ const ChatDialog = {
         background: white;
         border: 2px solid #9527F5;
         border-radius: 50%;
-        display: flex;
+        display: none; /* Hidden for now - voice recording feature not implemented yet */
         align-items: center;
         justify-content: center;
         cursor: pointer;
