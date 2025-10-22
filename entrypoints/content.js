@@ -7,6 +7,294 @@ export default defineContentScript({
   matches: ['<all_urls>'],
   
   async main() {
+    // Add global debugging functions immediately
+    window.debugExtension = {
+      checkTopicsContent: () => {
+        console.log('[DEBUG] Checking topics content...');
+        // Try to find ButtonPanel in different ways
+        if (window.ButtonPanel && window.ButtonPanel.topicsModal && window.ButtonPanel.topicsModal.customContentModal) {
+          const topics = window.ButtonPanel.topicsModal.customContentModal.topicContents;
+          console.log('[DEBUG] Topics content:', topics);
+          console.log('[DEBUG] Topics count:', topics.length);
+          return topics;
+        } else {
+          console.log('[DEBUG] ButtonPanel not found, trying alternative...');
+          // Try to find the content directly in DOM or other ways
+          return null;
+        }
+      },
+      
+      showAllIndicators: () => {
+        console.log('[DEBUG] Forcing all indicators to be visible...');
+        const indicators = ['pdf-content-indicator', 'image-content-indicator', 'topics-content-indicator', 'text-content-indicator', 'import-content-indicator'];
+        indicators.forEach(id => {
+          const element = document.getElementById(id);
+          if (element) {
+            element.style.display = 'block';
+            element.style.visibility = 'visible';
+            element.style.opacity = '1';
+            element.style.backgroundColor = '#16a34a';
+            element.style.border = '1px solid white';
+            console.log(`[DEBUG] Made ${id} visible`);
+          } else {
+            console.log(`[DEBUG] ${id} not found`);
+          }
+        });
+      },
+      
+      checkStorage: () => {
+        console.log('[DEBUG] Checking all possible storage locations...');
+        // Check if we can find any content in the page
+        const allElements = document.querySelectorAll('*');
+        console.log('[DEBUG] Total elements on page:', allElements.length);
+        
+        // Look for any elements that might contain content
+        const contentElements = document.querySelectorAll('[class*="content"], [id*="content"], [class*="topic"], [id*="topic"]');
+        console.log('[DEBUG] Content-related elements found:', contentElements.length);
+        contentElements.forEach((el, i) => {
+          if (i < 10) { // Only log first 10
+            console.log(`[DEBUG] Element ${i}:`, el.className, el.id);
+          }
+        });
+      }
+    };
+    
+    console.log('[DEBUG] Global debug functions added to window.debugExtension');
+    
+    // Add immediate debugging functions that work right away
+    window.debugTopics = () => {
+      console.log('[DEBUG] === IMMEDIATE TOPICS DEBUG ===');
+      
+      // Check if we can find any topics-related elements
+      const topicsElements = document.querySelectorAll('[class*="topic"], [id*="topic"], [class*="content"]');
+      console.log('[DEBUG] Found topics-related elements:', topicsElements.length);
+      
+      // Check if vertical button group exists
+      const buttonGroup = document.getElementById('vocab-vertical-button-group');
+      console.log('[DEBUG] Button group exists:', !!buttonGroup);
+      
+      // Check if topics button exists
+      const topicsButton = document.getElementById('vocab-topics-btn');
+      console.log('[DEBUG] Topics button exists:', !!topicsButton);
+      
+      // Check if topics indicator exists
+      const topicsIndicator = document.getElementById('topics-content-indicator');
+      console.log('[DEBUG] Topics indicator exists:', !!topicsIndicator);
+      
+      if (topicsIndicator) {
+        console.log('[DEBUG] Topics indicator current styles:', {
+          display: topicsIndicator.style.display,
+          visibility: topicsIndicator.style.visibility,
+          opacity: topicsIndicator.style.opacity,
+          backgroundColor: topicsIndicator.style.backgroundColor
+        });
+        
+        // Force it to be visible
+        topicsIndicator.style.display = 'block';
+        topicsIndicator.style.visibility = 'visible';
+        topicsIndicator.style.opacity = '1';
+        topicsIndicator.style.backgroundColor = '#16a34a';
+        topicsIndicator.style.border = '1px solid white';
+        topicsIndicator.style.position = 'absolute';
+        topicsIndicator.style.top = '4px';
+        topicsIndicator.style.right = '4px';
+        topicsIndicator.style.width = '8px';
+        topicsIndicator.style.height = '8px';
+        topicsIndicator.style.borderRadius = '50%';
+        topicsIndicator.style.zIndex = '10';
+        
+        console.log('[DEBUG] Topics indicator forced to be visible');
+      }
+      
+      console.log('[DEBUG] === END IMMEDIATE TOPICS DEBUG ===');
+    };
+    
+    // Add a simple function to check and show indicators
+    window.fixGreenDots = () => {
+      console.log('[DEBUG] === FIXING GREEN DOTS ===');
+      
+      // First, check if the vertical button group exists
+      const buttonGroup = document.getElementById('vocab-vertical-button-group');
+      console.log('[DEBUG] Button group found:', !!buttonGroup);
+      
+      if (buttonGroup) {
+        console.log('[DEBUG] Button group is visible:', buttonGroup.classList.contains('visible'));
+      }
+      
+      // Check each indicator
+      const indicators = [
+        { id: 'pdf-content-indicator', name: 'PDF' },
+        { id: 'image-content-indicator', name: 'Image' },
+        { id: 'topics-content-indicator', name: 'Topics' },
+        { id: 'text-content-indicator', name: 'Text' },
+        { id: 'import-content-indicator', name: 'Import Content' }
+      ];
+      
+      indicators.forEach(indicator => {
+        const element = document.getElementById(indicator.id);
+        console.log(`[DEBUG] ${indicator.name} indicator:`, !!element);
+        
+        if (element) {
+          // Force it to be visible
+          element.style.display = 'block';
+          element.style.visibility = 'visible';
+          element.style.opacity = '1';
+          element.style.backgroundColor = '#16a34a';
+          element.style.border = '1px solid white';
+          element.style.position = 'absolute';
+          element.style.top = '6px';
+          element.style.right = '6px';
+          element.style.width = '8px';
+          element.style.height = '8px';
+          element.style.borderRadius = '50%';
+          element.style.zIndex = '10';
+          
+          console.log(`[DEBUG] ${indicator.name} indicator forced to be visible`);
+        } else {
+          console.log(`[DEBUG] ${indicator.name} indicator NOT FOUND in DOM`);
+        }
+      });
+      
+      console.log('[DEBUG] === END FIXING GREEN DOTS ===');
+    };
+    
+    // Add function to check topics content specifically
+    window.checkTopicsContent = () => {
+      console.log('[DEBUG] === CHECKING TOPICS CONTENT ===');
+      
+      // Try to find ButtonPanel
+      if (window.ButtonPanel && window.ButtonPanel.topicsModal && window.ButtonPanel.topicsModal.customContentModal) {
+        const topics = window.ButtonPanel.topicsModal.customContentModal.topicContents;
+        console.log('[DEBUG] Topics content found:', topics);
+        console.log('[DEBUG] Topics count:', topics.length);
+        
+        if (topics.length > 0) {
+          console.log('[DEBUG] Topics content details:', topics.map(t => ({
+            tabId: t.tabId,
+            tabName: t.tabName,
+            contentType: t.contentType,
+            contentLength: t.content ? t.content.length : 0
+          })));
+          
+          // Force topics indicator to be visible
+          const topicsIndicator = document.getElementById('topics-content-indicator');
+          if (topicsIndicator) {
+            topicsIndicator.style.display = 'block';
+            topicsIndicator.style.visibility = 'visible';
+            topicsIndicator.style.opacity = '1';
+            topicsIndicator.style.backgroundColor = '#16a34a';
+            console.log('[DEBUG] Topics indicator forced to be visible');
+          } else {
+            console.log('[DEBUG] Topics indicator element not found');
+          }
+        } else {
+          console.log('[DEBUG] No topics content found');
+        }
+      } else {
+        console.log('[DEBUG] ButtonPanel not accessible');
+      }
+      
+      console.log('[DEBUG] === END CHECKING TOPICS CONTENT ===');
+    };
+    
+    // Add function to debug import-content indicator issue
+    window.debugImportContentIndicator = () => {
+      console.log('[DEBUG] === DEBUGGING IMPORT-CONTENT INDICATOR ===');
+      
+      if (window.ButtonPanel && window.ButtonPanel.topicsModal && window.ButtonPanel.topicsModal.customContentModal) {
+        const modal = window.ButtonPanel.topicsModal.customContentModal;
+        
+        console.log('[DEBUG] Content counts:');
+        console.log('- Topics:', modal.topicContents.length);
+        console.log('- Images:', modal.imageContents.length);
+        console.log('- PDFs:', modal.pdfContents.length);
+        console.log('- Texts:', modal.textContents.length);
+        
+        // Check if any content exists
+        const hasAnyContent = modal.topicContents.length > 0 || 
+                             modal.imageContents.length > 0 || 
+                             modal.pdfContents.length > 0 || 
+                             modal.textContents.length > 0;
+        
+        console.log('[DEBUG] hasAnyContent:', hasAnyContent);
+        
+        // Check import-content button and indicator
+        const importButton = document.getElementById('import-content');
+        const importIndicator = document.getElementById('import-content-indicator');
+        
+        console.log('[DEBUG] import-content button element:', importButton);
+        console.log('[DEBUG] import-content indicator element:', importIndicator);
+        
+        // If button exists but no indicator, create one
+        if (importButton && !importIndicator) {
+          console.log('[DEBUG] Creating missing import-content indicator...');
+          const indicator = document.createElement('div');
+          indicator.className = 'vocab-content-indicator';
+          indicator.id = 'import-content-indicator';
+          importButton.appendChild(indicator);
+          console.log('[DEBUG] Import-content indicator created!');
+        }
+        
+        if (importIndicator) {
+          console.log('[DEBUG] Current indicator styles:');
+          console.log('- display:', importIndicator.style.display);
+          console.log('- visibility:', importIndicator.style.visibility);
+          console.log('- opacity:', importIndicator.style.opacity);
+        }
+        
+        // Force update
+        console.log('[DEBUG] Forcing updateContentIndicators...');
+        window.ButtonPanel.updateContentIndicators();
+        
+      } else {
+        console.log('[DEBUG] ButtonPanel or topicsModal not found');
+      }
+      
+      console.log('[DEBUG] === END DEBUGGING ===');
+    };
+    
+    // Add function to force fix import-content indicator
+    window.fixImportContentIndicator = () => {
+      console.log('[FIX] === FIXING IMPORT-CONTENT INDICATOR ===');
+      
+      const importButton = document.getElementById('import-content');
+      let importIndicator = document.getElementById('import-content-indicator');
+      
+      if (!importButton) {
+        console.log('[FIX] Import-content button not found!');
+        return;
+      }
+      
+      // Create indicator if it doesn't exist
+      if (!importIndicator) {
+        console.log('[FIX] Creating missing import-content indicator...');
+        importIndicator = document.createElement('div');
+        importIndicator.className = 'vocab-content-indicator';
+        importIndicator.id = 'import-content-indicator';
+        importButton.appendChild(importIndicator);
+        console.log('[FIX] Import-content indicator created!');
+      }
+      
+      // Force it to be visible
+      importIndicator.style.cssText = `
+        display: block !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+        background-color: #16a34a !important;
+        border: 1px solid white !important;
+        position: absolute !important;
+        top: 6px !important;
+        right: 6px !important;
+        width: 8px !important;
+        height: 8px !important;
+        border-radius: 50% !important;
+        z-index: 10 !important;
+      `;
+      
+      console.log('[FIX] Import-content indicator should now be visible!');
+      console.log('[FIX] === END FIXING ===');
+    };
+    
     // Get current domain
     const currentDomain = window.location.hostname;
     const storageKey = `isExtensionEnabledFor_${currentDomain}`;
@@ -16,6 +304,79 @@ export default defineContentScript({
     
     // Initialize the button panel when content script loads
     await ButtonPanel.init();
+    
+    // PERMANENT FIX: Ensure import-content button always has indicator
+    setTimeout(() => {
+      const ensureImportContentIndicator = () => {
+        const importButton = document.getElementById('import-content');
+        const importIndicator = document.getElementById('import-content-indicator');
+        
+        if (importButton && !importIndicator) {
+          console.log('[PERMANENT FIX] Creating missing import-content indicator...');
+          const indicator = document.createElement('div');
+          indicator.className = 'vocab-content-indicator';
+          indicator.id = 'import-content-indicator';
+          importButton.appendChild(indicator);
+          
+          // Update indicators to show/hide based on content
+          if (window.ButtonPanel && window.ButtonPanel.updateContentIndicators) {
+            window.ButtonPanel.updateContentIndicators();
+          }
+        }
+      };
+      
+      // Run immediately
+      ensureImportContentIndicator();
+      
+      // Also run periodically to catch any recreated buttons
+      setInterval(ensureImportContentIndicator, 2000);
+    }, 1000);
+    
+    // SIMPLE FIX - Force topics indicator to be visible
+    window.fixTopicsDot = () => {
+      console.log('[FIX] Forcing topics green dot to be visible...');
+      const indicator = document.getElementById('topics-content-indicator');
+      if (indicator) {
+        indicator.style.cssText = `
+          display: block !important;
+          visibility: visible !important;
+          opacity: 1 !important;
+          background-color: #16a34a !important;
+          border: 1px solid white !important;
+          position: absolute !important;
+          top: 4px !important;
+          right: 4px !important;
+          width: 8px !important;
+          height: 8px !important;
+          border-radius: 50% !important;
+          z-index: 10 !important;
+        `;
+        console.log('[FIX] Topics green dot should now be visible!');
+      } else {
+        console.log('[FIX] Topics indicator element not found - creating one...');
+        const topicsButton = document.getElementById('vocab-topics-btn');
+        if (topicsButton) {
+          const newIndicator = document.createElement('div');
+          newIndicator.id = 'topics-content-indicator';
+          newIndicator.style.cssText = `
+            display: block !important;
+            visibility: visible !important;
+            opacity: 1 !important;
+            background-color: #16a34a !important;
+            border: 1px solid white !important;
+            position: absolute !important;
+            top: 4px !important;
+            right: 4px !important;
+            width: 8px !important;
+            height: 8px !important;
+            border-radius: 50% !important;
+            z-index: 10 !important;
+          `;
+          topicsButton.appendChild(newIndicator);
+          console.log('[FIX] Created and added topics green dot!');
+        }
+      }
+    };
     
     // Initialize the word selector functionality
     await WordSelector.init();
@@ -7166,6 +7527,23 @@ const ChatDialog = {
         transform: scale(0.9);
       }
 
+      /* Minimize Animation - Scale down and move to import-content button */
+      .vocab-custom-content-modal.minimizing {
+        animation: minimizeToButton 0.3s ease-out forwards;
+        pointer-events: none;
+      }
+
+      @keyframes minimizeToButton {
+        0% {
+          transform: var(--minimize-start-transform, translate(-50%, -50%)) scale(1);
+          opacity: 1;
+        }
+        100% {
+          transform: var(--minimize-end-transform, translate(calc(-50% + var(--minimize-target-x)), calc(-50% + var(--minimize-target-y)))) scale(0);
+          opacity: 1;
+        }
+      }
+
       /* Dragging state */
       .vocab-custom-content-modal.dragging {
         cursor: grabbing;
@@ -7977,73 +8355,80 @@ const ChatDialog = {
         border: none;
         pointer-events: all;
         cursor: pointer;
-        opacity: 1;
-        transition: opacity var(--vocab-transition-normal);
+        opacity: 0.6;
+        transition: opacity var(--vocab-transition-normal), background-color var(--vocab-transition-normal);
+        z-index: 10;
       }
       
-      /* Edge handles */
+      .vocab-custom-content-resize-handle:hover {
+        opacity: 1;
+        background: rgba(162, 78, 255, 0.1);
+      }
+      
+      /* Edge handles - larger for easier grabbing */
       .vocab-custom-content-resize-handle-top,
       .vocab-custom-content-resize-handle-bottom {
-        left: 20px;
-        right: 20px;
-        height: 8px;
+        left: 15px;
+        right: 15px;
+        height: 12px;
         cursor: ns-resize;
       }
       
       .vocab-custom-content-resize-handle-top {
-        top: -4px;
+        top: -6px;
       }
       
       .vocab-custom-content-resize-handle-bottom {
-        bottom: -4px;
+        bottom: -6px;
       }
       
       .vocab-custom-content-resize-handle-left,
       .vocab-custom-content-resize-handle-right {
-        top: 20px;
-        bottom: 20px;
-        width: 8px;
+        top: 15px;
+        bottom: 15px;
+        width: 12px;
         cursor: ew-resize;
       }
       
       .vocab-custom-content-resize-handle-left {
-        left: -4px;
+        left: -6px;
       }
       
       .vocab-custom-content-resize-handle-right {
-        right: -4px;
+        right: -6px;
       }
       
-      /* Corner handles - positioned on rounded border */
+      /* Corner handles - larger for easier grabbing */
       .vocab-custom-content-resize-handle-top-left,
       .vocab-custom-content-resize-handle-top-right,
       .vocab-custom-content-resize-handle-bottom-left,
       .vocab-custom-content-resize-handle-bottom-right {
-        width: 20px;
-        height: 20px;
+        width: 24px;
+        height: 24px;
+        border-radius: 50%;
       }
 
       .vocab-custom-content-resize-handle-top-left {
-        top: 0px;
-        left: 0px;
+        top: -2px;
+        left: -2px;
         cursor: nw-resize;
       }
 
       .vocab-custom-content-resize-handle-top-right {
-        top: 0px;
-        right: 0px;
+        top: -2px;
+        right: -2px;
         cursor: ne-resize;
       }
 
       .vocab-custom-content-resize-handle-bottom-left {
-        bottom: 0px;
-        left: 0px;
+        bottom: -2px;
+        left: -2px;
         cursor: sw-resize;
       }
 
       .vocab-custom-content-resize-handle-bottom-right {
-        bottom: 0px;
-        right: 0px;
+        bottom: -2px;
+        right: -2px;
         cursor: se-resize;
       }
 
@@ -8308,6 +8693,41 @@ const ButtonPanel = {
     }
     
     console.log('Button panel initialized. Enabled:', isEnabled);
+    
+    // Expose ButtonPanel to window for debugging
+    window.ButtonPanel = ButtonPanel;
+    console.log('[ButtonPanel] Exposed to window.ButtonPanel for debugging');
+    
+    // Add simple global functions for debugging
+    window.checkTopicsContent = () => {
+      console.log('[DEBUG] Checking topics content...');
+      if (ButtonPanel.topicsModal && ButtonPanel.topicsModal.customContentModal) {
+        const topics = ButtonPanel.topicsModal.customContentModal.topicContents;
+        console.log('[DEBUG] Topics content:', topics);
+        console.log('[DEBUG] Topics count:', topics.length);
+        return topics;
+      } else {
+        console.log('[DEBUG] No topicsModal found');
+        return null;
+      }
+    };
+    
+    window.showAllIndicators = () => {
+      console.log('[DEBUG] Forcing all indicators to be visible...');
+      const indicators = ['pdf-content-indicator', 'image-content-indicator', 'topics-content-indicator', 'text-content-indicator'];
+      indicators.forEach(id => {
+        const element = document.getElementById(id);
+        if (element) {
+          element.style.display = 'block';
+          element.style.visibility = 'visible';
+          element.style.opacity = '1';
+          element.style.backgroundColor = '#16a34a';
+          console.log(`[DEBUG] Made ${id} visible`);
+        } else {
+          console.log(`[DEBUG] ${id} not found`);
+        }
+      });
+    };
   },
 
   /**
@@ -8529,6 +8949,14 @@ const ButtonPanel = {
     button.appendChild(iconSpan);
     button.appendChild(textSpan);
 
+    // Add content indicator for import-content button
+    if (config.id === 'import-content') {
+      const indicator = document.createElement('div');
+      indicator.className = 'vocab-content-indicator';
+      indicator.id = 'import-content-indicator';
+      button.appendChild(indicator);
+    }
+
     return button;
   },
 
@@ -8548,6 +8976,7 @@ const ButtonPanel = {
     pdfButton.id = 'vocab-pdf-btn';
     pdfButton.innerHTML = `
       <div class="vocab-vertical-btn-icon">${this.createPDFIcon()}</div>
+      <div class="vocab-content-indicator" id="pdf-content-indicator"></div>
     `;
 
     // Create Image button
@@ -8556,6 +8985,7 @@ const ButtonPanel = {
     imageButton.id = 'vocab-image-btn';
     imageButton.innerHTML = `
       <div class="vocab-vertical-btn-icon">${this.createImageIcon()}</div>
+      <div class="vocab-content-indicator" id="image-content-indicator"></div>
     `;
 
     // Create Topics button
@@ -8564,6 +8994,7 @@ const ButtonPanel = {
     topicsButton.id = 'vocab-topics-btn';
     topicsButton.innerHTML = `
       <div class="vocab-vertical-btn-icon">${this.createTopicsIcon()}</div>
+      <div class="vocab-content-indicator" id="topics-content-indicator"></div>
     `;
 
     // Create Text button
@@ -8572,6 +9003,7 @@ const ButtonPanel = {
     textButton.id = 'vocab-text-btn';
     textButton.innerHTML = `
       <div class="vocab-vertical-btn-icon">${this.createTextIcon()}</div>
+      <div class="vocab-content-indicator" id="text-content-indicator"></div>
     `;
 
     // Append buttons to group
@@ -8580,7 +9012,197 @@ const ButtonPanel = {
     group.appendChild(topicsButton);
     group.appendChild(textButton);
 
+    // Update content indicators after creating buttons
+    // Add a delay to ensure DOM is fully ready
+    setTimeout(() => {
+      this.updateContentIndicators();
+    }, 50);
+
     return group;
+  },
+
+  /**
+   * Update content indicators for all content import buttons
+   */
+  updateContentIndicators() {
+    console.log('[ButtonPanel] ===== UPDATE CONTENT INDICATORS DEBUG =====');
+    
+    if (!this.topicsModal || !this.topicsModal.customContentModal) {
+      console.log('[ButtonPanel] No topicsModal or customContentModal found');
+      return;
+    }
+
+    // Check the actual storage arrays directly
+    console.log('[ButtonPanel] === CHECKING STORAGE ARRAYS ===');
+    console.log('[ButtonPanel] topicContents:', this.topicsModal.customContentModal.topicContents);
+    console.log('[ButtonPanel] imageContents:', this.topicsModal.customContentModal.imageContents);
+    console.log('[ButtonPanel] pdfContents:', this.topicsModal.customContentModal.pdfContents);
+    console.log('[ButtonPanel] textContents:', this.topicsModal.customContentModal.textContents);
+    console.log('[ButtonPanel] topicContents length:', this.topicsModal.customContentModal.topicContents.length);
+    console.log('[ButtonPanel] imageContents length:', this.topicsModal.customContentModal.imageContents.length);
+    console.log('[ButtonPanel] pdfContents length:', this.topicsModal.customContentModal.pdfContents.length);
+    console.log('[ButtonPanel] textContents length:', this.topicsModal.customContentModal.textContents.length);
+
+    const contentTypes = [
+      { type: 'pdf', indicatorId: 'pdf-content-indicator' },
+      { type: 'image', indicatorId: 'image-content-indicator' },
+      { type: 'topic', indicatorId: 'topics-content-indicator' },
+      { type: 'text', indicatorId: 'text-content-indicator' }
+    ];
+    let hasAnyContent = false;
+    
+    contentTypes.forEach(({ type, indicatorId }) => {
+      const indicator = document.getElementById(indicatorId);
+      
+      console.log(`[ButtonPanel] Checking ${type}:`);
+      console.log(`[ButtonPanel] - Indicator element:`, indicator);
+      
+      if (indicator) {
+        // Check if content exists for this type
+        const contents = this.topicsModal.customContentModal.getContentByType(type);
+        const hasContent = contents && contents.length > 0;
+        
+        console.log(`[ButtonPanel] - Contents array:`, contents);
+        console.log(`[ButtonPanel] - Has content:`, hasContent);
+        console.log(`[ButtonPanel] - Content count:`, contents ? contents.length : 0);
+        
+        // Show or hide indicator based on content existence
+        if (hasContent) {
+          indicator.style.display = 'block';
+          indicator.style.visibility = 'visible';
+          indicator.style.opacity = '1';
+          hasAnyContent = true;
+          console.log(`[ButtonPanel] - Showing indicator for ${type}`);
+        } else {
+          indicator.style.display = 'none';
+          indicator.style.visibility = 'hidden';
+          indicator.style.opacity = '0';
+          console.log(`[ButtonPanel] - Hiding indicator for ${type}`);
+        }
+      } else {
+        console.log(`[ButtonPanel] - Indicator element not found for ${type}`);
+      }
+    });
+    
+    // Update import-content indicator based on whether any content exists
+    console.log(`[ButtonPanel] === IMPORT-CONTENT INDICATOR UPDATE ===`);
+    console.log(`[ButtonPanel] hasAnyContent: ${hasAnyContent}`);
+    
+    const importIndicator = document.getElementById('import-content-indicator');
+    console.log(`[ButtonPanel] importIndicator element:`, importIndicator);
+    
+    if (importIndicator) {
+      if (hasAnyContent) {
+        importIndicator.style.display = 'block';
+        importIndicator.style.visibility = 'visible';
+        importIndicator.style.opacity = '1';
+        console.log(`[ButtonPanel] - Showing import-content indicator (hasAnyContent: ${hasAnyContent})`);
+      } else {
+        importIndicator.style.display = 'none';
+        importIndicator.style.visibility = 'hidden';
+        importIndicator.style.opacity = '0';
+        console.log(`[ButtonPanel] - Hiding import-content indicator (hasAnyContent: ${hasAnyContent})`);
+      }
+    } else {
+      console.log(`[ButtonPanel] - Import-content indicator element not found`);
+    }
+    
+    console.log('[ButtonPanel] ===== END UPDATE CONTENT INDICATORS DEBUG =====');
+  },
+
+  /**
+   * Manual function to check storage and update indicators (for debugging)
+   * Call this from browser console: window.ButtonPanel.debugCheckStorage()
+   */
+  debugCheckStorage() {
+    console.log('[ButtonPanel] ===== MANUAL STORAGE CHECK =====');
+    
+    if (!this.topicsModal || !this.topicsModal.customContentModal) {
+      console.log('[ButtonPanel] No topicsModal or customContentModal found');
+      return;
+    }
+
+    console.log('[ButtonPanel] === DIRECT STORAGE ARRAY CHECK ===');
+    console.log('[ButtonPanel] topicContents:', this.topicsModal.customContentModal.topicContents);
+    console.log('[ButtonPanel] imageContents:', this.topicsModal.customContentModal.imageContents);
+    console.log('[ButtonPanel] pdfContents:', this.topicsModal.customContentModal.pdfContents);
+    console.log('[ButtonPanel] textContents:', this.topicsModal.customContentModal.textContents);
+    
+    console.log('[ButtonPanel] === ARRAY LENGTHS ===');
+    console.log('[ButtonPanel] topicContents.length:', this.topicsModal.customContentModal.topicContents.length);
+    console.log('[ButtonPanel] imageContents.length:', this.topicsModal.customContentModal.imageContents.length);
+    console.log('[ButtonPanel] pdfContents.length:', this.topicsModal.customContentModal.pdfContents.length);
+    console.log('[ButtonPanel] textContents.length:', this.topicsModal.customContentModal.textContents.length);
+    
+    console.log('[ButtonPanel] === INDICATOR ELEMENTS CHECK ===');
+    const indicators = ['pdf-content-indicator', 'image-content-indicator', 'topics-content-indicator', 'text-content-indicator'];
+    indicators.forEach(id => {
+      const element = document.getElementById(id);
+      console.log(`[ButtonPanel] ${id}:`, element);
+      if (element) {
+        console.log(`[ButtonPanel] ${id} display style:`, element.style.display);
+        console.log(`[ButtonPanel] ${id} computed display:`, window.getComputedStyle(element).display);
+      }
+    });
+    
+    // Force update indicators
+    console.log('[ButtonPanel] === FORCING INDICATOR UPDATE ===');
+    this.updateContentIndicators();
+    
+    console.log('[ButtonPanel] ===== END MANUAL STORAGE CHECK =====');
+  },
+
+  /**
+   * Force show all indicators for testing (call from console: window.ButtonPanel.forceShowIndicators())
+   */
+  forceShowIndicators() {
+    console.log('[ButtonPanel] ===== FORCE SHOWING ALL INDICATORS =====');
+    const indicators = ['pdf-content-indicator', 'image-content-indicator', 'topics-content-indicator', 'text-content-indicator'];
+    indicators.forEach(id => {
+      const element = document.getElementById(id);
+      if (element) {
+        element.style.display = 'block';
+        element.style.visibility = 'visible';
+        element.style.opacity = '1';
+        console.log(`[ButtonPanel] Forced ${id} to be visible`);
+      } else {
+        console.log(`[ButtonPanel] ${id} not found`);
+      }
+    });
+    console.log('[ButtonPanel] ===== END FORCE SHOWING INDICATORS =====');
+  },
+
+  /**
+   * Quick fix function to manually check and update topics indicator
+   * Call this from console: window.ButtonPanel.fixTopicsIndicator()
+   */
+  fixTopicsIndicator() {
+    console.log('[ButtonPanel] ===== FIXING TOPICS INDICATOR =====');
+    
+    // Check if topics content exists
+    const topicsContent = this.topicsModal.customContentModal.topicContents;
+    console.log('[ButtonPanel] Topics content:', topicsContent);
+    console.log('[ButtonPanel] Topics content length:', topicsContent.length);
+    
+    // Find the topics indicator
+    const indicator = document.getElementById('topics-content-indicator');
+    console.log('[ButtonPanel] Topics indicator element:', indicator);
+    
+    if (indicator) {
+      if (topicsContent.length > 0) {
+        indicator.style.display = 'block';
+        indicator.style.visibility = 'visible';
+        indicator.style.opacity = '1';
+        console.log('[ButtonPanel] Topics indicator should now be visible');
+      } else {
+        indicator.style.display = 'none';
+        console.log('[ButtonPanel] No topics content found, hiding indicator');
+      }
+    } else {
+      console.log('[ButtonPanel] Topics indicator element not found!');
+    }
+    
+    console.log('[ButtonPanel] ===== END FIXING TOPICS INDICATOR =====');
   },
 
   /**
@@ -9412,6 +10034,7 @@ const ButtonPanel = {
 
 
       .vocab-vertical-btn {
+        position: relative;
         display: flex;
         flex-direction: row;
         align-items: center;
@@ -9458,6 +10081,20 @@ const ButtonPanel = {
         display: none;
       }
 
+      /* Content indicator styles */
+      .vocab-content-indicator {
+        position: absolute;
+        top: 6px;
+        right: 6px;
+        width: 8px;
+        height: 8px;
+        background-color: #16a34a;
+        border-radius: 50%;
+        display: none;
+        z-index: 10;
+        border: 1px solid white;
+      }
+
 
       /* Responsive adjustments for vertical button group */
       @media (max-width: 768px) {
@@ -9487,6 +10124,14 @@ const ButtonPanel = {
         .vocab-vertical-btn-icon svg {
           width: 30px;
           height: 30px;
+        }
+
+        /* Adjust content indicator size for mobile */
+        .vocab-content-indicator {
+          width: 6px;
+          height: 6px;
+          top: 4px;
+          right: 4px;
         }
       }
 
@@ -11317,17 +11962,33 @@ const ButtonPanel = {
         message = 'Import content';
         console.log(`[ButtonPanel] Import-content button message: "${message}"`);
       } else if (buttonType === 'pdf-upload') {
-        message = 'Upload PDF containing text';
-        console.log(`[ButtonPanel] PDF-upload button message: "${message}"`);
+        // Check if PDF content exists
+        const hasContent = this.topicsModal && this.topicsModal.customContentModal && 
+                          this.topicsModal.customContentModal.pdfContents && 
+                          this.topicsModal.customContentModal.pdfContents.length > 0;
+        message = hasContent ? 'View PDF content' : 'Upload PDF containing text';
+        console.log(`[ButtonPanel] PDF-upload button message: "${message}" (hasContent: ${hasContent})`);
       } else if (buttonType === 'image-upload') {
-        message = 'Upload image containing text';
-        console.log(`[ButtonPanel] Image-upload button message: "${message}"`);
+        // Check if image content exists
+        const hasContent = this.topicsModal && this.topicsModal.customContentModal && 
+                          this.topicsModal.customContentModal.imageContents && 
+                          this.topicsModal.customContentModal.imageContents.length > 0;
+        message = hasContent ? 'View image content' : 'Upload image containing text';
+        console.log(`[ButtonPanel] Image-upload button message: "${message}" (hasContent: ${hasContent})`);
       } else if (buttonType === 'topics-input') {
-        message = 'Keywords or topics which you want to study on';
-        console.log(`[ButtonPanel] Topics-input button message: "${message}"`);
+        // Check if topics content exists
+        const hasContent = this.topicsModal && this.topicsModal.customContentModal && 
+                          this.topicsModal.customContentModal.topicContents && 
+                          this.topicsModal.customContentModal.topicContents.length > 0;
+        message = hasContent ? 'View keyword content' : 'Keywords or topics which you want to study on';
+        console.log(`[ButtonPanel] Topics-input button message: "${message}" (hasContent: ${hasContent})`);
       } else if (buttonType === 'text-input') {
-        message = 'Copy content from elsewhere and paste here';
-        console.log(`[ButtonPanel] Text-input button message: "${message}"`);
+        // Check if text content exists
+        const hasContent = this.topicsModal && this.topicsModal.customContentModal && 
+                          this.topicsModal.customContentModal.textContents && 
+                          this.topicsModal.customContentModal.textContents.length > 0;
+        message = hasContent ? 'View text content' : 'Copy content from elsewhere and paste here';
+        console.log(`[ButtonPanel] Text-input button message: "${message}" (hasContent: ${hasContent})`);
       }
 
       console.log(`[ButtonPanel] Final tooltip message: "${message}" (disabled: ${isDisabled})`);
@@ -12414,6 +13075,27 @@ const ButtonPanel = {
       this.verticalButtonGroup.classList.add('visible');
       this.verticalButtonGroup.style.pointerEvents = 'auto';
       this.updateState({ showVerticalGroup: true });
+      
+      // Update content indicators when showing the button group
+      // Add a small delay to ensure DOM is ready
+      setTimeout(() => {
+        this.updateContentIndicators();
+        
+        // FORCE topics indicator to be visible if topics content exists
+        if (this.topicsModal && this.topicsModal.customContentModal && 
+            this.topicsModal.customContentModal.topicContents && 
+            this.topicsModal.customContentModal.topicContents.length > 0) {
+          const topicsIndicator = document.getElementById('topics-content-indicator');
+          if (topicsIndicator) {
+            topicsIndicator.style.display = 'block';
+            topicsIndicator.style.visibility = 'visible';
+            topicsIndicator.style.opacity = '1';
+            topicsIndicator.style.backgroundColor = '#16a34a';
+            topicsIndicator.style.border = '1px solid white';
+            console.log('[ButtonPanel] FORCED topics indicator to be visible when showing button group');
+          }
+        }
+      }, 100);
     }
   },
 
@@ -12541,6 +13223,23 @@ const ButtonPanel = {
       
       // Store reference for future removal
       this.importContentButton = importContentBtn;
+      
+      // SAFETY CHECK: Ensure indicator exists after button recreation
+      setTimeout(() => {
+        const indicator = document.getElementById('import-content-indicator');
+        if (!indicator) {
+          console.log('[ButtonPanel] Creating missing import-content indicator after button recreation...');
+          const newIndicator = document.createElement('div');
+          newIndicator.className = 'vocab-content-indicator';
+          newIndicator.id = 'import-content-indicator';
+          importContentBtn.appendChild(newIndicator);
+          
+          // Update indicators to show/hide based on content
+          if (this.updateContentIndicators) {
+            this.updateContentIndicators();
+          }
+        }
+      }, 100);
     }
   },
 
@@ -13589,6 +14288,11 @@ const ButtonPanel = {
           console.log('[ButtonPanel] After removal - Text contents:', this.textContents);
           console.log('[ButtonPanel] ===== END REMOVE CONTENT DEBUG (SUCCESS) =====');
           
+          // Update content indicators after removing content
+          if (window.ButtonPanel && window.ButtonPanel.updateContentIndicators) {
+            window.ButtonPanel.updateContentIndicators();
+          }
+          
           return content; // Return the content object so cleanup can be done by caller
         }
         
@@ -13673,6 +14377,26 @@ const ButtonPanel = {
             return null;
         }
         
+        // Update content indicators after adding content
+        if (window.ButtonPanel && window.ButtonPanel.updateContentIndicators) {
+          window.ButtonPanel.updateContentIndicators();
+        }
+        
+        // FORCE topics indicator to be visible if topics content was added
+        if (contentType === 'topic') {
+          setTimeout(() => {
+            const topicsIndicator = document.getElementById('topics-content-indicator');
+            if (topicsIndicator) {
+              topicsIndicator.style.display = 'block';
+              topicsIndicator.style.visibility = 'visible';
+              topicsIndicator.style.opacity = '1';
+              topicsIndicator.style.backgroundColor = '#16a34a';
+              topicsIndicator.style.border = '1px solid white';
+              console.log('[ButtonPanel] FORCED topics indicator to be visible after content added');
+            }
+          }, 100);
+        }
+        
         return newContent;
       },
       
@@ -13680,6 +14404,12 @@ const ButtonPanel = {
         const contents = this.getContentByType(contentType);
         if (index >= 0 && index < contents.length) {
           contents.splice(index, 1);
+          
+          // Update content indicators after removing content
+          if (window.ButtonPanel && window.ButtonPanel.updateContentIndicators) {
+            window.ButtonPanel.updateContentIndicators();
+          }
+          
           return true;
         }
         return false;
@@ -13700,6 +14430,11 @@ const ButtonPanel = {
             this.textContents = [];
             break;
         }
+        
+        // Update content indicators after clearing content
+        if (window.ButtonPanel && window.ButtonPanel.updateContentIndicators) {
+          window.ButtonPanel.updateContentIndicators();
+        }
       },
       
       clearAllContents: function() {
@@ -13707,6 +14442,11 @@ const ButtonPanel = {
         this.imageContents = [];
         this.pdfContents = [];
         this.textContents = [];
+        
+        // Update content indicators after clearing all content
+        if (window.ButtonPanel && window.ButtonPanel.updateContentIndicators) {
+          window.ButtonPanel.updateContentIndicators();
+        }
       },
       
       getAllTabs: function() {
@@ -14601,67 +15341,156 @@ const ButtonPanel = {
     console.log('[ButtonPanel] Modal overlay exists:', !!this.topicsModal.customContentModal.overlay);
     
     if (this.topicsModal.customContentModal.overlay) {
-      console.log('[ButtonPanel] Overlay classes before removal:', this.topicsModal.customContentModal.overlay.classList.toString());
-      this.topicsModal.customContentModal.overlay.classList.remove('visible');
+      const modal = this.topicsModal.customContentModal.modal;
+      const overlay = this.topicsModal.customContentModal.overlay;
       
-      // Remove class from body to show webpage icons again
-      document.body.classList.remove('vocab-custom-content-modal-open');
-      
-      console.log('[ButtonPanel] Overlay classes after removal:', this.topicsModal.customContentModal.overlay.classList.toString());
-      console.log('[ButtonPanel] Overlay is now visible:', this.topicsModal.customContentModal.overlay.classList.contains('visible'));
-      
-      // Close ChatDialog if it's open when modal is minimized/closed
-      if (typeof ChatDialog !== 'undefined' && ChatDialog.isOpen) {
-        console.log('[ButtonPanel] ChatDialog is open - closing it when custom content modal is minimized/closed');
-        console.log('[ButtonPanel] Current ChatDialog textKey:', ChatDialog.currentTextKey);
-        ChatDialog.close();
+      // Get import-content button coordinates
+      const importButton = document.getElementById('import-content');
+      if (importButton && modal) {
+        // Get current modal position and size
+        const modalRect = modal.getBoundingClientRect();
+        const modalCenterX = modalRect.left + modalRect.width / 2;
+        const modalCenterY = modalRect.top + modalRect.height / 2;
+        
+        // Get import-content button position
+        const buttonRect = importButton.getBoundingClientRect();
+        const buttonCenterX = buttonRect.left + buttonRect.width / 2;
+        const buttonCenterY = buttonRect.top + buttonRect.height / 2;
+        
+        // Calculate the translation needed to move modal center to button center
+        // After resetting transform to 'none', the modal will be positioned at its natural position
+        // So we need to calculate from the modal's current center to the button center
+        const targetX = buttonCenterX - modalCenterX;
+        const targetY = buttonCenterY - modalCenterY;
+        
+        console.log('[ButtonPanel] Modal center:', { x: modalCenterX, y: modalCenterY });
+        console.log('[ButtonPanel] Button center:', { x: buttonCenterX, y: buttonCenterY });
+        console.log('[ButtonPanel] Target translation:', { x: targetX, y: targetY });
+        
+        // Disable overlay transitions to prevent fade effect during animation
+        overlay.style.transition = 'none';
+        
+        // Check modal's current positioning mode
+        const computedStyle = window.getComputedStyle(modal);
+        const isCentered = computedStyle.left === '50%' || 
+                          computedStyle.left === 'auto' || 
+                          computedStyle.transform.includes('translate(-50%');
+        
+        // Set CSS custom properties for the animation based on positioning mode
+        modal.style.setProperty('--minimize-target-x', `${targetX}px`);
+        modal.style.setProperty('--minimize-target-y', `${targetY}px`);
+        
+        if (isCentered) {
+          // Modal is in centered mode - use original animation
+          modal.style.setProperty('--minimize-start-transform', 'translate(-50%, -50%)');
+          modal.style.setProperty('--minimize-end-transform', 'translate(calc(-50% + var(--minimize-target-x)), calc(-50% + var(--minimize-target-y)))');
+        } else {
+          // Modal is in absolute mode - use direct translation
+          modal.style.setProperty('--minimize-start-transform', 'none');
+          modal.style.setProperty('--minimize-end-transform', `translate(${targetX}px, ${targetY}px)`);
+        }
+        
+        // Add minimizing class to trigger animation
+        modal.classList.add('minimizing');
+        
+        // Wait for animation to complete, then hide modal
+        setTimeout(() => {
+          console.log('[ButtonPanel] Animation completed, hiding modal');
+          
+          // Directly hide the modal element to prevent reappear effect
+          modal.style.display = 'none';
+          
+          // Hide overlay immediately without transition
+          overlay.classList.remove('visible');
+          
+          // Remove class from body to show webpage icons again
+          document.body.classList.remove('vocab-custom-content-modal-open');
+          
+          // Clean up animation class and restore overlay transitions
+          modal.classList.remove('minimizing');
+          overlay.style.transition = ''; // Restore original transition
+          
+          // Clean up CSS custom properties
+          modal.style.removeProperty('--minimize-target-x');
+          modal.style.removeProperty('--minimize-target-y');
+          modal.style.removeProperty('--minimize-start-transform');
+          modal.style.removeProperty('--minimize-end-transform');
+          
+          // Continue with the rest of the cleanup
+          this.continueModalCleanup();
+        }, 300); // 0.3s animation duration
+        
+        return; // Exit early, cleanup will continue in setTimeout
+      } else {
+        console.log('[ButtonPanel] Import-content button or modal not found, using fallback');
+        // Fallback to original behavior if button not found
+        overlay.classList.remove('visible');
+        document.body.classList.remove('vocab-custom-content-modal-open');
       }
       
-      // Update button states after modal closes
-      this.updateButtonStatesFromSelections();
-      
-      // Hide info banner if visible
-      this.hideCustomContentInfoBanner();
-      
-      // Update icon contexts for all existing icons
-      this.updateIconContexts();
-      
-      // Restore any icon wrappers that were moved to modal overlay back to their original highlights
-      const iconWrappers = this.topicsModal.customContentModal.overlay.querySelectorAll('.vocab-text-icons-wrapper');
-      iconWrappers.forEach(wrapper => {
-        const textKey = wrapper.getAttribute('data-text-key');
-        if (textKey) {
-          // Try to find the original highlight element
-          let highlight = document.querySelector(`[data-text-highlight="${textKey}"]`);
-          
-          // If not found by data-text-highlight, try to find by checking simplifiedTexts
-          if (!highlight && TextSelector.simplifiedTexts.has(textKey)) {
-            const simplifiedData = TextSelector.simplifiedTexts.get(textKey);
-            if (simplifiedData && simplifiedData.highlight) {
-              highlight = simplifiedData.highlight;
-            }
-          }
-          
-          // Only restore if we found a highlight AND it's definitely from the main webpage (not modal content)
-          if (highlight && !highlight.closest('.vocab-custom-content-modal') && highlight.closest('body')) {
-            // This is a main webpage highlight, move the icons back
-            console.log('[ButtonPanel] Restoring icons for textKey:', textKey);
-            highlight.appendChild(wrapper);
-            // Update context to main-webpage since it's being restored to main webpage
-            wrapper.setAttribute('data-icon-context', 'main-webpage');
-          } else {
-            // This is modal content or highlight not found, keep the wrapper in the modal overlay
-            // Don't remove it as it might be needed for modal content
-            console.log('[ButtonPanel] Keeping modal content icons for textKey:', textKey);
-            // Update context to custom-content-modal since it's staying in modal
-            wrapper.setAttribute('data-icon-context', 'custom-content-modal');
-          }
-        } else {
-          // No textKey, keep the wrapper in the modal overlay
-          console.log('[ButtonPanel] Keeping icon wrapper without textKey');
-        }
-      });
+      // Continue with cleanup for both animation and fallback cases
+      this.continueModalCleanup();
     }
+  },
+
+  /**
+   * Continue modal cleanup after animation or immediate hide
+   */
+  continueModalCleanup() {
+    console.log('[ButtonPanel] Overlay classes after removal:', this.topicsModal.customContentModal.overlay.classList.toString());
+    console.log('[ButtonPanel] Overlay is now visible:', this.topicsModal.customContentModal.overlay.classList.contains('visible'));
+    
+    // Close ChatDialog if it's open when modal is minimized/closed
+    if (typeof ChatDialog !== 'undefined' && ChatDialog.isOpen) {
+      console.log('[ButtonPanel] ChatDialog is open - closing it when custom content modal is minimized/closed');
+      console.log('[ButtonPanel] Current ChatDialog textKey:', ChatDialog.currentTextKey);
+      ChatDialog.close();
+    }
+    
+    // Update button states after modal closes
+    this.updateButtonStatesFromSelections();
+    
+    // Hide info banner if visible
+    this.hideCustomContentInfoBanner();
+    
+    // Update icon contexts for all existing icons
+    this.updateIconContexts();
+    
+    // Restore any icon wrappers that were moved to modal overlay back to their original highlights
+    const iconWrappers = this.topicsModal.customContentModal.overlay.querySelectorAll('.vocab-text-icons-wrapper');
+    iconWrappers.forEach(wrapper => {
+      const textKey = wrapper.getAttribute('data-text-key');
+      if (textKey) {
+        // Try to find the original highlight element
+        let highlight = document.querySelector(`[data-text-highlight="${textKey}"]`);
+        
+        // If not found by data-text-highlight, try to find by checking simplifiedTexts
+        if (!highlight && TextSelector.simplifiedTexts.has(textKey)) {
+          const simplifiedData = TextSelector.simplifiedTexts.get(textKey);
+          if (simplifiedData && simplifiedData.highlight) {
+            highlight = simplifiedData.highlight;
+          }
+        }
+        
+        // Only restore if we found a highlight AND it's definitely from the main webpage (not modal content)
+        if (highlight && !highlight.closest('.vocab-custom-content-modal') && highlight.closest('body')) {
+          // This is a main webpage highlight, move the icons back
+          console.log('[ButtonPanel] Restoring icons for textKey:', textKey);
+          highlight.appendChild(wrapper);
+          // Update context to main-webpage since it's being restored to main webpage
+          wrapper.setAttribute('data-icon-context', 'main-webpage');
+        } else {
+          // This is modal content or highlight not found, keep the wrapper in the modal overlay
+          // Don't remove it as it might be needed for modal content
+          console.log('[ButtonPanel] Keeping modal content icons for textKey:', textKey);
+          // Update context to custom-content-modal since it's staying in modal
+          wrapper.setAttribute('data-icon-context', 'custom-content-modal');
+        }
+      } else {
+        // No textKey, keep the wrapper in the modal overlay
+        console.log('[ButtonPanel] Keeping icon wrapper without textKey');
+      }
+    });
     
     console.log('[ButtonPanel] ===== END HIDE CUSTOM CONTENT MODAL DEBUG =====');
   },
@@ -15574,6 +16403,9 @@ const ButtonPanel = {
     // Add to document
     document.body.appendChild(overlay);
     
+    // Initialize modal positioning for resize functionality
+    this.initializeModalPositioning(modal);
+    
     // Store references
     console.log('[ButtonPanel] Storing modal references...');
     this.topicsModal.customContentModal.overlay = overlay;
@@ -15863,26 +16695,39 @@ const ButtonPanel = {
     
     // Switch to the specified tab or first tab if available
     if (contents.length > 0) {
-      if (activeTabId) {
-        // Switch to the specified tab if it exists
-        const targetContent = contents.find(content => content.tabId === activeTabId);
-        if (targetContent) {
-          console.log('[ButtonPanel] Switching to specified tab:', activeTabId);
-          this.switchToTab(targetContent.tabId.toString());
+      // Use requestAnimationFrame to ensure DOM is fully rendered before switching tabs
+      requestAnimationFrame(() => {
+        if (activeTabId) {
+          // Switch to the specified tab if it exists
+          const targetContent = contents.find(content => content.tabId === activeTabId);
+          if (targetContent) {
+            console.log('[ButtonPanel] Switching to specified tab:', activeTabId);
+            this.switchToTab(targetContent.tabId.toString());
+          } else {
+            console.log('[ButtonPanel] Specified tab not found, switching to first tab');
+            this.switchToTab(contents[0].tabId.toString());
+          }
         } else {
-          console.log('[ButtonPanel] Specified tab not found, switching to first tab');
+          // Switch to the first tab if no specific tab is specified
+          console.log('[ButtonPanel] No specific tab specified, switching to first tab');
           this.switchToTab(contents[0].tabId.toString());
         }
-      } else {
-        // Switch to the first tab if no specific tab is specified
-        console.log('[ButtonPanel] No specific tab specified, switching to first tab');
-        this.switchToTab(contents[0].tabId.toString());
-      }
+        
+        // Ensure visual selection is updated after a brief delay to account for any animations
+        setTimeout(() => {
+          this.updateTabSelectionVisual();
+        }, 50);
+      });
     }
     
     // Ensure modal is visible and add body class for blur effect
     if (!this.topicsModal.customContentModal.overlay.classList.contains('visible')) {
       this.topicsModal.customContentModal.overlay.classList.add('visible');
+    }
+    
+    // Restore modal display if it was hidden during minimize animation
+    if (this.topicsModal.customContentModal.modal) {
+      this.topicsModal.customContentModal.modal.style.display = '';
     }
     
     // Always add body class to blur webpage icons
@@ -16107,6 +16952,11 @@ const ButtonPanel = {
     // Show the modal
     setTimeout(() => {
       this.topicsModal.customContentModal.overlay.classList.add('visible');
+      
+      // Restore modal display if it was hidden during minimize animation
+      if (this.topicsModal.customContentModal.modal) {
+        this.topicsModal.customContentModal.modal.style.display = '';
+      }
       
       // Clear all selections when opening modal
       this.clearSelectionsOnModalOpen();
@@ -16416,15 +17266,7 @@ const ButtonPanel = {
       // Clear existing highlights first to avoid duplicates
       this.clearExistingHighlights();
       
-      // Restore word meanings
-      if (activeContent.analysis.wordMeanings && activeContent.analysis.wordMeanings.length > 0) {
-        console.log('[ButtonPanel] Restoring', activeContent.analysis.wordMeanings.length, 'word meanings');
-        activeContent.analysis.wordMeanings.forEach(wordData => {
-          this.restoreWordExplanation(wordData);
-        });
-      }
-
-      // Restore simplified texts with additional delay to ensure content is fully rendered
+      // Restore simplified texts FIRST to establish text highlight containers
       if (activeContent.analysis.simplifiedMeanings && activeContent.analysis.simplifiedMeanings.length > 0) {
         console.log('[ButtonPanel] Restoring', activeContent.analysis.simplifiedMeanings.length, 'simplified texts');
         // Add extra delay for simplified texts to ensure content is fully rendered
@@ -16433,11 +17275,29 @@ const ButtonPanel = {
             this.restoreSimplifiedText(simplifiedData);
           });
           
-          // Additional repositioning after all simplified texts are restored
+          // After text highlights are restored, restore word meanings
           setTimeout(() => {
-            this.repositionAllSimplifiedIcons();
+            if (activeContent.analysis.wordMeanings && activeContent.analysis.wordMeanings.length > 0) {
+              console.log('[ButtonPanel] Restoring', activeContent.analysis.wordMeanings.length, 'word meanings');
+              activeContent.analysis.wordMeanings.forEach(wordData => {
+                this.restoreWordExplanationWithHierarchy(wordData);
+              });
+            }
+            
+            // Additional repositioning after all highlights are restored
+            setTimeout(() => {
+              this.repositionAllSimplifiedIcons();
+            }, 100);
           }, 100);
         }, 200);
+      } else {
+        // If no simplified texts, restore word meanings directly
+        if (activeContent.analysis.wordMeanings && activeContent.analysis.wordMeanings.length > 0) {
+          console.log('[ButtonPanel] Restoring', activeContent.analysis.wordMeanings.length, 'word meanings');
+          activeContent.analysis.wordMeanings.forEach(wordData => {
+            this.restoreWordExplanation(wordData);
+          });
+        }
       }
 
       // Restore chats
@@ -16510,7 +17370,196 @@ const ButtonPanel = {
   },
 
   /**
-   * Restore visual word explanation elements
+   * Restore visual word explanation elements with hierarchy awareness
+   * @param {Object} wordData - Word explanation data
+   */
+  restoreWordExplanationWithHierarchy(wordData) {
+    console.log('[ButtonPanel] Restoring word explanation with hierarchy for:', wordData.word);
+    console.log('[ButtonPanel] Word data:', wordData);
+    
+    // Find the content element
+    const contentElement = this.topicsModal.customContentModal.modal.querySelector('.vocab-custom-content-editor-content');
+    if (!contentElement) {
+      console.log('[ButtonPanel] Content element not found for word restoration');
+      return;
+    }
+
+    const textContent = contentElement.textContent || contentElement.innerText;
+    if (!textContent) {
+      console.log('[ButtonPanel] No text content found for word restoration');
+      return;
+    }
+
+    // Use stored textStartIndex if available, otherwise fall back to regex search
+    if (wordData.textStartIndex !== undefined && wordData.location !== undefined) {
+      console.log('[ButtonPanel] Using stored positioning data - textStartIndex:', wordData.textStartIndex, 'location:', wordData.location);
+      console.log('[ButtonPanel] Text content length:', textContent.length);
+      console.log('[ButtonPanel] Text content preview:', textContent.substring(0, 200));
+      
+      // Use the stored location data to find the word
+      const wordStart = wordData.textStartIndex + wordData.location.index;
+      const wordEnd = wordStart + wordData.location.length;
+      
+      console.log('[ButtonPanel] Calculated word position:', wordStart, '-', wordEnd);
+      
+      // Verify the word matches at this position
+      const wordAtPosition = textContent.substring(wordStart, wordEnd);
+      console.log('[ButtonPanel] Word at calculated position:', wordAtPosition);
+      
+      if (wordAtPosition.toLowerCase() === wordData.normalizedWord) {
+        console.log('[ButtonPanel] Word matches at calculated position');
+        
+        // Check if this word is inside an existing text highlight
+        const textHighlights = contentElement.querySelectorAll('.vocab-text-highlight');
+        let targetTextHighlight = null;
+        
+        for (const textHighlight of textHighlights) {
+          const textHighlightStart = this.getTextNodeOffset(textHighlight);
+          const textHighlightEnd = textHighlightStart + textHighlight.textContent.length;
+          
+          console.log('[ButtonPanel] Checking text highlight:', textHighlightStart, '-', textHighlightEnd);
+          
+          // Check if word position is within this text highlight
+          if (wordStart >= textHighlightStart && wordEnd <= textHighlightEnd) {
+            console.log('[ButtonPanel] Word is inside text highlight, will nest it');
+            targetTextHighlight = textHighlight;
+            break;
+          }
+        }
+        
+        if (targetTextHighlight) {
+          // Word should be nested inside the text highlight
+          this.createNestedWordHighlight(targetTextHighlight, wordStart, wordEnd, wordData);
+        } else {
+          // Word is not inside any text highlight, create standalone highlight
+          this.createStandaloneWordHighlight(contentElement, wordStart, wordEnd, wordData);
+        }
+      } else {
+        console.log('[ButtonPanel] Word does not match at calculated position, falling back to regex search');
+        this.restoreWordExplanation(wordData);
+      }
+    } else {
+      console.log('[ButtonPanel] No stored positioning data, falling back to regex search');
+      this.restoreWordExplanation(wordData);
+    }
+  },
+
+  /**
+   * Create a word highlight nested inside a text highlight
+   * @param {HTMLElement} textHighlight - The parent text highlight element
+   * @param {number} wordStart - Start position of the word
+   * @param {number} wordEnd - End position of the word
+   * @param {Object} wordData - Word explanation data
+   */
+  createNestedWordHighlight(textHighlight, wordStart, wordEnd, wordData) {
+    console.log('[ButtonPanel] Creating nested word highlight for:', wordData.word);
+    
+    const textHighlightStart = this.getTextNodeOffset(textHighlight);
+    const relativeWordStart = wordStart - textHighlightStart;
+    const relativeWordEnd = wordEnd - textHighlightStart;
+    
+    console.log('[ButtonPanel] Text highlight start:', textHighlightStart);
+    console.log('[ButtonPanel] Relative word position:', relativeWordStart, '-', relativeWordEnd);
+    
+    // Create word highlight element
+    const wordHighlight = document.createElement('span');
+    wordHighlight.className = 'vocab-word-highlight vocab-word-explained';
+    wordHighlight.setAttribute('data-word-highlight', `${wordData.normalizedWord}-0`);
+    wordHighlight.setAttribute('data-meaning', wordData.meaning);
+    wordHighlight.setAttribute('data-examples', JSON.stringify(wordData.examples));
+    
+    // Replace the word text within the text highlight
+    this.replaceTextInElement(textHighlight, relativeWordStart, relativeWordEnd, wordHighlight);
+    
+    // Add to WordSelector explained words
+    if (!WordSelector.explainedWords.has(wordData.normalizedWord)) {
+      WordSelector.explainedWords.set(wordData.normalizedWord, {
+        word: wordData.word,
+        meaning: wordData.meaning,
+        examples: wordData.examples,
+        shouldAllowFetchMoreExamples: wordData.shouldAllowFetchMoreExamples || false,
+        hasCalledGetMoreExamples: false,
+        highlights: new Set()
+      });
+    }
+    WordSelector.explainedWords.get(wordData.normalizedWord).highlights.add(wordHighlight);
+
+    // Add green cross button
+    const greenCrossBtn = WordSelector.createRemoveExplainedButton(wordData.word);
+    wordHighlight.appendChild(greenCrossBtn);
+
+    // Setup word interactions
+    WordSelector.setupWordInteractions(wordHighlight);
+
+    console.log('[ButtonPanel] Created nested word highlight for:', wordData.word);
+  },
+
+  /**
+   * Create a standalone word highlight (not nested)
+   * @param {HTMLElement} contentElement - The content element
+   * @param {number} wordStart - Start position of the word
+   * @param {number} wordEnd - End position of the word
+   * @param {Object} wordData - Word explanation data
+   */
+  createStandaloneWordHighlight(contentElement, wordStart, wordEnd, wordData) {
+    console.log('[ButtonPanel] Creating standalone word highlight for:', wordData.word);
+    
+    // Create word highlight element
+    const wordHighlight = document.createElement('span');
+    wordHighlight.className = 'vocab-word-highlight vocab-word-explained';
+    wordHighlight.setAttribute('data-word-highlight', `${wordData.normalizedWord}-0`);
+    wordHighlight.setAttribute('data-meaning', wordData.meaning);
+    wordHighlight.setAttribute('data-examples', JSON.stringify(wordData.examples));
+    
+    // Replace the word text in the content
+    this.replaceTextInElement(contentElement, wordStart, wordEnd, wordHighlight);
+    
+    // Add to WordSelector explained words
+    if (!WordSelector.explainedWords.has(wordData.normalizedWord)) {
+      WordSelector.explainedWords.set(wordData.normalizedWord, {
+        word: wordData.word,
+        meaning: wordData.meaning,
+        examples: wordData.examples,
+        shouldAllowFetchMoreExamples: wordData.shouldAllowFetchMoreExamples || false,
+        hasCalledGetMoreExamples: false,
+        highlights: new Set()
+      });
+    }
+    WordSelector.explainedWords.get(wordData.normalizedWord).highlights.add(wordHighlight);
+
+    // Add green cross button
+    const greenCrossBtn = WordSelector.createRemoveExplainedButton(wordData.word);
+    wordHighlight.appendChild(greenCrossBtn);
+
+    // Setup word interactions
+    WordSelector.setupWordInteractions(wordHighlight);
+
+    console.log('[ButtonPanel] Created standalone word highlight for:', wordData.word);
+  },
+
+  /**
+   * Get the text node offset of an element within its parent
+   * @param {HTMLElement} element - The element to get offset for
+   * @returns {number} The offset position
+   */
+  getTextNodeOffset(element) {
+    let offset = 0;
+    let node = element.previousSibling;
+    
+    while (node) {
+      if (node.nodeType === Node.TEXT_NODE) {
+        offset += node.textContent.length;
+      } else if (node.nodeType === Node.ELEMENT_NODE) {
+        offset += node.textContent.length;
+      }
+      node = node.previousSibling;
+    }
+    
+    return offset;
+  },
+
+  /**
+   * Restore visual word explanation elements (original function for fallback)
    * @param {Object} wordData - Word explanation data
    */
   restoreWordExplanation(wordData) {
@@ -17425,6 +18474,27 @@ const ButtonPanel = {
   },
 
   /**
+   * Initialize modal positioning for resize functionality
+   * Converts modal from centered positioning to absolute positioning
+   * @param {HTMLElement} modal - The modal element to initialize
+   */
+  initializeModalPositioning(modal) {
+    // Wait for modal to be rendered and positioned
+    requestAnimationFrame(() => {
+      const rect = modal.getBoundingClientRect();
+      const centerX = window.innerWidth / 2;
+      const centerY = window.innerHeight / 2;
+      
+      // Convert from centered positioning to absolute positioning
+      modal.style.left = `${centerX - rect.width / 2}px`;
+      modal.style.top = `${centerY - rect.height / 2}px`;
+      modal.style.transform = 'none';
+      
+      console.log('[ButtonPanel] Initialized modal positioning for resize functionality');
+    });
+  },
+
+  /**
    * Create resize handles for the modal
    * @returns {HTMLElement} Container with resize handles
    */
@@ -17477,29 +18547,10 @@ const ButtonPanel = {
         const startLeft = rect.left;
         const startTop = rect.top;
         
-        // If this is the first resize, ensure we have proper positioning
+        // Modal should already be in absolute positioning mode
         const computedStyle = window.getComputedStyle(modal);
-        let actualStartLeft = startLeft;
-        let actualStartTop = startTop;
-        
-        // Check if modal is centered (either by left: 50% or transform)
-        const isCentered = computedStyle.left === '50%' || 
-                          computedStyle.left === 'auto' || 
-                          computedStyle.transform.includes('translate(-50%');
-        
-        if (isCentered) {
-          // Modal is centered, set absolute positioning immediately
-          modal.style.left = startLeft + 'px';
-          modal.style.top = startTop + 'px';
-          modal.style.transform = 'none';
-          // Update the position values for resize calculation
-          actualStartLeft = startLeft;
-          actualStartTop = startTop;
-        } else {
-          // Modal already has absolute positioning, use computed values
-          actualStartLeft = parseFloat(computedStyle.left) || startLeft;
-          actualStartTop = parseFloat(computedStyle.top) || startTop;
-        }
+        let actualStartLeft = parseFloat(computedStyle.left) || startLeft;
+        let actualStartTop = parseFloat(computedStyle.top) || startTop;
         
         const handleMouseMove = (e) => {
         const deltaX = e.clientX - startX;
@@ -17510,7 +18561,7 @@ const ButtonPanel = {
         let newLeft = actualStartLeft;
         let newTop = actualStartTop;
         
-          // Calculate new dimensions based on position (1:1 ratio)
+          // Calculate new dimensions based on position with proportional scaling
           switch (position) {
             case 'right':
               newWidth = startWidth + deltaX;
@@ -17548,13 +18599,34 @@ const ButtonPanel = {
               break;
           }
         
-          // Apply viewport constraints
+          // Apply viewport constraints with better proportions and resistance
         const minWidth = 400;
         const minHeight = 300;
-          const maxWidth = window.innerWidth - 20; // Leave 20px margin from viewport edge
-          const maxHeight = window.innerHeight - 20; // Leave 20px margin from viewport edge
+          const maxWidth = Math.min(900, window.innerWidth - 40); // Respect CSS max-width and viewport
+          const maxHeight = Math.min(window.innerHeight * 0.9, window.innerHeight - 40); // Respect CSS max-height
         
-          // Constrain dimensions
+          // Add resistance when approaching limits for smoother feel
+          const resistanceFactor = 0.3; // How much resistance to apply near limits
+          
+          // Apply resistance to width
+          if (newWidth < minWidth + 50) {
+            const resistance = (minWidth + 50 - newWidth) * resistanceFactor;
+            newWidth = Math.max(minWidth, newWidth + resistance);
+          } else if (newWidth > maxWidth - 50) {
+            const resistance = (newWidth - (maxWidth - 50)) * resistanceFactor;
+            newWidth = Math.min(maxWidth, newWidth - resistance);
+          }
+          
+          // Apply resistance to height
+          if (newHeight < minHeight + 50) {
+            const resistance = (minHeight + 50 - newHeight) * resistanceFactor;
+            newHeight = Math.max(minHeight, newHeight + resistance);
+          } else if (newHeight > maxHeight - 50) {
+            const resistance = (newHeight - (maxHeight - 50)) * resistanceFactor;
+            newHeight = Math.min(maxHeight, newHeight - resistance);
+          }
+        
+          // Final constraint check
         newWidth = Math.max(minWidth, Math.min(maxWidth, newWidth));
         newHeight = Math.max(minHeight, Math.min(maxHeight, newHeight));
         
@@ -17565,7 +18637,7 @@ const ButtonPanel = {
           newLeft = Math.max(0, Math.min(maxLeft, newLeft));
           newTop = Math.max(0, Math.min(maxTop, newTop));
           
-          // Apply new dimensions
+          // Apply new dimensions with smooth transitions
         modal.style.width = `${newWidth}px`;
         modal.style.height = `${newHeight}px`;
         modal.style.left = `${newLeft}px`;
