@@ -7880,9 +7880,9 @@ const ChatDialog = {
 
       /* Add Tab Button */
       .vocab-custom-content-add-tab {
-        background: rgba(162, 78, 255, 0.1);
+        background: #9527F5;
         border: none;
-        color: #9527F5;
+        color: white;
         cursor: pointer !important;
         padding: var(--vocab-spacing-xs);
         border-radius: 8px;
@@ -7900,14 +7900,14 @@ const ChatDialog = {
       }
 
       .vocab-custom-content-add-tab:hover {
-        background: rgba(162, 78, 255, 0.2);
-        color: #9527F5;
+        background: #7a1fd9;
+        color: white;
         cursor: pointer;
       }
 
       .vocab-custom-content-add-tab:active {
-        background: rgba(162, 78, 255, 0.1);
-        color: #9527F5;
+        background: #6a1b9a;
+        color: white;
         outline: none;
         box-shadow: none;
         transform: scale(0.95);
@@ -16366,16 +16366,16 @@ const ButtonPanel = {
     chatIcon.className = 'vocab-custom-content-chat-icon';
     chatIcon.innerHTML = `
       <svg width="16" height="16" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <rect x="4" y="4" width="12" height="10" rx="2" stroke="white" stroke-width="1.3" fill="none"/>
-        <line x1="10" y1="2" x2="10" y2="4" stroke="white" stroke-width="1.3" stroke-linecap="round"/>
-        <circle cx="10" cy="1.5" r="0.8" fill="white"/>
-        <circle cx="7.5" cy="8.5" r="1.2" fill="white"/>
-        <circle cx="12.5" cy="8.5" r="1.2" fill="white"/>
-        <path d="M7 11C7.5 11.8 8.5 12.5 10 12.5C11.5 12.5 12.5 11.8 13 11" stroke="white" stroke-width="1.3" stroke-linecap="round" fill="none"/>
-        <path d="M10 14L10 16.5L8 15" stroke="white" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
+        <rect x="5" y="5" width="10" height="8" rx="1.5" stroke="white" stroke-width="1.1" fill="none"/>
+        <line x1="10" y1="2.5" x2="10" y2="5" stroke="white" stroke-width="1.1" stroke-linecap="round"/>
+        <circle cx="10" cy="2" r="0.6" fill="white"/>
+        <circle cx="8" cy="9" r="0.8" fill="white"/>
+        <circle cx="12" cy="9" r="0.8" fill="white"/>
+        <path d="M8 11.5C8.3 12 9 12.3 10 12.3C11 12.3 11.7 12 12 11.5" stroke="white" stroke-width="1.1" stroke-linecap="round" fill="none"/>
+        <path d="M10 13L10 15L8.5 14" stroke="white" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round"/>
       </svg>
     `;
-    chatIcon.setAttribute('title', 'Chat with AI Agent - Ask anything about this content');
+    chatIcon.setAttribute('title', 'Ask me anything !!!');
     
     // Add click handler for chat icon
     chatIcon.addEventListener('click', () => {
