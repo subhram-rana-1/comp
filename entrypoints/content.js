@@ -7485,7 +7485,7 @@ const ChatDialog = {
       }
 
       /* Hide explained words cross icon when custom content modal is open (main webpage only) */
-      body.vocab-custom-content-modal-open .vocab-word-explained .vocab-word-remove-explained-btn {
+      body.vocab-custom-content-modal-open .vocab-text-icons-wrapper[data-icon-context="main-webpage"] .vocab-word-remove-explained-btn {
         opacity: 0 !important;
         visibility: hidden !important;
         pointer-events: none !important;
