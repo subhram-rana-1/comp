@@ -2986,7 +2986,7 @@ const TextSelector = {
       iconsWrapper.style.setProperty('top', '-2px', 'important'); // Slight adjustment to align upper borders
     } else {
       // In main webpage context: position to the left as before
-      iconsWrapper.style.setProperty('left', '-60px', 'important'); // 60px to the left of the highlight
+      iconsWrapper.style.setProperty('left', '-40px', 'important'); // 40px to the left of the highlight
       iconsWrapper.style.setProperty('top', '0px', 'important'); // Align with top edge of selected text
     }
     
@@ -7515,6 +7515,7 @@ const ChatDialog = {
         flex-direction: column;
         font-family: 'Inter', 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
         position: absolute;
+        z-index: 10000010; /* Higher than all other elements including icons (10000005) */
         top: 50%;
         left: 50%;
         transform: translate(-50%, -50%);
@@ -7565,6 +7566,8 @@ const ChatDialog = {
       .vocab-custom-content-modal.minimizing {
         animation: minimizeToButton 0.3s ease-out forwards;
         pointer-events: none;
+        z-index: 10000010 !important; /* Ensure modal appears above everything during animation */
+        position: fixed !important; /* Break out of overlay stacking context */
       }
 
       @keyframes minimizeToButton {
@@ -12428,7 +12431,7 @@ const ButtonPanel = {
                   iconsWrapper.style.setProperty('top', '-2px', 'important'); // Slight adjustment to align upper borders
                 } else {
                   // In main webpage context: position to the left as before
-                  iconsWrapper.style.setProperty('left', '-60px', 'important'); // 60px to the left of the highlight
+                  iconsWrapper.style.setProperty('left', '-40px', 'important'); // 40px to the left of the highlight
                   iconsWrapper.style.setProperty('top', '0px', 'important'); // Align with top edge of selected text
                 }
                 
@@ -17921,7 +17924,7 @@ const ButtonPanel = {
         } else {
           // Main webpage context: position relative to viewport (original behavior)
           const top = highlightRect.top - 40; // 40px above
-          const left = highlightRect.left - 60; // 60px to the left
+          const left = highlightRect.left - 40; // 40px to the left
           
           iconsWrapper.style.top = `${Math.max(10, top)}px`; // Ensure it doesn't go above viewport
           iconsWrapper.style.left = `${Math.max(10, left)}px`; // Ensure it doesn't go left of viewport
