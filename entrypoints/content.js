@@ -5963,6 +5963,7 @@ const ChatDialog = {
         transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
         user-select: none;  /* Disable text selection in popup */
+        background: white !important;
       }
       
       .vocab-chat-dialog.visible {
@@ -5971,7 +5972,7 @@ const ChatDialog = {
       
       /* Dialog Content */
       .vocab-chat-content {
-        background: white;
+        background: white !important;
         height: 100%;
         border-radius: 16px 0 0 16px;
         box-shadow: -4px 0 24px rgba(149, 39, 245, 0.2), -2px 0 12px rgba(149, 39, 245, 0.1);
@@ -6215,6 +6216,7 @@ const ChatDialog = {
         padding: 16px;
         display: none;
         flex-direction: column;
+        background: white !important;
       }
       
       .vocab-chat-tab-content.active {
@@ -6259,6 +6261,7 @@ const ChatDialog = {
         padding: 16px;
         scrollbar-width: thin;
         scrollbar-color: #cbd5e1 #f1f5f9;
+        background: white !important;
       }
       
       .vocab-chat-scrollable-content::-webkit-scrollbar {
