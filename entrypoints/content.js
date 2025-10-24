@@ -16084,6 +16084,12 @@ const ButtonPanel = {
       this.pdfUploadModal.modal.classList.remove('visible');
     }
     
+    // Reset the file input to allow re-uploading the same file
+    if (this.pdfUploadModal && this.pdfUploadModal.fileInput) {
+      this.pdfUploadModal.fileInput.value = '';
+      console.log('[ButtonPanel] PDF file input reset for processing');
+    }
+    
     // Remove class from body to show webpage icons again
     document.body.classList.remove('vocab-pdf-modal-open');
     
@@ -16101,6 +16107,12 @@ const ButtonPanel = {
     }
     if (this.pdfUploadModal && this.pdfUploadModal.modal) {
       this.pdfUploadModal.modal.classList.remove('visible');
+    }
+    
+    // Reset the file input to allow re-uploading the same file
+    if (this.pdfUploadModal && this.pdfUploadModal.fileInput) {
+      this.pdfUploadModal.fileInput.value = '';
+      console.log('[ButtonPanel] PDF file input reset');
     }
     
     // Remove class from body to show webpage icons again
@@ -18031,13 +18043,22 @@ const ButtonPanel = {
     }
     
     // Get the text content (remove any HTML tags)
-    const textContent = editorContent.textContent || editorContent.innerText;
+    let textContent = editorContent.textContent || editorContent.innerText;
     if (!textContent || textContent.trim().length === 0) {
       console.log('[ButtonPanel] No text content found in editor');
       return;
     }
     
-    console.log('[ButtonPanel] Text content:', textContent.substring(0, 100) + '...');
+    // Truncate text content if it's too large to prevent API 422 errors
+    // Most APIs have limits around 50,000 characters for context
+    const MAX_CONTEXT_LENGTH = 40000; // Leave some buffer
+    if (textContent.length > MAX_CONTEXT_LENGTH) {
+      console.log('[ButtonPanel] Text content too large (' + textContent.length + ' chars), truncating to ' + MAX_CONTEXT_LENGTH + ' chars');
+      textContent = textContent.substring(0, MAX_CONTEXT_LENGTH) + '...\n\n[Content truncated for API processing]';
+    }
+    
+    console.log('[ButtonPanel] Text content length:', textContent.length);
+    console.log('[ButtonPanel] Text content preview:', textContent.substring(0, 100) + '...');
     
     // Generate a consistent textKey for this content tab using proper format
     const contentType = activeContent.contentType || 'custom-content';

@@ -25,6 +25,25 @@ class ApiService {
   static async ask({ initial_context, chat_history = [], question }) {
     const url = `${this.BASE_URL}${this.ENDPOINTS.ASK}`;
     
+    // Validate input parameters
+    if (!initial_context || typeof initial_context !== 'string') {
+      throw new Error('initial_context is required and must be a string');
+    }
+    if (!question || typeof question !== 'string') {
+      throw new Error('question is required and must be a string');
+    }
+    if (!Array.isArray(chat_history)) {
+      throw new Error('chat_history must be an array');
+    }
+    
+    // Check for reasonable size limits
+    if (initial_context.length > 100000) {
+      console.warn('[ApiService] initial_context is very large (' + initial_context.length + ' chars), this might cause API errors');
+    }
+    if (question.length > 10000) {
+      console.warn('[ApiService] question is very large (' + question.length + ' chars), this might cause API errors');
+    }
+    
     const requestBody = {
       initial_context,
       chat_history,
@@ -33,7 +52,11 @@ class ApiService {
     
     try {
       console.log('[ApiService] Sending request to:', url);
-      console.log('[ApiService] Request body:', requestBody);
+      console.log('[ApiService] Request body size:', {
+        initial_context_length: initial_context.length,
+        chat_history_length: chat_history.length,
+        question_length: question.length
+      });
       
       const response = await fetch(url, {
         method: 'POST',
@@ -47,7 +70,18 @@ class ApiService {
       });
       
       if (!response.ok) {
-        throw new Error(`API request failed: ${response.status} ${response.statusText}`);
+        let errorMessage = `API request failed: ${response.status} ${response.statusText}`;
+        
+        // Provide more specific error messages for common status codes
+        if (response.status === 422) {
+          errorMessage = `API request failed: 422 Unprocessable Entity. This usually means the request data is too large or contains invalid characters. Try asking a shorter question or the content might be too long.`;
+        } else if (response.status === 413) {
+          errorMessage = `API request failed: 413 Payload Too Large. The content or question is too large for the API to process.`;
+        } else if (response.status === 400) {
+          errorMessage = `API request failed: 400 Bad Request. The request format might be invalid.`;
+        }
+        
+        throw new Error(errorMessage);
       }
       
       const data = await response.json();
