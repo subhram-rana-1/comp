@@ -8270,11 +8270,41 @@ const ChatDialog = {
       .vocab-custom-content-editor-content ol {
         margin-bottom: var(--vocab-spacing-md);
         padding-left: var(--vocab-spacing-lg);
+        margin-left: 0;
+        margin-top: var(--vocab-spacing-sm);
+      }
+
+      .vocab-custom-content-editor-content ul {
+        list-style-type: disc;
+      }
+
+      .vocab-custom-content-editor-content ol {
+        list-style-type: decimal;
       }
 
       .vocab-custom-content-editor-content li {
         margin-bottom: var(--vocab-spacing-sm);
         color: var(--vocab-text-primary);
+        line-height: 1.6;
+        padding-left: var(--vocab-spacing-xs);
+      }
+
+      /* Nested lists */
+      .vocab-custom-content-editor-content ul ul,
+      .vocab-custom-content-editor-content ol ol,
+      .vocab-custom-content-editor-content ul ol,
+      .vocab-custom-content-editor-content ol ul {
+        margin-top: var(--vocab-spacing-xs);
+        margin-bottom: var(--vocab-spacing-xs);
+        padding-left: var(--vocab-spacing-lg);
+      }
+
+      .vocab-custom-content-editor-content ul ul {
+        list-style-type: circle;
+      }
+
+      .vocab-custom-content-editor-content ul ul ul {
+        list-style-type: square;
       }
 
       .vocab-custom-content-editor-content blockquote {
@@ -18977,37 +19007,19 @@ const ButtonPanel = {
     console.log('[ButtonPanel] Editor content element found:', !!editorContent);
     console.log('[ButtonPanel] Content to load:', content.substring(0, 100) + '...');
     
-    // Check if content contains markdown formatting
-    const hasMarkdownFormatting = /^#+\s|^\*\*|^\*|^```|^`/.test(content.trim());
+    // Enhanced markdown detection - check for various markdown patterns
+    const hasMarkdownFormatting = /^#+\s|\*\*[^*]+\*\*|\*[^*]+\*|^```|^`|^\- |^\d+\. |^\+ |^● /m.test(content);
+    
+    console.log('[ButtonPanel] Markdown detection result:', hasMarkdownFormatting);
+    console.log('[ButtonPanel] Content sample for detection:', content.substring(0, 200));
     
     let htmlContent;
     
     if (hasMarkdownFormatting) {
       console.log('[ButtonPanel] Content appears to have markdown formatting, converting to HTML');
-      // Simple markdown to HTML conversion (for basic formatting)
-      htmlContent = content
-        .replace(/^# (.*$)/gim, '<h1>$1</h1>')
-        .replace(/^## (.*$)/gim, '<h2>$1</h2>')
-        .replace(/^### (.*$)/gim, '<h3>$1</h3>')
-        .replace(/^#### (.*$)/gim, '<h4>$1</h4>')
-        .replace(/^##### (.*$)/gim, '<h5>$1</h5>')
-        .replace(/^###### (.*$)/gim, '<h6>$1</h6>')
-        .replace(/\*\*(.*?)\*\*/gim, '<strong>$1</strong>')
-        .replace(/\*(.*?)\*/gim, '<em>$1</em>')
-        .replace(/`(.*?)`/gim, '<code>$1</code>')
-        .replace(/```([\s\S]*?)```/gim, '<pre><code>$1</code></pre>')
-        .replace(/^\* (.*$)/gim, '<li>$1</li>')
-        .replace(/^- (.*$)/gim, '<li>$1</li>')
-        .replace(/^\d+\. (.*$)/gim, '<li>$1</li>')
-        .replace(/\n\n/gim, '</p><p>')
-        .replace(/\n/gim, '<br>');
       
-      // Wrap in paragraphs
-      htmlContent = '<p>' + htmlContent + '</p>';
-      
-      // Clean up empty paragraphs
-      htmlContent = htmlContent.replace(/<p><\/p>/gim, '');
-      htmlContent = htmlContent.replace(/<p><br><\/p>/gim, '');
+      // Use a more robust markdown renderer
+      htmlContent = this.renderMarkdownToHtml(content);
     } else {
       console.log('[ButtonPanel] Content appears to be plain text, displaying as-is');
       // For plain text, just escape HTML and preserve line breaks
@@ -19029,6 +19041,143 @@ const ButtonPanel = {
     editorContent.innerHTML = htmlContent;
     
     console.log('[ButtonPanel] ===== EDITOR CONTENT UPDATED SUCCESSFULLY =====');
+  },
+
+  /**
+   * Enhanced markdown to HTML renderer
+   * @param {string} markdown - Markdown text to convert
+   * @returns {string} HTML string
+   */
+  renderMarkdownToHtml(markdown) {
+    if (!markdown) return '';
+    
+    console.log('[ButtonPanel] renderMarkdownToHtml called with:', markdown.substring(0, 200) + '...');
+    
+    let html = markdown;
+    
+    // Escape HTML first to prevent XSS
+    html = html.replace(/&/g, '&amp;')
+               .replace(/</g, '&lt;')
+               .replace(/>/g, '&gt;');
+    
+    // Code blocks (```)
+    html = html.replace(/```(\w+)?\n([\s\S]*?)```/g, '<pre><code class="language-$1">$2</code></pre>');
+    
+    // Inline code (`)
+    html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
+    
+    // Bold (**text** or __text__) - handle both patterns
+    html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+    html = html.replace(/__([^_]+)__/g, '<strong>$1</strong>');
+    
+    console.log('[ButtonPanel] After bold processing:', html.substring(0, 300) + '...');
+    
+    // Debug bullet processing
+    const bulletMatches = html.match(/^[\s]*[\*\-+●] (.+)$/gm);
+    if (bulletMatches) {
+      console.log('[ButtonPanel] Found bullet points:', bulletMatches);
+    }
+    
+    // Italic (*text* or _text_) - but not if it's part of bold
+    html = html.replace(/(?<!\*)\*([^*]+)\*(?!\*)/g, '<em>$1</em>');
+    html = html.replace(/(?<!_)_([^_]+)_(?!_)/g, '<em>$1</em>');
+    
+    // Links [text](url)
+    html = html.replace(/\[([^\]]+)\]\(([^\)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
+    
+    // Headings (process from largest to smallest to avoid conflicts)
+    html = html.replace(/^###### (.+)$/gm, '<h6>$1</h6>');
+    html = html.replace(/^##### (.+)$/gm, '<h5>$1</h5>');
+    html = html.replace(/^#### (.+)$/gm, '<h4>$1</h4>');
+    html = html.replace(/^### (.+)$/gm, '<h3>$1</h3>');
+    html = html.replace(/^## (.+)$/gm, '<h2>$1</h2>');
+    html = html.replace(/^# (.+)$/gm, '<h1>$1</h1>');
+    
+    // Lists - handle unordered lists (*, -, +, ●)
+    html = html.replace(/^[\s]*[\*\-+●] (.+)$/gm, (match, content) => {
+      // Clean up extra spaces in bullet content
+      const cleanedContent = content.trim().replace(/\s+/g, ' ');
+      return `<li>${cleanedContent}</li>`;
+    });
+    
+    // Ordered lists (1., 2., etc.)
+    html = html.replace(/^[\s]*\d+\. (.+)$/gm, (match, content) => {
+      // Clean up extra spaces in ordered list content
+      const cleanedContent = content.trim().replace(/\s+/g, ' ');
+      return `<li>${cleanedContent}</li>`;
+    });
+    
+    console.log('[ButtonPanel] After bullet processing:', html.substring(0, 400) + '...');
+    
+    // Debug ordered list detection
+    const orderedMatches = markdown.match(/^\s*\d+\./gm);
+    if (orderedMatches) {
+      console.log('[ButtonPanel] Found ordered list items:', orderedMatches);
+    }
+    
+    // Wrap consecutive <li> elements in <ul> or <ol>
+    // First, identify ordered vs unordered lists by checking original markdown
+    const originalLines = markdown.split('\n');
+    const lines = html.split('\n');
+    let processedLines = [];
+    let inList = false;
+    let listType = 'ul';
+    let listItems = [];
+    
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      const isListItem = line.includes('<li>');
+      
+      // Check if this line was originally an ordered list item
+      const originalLine = originalLines[i] || '';
+      const isOrderedListItem = isListItem && /^\s*\d+\./.test(originalLine);
+      
+      if (isListItem) {
+        if (!inList) {
+          inList = true;
+          listType = isOrderedListItem ? 'ol' : 'ul';
+          console.log('[ButtonPanel] Starting list type:', listType, 'for line:', originalLine);
+          listItems = [];
+        }
+        listItems.push(line);
+      } else {
+        if (inList) {
+          // Close the current list
+          processedLines.push(`<${listType}>`);
+          processedLines.push(...listItems);
+          processedLines.push(`</${listType}>`);
+          inList = false;
+          listItems = [];
+        }
+        processedLines.push(line);
+      }
+    }
+    
+    // Handle case where list is at the end
+    if (inList) {
+      processedLines.push(`<${listType}>`);
+      processedLines.push(...listItems);
+      processedLines.push(`</${listType}>`);
+    }
+    
+    html = processedLines.join('\n');
+    
+    // Convert line breaks
+    html = html.replace(/\n\n/g, '</p><p>');
+    html = html.replace(/\n/g, '<br>');
+    
+    // Wrap in paragraphs
+    html = '<p>' + html + '</p>';
+    
+    // Clean up empty paragraphs and fix paragraph structure
+    html = html.replace(/<p><\/p>/g, '');
+    html = html.replace(/<p><br><\/p>/g, '');
+    html = html.replace(/<p>\s*<\/p>/g, '');
+    
+    // Fix paragraphs that contain only whitespace
+    html = html.replace(/<p>\s*<br>\s*<\/p>/g, '');
+    
+    return html;
   },
 
   /**

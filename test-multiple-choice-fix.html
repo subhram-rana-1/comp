@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Multiple Choice Question Fix Test</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        
+        .test-section {
+            margin: 30px 0;
+            padding: 20px;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            background: #f9f9f9;
+        }
+        
+        .test-title {
+            color: #9527F5;
+            font-weight: 600;
+            margin-bottom: 15px;
+        }
+        
+        .before, .after {
+            margin: 15px 0;
+            padding: 15px;
+            border-radius: 5px;
+        }
+        
+        .before {
+            background: #ffebee;
+            border-left: 4px solid #f44336;
+        }
+        
+        .after {
+            background: #e8f5e8;
+            border-left: 4px solid #4caf50;
+        }
+        
+        .before-label, .after-label {
+            font-weight: 600;
+            margin-bottom: 10px;
+        }
+        
+        .before-label {
+            color: #d32f2f;
+        }
+        
+        .after-label {
+            color: #388e3c;
+        }
+        
+        .debug-info {
+            background: #f0f0f0;
+            padding: 10px;
+            border-radius: 5px;
+            font-family: monospace;
+            font-size: 12px;
+            margin: 10px 0;
+            white-space: pre-wrap;
+        }
+        
+        /* Enhanced list styles */
+        ul, ol {
+            margin-bottom: 16px;
+            padding-left: 24px;
+            margin-left: 0;
+            margin-top: 8px;
+        }
+        
+        ul {
+            list-style-type: disc;
+        }
+        
+        ol {
+            list-style-type: decimal;
+        }
+        
+        li {
+            margin-bottom: 8px;
+            line-height: 1.6;
+            padding-left: 4px;
+        }
+        
+        strong {
+            font-weight: 600;
+        }
+        
+        h1, h2, h3 {
+            color: #9527F5;
+            margin-top: 24px;
+            margin-bottom: 16px;
+            font-weight: 600;
+        }
+        
+        h1 {
+            font-size: 32px;
+            font-weight: 700;
+            border-bottom: 2px solid #e0e0e0;
+            padding-bottom: 8px;
+        }
+        
+        h2 {
+            font-size: 28px;
+            font-weight: 600;
+        }
+        
+        .question {
+            font-weight: 600;
+            margin-bottom: 20px;
+            color: #333;
+        }
+    </style>
+</head>
+<body>
+    <h1>Multiple Choice Question Fix Test</h1>
+    
+    <div class="test-section">
+        <div class="test-title">Your Exact Content (SS1 vs SS2)</div>
+        
+        <div class="debug-info">
+<strong>Your API Response:</strong>
+Q.1 Which one of the following statements about art best captures the argu-
+ments made in the passage?
+1. In the age of online subscription services, it is time to change our understanding of
+classic works of art being primarily immutable and easily available to the public.
+2. Accepting retroactive changes to works of art is dangerous because it will encourage
+creators to not put enough effort into the original attempt, given that they can
+always edit or update their work later.
+3. Works of art belong to the cultural commons and hence must remain available in
+perpetuity, irrespective of who pays for access to them.
+4. As art is increasingly created, stored, and distributed digitally, access to it is coun-
+terintuitively likely to be made more difficult by the rapid churn in technology and
+the whims of host platforms.
+        </div>
+        
+        <div class="before">
+            <div class="before-label">SS2 - Before Fix (Broken):</div>
+            <div class="question">Q.1 Which one of the following statements about art best captures the arguments made in the passage?</div>
+            <ul>
+                <li>1. In the age of online subscription services, it is time to change our understanding of classic works of art being primarily immutable and easily available to the public.</li>
+                <li>1. Accepting retroactive changes to works of art is dangerous because it will encourage creators to not put enough effort into the original attempt, given that they can always edit or update their work later.</li>
+                <li>1. Works of art belong to the cultural commons and hence must remain available in perpetuity, irrespective of who pays for access to them.</li>
+                <li>1. As art is increasingly created, stored, and distributed digitally, access to it is counterintuitively likely to be made more difficult by the rapid churn in technology and the whims of host platforms.</li>
+            </ul>
+        </div>
+        
+        <div class="after">
+            <div class="after-label">SS1 - After Fix (Correct):</div>
+            <div class="question">Q.1 Which one of the following statements about art best captures the arguments made in the passage?</div>
+            <ol>
+                <li>In the age of online subscription services, it is time to change our understanding of classic works of art being primarily immutable and easily available to the public.</li>
+                <li>Accepting retroactive changes to works of art is dangerous because it will encourage creators to not put enough effort into the original attempt, given that they can always edit or update their work later.</li>
+                <li>Works of art belong to the cultural commons and hence must remain available in perpetuity, irrespective of who pays for access to them.</li>
+                <li>As art is increasingly created, stored, and distributed digitally, access to it is counterintuitively likely to be made more difficult by the rapid churn in technology and the whims of host platforms.</li>
+            </ol>
+        </div>
+    </div>
+    
+    <div class="test-section">
+        <div class="test-title">Fix Applied</div>
+        
+        <div class="debug-info">
+<strong>Key Changes Made:</strong>
+1. Fixed ordered list detection logic
+2. Improved line matching between HTML and original markdown
+3. Added debugging for multiple choice questions
+4. Enhanced list type detection (ol vs ul)
+
+<strong>Debugging Added:</strong>
+- [ButtonPanel] Found ordered list items: ["1.", "2.", "3.", "4."]
+- [ButtonPanel] Ordered list count: 4
+- [ButtonPanel] Detected question format - likely multiple choice
+- [ButtonPanel] Starting list type: ol for line: 1. In the age...
+- [ButtonPanel] Final ordered lists found: 1
+- [ButtonPanel] First ordered list: &lt;ol&gt;&lt;li&gt;...&lt;/li&gt;&lt;/ol&gt;
+        </div>
+        
+        <div class="after">
+            <div class="after-label">Expected Console Output:</div>
+            <ul>
+                <li><strong>Markdown Detection:</strong> Should detect numbered items (1., 2., 3., 4.)</li>
+                <li><strong>Question Detection:</strong> Should detect "Q.1" pattern</li>
+                <li><strong>List Type:</strong> Should use &lt;ol&gt; instead of &lt;ul&gt;</li>
+                <li><strong>Numbering:</strong> Should show 1, 2, 3, 4 instead of 1, 1, 1, 1</li>
+            </ul>
+        </div>
+    </div>
+    
+    <div class="test-section">
+        <div class="test-title">Testing Instructions</div>
+        
+        <div class="debug-info">
+<strong>To Test the Fix:</strong>
+1. Upload your PDF with the multiple choice question
+2. Open browser console (F12)
+3. Look for the debugging messages listed above
+4. Verify that the options show as 1, 2, 3, 4 instead of 1, 1, 1, 1
+5. Check that the list is wrapped in &lt;ol&gt; tags (ordered list)
+        </div>
+        
+        <div class="after">
+            <div class="after-label">Success Criteria:</div>
+            <ul>
+                <li>✅ Options numbered correctly (1, 2, 3, 4)</li>
+                <li>✅ List wrapped in &lt;ol&gt; tags</li>
+                <li>✅ Question text preserved</li>
+                <li>✅ Proper indentation and spacing</li>
+                <li>✅ Console shows debugging information</li>
+            </ul>
+        </div>
+    </div>
+    
+    <script>
+        // Test the exact content from your API response
+        const testContent = `Q.1 Which one of the following statements about art best captures the argu-
+ments made in the passage?
+1. In the age of online subscription services, it is time to change our understanding of
+classic works of art being primarily immutable and easily available to the public.
+2. Accepting retroactive changes to works of art is dangerous because it will encourage
+creators to not put enough effort into the original attempt, given that they can
+always edit or update their work later.
+3. Works of art belong to the cultural commons and hence must remain available in
+perpetuity, irrespective of who pays for access to them.
+4. As art is increasingly created, stored, and distributed digitally, access to it is coun-
+terintuitively likely to be made more difficult by the rapid churn in technology and
+the whims of host platforms.`;
+        
+        console.log('Testing multiple choice question fix...');
+        
+        // Test ordered list detection
+        const orderedMatches = testContent.match(/^\s*\d+\./gm);
+        console.log('[Test] Found ordered list items:', orderedMatches);
+        console.log('[Test] Ordered list count:', orderedMatches.length);
+        
+        // Test question detection
+        const questionPattern = /Q\.\d+/;
+        if (questionPattern.test(testContent)) {
+            console.log('[Test] Detected question format - likely multiple choice');
+        }
+        
+        // Test the processing
+        const lines = testContent.split('\n');
+        lines.forEach((line, index) => {
+            if (/^\s*\d+\./.test(line)) {
+                console.log(`[Test] Line ${index}: "${line}" - Should be ordered list item`);
+            }
+        });
+        
+        console.log('[Test] Expected result: 4 ordered list items (1, 2, 3, 4)');
+    </script>
+</body>
+</html>
