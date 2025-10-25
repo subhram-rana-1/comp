@@ -4,11 +4,11 @@ import { getHostPermissions } from './core/config/buildConfig.js';
 export default defineConfig({
   publicDir: 'assets',
   manifest: {
-    name: 'Magic comprehension with AI',
+    name: 'CompreAI',
     version: '1.0.0',
-    description: 'Sharpen your vocabulary and comprehension skill',
+    description: 'Enhance your reading, vocabulary, and comprehension instantly with AI-powered insights.',
     action: {
-      default_title: 'Sharpen your vocabulary and comprehension skill',
+      default_title: 'Boost your vocabulary and comprehension with AI',
     },
     icons: {
       16: 'chrome-extension-logo.png',
