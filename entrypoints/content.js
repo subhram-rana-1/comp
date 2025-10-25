@@ -4979,7 +4979,7 @@ const ChatDialog = {
       console.log('[ChatDialog] Chat container not found, cannot re-render messages');
       return;
     }
-    docdo
+    
     // Clear existing messages
     chatContainer.innerHTML = '';
     
@@ -4992,7 +4992,7 @@ const ChatDialog = {
       // Update delete button visibility and scroll to bottom after rendering
       setTimeout(() => {
         this.updateGlobalClearButton();
-        chatContainer.scrollTop = chatContainer.scrollHeight;
+        this.scrollToBottom(chatContainer);
       }, 10);
     } else {
       // Show appropriate message based on chat context
@@ -5153,12 +5153,21 @@ const ChatDialog = {
     // Update indicator position
     this.updateIndicatorPosition();
     
-    // If switching to ask tab, focus the input
+    // If switching to ask tab, focus the input and scroll to bottom
     if (tabName === 'ask') {
       const inputField = document.getElementById('vocab-chat-input');
       if (inputField) {
         setTimeout(() => inputField.focus(), 100);
       }
+      
+      // Auto-scroll to bottom when switching to chat tab (if there are messages)
+      setTimeout(() => {
+        const chatContainer = document.getElementById('vocab-chat-messages');
+        if (chatContainer && this.chatHistory.length > 0) {
+          this.scrollToBottom(chatContainer);
+          console.log('[ChatDialog] Auto-scrolled to bottom on tab switch to ask');
+        }
+      }, 150);
     }
   },
   
@@ -5575,8 +5584,13 @@ const ChatDialog = {
     // Show global clear button
     this.updateGlobalClearButton();
     
-    // Scroll to bottom
-    chatContainer.scrollTop = chatContainer.scrollHeight;
+    // Auto-scroll to bottom with smooth behavior
+    this.scrollToBottom(chatContainer);
+    
+    // Fallback: Also try scrolling after a short delay to ensure DOM is fully updated
+    setTimeout(() => {
+      this.scrollToBottom(chatContainer);
+    }, 100);
     
     // Store in history
     const messageData = { type, message, timestamp: new Date().toISOString() };
@@ -5635,6 +5649,40 @@ const ChatDialog = {
   },
   
   /**
+   * Scroll chat container to bottom with smooth behavior
+   * @param {HTMLElement} chatContainer - The chat messages container
+   */
+  scrollToBottom(chatContainer) {
+    if (!chatContainer) {
+      console.log('[ChatDialog] scrollToBottom: No chat container provided');
+      return;
+    }
+    
+    // Find the scrollable parent container (tab content)
+    const tabContent = chatContainer.closest('.vocab-chat-tab-content');
+    if (!tabContent) {
+      console.log('[ChatDialog] scrollToBottom: No tab content found');
+      return;
+    }
+    
+    console.log('[ChatDialog] scrollToBottom: Scrolling tab content to bottom');
+    console.log('[ChatDialog] scrollToBottom: Tab content scrollHeight:', tabContent.scrollHeight);
+    console.log('[ChatDialog] scrollToBottom: Tab content clientHeight:', tabContent.clientHeight);
+    
+    // Use requestAnimationFrame to ensure DOM updates are complete
+    requestAnimationFrame(() => {
+      // Scroll the tab content (outer scrollbar) to bottom
+      tabContent.scrollTop = tabContent.scrollHeight;
+      
+      // Also try smooth scroll
+      tabContent.scrollTo({
+        top: tabContent.scrollHeight,
+        behavior: 'smooth'
+      });
+    });
+  },
+  
+  /**
    * Show loading animation (three dots waving)
    */
   showLoadingAnimation() {
@@ -5651,8 +5699,8 @@ const ChatDialog = {
     
     chatContainer.appendChild(loadingIndicator);
     
-    // Scroll to bottom
-    chatContainer.scrollTop = chatContainer.scrollHeight;
+    // Auto-scroll to bottom with smooth behavior
+    this.scrollToBottom(chatContainer);
   },
   
   /**
@@ -5783,6 +5831,15 @@ const ChatDialog = {
             console.log(`[ChatDialog] Auto-focused question input for ${this.chatContext} chat`);
           }
         }, 100);
+        
+        // Auto-scroll to bottom when dialog opens (if there are messages)
+        setTimeout(() => {
+          const chatContainer = document.getElementById('vocab-chat-messages');
+          if (chatContainer && this.chatHistory.length > 0) {
+            this.scrollToBottom(chatContainer);
+            console.log('[ChatDialog] Auto-scrolled to bottom on dialog open');
+          }
+        }, 150);
         
         // Ensure focus buttons are hidden/shown based on chat context after dialog is rendered
         setTimeout(() => {
@@ -5964,7 +6021,7 @@ const ChatDialog = {
         font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
         user-select: none;  /* Disable text selection in popup */
         background: white !important;
-        border-radius: 16px;
+        border-radius: 16px 0 0 16px; /* top-left top-right bottom-right bottom-left */
       }
       
       .vocab-chat-dialog.visible {
@@ -5975,7 +6032,7 @@ const ChatDialog = {
       .vocab-chat-content {
         background: white !important;
         height: 100%;
-        border-radius: 16px;
+        border-radius: 16px 0 0 16px; /* top-left top-right bottom-right bottom-left */
         box-shadow: -4px 0 24px rgba(149, 39, 245, 0.2), -2px 0 12px rgba(149, 39, 245, 0.1);
         display: flex;
         flex-direction: column;
