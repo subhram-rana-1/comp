@@ -5964,6 +5964,7 @@ const ChatDialog = {
         font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
         user-select: none;  /* Disable text selection in popup */
         background: white !important;
+        border-radius: 16px;
       }
       
       .vocab-chat-dialog.visible {
@@ -5974,7 +5975,7 @@ const ChatDialog = {
       .vocab-chat-content {
         background: white !important;
         height: 100%;
-        border-radius: 16px 0 0 16px;
+        border-radius: 16px;
         box-shadow: -4px 0 24px rgba(149, 39, 245, 0.2), -2px 0 12px rgba(149, 39, 245, 0.1);
         display: flex;
         flex-direction: column;
@@ -5985,8 +5986,8 @@ const ChatDialog = {
       /* Collapse Button */
       .vocab-chat-collapse-btn {
         position: absolute;
-        top: 16px;
-        left: 16px;
+        top: 20px;
+        left: 20px;
         width: 32px;
         height: 32px;
         background: white;
@@ -6016,8 +6017,8 @@ const ChatDialog = {
       /* Left Button Container */
       .vocab-chat-left-buttons {
         position: absolute;
-        top: 16px;
-        left: 16px;
+        top: 20px;
+        left: 20px;
         display: flex;
         flex-direction: column;
         gap: 8px;
@@ -6113,8 +6114,8 @@ const ChatDialog = {
       /* Focus Button - Top Right */
       .vocab-chat-focus-btn-top-right {
         position: absolute;
-        top: 16px;
-        right: 16px;
+        top: 20px;
+        right: 20px;
         padding: 6px 12px;
         background: white;
         border: 1px solid #e5e7eb;
@@ -7173,10 +7174,6 @@ const ChatDialog = {
           max-width: 100vw;
           height: 100vh;
           max-height: 100vh;
-        }
-        
-        .vocab-chat-content {
-          border-radius: 0;
         }
         
         .vocab-chat-resize-handle {
@@ -12300,6 +12297,41 @@ const ButtonPanel = {
           console.log('[ButtonPanel] Removed chat history from ChatDialog for textKey:', textKey);
         }
       }
+    }
+  },
+
+  /**
+   * Remove specific word from analysis data structure for current tab
+   * @param {string} normalizedWord - The normalized word to remove
+   */
+  removeWordFromAnalysisData(normalizedWord) {
+    console.log('[ButtonPanel] Removing word from analysis data:', normalizedWord);
+    
+    // Check if custom content modal is open and has active tab
+    if (!this.topicsModal || !this.topicsModal.customContentModal || !this.topicsModal.customContentModal.activeTabId) {
+      console.log('[ButtonPanel] No active tab in custom content modal');
+      return;
+    }
+    
+    const activeTabId = this.topicsModal.customContentModal.activeTabId;
+    const activeContent = this.topicsModal.customContentModal.getContentByTabId(parseInt(activeTabId));
+    
+    if (!activeContent || !activeContent.analysis || !activeContent.analysis.wordMeanings) {
+      console.log('[ButtonPanel] No word meanings found in analysis data for tab:', activeTabId);
+      return;
+    }
+    
+    // Find and remove the specific word from wordMeanings array
+    const initialLength = activeContent.analysis.wordMeanings.length;
+    activeContent.analysis.wordMeanings = activeContent.analysis.wordMeanings.filter(wordData => 
+      wordData.normalizedWord !== normalizedWord
+    );
+    
+    const removedCount = initialLength - activeContent.analysis.wordMeanings.length;
+    if (removedCount > 0) {
+      console.log('[ButtonPanel] Removed', removedCount, 'word meaning(s) for word:', normalizedWord, 'from analysis data');
+    } else {
+      console.log('[ButtonPanel] No word meaning found for word:', normalizedWord, 'in analysis data');
     }
   },
 
