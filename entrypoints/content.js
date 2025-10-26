@@ -7549,6 +7549,14 @@ const ChatDialog = {
         transition: opacity 0.2s ease, visibility 0.2s ease;
       }
 
+      /* Hide green cross icons for all explained words on main webpage when custom content modal is open */
+      body.vocab-custom-content-modal-open .vocab-word-explained:not(.vocab-custom-content-modal .vocab-word-explained) .vocab-word-remove-explained-btn {
+        opacity: 0 !important;
+        visibility: hidden !important;
+        pointer-events: none !important;
+        transition: opacity 0.2s ease, visibility 0.2s ease;
+      }
+
       @keyframes overlayFadeIn {
         from {
           opacity: 0;
@@ -9708,7 +9716,7 @@ const ButtonPanel = {
         overflow: visible !important;
         border-radius: 100px;
         box-shadow: 0 4px 20px rgba(149, 39, 245, 0.3), 0 2px 8px rgba(149, 39, 245, 0.2);
-        background: transparent;
+        background: white;
       }
 
       /* Main Button Group with Purple Shadow */
@@ -9718,10 +9726,10 @@ const ButtonPanel = {
         gap: 0;
         background: white;
         padding: 0;
-        border-radius: 100px 100px 0 0;
+        border-radius: 100px;
         box-shadow: none;
-        border: 1px solid rgba(149, 39, 245, 0.1);
-        border-bottom: none;
+        // border: 1px solid rgba(149, 39, 245, 0.15);
+        border: none;
         overflow: visible !important;
       }
 
@@ -9765,16 +9773,15 @@ const ButtonPanel = {
         display: flex;
         justify-content: center;
         align-items: center;
-        padding: 8px 6px 10px 6px;
+        padding: 6px 6px 8px 6px;
         cursor: grab;
         user-select: none;
         border-radius: 0 0 100px 100px;
         background: white;
-        width: calc(46px);
+        width: 46px;
         margin-top: 0;
         box-shadow: none;
-        border: 1px solid rgba(149, 39, 245, 0.1);
-        border-top: none;
+        border: none;
       }
 
       .vocab-drag-handle:hover {
@@ -9942,10 +9949,17 @@ const ButtonPanel = {
       #import-content {
         background: #ede5ff !important;
         border: none !important;
+        border-color: transparent !important;
+        outline: none !important;
+        box-shadow: none !important;
       }
 
       #import-content:hover {
         background: #ddc8ff !important;
+        border: none !important;
+        border-color: transparent !important;
+        outline: none !important;
+        box-shadow: none !important;
       }
       
       /* Ask Anything Button - Light Purple BG with Purple Wireframe Icon */
