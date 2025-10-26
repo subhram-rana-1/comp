@@ -7549,6 +7549,14 @@ const ChatDialog = {
         transition: opacity 0.2s ease, visibility 0.2s ease;
       }
 
+      /* Hide green cross icons for all explained words on main webpage when custom content modal is open */
+      body.vocab-custom-content-modal-open .vocab-word-explained:not(.vocab-custom-content-modal .vocab-word-explained) .vocab-word-remove-explained-btn {
+        opacity: 0 !important;
+        visibility: hidden !important;
+        pointer-events: none !important;
+        transition: opacity 0.2s ease, visibility 0.2s ease;
+      }
+
       @keyframes overlayFadeIn {
         from {
           opacity: 0;
