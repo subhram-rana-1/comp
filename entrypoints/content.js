@@ -7807,7 +7807,7 @@ const ChatDialog = {
 
       /* Minimize Animation - Scale down and move to import-content button */
       .vocab-custom-content-modal.minimizing {
-        animation: minimizeToButton 0.3s ease-out forwards;
+        animation: minimizeToButton 0.2s ease-out forwards;
         pointer-events: none;
         z-index: 10000010 !important; /* Ensure modal appears above everything during animation */
         position: fixed !important; /* Break out of overlay stacking context */
@@ -15841,7 +15841,7 @@ const ButtonPanel = {
           
           // Continue with the rest of the cleanup
           this.continueModalCleanup();
-        }, 300); // 0.3s animation duration
+        }, 200); // 0.2s animation duration (faster)
         
         return; // Exit early, cleanup will continue in setTimeout
       } else {
