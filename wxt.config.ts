@@ -1,11 +1,19 @@
 import { defineConfig } from 'wxt';
 import { getHostPermissions } from './core/config/buildConfig.js';
+import { readFileSync } from 'fs';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+const rootDir = join(__dirname);
+const packageJson = JSON.parse(readFileSync(join(rootDir, 'package.json'), 'utf-8'));
 
 export default defineConfig({
   publicDir: 'assets',
   manifest: {
     name: 'CompreAI',
-    version: '1.0.0',
+    version: packageJson.version,
     description: 'Enhance your reading, vocabulary, and comprehension instantly with AI-powered insights.',
     action: {
       default_title: 'Boost your vocabulary and comprehension with AI',
