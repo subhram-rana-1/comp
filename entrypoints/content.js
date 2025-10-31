@@ -9726,8 +9726,15 @@ const ButtonPanel = {
    */
   createTopicsIcon() {
     return `
-      <svg width="36" height="36" viewBox="0 0 28 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <text x="3" y="18" font-family="Arial, sans-serif" font-size="20" font-weight="900" fill="#9527F5">W</text>
+      <svg width="36" height="36" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <filter id="distress-filter-topics" x="-50%" y="-50%" width="200%" height="200%">
+            <feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="4" result="noise"/>
+            <feDisplacementMap in="SourceGraphic" in2="noise" scale="1.5" xChannelSelector="R" yChannelSelector="G"/>
+          </filter>
+        </defs>
+        <text x="18" y="14" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" font-weight="900" fill="#9527F5" filter="url(#distress-filter-topics)">KEY</text>
+        <text x="18" y="25" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" font-weight="900" fill="#9527F5" filter="url(#distress-filter-topics)">WORD</text>
       </svg>
     `;
   },
@@ -9739,7 +9746,13 @@ const ButtonPanel = {
   createTextIcon() {
     return `
       <svg width="36" height="36" viewBox="0 0 32 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <text x="2" y="16" font-family="Arial, sans-serif" font-size="14" font-weight="900" fill="#9527F5">Txt</text>
+        <defs>
+          <filter id="distress-filter-text" x="-50%" y="-50%" width="200%" height="200%">
+            <feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="4" result="noise"/>
+            <feDisplacementMap in="SourceGraphic" in2="noise" scale="1.5" xChannelSelector="R" yChannelSelector="G"/>
+          </filter>
+        </defs>
+        <text x="2" y="16" font-family="Arial, sans-serif" font-size="14" font-weight="900" fill="#9527F5" filter="url(#distress-filter-text)">TXT</text>
       </svg>
     `;
   },
