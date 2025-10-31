@@ -1893,35 +1893,46 @@ const WordSelector = {
     
     console.log('[WordSelector] ✓ Found word data in explainedWords:', wordData);
     
-    // Remove green background and buttons from all highlights
+    // Remove green background and buttons from all highlights with smooth animations
     if (wordData.highlights) {
       wordData.highlights.forEach(highlight => {
-        // Remove the green explained class
-        highlight.classList.remove('vocab-word-explained');
+        // Add disappearing animation classes (same 0.3s duration as purple highlights)
+        highlight.classList.add('word-disappearing');
         
-        // Remove the green cross button
+        // Add disappearing animation to green cross button
         const greenBtn = highlight.querySelector('.vocab-word-remove-explained-btn');
         if (greenBtn) {
-          greenBtn.remove();
+          greenBtn.classList.add('button-disappearing');
         }
         
-        // Remove data attributes
-        highlight.removeAttribute('data-meaning');
-        highlight.removeAttribute('data-examples');
-        highlight.removeAttribute('data-popup-id');
-        
-        // Remove the highlight wrapper completely
-        const parent = highlight.parentNode;
-        if (parent) {
-          // Move all child nodes out of the highlight wrapper
-          while (highlight.firstChild) {
-            parent.insertBefore(highlight.firstChild, highlight);
+        // Wait for animation to complete before removing elements (0.3s same duration)
+        setTimeout(() => {
+          // Remove the green explained class
+          highlight.classList.remove('vocab-word-explained', 'word-disappearing');
+          
+          // Remove the green cross button
+          if (greenBtn) {
+            greenBtn.remove();
           }
-          // Remove the empty highlight wrapper
-          highlight.remove();
-          // Normalize parent to merge text nodes
-          parent.normalize();
-        }
+          
+          // Remove data attributes
+          highlight.removeAttribute('data-meaning');
+          highlight.removeAttribute('data-examples');
+          highlight.removeAttribute('data-popup-id');
+          
+          // Remove the highlight wrapper completely
+          const parent = highlight.parentNode;
+          if (parent) {
+            // Move all child nodes out of the highlight wrapper
+            while (highlight.firstChild) {
+              parent.insertBefore(highlight.firstChild, highlight);
+            }
+            // Remove the empty highlight wrapper
+            highlight.remove();
+            // Normalize parent to merge text nodes
+            parent.normalize();
+          }
+        }, 300); // Same duration as animation (0.3s)
       });
     }
     
@@ -2044,11 +2055,30 @@ const WordSelector = {
         border-radius: 8px;
         border: 1px solid rgba(21, 128, 61, 0.4);
         padding: 0 2px;
+        transition: background-color 0.3s ease-in-out, border-color 0.3s ease-in-out, opacity 0.3s ease-in-out;
       }
       
       .vocab-word-explained:hover {
         background-color: rgba(34, 197, 94, 0.30) !important;
         border-color: rgba(21, 128, 61, 0.6);
+      }
+      
+      /* Smooth animation for green word highlight disappearance - 0.3s duration */
+      .vocab-word-explained.word-disappearing {
+        animation: wordFadeOut 0.3s ease-in-out forwards;
+      }
+      
+      @keyframes wordFadeOut {
+        0% {
+          background-color: rgba(34, 197, 94, 0.20);
+          border-color: rgba(21, 128, 61, 0.4);
+          opacity: 1;
+        }
+        100% {
+          background-color: transparent;
+          border-color: transparent;
+          opacity: 0;
+        }
       }
       
       /* Green cross button for explained words - no circle, just cross */
@@ -2065,10 +2095,26 @@ const WordSelector = {
         justify-content: center;
         cursor: pointer;
         opacity: 0.8;
-        transition: opacity 0.2s ease, transform 0.1s ease;
+        transition: opacity 0.3s ease-in-out, transform 0.3s ease-in-out, scale 0.3s ease-in-out;
         padding: 0;
         z-index: 999999;
         filter: drop-shadow(0 1px 2px rgba(34, 197, 94, 0.4));
+      }
+      
+      /* Smooth animation for green cross button disappearance - 0.3s duration */
+      .vocab-word-remove-explained-btn.button-disappearing {
+        animation: greenButtonFadeOut 0.3s ease-in-out forwards;
+      }
+      
+      @keyframes greenButtonFadeOut {
+        0% {
+          opacity: 0.8;
+          transform: scale(1);
+        }
+        100% {
+          opacity: 0;
+          transform: scale(0.8);
+        }
       }
       
       .vocab-word-explained:hover .vocab-word-remove-explained-btn {
@@ -2768,7 +2814,7 @@ const TextSelector = {
     
     // Create highlight wrapper
     const highlight = document.createElement('span');
-    highlight.className = 'vocab-text-highlight';
+    highlight.className = 'vocab-text-highlight underline-appearing';
     highlight.setAttribute('data-text-key', textKey);
     highlight.setAttribute('data-highlight-id', `text-highlight-${this.highlightIdCounter++}`);
     
@@ -2787,6 +2833,11 @@ const TextSelector = {
     const removeBtn = this.createRemoveButton(text);
     highlight.appendChild(removeBtn);
     
+    // Remove the appearing class after animation completes
+    setTimeout(() => {
+      highlight.classList.remove('underline-appearing');
+    }, 300);
+    
     // Store the highlight in our map (O(1) operation)
     this.textToHighlights.set(textKey, highlight);
   },
@@ -2798,7 +2849,7 @@ const TextSelector = {
    */
   createRemoveButton(text) {
     const btn = document.createElement('button');
-    btn.className = 'vocab-text-remove-btn';
+    btn.className = 'vocab-text-remove-btn button-appearing';
     btn.setAttribute('aria-label', `Remove highlight for selected text`);
     btn.innerHTML = this.createCloseIcon();
     
@@ -2808,6 +2859,11 @@ const TextSelector = {
       e.stopPropagation();
       this.removeText(text);
     });
+    
+    // Remove the appearing class after animation completes (0.3s same as underline)
+    setTimeout(() => {
+      btn.classList.remove('button-appearing');
+    }, 300);
     
     return btn;
   },
@@ -2845,22 +2901,34 @@ const TextSelector = {
     const parent = highlight.parentNode;
     if (!parent) return;
     
-    // Remove the button first
+    // Add disappearing animation classes (same 0.3s duration)
+    // Only add if not already present (might be added by removeFromSimplifiedTexts)
     const btn = highlight.querySelector('.vocab-text-remove-btn');
-    if (btn) {
-      btn.remove();
+    if (btn && !btn.classList.contains('button-disappearing')) {
+      btn.classList.add('button-disappearing');
+    }
+    if (!highlight.classList.contains('underline-disappearing')) {
+      highlight.classList.add('underline-disappearing');
     }
     
-    // Move all child nodes back to parent
-    while (highlight.firstChild) {
-      parent.insertBefore(highlight.firstChild, highlight);
-    }
-    
-    // Remove the empty highlight span
-    highlight.remove();
-    
-    // Normalize the parent to merge adjacent text nodes
-    parent.normalize();
+    // Wait for animation to complete before removing (0.3s same duration for both)
+    setTimeout(() => {
+      // Remove button first
+      if (btn) {
+        btn.remove();
+      }
+      
+      // Move all child nodes back to parent
+      while (highlight.firstChild) {
+        parent.insertBefore(highlight.firstChild, highlight);
+      }
+      
+      // Remove the empty highlight span
+      highlight.remove();
+      
+      // Normalize the parent to merge adjacent text nodes
+      parent.normalize();
+    }, 300); // Same duration as animation (0.3s)
   },
   
   /**
@@ -3106,7 +3174,12 @@ const TextSelector = {
     // Only animate the underline color, not the text itself
     highlight.classList.add('vocab-text-vanishing');
     
-    // Wait for animation to complete before removing elements
+    // Immediately add disappearing class to prevent purple underline from appearing
+    // This ensures if purple underline becomes visible after simplified class is removed,
+    // it will already be in disappearing state
+    highlight.classList.add('underline-disappearing');
+    
+    // Wait for green underline animation to complete before removing elements
     setTimeout(() => {
       // Remove icons wrapper
       if (iconsWrapper) {
@@ -3114,11 +3187,15 @@ const TextSelector = {
       }
       
       // Remove the simplified class (green underline)
+      // After this, if purple underline is visible, it will already be fading out
       highlight.classList.remove('vocab-text-simplified', 'vocab-text-vanishing');
       
-      // Remove highlight completely
-      this.removeHighlight(highlight);
-    }, 300); // Match the CSS transition duration
+      // Continue with removal - purple underline should already be disappearing
+      // Wait for purple underline to fade out before actually removing
+      setTimeout(() => {
+        this.removeHighlight(highlight);
+      }, 300); // Wait for purple underline fade-out animation
+    }, 300); // Wait for green underline fade-out animation
     
     // Remove from simplifiedTexts map
     this.simplifiedTexts.delete(textKey);
@@ -3332,6 +3409,44 @@ const TextSelector = {
         text-underline-offset: 2px;
         cursor: text;
         overflow: visible;
+        transition: text-decoration-color 0.3s ease-in-out, opacity 0.3s ease-in-out;
+        opacity: 1;
+      }
+      
+      /* Smooth animation for underline appearance - 0.3s duration */
+      .vocab-text-highlight.underline-appearing {
+        text-decoration-color: transparent;
+        animation: underlineFadeIn 0.3s ease-in-out forwards;
+      }
+      
+      /* Smooth animation for underline disappearance - same 0.3s duration */
+      .vocab-text-highlight.underline-disappearing {
+        animation: underlineFadeOut 0.3s ease-in-out forwards;
+      }
+      
+      /* Prevent purple underline from appearing when simplified text is being removed */
+      /* Keep underline transparent during disappearing animation to avoid glitch */
+      .vocab-text-highlight.underline-disappearing:not(.vocab-text-simplified) {
+        text-decoration-color: transparent !important;
+        animation: none; /* Prevent animation from purple, keep it transparent */
+      }
+      
+      @keyframes underlineFadeIn {
+        0% {
+          text-decoration-color: transparent;
+        }
+        100% {
+          text-decoration-color: #9527F5;
+        }
+      }
+      
+      @keyframes underlineFadeOut {
+        0% {
+          text-decoration-color: #9527F5;
+        }
+        100% {
+          text-decoration-color: transparent;
+        }
       }
       
       /* For block-level elements inside highlight, maintain underline */
@@ -3355,11 +3470,45 @@ const TextSelector = {
         justify-content: center;
         cursor: pointer;
         opacity: 0.9;
-        transition: opacity 0.2s ease, transform 0.1s ease, background-color 0.2s ease;
+        transition: opacity 0.3s ease-in-out, transform 0.1s ease, background-color 0.2s ease, scale 0.3s ease-in-out;
         padding: 0;
         z-index: 10000003;
         box-shadow: 0 2px 4px rgba(149, 39, 245, 0.4);
         pointer-events: auto;
+      }
+      
+      /* Smooth animation for button appearance - 0.3s duration (same as underline) */
+      .vocab-text-remove-btn.button-appearing {
+        opacity: 0;
+        transform: scale(0.8);
+        animation: buttonFadeIn 0.3s ease-in-out forwards;
+      }
+      
+      /* Smooth animation for button disappearance - 0.3s duration (same as underline) */
+      .vocab-text-remove-btn.button-disappearing {
+        animation: buttonFadeOut 0.3s ease-in-out forwards;
+      }
+      
+      @keyframes buttonFadeIn {
+        0% {
+          opacity: 0;
+          transform: scale(0.8);
+        }
+        100% {
+          opacity: 0.9;
+          transform: scale(1);
+        }
+      }
+      
+      @keyframes buttonFadeOut {
+        0% {
+          opacity: 0.9;
+          transform: scale(1);
+        }
+        100% {
+          opacity: 0;
+          transform: scale(0.8);
+        }
       }
       
       .vocab-text-highlight:hover .vocab-text-remove-btn {
