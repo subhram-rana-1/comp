@@ -1,6 +1,6 @@
 {
-  "name": "CmpreAI",
-  "version": "1.0.0",
+  "name": "CompreAI",
+  "version": "1.0.1",
   "description": "Enhance your reading, vocabulary, and comprehension instantly with AI-powered insights.",
   "type": "module",
   "private": true,
