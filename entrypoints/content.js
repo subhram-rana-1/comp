@@ -745,6 +745,74 @@ const WordSelector = {
   },
   
   /**
+   * Check if an element or range is within allowed selection areas
+   * Allowed: Main website content and .vocab-custom-content-editor-content
+   * Disallowed: All other extension UI components
+   * @param {Element|Range} elementOrRange - The element or range to check
+   * @returns {boolean} True if selection is allowed, false otherwise
+   */
+  isSelectionAllowed(elementOrRange) {
+    // Get the container element from element or range
+    let containerElement = null;
+    
+    if (elementOrRange instanceof Range) {
+      // For range, check the common ancestor container
+      containerElement = elementOrRange.commonAncestorContainer;
+      // If it's a text node, get its parent
+      if (containerElement && containerElement.nodeType === Node.TEXT_NODE) {
+        containerElement = containerElement.parentElement;
+      } else if (containerElement && containerElement.nodeType === Node.ELEMENT_NODE) {
+        containerElement = containerElement;
+      }
+    } else if (elementOrRange instanceof Element) {
+      containerElement = elementOrRange;
+    } else if (elementOrRange instanceof Node) {
+      // For other node types (like text nodes), get parent element
+      if (elementOrRange.nodeType === Node.TEXT_NODE) {
+        containerElement = elementOrRange.parentElement;
+      } else if (elementOrRange.nodeType === Node.ELEMENT_NODE) {
+        containerElement = elementOrRange;
+      }
+    }
+    
+    // Ensure we have an Element (not a Text node or null)
+    if (!containerElement || !(containerElement instanceof Element)) {
+      return false;
+    }
+    
+    // First check: If inside .vocab-custom-content-editor-content, allow it
+    // This is the exception - even though it's inside vocab-custom-content-modal,
+    // we want to allow selection in the editor content
+    const editorContent = containerElement.closest('.vocab-custom-content-editor-content');
+    if (editorContent) {
+      return true;
+    }
+    
+    // Second check: If inside any extension UI component, disallow it
+    // List of extension UI component selectors
+    const extensionUISelectors = [
+      '.vocab-helper-panel',
+      '.vocab-topics-modal',
+      '.vocab-topics-modal-overlay',
+      '.vocab-chat-dialog',
+      '.vocab-custom-content-modal',
+      '.vocab-custom-content-info-banner',
+      '.vocab-word-popup',
+      '.vocab-notification'
+    ];
+    
+    // Check if the container is inside any extension UI component
+    for (const selector of extensionUISelectors) {
+      if (containerElement.closest(selector)) {
+        return false;
+      }
+    }
+    
+    // If not in extension UI and not in editor content, it's main website content - allow it
+    return true;
+  },
+  
+  /**
    * Handle double-click event
    * @param {MouseEvent} event
    */
@@ -754,19 +822,21 @@ const WordSelector = {
       return;
     }
     
-    // Don't process clicks on our own UI elements (except highlights)
-    if (event.target.closest('.vocab-helper-panel')) {
-      return;
-    }
-    
     // Check if clicking on an existing highlight to deselect it
     const clickedHighlight = event.target.closest('.vocab-word-highlight');
     if (clickedHighlight) {
+      // Allow deselection of highlights anywhere (they should be removable)
       const word = clickedHighlight.getAttribute('data-word');
       if (word) {
         this.removeWord(word);
         console.log('[WordSelector] Word deselected via double-click:', word);
       }
+      return;
+    }
+    
+    // Check if selection is allowed in the clicked area
+    if (!this.isSelectionAllowed(event.target)) {
+      console.log('[WordSelector] Selection not allowed - clicked in extension UI');
       return;
     }
     
@@ -795,6 +865,16 @@ const WordSelector = {
       return;
     }
     
+    const range = selection.getRangeAt(0);
+    
+    // IMPORTANT: Also validate the selection range itself
+    // This ensures the selected text is not from extension UI
+    if (!this.isSelectionAllowed(range)) {
+      console.log('[WordSelector] Selection not allowed - range is in extension UI');
+      selection.removeAllRanges();
+      return;
+    }
+    
     const normalizedWord = selectedText.toLowerCase();
     console.log('[WordSelector] Original word:', selectedText);
     console.log('[WordSelector] Normalized word:', normalizedWord);
@@ -806,8 +886,6 @@ const WordSelector = {
       console.log('[WordSelector] Word deselected:', selectedText);
       return;
     }
-    
-    const range = selection.getRangeAt(0);
     
     // Add word to selected set (O(1) operation)
     this.addWord(selectedText);
@@ -2579,6 +2657,74 @@ const TextSelector = {
   },
   
   /**
+   * Check if an element or range is within allowed selection areas
+   * Allowed: Main website content and .vocab-custom-content-editor-content
+   * Disallowed: All other extension UI components
+   * @param {Element|Range} elementOrRange - The element or range to check
+   * @returns {boolean} True if selection is allowed, false otherwise
+   */
+  isSelectionAllowed(elementOrRange) {
+    // Get the container element from element or range
+    let containerElement = null;
+    
+    if (elementOrRange instanceof Range) {
+      // For range, check the common ancestor container
+      containerElement = elementOrRange.commonAncestorContainer;
+      // If it's a text node, get its parent
+      if (containerElement && containerElement.nodeType === Node.TEXT_NODE) {
+        containerElement = containerElement.parentElement;
+      } else if (containerElement && containerElement.nodeType === Node.ELEMENT_NODE) {
+        containerElement = containerElement;
+      }
+    } else if (elementOrRange instanceof Element) {
+      containerElement = elementOrRange;
+    } else if (elementOrRange instanceof Node) {
+      // For other node types (like text nodes), get parent element
+      if (elementOrRange.nodeType === Node.TEXT_NODE) {
+        containerElement = elementOrRange.parentElement;
+      } else if (elementOrRange.nodeType === Node.ELEMENT_NODE) {
+        containerElement = elementOrRange;
+      }
+    }
+    
+    // Ensure we have an Element (not a Text node or null)
+    if (!containerElement || !(containerElement instanceof Element)) {
+      return false;
+    }
+    
+    // First check: If inside .vocab-custom-content-editor-content, allow it
+    // This is the exception - even though it's inside vocab-custom-content-modal,
+    // we want to allow selection in the editor content
+    const editorContent = containerElement.closest('.vocab-custom-content-editor-content');
+    if (editorContent) {
+      return true;
+    }
+    
+    // Second check: If inside any extension UI component, disallow it
+    // List of extension UI component selectors
+    const extensionUISelectors = [
+      '.vocab-helper-panel',
+      '.vocab-topics-modal',
+      '.vocab-topics-modal-overlay',
+      '.vocab-chat-dialog',
+      '.vocab-custom-content-modal',
+      '.vocab-custom-content-info-banner',
+      '.vocab-word-popup',
+      '.vocab-notification'
+    ];
+    
+    // Check if the container is inside any extension UI component
+    for (const selector of extensionUISelectors) {
+      if (containerElement.closest(selector)) {
+        return false;
+      }
+    }
+    
+    // If not in extension UI and not in editor content, it's main website content - allow it
+    return true;
+  },
+  
+  /**
    * Handle mouse up event (after text selection)
    * @param {MouseEvent} event
    */
@@ -2588,10 +2734,15 @@ const TextSelector = {
       return;
     }
     
-    // Don't process clicks on our own UI elements
-    if (event.target.closest('.vocab-helper-panel') ||
-        event.target.closest('.vocab-text-highlight') ||
+    // Check if clicking on existing highlights - allow interaction with them
+    if (event.target.closest('.vocab-text-highlight') ||
         event.target.closest('.vocab-word-highlight')) {
+      return;
+    }
+    
+    // Check if selection is allowed in the clicked area
+    if (!this.isSelectionAllowed(event.target)) {
+      console.log('[TextSelector] Selection not allowed - clicked in extension UI');
       return;
     }
     
@@ -2626,6 +2777,14 @@ const TextSelector = {
       }
       
       const range = selection.getRangeAt(0);
+      
+      // IMPORTANT: Also validate the selection range itself
+      // This ensures the selected text is not from extension UI
+      if (!this.isSelectionAllowed(range)) {
+        console.log('[TextSelector] Selection not allowed - range is in extension UI');
+        selection.removeAllRanges();
+        return;
+      }
       
       // Check if this exact text is already selected
       const textKey = this.getContextualTextKey(selectedText);
