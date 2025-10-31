@@ -6689,14 +6689,19 @@ const ChatDialog = {
         transition: border-color 0.2s ease;
         min-height: 40px;
         max-height: 120px;
+        color: #1f2937 !important; /* Ensure text is visible */
+        caret-color: #9527F5 !important; /* Ensure cursor is visible */
+        background-color: white !important; /* Ensure background is white */
       }
       
       .vocab-chat-input:focus {
         border-color: #9527F5;
+        color: #1f2937 !important; /* Ensure text is visible on focus */
+        caret-color: #9527F5 !important; /* Ensure cursor is visible on focus */
       }
       
       .vocab-chat-input::placeholder {
-        color: #9ca3af;
+        color: #9ca3af !important; /* Ensure placeholder is visible */
       }
       
       /* Send Button - Wireframe Purple Circular */
