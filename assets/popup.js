@@ -21,57 +21,52 @@ const DomainManager = {
 };
 
 // ===================================
-// Storage Module - Handles Chrome Storage API (Per-Domain)
+// Storage Module - Handles Chrome Storage API (Global)
 // ===================================
 const StorageManager = {
-  STORAGE_PREFIX: 'isExtensionEnabledFor_',
+  GLOBAL_STORAGE_KEY: 'is_extension_globally_enabled',
 
   /**
-   * Get storage key for a specific domain
-   * @param {string} domain - The domain name
-   * @returns {string} Storage key for the domain
-   */
-  getStorageKey(domain) {
-    return `${this.STORAGE_PREFIX}${domain}`;
-  },
-
-  /**
-   * Save toggle state to Chrome local storage for a specific domain
-   * @param {string} domain - The domain name
+   * Save global toggle state to Chrome local storage
    * @param {boolean} isEnabled - The toggle state to save
    */
-  async saveToggleState(domain, isEnabled) {
+  async saveToggleState(isEnabled) {
     try {
-      const key = this.getStorageKey(domain);
-      if (isEnabled) {
-        // Save the enabled state
-        await chrome.storage.local.set({ [key]: isEnabled });
-        console.log(`Toggle state saved for ${domain}:`, isEnabled);
-      } else {
-        // Remove the key from storage when disabled
-        await chrome.storage.local.remove([key]);
-        console.log(`Toggle state removed for ${domain} (disabled)`);
-      }
+      await chrome.storage.local.set({ [this.GLOBAL_STORAGE_KEY]: isEnabled });
+      console.log(`Global toggle state saved:`, isEnabled);
     } catch (error) {
-      console.error('Error saving toggle state:', error);
+      console.error('Error saving global toggle state:', error);
     }
   },
 
   /**
-   * Load toggle state from Chrome local storage for a specific domain
-   * @param {string} domain - The domain name
-   * @returns {Promise<boolean>} The saved toggle state (defaults to false - disabled by default)
+   * Load global toggle state from Chrome local storage
+   * If not found, creates it and sets to true (enabled by default)
+   * @returns {Promise<boolean>} The saved toggle state (defaults to true - enabled by default)
    */
-  async loadToggleState(domain) {
+  async loadToggleState() {
     try {
-      const key = this.getStorageKey(domain);
-      const result = await chrome.storage.local.get([key]);
-      const state = result[key] ?? false; // Default to false (disabled) if not set
-      console.log(`Toggle state loaded for ${domain}:`, state);
+      const result = await chrome.storage.local.get([this.GLOBAL_STORAGE_KEY]);
+      let state = result[this.GLOBAL_STORAGE_KEY];
+      
+      // If not found, create it and set to true (enabled by default)
+      if (state === undefined) {
+        state = true;
+        await chrome.storage.local.set({ [this.GLOBAL_STORAGE_KEY]: state });
+        console.log('Global toggle state not found, created with default value: true');
+      }
+      
+      console.log(`Global toggle state loaded:`, state);
       return state;
     } catch (error) {
-      console.error('Error loading toggle state:', error);
-      return false; // Default to false (disabled) on error
+      console.error('Error loading global toggle state:', error);
+      // On error, default to true (enabled) and try to save it
+      try {
+        await chrome.storage.local.set({ [this.GLOBAL_STORAGE_KEY]: true });
+      } catch (saveError) {
+        console.error('Error saving default state:', saveError);
+      }
+      return true; // Default to true (enabled) on error
     }
   }
 };
@@ -82,10 +77,10 @@ const StorageManager = {
 const UIManager = {
   // DOM elements
   toggleSwitch: document.getElementById('extensionToggle'),
-  catIcon: document.querySelector('.cat-icon'),
-  title: document.querySelector('.title'),
-  instructions: document.querySelector('.instructions'),
-  fingerPoint: document.querySelector('.finger-point'),
+  get catIcon() { return document.querySelector('.cat-icon'); },
+  get title() { return document.querySelector('.title'); },
+  get instructions() { return document.querySelector('.instructions'); },
+  get fingerPoint() { return document.querySelector('.finger-point'); },
 
   /**
    * Update UI based on toggle state
@@ -123,24 +118,102 @@ const UIManager = {
 // ===================================
 class PopupApp {
   static currentDomain = null;
+  static loadingState = null;
+  static normalContent = null;
+
+  /**
+   * Check if the current tab is loading
+   */
+  static async checkTabLoading() {
+    try {
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      // Tab is loading if status is 'loading'
+      return tab?.status === 'loading';
+    } catch (error) {
+      console.error('Error checking tab status:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Show loading state or normal content based on tab status
+   */
+  static async updateContentVisibility() {
+    const isLoading = await this.checkTabLoading();
+    const toggleContainer = document.querySelector('.toggle-container');
+    
+    if (this.loadingState && this.normalContent) {
+      if (isLoading) {
+        // Show loading state
+        this.loadingState.style.display = 'flex';
+        this.normalContent.classList.remove('visible');
+        // Hide toggle button
+        if (toggleContainer) {
+          toggleContainer.style.display = 'none';
+        }
+      } else {
+        // Show normal content
+        this.loadingState.style.display = 'none';
+        this.normalContent.classList.add('visible');
+        // Show toggle button
+        if (toggleContainer) {
+          toggleContainer.style.display = 'flex';
+        }
+      }
+    }
+  }
 
   /**
    * Initialize the popup application
    */
   static async init() {
-    // Get current domain
-    this.currentDomain = await DomainManager.getCurrentDomain();
-    console.log('Current domain:', this.currentDomain);
-    
-    // Load saved state from storage for this domain
-    const savedState = await StorageManager.loadToggleState(this.currentDomain);
-    
-    // Update UI and toggle switch with saved state
-    UIManager.setToggleState(savedState);
-    UIManager.updateUI(savedState);
+    // Get DOM elements
+    this.loadingState = document.getElementById('loadingState');
+    this.normalContent = document.getElementById('normalContent');
 
-    // Listen for toggle changes
-    UIManager.toggleSwitch.addEventListener('change', this.handleToggleChange.bind(this));
+    // Check initial tab loading state
+    await this.updateContentVisibility();
+
+    // Poll tab status every 200ms while loading
+    const checkInterval = setInterval(async () => {
+      const isLoading = await this.checkTabLoading();
+      await this.updateContentVisibility();
+      
+      // Stop polling once page is loaded
+      if (!isLoading) {
+        clearInterval(checkInterval);
+      }
+    }, 200);
+
+    // Also listen for tab updates
+    chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+      if (changeInfo.status === 'complete' || changeInfo.status === 'loading') {
+        this.updateContentVisibility();
+      }
+    });
+
+    // Load global saved state from storage (only if content is visible)
+    if (this.normalContent && this.normalContent.classList.contains('visible')) {
+      const savedState = await StorageManager.loadToggleState();
+      
+      // Update UI and toggle switch with saved state
+      UIManager.setToggleState(savedState);
+      UIManager.updateUI(savedState);
+
+      // Listen for toggle changes
+      UIManager.toggleSwitch.addEventListener('change', this.handleToggleChange.bind(this));
+    } else {
+      // If still loading, wait for content to be visible before initializing toggle
+      const initInterval = setInterval(async () => {
+        if (this.normalContent && this.normalContent.classList.contains('visible')) {
+          clearInterval(initInterval);
+          const savedState = await StorageManager.loadToggleState();
+          UIManager.setToggleState(savedState);
+          UIManager.updateUI(savedState);
+          UIManager.toggleSwitch.addEventListener('change', this.handleToggleChange.bind(this));
+        }
+      }, 200);
+    }
   }
 
   /**
@@ -150,33 +223,36 @@ class PopupApp {
   static async handleToggleChange(event) {
     const isEnabled = event.target.checked;
     
-    console.log('[Popup] Toggle changed:', isEnabled, 'for domain:', this.currentDomain);
+    console.log('[Popup] Global toggle changed:', isEnabled);
     
     // Update UI
     UIManager.updateUI(isEnabled);
     
-    // Save state to storage for this domain
-    await StorageManager.saveToggleState(this.currentDomain, isEnabled);
-    console.log('[Popup] State saved to storage');
+    // Save global state to storage
+    await StorageManager.saveToggleState(isEnabled);
+    console.log('[Popup] Global state saved to storage');
     
-    // Notify content script of the change
+    // Notify content script of the change (broadcast to all tabs)
     try {
-      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-      console.log('[Popup] Active tab:', tab);
+      const tabs = await chrome.tabs.query({});
+      console.log('[Popup] Sending message to all tabs:', tabs.length);
       
-      if (tab?.id) {
-        console.log('[Popup] Sending message to tab:', tab.id);
-        const response = await chrome.tabs.sendMessage(tab.id, {
-          type: 'TOGGLE_EXTENSION',
-          domain: this.currentDomain,
-          isEnabled: isEnabled
-        });
-        console.log('[Popup] Message sent, response:', response);
-      } else {
-        console.error('[Popup] No active tab found');
+      for (const tab of tabs) {
+        if (tab?.id) {
+          try {
+            await chrome.tabs.sendMessage(tab.id, {
+              type: 'TOGGLE_EXTENSION_GLOBAL',
+              isEnabled: isEnabled
+            });
+            console.log('[Popup] Message sent to tab:', tab.id);
+          } catch (error) {
+            // Tab might not have content script loaded, ignore
+            console.log('[Popup] Could not send message to tab:', tab.id, error.message);
+          }
+        }
       }
     } catch (error) {
-      console.error('[Popup] Error sending message to content script:', error);
+      console.error('[Popup] Error sending message to content scripts:', error);
       // Storage change listener should still work even if message fails
     }
   }

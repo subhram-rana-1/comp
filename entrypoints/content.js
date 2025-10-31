@@ -295,15 +295,60 @@ export default defineContentScript({
       console.log('[FIX] === END FIXING ===');
     };
     
-    // Get current domain
-    const currentDomain = window.location.hostname;
-    const storageKey = `isExtensionEnabledFor_${currentDomain}`;
+    // Global storage key for extension state
+    const GLOBAL_STORAGE_KEY = 'is_extension_globally_enabled';
     
-    console.log('[Content Script] Current domain:', currentDomain);
-    console.log('[Content Script] Storage key:', storageKey);
+    console.log('[Content Script] Initializing with global storage key:', GLOBAL_STORAGE_KEY);
     
     // Initialize the button panel when content script loads
     await ButtonPanel.init();
+    
+    // Initialize the word selector functionality (will check state internally)
+    await WordSelector.init();
+    
+    // Initialize the text selector functionality (will check state internally)
+    await TextSelector.init();
+    
+    // Initialize the chat dialog
+    ChatDialog.init();
+    
+    // Check global extension state on page load/reload AFTER initialization
+    const checkGlobalExtensionState = async () => {
+      try {
+        const result = await chrome.storage.local.get([GLOBAL_STORAGE_KEY]);
+        let isEnabled = result[GLOBAL_STORAGE_KEY];
+        
+        // If not found, create it and set to true (enabled by default)
+        if (isEnabled === undefined) {
+          isEnabled = true;
+          await chrome.storage.local.set({ [GLOBAL_STORAGE_KEY]: isEnabled });
+          console.log('[Content Script] Global toggle state not found, created with default value: true');
+        }
+        
+        console.log('[Content Script] Global extension state:', isEnabled);
+        
+        if (isEnabled) {
+          ButtonPanel.show();
+          WordSelector.enable();
+          TextSelector.enable();
+        } else {
+          ButtonPanel.hide();
+          WordSelector.disable();
+          TextSelector.disable();
+          WordSelector.clearAll();
+          TextSelector.clearAll();
+        }
+      } catch (error) {
+        console.error('[Content Script] Error checking global extension state:', error);
+        // Default to enabled on error
+        ButtonPanel.show();
+        WordSelector.enable();
+        TextSelector.enable();
+      }
+    };
+    
+    // Check state after initialization
+    await checkGlobalExtensionState();
     
     // PERMANENT FIX: Ensure import-content button always has indicator
     setTimeout(() => {
@@ -378,24 +423,15 @@ export default defineContentScript({
       }
     };
     
-    // Initialize the word selector functionality
-    await WordSelector.init();
-    
-    // Initialize the text selector functionality
-    await TextSelector.init();
-    
-    // Initialize the chat dialog
-    ChatDialog.init();
-    
-    // Listen for storage changes to show/hide panel (per-domain)
+    // Listen for storage changes to show/hide panel (global)
     chrome.storage.onChanged.addListener((changes, namespace) => {
       console.log('[Content Script] Storage changed:', changes, 'Namespace:', namespace);
       
       if (namespace === 'local') {
-        // Check if our domain's key changed
-        if (changes[storageKey]) {
-          const isEnabled = changes[storageKey].newValue;
-          console.log(`[Content Script] Toggle state changed for ${currentDomain}:`, isEnabled);
+        // Check if global key changed
+        if (changes[GLOBAL_STORAGE_KEY]) {
+          const isEnabled = changes[GLOBAL_STORAGE_KEY].newValue;
+          console.log(`[Content Script] Global toggle state changed:`, isEnabled);
           
           if (isEnabled) {
             ButtonPanel.show();
@@ -417,8 +453,8 @@ export default defineContentScript({
     chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       console.log('[Content Script] Message received:', message);
       
-      if (message.type === 'TOGGLE_EXTENSION' && message.domain === currentDomain) {
-        console.log(`[Content Script] Toggling extension for ${currentDomain}:`, message.isEnabled);
+      if (message.type === 'TOGGLE_EXTENSION_GLOBAL') {
+        console.log(`[Content Script] Global toggle changed:`, message.isEnabled);
         
         if (message.isEnabled) {
           ButtonPanel.show();
@@ -434,8 +470,8 @@ export default defineContentScript({
         }
         
         sendResponse({ success: true });
-      } else if (message.type === 'TAB_STATE_CHANGE' && message.domain === currentDomain) {
-        console.log(`[Content Script] Tab state change for ${currentDomain}:`, message.eventType);
+      } else if (message.type === 'TAB_STATE_CHANGE') {
+        console.log(`[Content Script] Tab state change:`, message.eventType);
         handleTabStateChange(message.domain, message.eventType, sendResponse);
       } else if (message.type === 'CHECK_EXTENSION_STATE') {
         handleExtensionStateCheck(message.domain, sendResponse);
@@ -458,26 +494,26 @@ async function handleTabStateChange(domain, eventType, sendResponse) {
   try {
     console.log(`[Content Script] Handling tab state change: ${eventType} for ${domain}`);
     
-    // Check if extension state exists in storage
-    const storageKey = `isExtensionEnabledFor_${domain}`;
-    const result = await chrome.storage.local.get([storageKey]);
-    const isEnabled = result[storageKey];
+    // Check global extension state in storage
+    const GLOBAL_STORAGE_KEY = 'is_extension_globally_enabled';
+    const result = await chrome.storage.local.get([GLOBAL_STORAGE_KEY]);
+    let isEnabled = result[GLOBAL_STORAGE_KEY];
     
     if (isEnabled === undefined) {
-      // No storage data found - this is a new domain, set to disabled
-      console.log(`[Content Script] New domain detected: ${domain}, setting to disabled`);
+      // No storage data found - create it and set to enabled (ON by default)
+      console.log(`[Content Script] Global toggle state not found, creating with default value: true`);
+      isEnabled = true;
+      await chrome.storage.local.set({ [GLOBAL_STORAGE_KEY]: isEnabled });
       
-      // Ensure all components are disabled
-      ButtonPanel.hide();
-      WordSelector.disable();
-      TextSelector.disable();
-      WordSelector.clearAll();
-      TextSelector.clearAll();
+      // Ensure all components are enabled (default ON)
+      ButtonPanel.show();
+      WordSelector.enable();
+      TextSelector.enable();
       
-      sendResponse({ success: true, isEnabled: false, isNewDomain: true });
+      sendResponse({ success: true, isEnabled: true, isNewDomain: true });
     } else {
       // Storage data exists, use the stored value
-      console.log(`[Content Script] Existing domain: ${domain}, enabled: ${isEnabled}`);
+      console.log(`[Content Script] Global extension state: ${isEnabled}`);
       
       if (isEnabled) {
         ButtonPanel.show();
@@ -506,11 +542,18 @@ async function handleTabStateChange(domain, eventType, sendResponse) {
  */
 async function handleExtensionStateCheck(domain, sendResponse) {
   try {
-    const storageKey = `isExtensionEnabledFor_${domain}`;
-    const result = await chrome.storage.local.get([storageKey]);
-    const isEnabled = result[storageKey] ?? false; // Default to false for new domains
+    const GLOBAL_STORAGE_KEY = 'is_extension_globally_enabled';
+    const result = await chrome.storage.local.get([GLOBAL_STORAGE_KEY]);
+    let isEnabled = result[GLOBAL_STORAGE_KEY];
     
-    console.log(`[Content Script] Extension state check for ${domain}:`, isEnabled);
+    // If not found, create it and set to true (enabled by default)
+    if (isEnabled === undefined) {
+      isEnabled = true;
+      await chrome.storage.local.set({ [GLOBAL_STORAGE_KEY]: isEnabled });
+      console.log('[Content Script] Global toggle state not found, created with default value: true');
+    }
+    
+    console.log(`[Content Script] Global extension state:`, isEnabled);
     
     sendResponse({
       success: true,
@@ -518,11 +561,11 @@ async function handleExtensionStateCheck(domain, sendResponse) {
       domain: domain
     });
   } catch (error) {
-    console.error('[Content Script] Error checking extension state:', error);
+    console.error('[Content Script] Error checking global extension state:', error);
     sendResponse({
       success: false,
       error: error.message,
-      isEnabled: false
+      isEnabled: true // Default to enabled on error
     });
   }
 }
@@ -661,13 +704,21 @@ const WordSelector = {
    */
   async checkExtensionEnabled() {
     try {
-      const currentDomain = window.location.hostname;
-      const storageKey = `isExtensionEnabledFor_${currentDomain}`;
-      const result = await chrome.storage.local.get([storageKey]);
-      return result[storageKey] ?? false; // Default to false for new domains
+      const GLOBAL_STORAGE_KEY = 'is_extension_globally_enabled';
+      const result = await chrome.storage.local.get([GLOBAL_STORAGE_KEY]);
+      let isEnabled = result[GLOBAL_STORAGE_KEY];
+      
+      // If not found, create it and set to true (enabled by default)
+      if (isEnabled === undefined) {
+        isEnabled = true;
+        await chrome.storage.local.set({ [GLOBAL_STORAGE_KEY]: isEnabled });
+        console.log('[WordSelector] Global toggle state not found, created with default value: true');
+      }
+      
+      return isEnabled;
     } catch (error) {
-      console.error('[WordSelector] Error checking extension state:', error);
-      return false; // Default to false on error
+      console.error('[WordSelector] Error checking global extension state:', error);
+      return true; // Default to true (enabled) on error
     }
   },
   
@@ -694,6 +745,74 @@ const WordSelector = {
   },
   
   /**
+   * Check if an element or range is within allowed selection areas
+   * Allowed: Main website content and .vocab-custom-content-editor-content
+   * Disallowed: All other extension UI components
+   * @param {Element|Range} elementOrRange - The element or range to check
+   * @returns {boolean} True if selection is allowed, false otherwise
+   */
+  isSelectionAllowed(elementOrRange) {
+    // Get the container element from element or range
+    let containerElement = null;
+    
+    if (elementOrRange instanceof Range) {
+      // For range, check the common ancestor container
+      containerElement = elementOrRange.commonAncestorContainer;
+      // If it's a text node, get its parent
+      if (containerElement && containerElement.nodeType === Node.TEXT_NODE) {
+        containerElement = containerElement.parentElement;
+      } else if (containerElement && containerElement.nodeType === Node.ELEMENT_NODE) {
+        containerElement = containerElement;
+      }
+    } else if (elementOrRange instanceof Element) {
+      containerElement = elementOrRange;
+    } else if (elementOrRange instanceof Node) {
+      // For other node types (like text nodes), get parent element
+      if (elementOrRange.nodeType === Node.TEXT_NODE) {
+        containerElement = elementOrRange.parentElement;
+      } else if (elementOrRange.nodeType === Node.ELEMENT_NODE) {
+        containerElement = elementOrRange;
+      }
+    }
+    
+    // Ensure we have an Element (not a Text node or null)
+    if (!containerElement || !(containerElement instanceof Element)) {
+      return false;
+    }
+    
+    // First check: If inside .vocab-custom-content-editor-content, allow it
+    // This is the exception - even though it's inside vocab-custom-content-modal,
+    // we want to allow selection in the editor content
+    const editorContent = containerElement.closest('.vocab-custom-content-editor-content');
+    if (editorContent) {
+      return true;
+    }
+    
+    // Second check: If inside any extension UI component, disallow it
+    // List of extension UI component selectors
+    const extensionUISelectors = [
+      '.vocab-helper-panel',
+      '.vocab-topics-modal',
+      '.vocab-topics-modal-overlay',
+      '.vocab-chat-dialog',
+      '.vocab-custom-content-modal',
+      '.vocab-custom-content-info-banner',
+      '.vocab-word-popup',
+      '.vocab-notification'
+    ];
+    
+    // Check if the container is inside any extension UI component
+    for (const selector of extensionUISelectors) {
+      if (containerElement.closest(selector)) {
+        return false;
+      }
+    }
+    
+    // If not in extension UI and not in editor content, it's main website content - allow it
+    return true;
+  },
+  
+  /**
    * Handle double-click event
    * @param {MouseEvent} event
    */
@@ -703,19 +822,21 @@ const WordSelector = {
       return;
     }
     
-    // Don't process clicks on our own UI elements (except highlights)
-    if (event.target.closest('.vocab-helper-panel')) {
-      return;
-    }
-    
     // Check if clicking on an existing highlight to deselect it
     const clickedHighlight = event.target.closest('.vocab-word-highlight');
     if (clickedHighlight) {
+      // Allow deselection of highlights anywhere (they should be removable)
       const word = clickedHighlight.getAttribute('data-word');
       if (word) {
         this.removeWord(word);
         console.log('[WordSelector] Word deselected via double-click:', word);
       }
+      return;
+    }
+    
+    // Check if selection is allowed in the clicked area
+    if (!this.isSelectionAllowed(event.target)) {
+      console.log('[WordSelector] Selection not allowed - clicked in extension UI');
       return;
     }
     
@@ -744,6 +865,16 @@ const WordSelector = {
       return;
     }
     
+    const range = selection.getRangeAt(0);
+    
+    // IMPORTANT: Also validate the selection range itself
+    // This ensures the selected text is not from extension UI
+    if (!this.isSelectionAllowed(range)) {
+      console.log('[WordSelector] Selection not allowed - range is in extension UI');
+      selection.removeAllRanges();
+      return;
+    }
+    
     const normalizedWord = selectedText.toLowerCase();
     console.log('[WordSelector] Original word:', selectedText);
     console.log('[WordSelector] Normalized word:', normalizedWord);
@@ -755,8 +886,6 @@ const WordSelector = {
       console.log('[WordSelector] Word deselected:', selectedText);
       return;
     }
-    
-    const range = selection.getRangeAt(0);
     
     // Add word to selected set (O(1) operation)
     this.addWord(selectedText);
@@ -1893,35 +2022,46 @@ const WordSelector = {
     
     console.log('[WordSelector] ✓ Found word data in explainedWords:', wordData);
     
-    // Remove green background and buttons from all highlights
+    // Remove green background and buttons from all highlights with smooth animations
     if (wordData.highlights) {
       wordData.highlights.forEach(highlight => {
-        // Remove the green explained class
-        highlight.classList.remove('vocab-word-explained');
+        // Add disappearing animation classes (same 0.3s duration as purple highlights)
+        highlight.classList.add('word-disappearing');
         
-        // Remove the green cross button
+        // Add disappearing animation to green cross button
         const greenBtn = highlight.querySelector('.vocab-word-remove-explained-btn');
         if (greenBtn) {
-          greenBtn.remove();
+          greenBtn.classList.add('button-disappearing');
         }
         
-        // Remove data attributes
-        highlight.removeAttribute('data-meaning');
-        highlight.removeAttribute('data-examples');
-        highlight.removeAttribute('data-popup-id');
-        
-        // Remove the highlight wrapper completely
-        const parent = highlight.parentNode;
-        if (parent) {
-          // Move all child nodes out of the highlight wrapper
-          while (highlight.firstChild) {
-            parent.insertBefore(highlight.firstChild, highlight);
+        // Wait for animation to complete before removing elements (0.3s same duration)
+        setTimeout(() => {
+          // Remove the green explained class
+          highlight.classList.remove('vocab-word-explained', 'word-disappearing');
+          
+          // Remove the green cross button
+          if (greenBtn) {
+            greenBtn.remove();
           }
-          // Remove the empty highlight wrapper
-          highlight.remove();
-          // Normalize parent to merge text nodes
-          parent.normalize();
-        }
+          
+          // Remove data attributes
+          highlight.removeAttribute('data-meaning');
+          highlight.removeAttribute('data-examples');
+          highlight.removeAttribute('data-popup-id');
+          
+          // Remove the highlight wrapper completely
+          const parent = highlight.parentNode;
+          if (parent) {
+            // Move all child nodes out of the highlight wrapper
+            while (highlight.firstChild) {
+              parent.insertBefore(highlight.firstChild, highlight);
+            }
+            // Remove the empty highlight wrapper
+            highlight.remove();
+            // Normalize parent to merge text nodes
+            parent.normalize();
+          }
+        }, 300); // Same duration as animation (0.3s)
       });
     }
     
@@ -2044,11 +2184,30 @@ const WordSelector = {
         border-radius: 8px;
         border: 1px solid rgba(21, 128, 61, 0.4);
         padding: 0 2px;
+        transition: background-color 0.3s ease-in-out, border-color 0.3s ease-in-out, opacity 0.3s ease-in-out;
       }
       
       .vocab-word-explained:hover {
         background-color: rgba(34, 197, 94, 0.30) !important;
         border-color: rgba(21, 128, 61, 0.6);
+      }
+      
+      /* Smooth animation for green word highlight disappearance - 0.3s duration */
+      .vocab-word-explained.word-disappearing {
+        animation: wordFadeOut 0.3s ease-in-out forwards;
+      }
+      
+      @keyframes wordFadeOut {
+        0% {
+          background-color: rgba(34, 197, 94, 0.20);
+          border-color: rgba(21, 128, 61, 0.4);
+          opacity: 1;
+        }
+        100% {
+          background-color: transparent;
+          border-color: transparent;
+          opacity: 0;
+        }
       }
       
       /* Green cross button for explained words - no circle, just cross */
@@ -2065,10 +2224,26 @@ const WordSelector = {
         justify-content: center;
         cursor: pointer;
         opacity: 0.8;
-        transition: opacity 0.2s ease, transform 0.1s ease;
+        transition: opacity 0.3s ease-in-out, transform 0.3s ease-in-out, scale 0.3s ease-in-out;
         padding: 0;
         z-index: 999999;
         filter: drop-shadow(0 1px 2px rgba(34, 197, 94, 0.4));
+      }
+      
+      /* Smooth animation for green cross button disappearance - 0.3s duration */
+      .vocab-word-remove-explained-btn.button-disappearing {
+        animation: greenButtonFadeOut 0.3s ease-in-out forwards;
+      }
+      
+      @keyframes greenButtonFadeOut {
+        0% {
+          opacity: 0.8;
+          transform: scale(1);
+        }
+        100% {
+          opacity: 0;
+          transform: scale(0.8);
+        }
       }
       
       .vocab-word-explained:hover .vocab-word-remove-explained-btn {
@@ -2441,13 +2616,21 @@ const TextSelector = {
    */
   async checkExtensionEnabled() {
     try {
-      const currentDomain = window.location.hostname;
-      const storageKey = `isExtensionEnabledFor_${currentDomain}`;
-      const result = await chrome.storage.local.get([storageKey]);
-      return result[storageKey] ?? false; // Default to false for new domains
+      const GLOBAL_STORAGE_KEY = 'is_extension_globally_enabled';
+      const result = await chrome.storage.local.get([GLOBAL_STORAGE_KEY]);
+      let isEnabled = result[GLOBAL_STORAGE_KEY];
+      
+      // If not found, create it and set to true (enabled by default)
+      if (isEnabled === undefined) {
+        isEnabled = true;
+        await chrome.storage.local.set({ [GLOBAL_STORAGE_KEY]: isEnabled });
+        console.log('[TextSelector] Global toggle state not found, created with default value: true');
+      }
+      
+      return isEnabled;
     } catch (error) {
-      console.error('[TextSelector] Error checking extension state:', error);
-      return false; // Default to false on error
+      console.error('[TextSelector] Error checking global extension state:', error);
+      return true; // Default to true (enabled) on error
     }
   },
   
@@ -2474,6 +2657,74 @@ const TextSelector = {
   },
   
   /**
+   * Check if an element or range is within allowed selection areas
+   * Allowed: Main website content and .vocab-custom-content-editor-content
+   * Disallowed: All other extension UI components
+   * @param {Element|Range} elementOrRange - The element or range to check
+   * @returns {boolean} True if selection is allowed, false otherwise
+   */
+  isSelectionAllowed(elementOrRange) {
+    // Get the container element from element or range
+    let containerElement = null;
+    
+    if (elementOrRange instanceof Range) {
+      // For range, check the common ancestor container
+      containerElement = elementOrRange.commonAncestorContainer;
+      // If it's a text node, get its parent
+      if (containerElement && containerElement.nodeType === Node.TEXT_NODE) {
+        containerElement = containerElement.parentElement;
+      } else if (containerElement && containerElement.nodeType === Node.ELEMENT_NODE) {
+        containerElement = containerElement;
+      }
+    } else if (elementOrRange instanceof Element) {
+      containerElement = elementOrRange;
+    } else if (elementOrRange instanceof Node) {
+      // For other node types (like text nodes), get parent element
+      if (elementOrRange.nodeType === Node.TEXT_NODE) {
+        containerElement = elementOrRange.parentElement;
+      } else if (elementOrRange.nodeType === Node.ELEMENT_NODE) {
+        containerElement = elementOrRange;
+      }
+    }
+    
+    // Ensure we have an Element (not a Text node or null)
+    if (!containerElement || !(containerElement instanceof Element)) {
+      return false;
+    }
+    
+    // First check: If inside .vocab-custom-content-editor-content, allow it
+    // This is the exception - even though it's inside vocab-custom-content-modal,
+    // we want to allow selection in the editor content
+    const editorContent = containerElement.closest('.vocab-custom-content-editor-content');
+    if (editorContent) {
+      return true;
+    }
+    
+    // Second check: If inside any extension UI component, disallow it
+    // List of extension UI component selectors
+    const extensionUISelectors = [
+      '.vocab-helper-panel',
+      '.vocab-topics-modal',
+      '.vocab-topics-modal-overlay',
+      '.vocab-chat-dialog',
+      '.vocab-custom-content-modal',
+      '.vocab-custom-content-info-banner',
+      '.vocab-word-popup',
+      '.vocab-notification'
+    ];
+    
+    // Check if the container is inside any extension UI component
+    for (const selector of extensionUISelectors) {
+      if (containerElement.closest(selector)) {
+        return false;
+      }
+    }
+    
+    // If not in extension UI and not in editor content, it's main website content - allow it
+    return true;
+  },
+  
+  /**
    * Handle mouse up event (after text selection)
    * @param {MouseEvent} event
    */
@@ -2483,10 +2734,15 @@ const TextSelector = {
       return;
     }
     
-    // Don't process clicks on our own UI elements
-    if (event.target.closest('.vocab-helper-panel') ||
-        event.target.closest('.vocab-text-highlight') ||
+    // Check if clicking on existing highlights - allow interaction with them
+    if (event.target.closest('.vocab-text-highlight') ||
         event.target.closest('.vocab-word-highlight')) {
+      return;
+    }
+    
+    // Check if selection is allowed in the clicked area
+    if (!this.isSelectionAllowed(event.target)) {
+      console.log('[TextSelector] Selection not allowed - clicked in extension UI');
       return;
     }
     
@@ -2521,6 +2777,14 @@ const TextSelector = {
       }
       
       const range = selection.getRangeAt(0);
+      
+      // IMPORTANT: Also validate the selection range itself
+      // This ensures the selected text is not from extension UI
+      if (!this.isSelectionAllowed(range)) {
+        console.log('[TextSelector] Selection not allowed - range is in extension UI');
+        selection.removeAllRanges();
+        return;
+      }
       
       // Check if this exact text is already selected
       const textKey = this.getContextualTextKey(selectedText);
@@ -2768,7 +3032,7 @@ const TextSelector = {
     
     // Create highlight wrapper
     const highlight = document.createElement('span');
-    highlight.className = 'vocab-text-highlight';
+    highlight.className = 'vocab-text-highlight underline-appearing';
     highlight.setAttribute('data-text-key', textKey);
     highlight.setAttribute('data-highlight-id', `text-highlight-${this.highlightIdCounter++}`);
     
@@ -2787,6 +3051,11 @@ const TextSelector = {
     const removeBtn = this.createRemoveButton(text);
     highlight.appendChild(removeBtn);
     
+    // Remove the appearing class after animation completes
+    setTimeout(() => {
+      highlight.classList.remove('underline-appearing');
+    }, 300);
+    
     // Store the highlight in our map (O(1) operation)
     this.textToHighlights.set(textKey, highlight);
   },
@@ -2798,7 +3067,7 @@ const TextSelector = {
    */
   createRemoveButton(text) {
     const btn = document.createElement('button');
-    btn.className = 'vocab-text-remove-btn';
+    btn.className = 'vocab-text-remove-btn button-appearing';
     btn.setAttribute('aria-label', `Remove highlight for selected text`);
     btn.innerHTML = this.createCloseIcon();
     
@@ -2808,6 +3077,11 @@ const TextSelector = {
       e.stopPropagation();
       this.removeText(text);
     });
+    
+    // Remove the appearing class after animation completes (0.3s same as underline)
+    setTimeout(() => {
+      btn.classList.remove('button-appearing');
+    }, 300);
     
     return btn;
   },
@@ -2845,22 +3119,34 @@ const TextSelector = {
     const parent = highlight.parentNode;
     if (!parent) return;
     
-    // Remove the button first
+    // Add disappearing animation classes (same 0.3s duration)
+    // Only add if not already present (might be added by removeFromSimplifiedTexts)
     const btn = highlight.querySelector('.vocab-text-remove-btn');
-    if (btn) {
-      btn.remove();
+    if (btn && !btn.classList.contains('button-disappearing')) {
+      btn.classList.add('button-disappearing');
+    }
+    if (!highlight.classList.contains('underline-disappearing')) {
+      highlight.classList.add('underline-disappearing');
     }
     
-    // Move all child nodes back to parent
-    while (highlight.firstChild) {
-      parent.insertBefore(highlight.firstChild, highlight);
-    }
-    
-    // Remove the empty highlight span
-    highlight.remove();
-    
-    // Normalize the parent to merge adjacent text nodes
-    parent.normalize();
+    // Wait for animation to complete before removing (0.3s same duration for both)
+    setTimeout(() => {
+      // Remove button first
+      if (btn) {
+        btn.remove();
+      }
+      
+      // Move all child nodes back to parent
+      while (highlight.firstChild) {
+        parent.insertBefore(highlight.firstChild, highlight);
+      }
+      
+      // Remove the empty highlight span
+      highlight.remove();
+      
+      // Normalize the parent to merge adjacent text nodes
+      parent.normalize();
+    }, 300); // Same duration as animation (0.3s)
   },
   
   /**
@@ -3106,7 +3392,12 @@ const TextSelector = {
     // Only animate the underline color, not the text itself
     highlight.classList.add('vocab-text-vanishing');
     
-    // Wait for animation to complete before removing elements
+    // Immediately add disappearing class to prevent purple underline from appearing
+    // This ensures if purple underline becomes visible after simplified class is removed,
+    // it will already be in disappearing state
+    highlight.classList.add('underline-disappearing');
+    
+    // Wait for green underline animation to complete before removing elements
     setTimeout(() => {
       // Remove icons wrapper
       if (iconsWrapper) {
@@ -3114,11 +3405,15 @@ const TextSelector = {
       }
       
       // Remove the simplified class (green underline)
+      // After this, if purple underline is visible, it will already be fading out
       highlight.classList.remove('vocab-text-simplified', 'vocab-text-vanishing');
       
-      // Remove highlight completely
-      this.removeHighlight(highlight);
-    }, 300); // Match the CSS transition duration
+      // Continue with removal - purple underline should already be disappearing
+      // Wait for purple underline to fade out before actually removing
+      setTimeout(() => {
+        this.removeHighlight(highlight);
+      }, 300); // Wait for purple underline fade-out animation
+    }, 300); // Wait for green underline fade-out animation
     
     // Remove from simplifiedTexts map
     this.simplifiedTexts.delete(textKey);
@@ -3328,10 +3623,48 @@ const TextSelector = {
         text-decoration-line: underline;
         text-decoration-style: dashed;
         text-decoration-color: #9527F5;
-        text-decoration-thickness: 1px;
+        text-decoration-thickness: 0.6px;
         text-underline-offset: 2px;
         cursor: text;
         overflow: visible;
+        transition: text-decoration-color 0.3s ease-in-out, opacity 0.3s ease-in-out;
+        opacity: 1;
+      }
+      
+      /* Smooth animation for underline appearance - 0.3s duration */
+      .vocab-text-highlight.underline-appearing {
+        text-decoration-color: transparent;
+        animation: underlineFadeIn 0.3s ease-in-out forwards;
+      }
+      
+      /* Smooth animation for underline disappearance - same 0.3s duration */
+      .vocab-text-highlight.underline-disappearing {
+        animation: underlineFadeOut 0.3s ease-in-out forwards;
+      }
+      
+      /* Prevent purple underline from appearing when simplified text is being removed */
+      /* Keep underline transparent during disappearing animation to avoid glitch */
+      .vocab-text-highlight.underline-disappearing:not(.vocab-text-simplified) {
+        text-decoration-color: transparent !important;
+        animation: none; /* Prevent animation from purple, keep it transparent */
+      }
+      
+      @keyframes underlineFadeIn {
+        0% {
+          text-decoration-color: transparent;
+        }
+        100% {
+          text-decoration-color: #9527F5;
+        }
+      }
+      
+      @keyframes underlineFadeOut {
+        0% {
+          text-decoration-color: #9527F5;
+        }
+        100% {
+          text-decoration-color: transparent;
+        }
       }
       
       /* For block-level elements inside highlight, maintain underline */
@@ -3355,11 +3688,45 @@ const TextSelector = {
         justify-content: center;
         cursor: pointer;
         opacity: 0.9;
-        transition: opacity 0.2s ease, transform 0.1s ease, background-color 0.2s ease;
+        transition: opacity 0.3s ease-in-out, transform 0.1s ease, background-color 0.2s ease, scale 0.3s ease-in-out;
         padding: 0;
         z-index: 10000003;
         box-shadow: 0 2px 4px rgba(149, 39, 245, 0.4);
         pointer-events: auto;
+      }
+      
+      /* Smooth animation for button appearance - 0.3s duration (same as underline) */
+      .vocab-text-remove-btn.button-appearing {
+        opacity: 0;
+        transform: scale(0.8);
+        animation: buttonFadeIn 0.3s ease-in-out forwards;
+      }
+      
+      /* Smooth animation for button disappearance - 0.3s duration (same as underline) */
+      .vocab-text-remove-btn.button-disappearing {
+        animation: buttonFadeOut 0.3s ease-in-out forwards;
+      }
+      
+      @keyframes buttonFadeIn {
+        0% {
+          opacity: 0;
+          transform: scale(0.8);
+        }
+        100% {
+          opacity: 0.9;
+          transform: scale(1);
+        }
+      }
+      
+      @keyframes buttonFadeOut {
+        0% {
+          opacity: 0.9;
+          transform: scale(1);
+        }
+        100% {
+          opacity: 0;
+          transform: scale(0.8);
+        }
       }
       
       .vocab-text-highlight:hover .vocab-text-remove-btn {
@@ -3393,6 +3760,7 @@ const TextSelector = {
         z-index: 10000003;
         animation: vocab-icon-appear 0.4s ease-out;
         pointer-events: auto;
+        transition: opacity 0.3s ease-out, transform 0.3s ease-out;
       }
 
       /* Modal context: enhanced styling */
@@ -3586,7 +3954,7 @@ const TextSelector = {
       .vocab-text-simplified {
         text-decoration-color: #22c55e !important;
         text-decoration-style: dashed !important;
-        text-decoration-thickness: 2px !important;
+        text-decoration-thickness: 1.1px !important;
         transition: text-decoration-color 0.3s ease-out;
       }
       
@@ -3601,6 +3969,8 @@ const TextSelector = {
         opacity: 0;
         transform: scale(0.8) translateY(-10px);
         pointer-events: none;
+        transition: opacity 0.3s ease-out, transform 0.3s ease-out;
+        animation: none; /* Disable appearance animation when vanishing */
       }
       
       /* Pulsate animation for text highlights - light purple */
@@ -5054,7 +5424,25 @@ const ChatDialog = {
     inputField.placeholder = 'Type your question here ...';
     inputField.rows = 1;
     
+    // Apply inline styles as a fallback to ensure visibility even if CSS is overridden
+    // Inline styles have the highest specificity and will override most site CSS
+    inputField.style.color = '#1f2937';
+    inputField.style.caretColor = '#9527F5';
+    inputField.style.backgroundColor = 'white';
+    
     console.log('[ChatDialog] Input field created with ID:', inputField.id);
+    
+    // Reapply visibility styles if they get removed (safeguard against site JavaScript)
+    const ensureVisibility = () => {
+      inputField.style.color = '#1f2937';
+      inputField.style.caretColor = '#9527F5';
+      inputField.style.backgroundColor = 'white';
+    };
+    
+    // Ensure visibility on focus and key events (in case site JavaScript tries to override)
+    inputField.addEventListener('focus', ensureVisibility);
+    inputField.addEventListener('keydown', ensureVisibility);
+    inputField.addEventListener('keyup', ensureVisibility);
     
     // Auto-resize textarea with scroll when max height reached
     inputField.addEventListener('input', (e) => {
@@ -5069,6 +5457,9 @@ const ChatDialog = {
       } else {
         e.target.style.overflowY = 'hidden';
       }
+      
+      // Ensure visibility is maintained during input
+      ensureVisibility();
     });
     
     // Handle Enter key (Shift+Enter for new line)
@@ -6689,14 +7080,19 @@ const ChatDialog = {
         transition: border-color 0.2s ease;
         min-height: 40px;
         max-height: 120px;
+        color: #1f2937 !important; /* Ensure text is visible */
+        caret-color: #9527F5 !important; /* Ensure cursor is visible */
+        background-color: white !important; /* Ensure background is white */
       }
       
       .vocab-chat-input:focus {
         border-color: #9527F5;
+        color: #1f2937 !important; /* Ensure text is visible on focus */
+        caret-color: #9527F5 !important; /* Ensure cursor is visible on focus */
       }
       
       .vocab-chat-input::placeholder {
-        color: #9ca3af;
+        color: #9ca3af !important; /* Ensure placeholder is visible */
       }
       
       /* Send Button - Wireframe Purple Circular */
@@ -7629,7 +8025,7 @@ const ChatDialog = {
 
       /* Minimize Animation - Scale down and move to import-content button */
       .vocab-custom-content-modal.minimizing {
-        animation: minimizeToButton 0.3s ease-out forwards;
+        animation: minimizeToButton 0.2s ease-out forwards;
         pointer-events: none;
         z-index: 10000010 !important; /* Ensure modal appears above everything during animation */
         position: fixed !important; /* Break out of overlay stacking context */
@@ -8922,13 +9318,21 @@ const ButtonPanel = {
    */
   async checkExtensionEnabled() {
     try {
-      const currentDomain = window.location.hostname;
-      const storageKey = `isExtensionEnabledFor_${currentDomain}`;
-      const result = await chrome.storage.local.get([storageKey]);
-      return result[storageKey] ?? false; // Default to false for new domains
+      const GLOBAL_STORAGE_KEY = 'is_extension_globally_enabled';
+      const result = await chrome.storage.local.get([GLOBAL_STORAGE_KEY]);
+      let isEnabled = result[GLOBAL_STORAGE_KEY];
+      
+      // If not found, create it and set to true (enabled by default)
+      if (isEnabled === undefined) {
+        isEnabled = true;
+        await chrome.storage.local.set({ [GLOBAL_STORAGE_KEY]: isEnabled });
+        console.log('[ButtonPanel] Global toggle state not found, created with default value: true');
+      }
+      
+      return isEnabled;
     } catch (error) {
-      console.error('Error checking extension state:', error);
-      return false; // Default to false on error
+      console.error('[ButtonPanel] Error checking global extension state:', error);
+      return true; // Default to true (enabled) on error
     }
   },
 
@@ -8967,17 +9371,17 @@ const ButtonPanel = {
 
     const lowerButtons = [
       {
-        id: 'ask',
-        className: 'vocab-btn vocab-btn-solid-purple',
-        icon: this.createChatIcon(),
-        text: 'Ask anything',
-        type: 'solid-purple'
-      },
-      {
         id: 'magic-meaning',
         className: 'vocab-btn vocab-btn-solid-purple',
         icon: this.createSparkleIcon(),
         text: 'Magic meaning',
+        type: 'solid-purple'
+      },
+      {
+        id: 'ask',
+        className: 'vocab-btn vocab-btn-solid-purple',
+        icon: this.createChatIcon(),
+        text: 'Ask anything',
         type: 'solid-purple'
       },
       {
@@ -9481,8 +9885,15 @@ const ButtonPanel = {
    */
   createTopicsIcon() {
     return `
-      <svg width="36" height="36" viewBox="0 0 28 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <text x="3" y="18" font-family="Arial, sans-serif" font-size="20" font-weight="900" fill="#9527F5">W</text>
+      <svg width="36" height="36" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <filter id="distress-filter-topics" x="-50%" y="-50%" width="200%" height="200%">
+            <feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="4" result="noise"/>
+            <feDisplacementMap in="SourceGraphic" in2="noise" scale="1.5" xChannelSelector="R" yChannelSelector="G"/>
+          </filter>
+        </defs>
+        <text x="18" y="14" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" font-weight="900" fill="#9527F5" filter="url(#distress-filter-topics)">KEY</text>
+        <text x="18" y="25" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" font-weight="900" fill="#9527F5" filter="url(#distress-filter-topics)">WORD</text>
       </svg>
     `;
   },
@@ -9494,7 +9905,13 @@ const ButtonPanel = {
   createTextIcon() {
     return `
       <svg width="36" height="36" viewBox="0 0 32 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <text x="2" y="16" font-family="Arial, sans-serif" font-size="14" font-weight="900" fill="#9527F5">Txt</text>
+        <defs>
+          <filter id="distress-filter-text" x="-50%" y="-50%" width="200%" height="200%">
+            <feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="4" result="noise"/>
+            <feDisplacementMap in="SourceGraphic" in2="noise" scale="1.5" xChannelSelector="R" yChannelSelector="G"/>
+          </filter>
+        </defs>
+        <text x="2" y="16" font-family="Arial, sans-serif" font-size="14" font-weight="900" fill="#9527F5" filter="url(#distress-filter-text)">TXT</text>
       </svg>
     `;
   },
@@ -9717,6 +10134,43 @@ const ButtonPanel = {
         border-radius: 100px;
         box-shadow: 0 4px 20px rgba(149, 39, 245, 0.3), 0 2px 8px rgba(149, 39, 245, 0.2);
         background: white;
+        transform-origin: center;
+      }
+
+      /* Pop-in animation for wrapper container appearing */
+      .vocab-wrapper-container.pop-in {
+        animation: wrapperContainerPopIn 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+      }
+
+      /* Pop-out animation for wrapper container disappearing */
+      .vocab-wrapper-container.pop-out {
+        animation: wrapperContainerPopOut 0.3s cubic-bezier(0.6, 0, 0.4, 1) forwards;
+      }
+
+      @keyframes wrapperContainerPopIn {
+        0% {
+          opacity: 0;
+          transform: scale(0);
+        }
+        60% {
+          opacity: 1;
+          transform: scale(1.1);
+        }
+        100% {
+          opacity: 1;
+          transform: scale(1);
+        }
+      }
+
+      @keyframes wrapperContainerPopOut {
+        0% {
+          opacity: 1;
+          transform: scale(1);
+        }
+        100% {
+          opacity: 0;
+          transform: scale(0);
+        }
       }
 
       /* Main Button Group with Purple Shadow */
@@ -9974,49 +10428,20 @@ const ButtonPanel = {
       }
 
       /* Magic Meaning Button - VIBGYOROYGBIV Flowing Gradient when enabled */
+      /* Magic meaning button - solid purple when enabled with breathing animation */
       #magic-meaning:not(.disabled) {
-        background: linear-gradient(
-          90deg,
-          #9400D3 0%,   /* Violet */
-          #4B0082 6.25%, /* Indigo */
-          #0000FF 12.5%, /* Blue */
-          #00FF00 18.75%, /* Green */
-          #FFFF00 25%,   /* Yellow */
-          #FF7F00 31.25%, /* Orange */
-          #FF0000 37.5%, /* Red */
-          #FF7F00 43.75%, /* Orange (reverse) */
-          #FFFF00 50%,   /* Yellow (reverse) */
-          #00FF00 56.25%, /* Green (reverse) */
-          #0000FF 62.5%, /* Blue (reverse) */
-          #4B0082 68.75%, /* Indigo (reverse) */
-          #9400D3 75%,   /* Violet (reverse) */
-          #4B0082 81.25%, /* Indigo (forward again) */
-          #0000FF 87.5%, /* Blue (forward again) */
-          #00FF00 93.75%, /* Green (forward again) */
-          #9400D3 100%   /* Violet (seamless loop) */
-        );
-        background-size: 800% 100%;
-        border-color: #9400D3;
-        animation: vibgyoroygbivFlow 4s linear infinite, vocab-magic-ready 2s ease-in-out infinite;
-        position: relative;
-        overflow: hidden;
-        isolation: isolate;
+        background: #9527F5 !important;
+        border-color: #9527F5 !important;
+        color: white !important;
+        animation: magicMeaningBreathing 2s ease-in-out infinite !important;
       }
       
       #magic-meaning:hover:not(.disabled) {
-        animation: vibgyoroygbivFlow 2.5s linear infinite, vocab-magic-ready 1.5s ease-in-out infinite;
+        background: #7a1fd9 !important;
+        border-color: #7a1fd9 !important;
       }
 
-      @keyframes vibgyoroygbivFlow {
-        0% {
-          background-position: 0% 50%;
-        }
-        100% {
-          background-position: 87.5% 50%;
-        }
-      }
-
-      @keyframes vocab-magic-ready {
+      @keyframes magicMeaningBreathing {
         0%, 100% {
           transform: scale(1);
           box-shadow: 0 2px 8px rgba(149, 39, 245, 0.3);
@@ -11872,26 +12297,127 @@ const ButtonPanel = {
       }
 
       /* Attention-grabbing animation when button becomes enabled */
-      #magic-meaning.just-enabled {
-        animation: vocab-magic-attention 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+      /* Magic meaning enabled notification popup - speech bubble design */
+      .vocab-magic-meaning-notification {
+        position: fixed !important;
+        background: white !important;
+        color: #333 !important;
+        padding: 12px 16px 32px 16px !important;
+        border-radius: 12px !important;
+        border: 1px solid #9527F5 !important;
+        font-size: 14px !important;
+        font-weight: 500 !important;
+        text-align: left !important;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif !important;
+        box-shadow: 0 0 20px rgba(178, 156, 251, 0.3), 0 4px 12px rgba(178, 156, 251, 0.2) !important;
+        z-index: 2147483647 !important;
+        pointer-events: all !important;
+        opacity: 0 !important;
+        transform: translateY(5px) scale(0.95) !important;
+        transition: opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1), 
+                   transform 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+        display: flex !important;
+        flex-direction: column !important;
+        align-items: flex-start !important;
+        justify-content: center !important;
+        visibility: visible !important;
+        width: auto !important;
+        min-width: 200px !important;
+        min-height: 55px !important;
       }
 
-      @keyframes vocab-magic-attention {
-        0% {
-          transform: scale(1);
-        }
-        30% {
-          transform: scale(1.15);
-        }
-        50% {
-          transform: scale(0.95);
-        }
-        70% {
-          transform: scale(1.05);
-        }
-        100% {
-          transform: scale(1);
-        }
+      .vocab-magic-meaning-notification.visible {
+        opacity: 1 !important;
+        transform: translateY(0) scale(1) !important;
+      }
+
+      /* Close button in top-right */
+      .vocab-magic-meaning-notification-close {
+        position: absolute !important;
+        top: 10px !important;
+        right: 10px !important;
+        width: 20px !important;
+        height: 20px !important;
+        border: none !important;
+        background: transparent !important;
+        cursor: pointer !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        padding: 0 !important;
+        opacity: 0.8 !important;
+        transition: opacity 0.2s ease, transform 0.2s ease !important;
+        z-index: 10 !important;
+      }
+
+      .vocab-magic-meaning-notification-close:hover {
+        opacity: 1 !important;
+        transform: scale(1.1) !important;
+      }
+
+      .vocab-magic-meaning-notification-close:active {
+        transform: scale(0.9) !important;
+      }
+
+      .vocab-magic-meaning-notification-close svg {
+        width: 14px !important;
+        height: 14px !important;
+        stroke: #9527F5 !important;
+      }
+
+      /* Don't show again button in bottom-right */
+      .vocab-magic-meaning-dont-show {
+        position: absolute !important;
+        bottom: 10px !important;
+        right: 10px !important;
+        background: white !important;
+        border: 1px solid #d4c4f0 !important;
+        color: #b29cfb !important;
+        font-size: 11px !important;
+        font-weight: 500 !important;
+        cursor: pointer !important;
+        padding: 4px 8px !important;
+        border-radius: 6px !important;
+        opacity: 1 !important;
+        transition: all 0.2s ease !important;
+        text-decoration: none !important;
+      }
+
+      .vocab-magic-meaning-dont-show:hover {
+        border-color: #9527F5 !important;
+        color: #9527F5 !important;
+        background: #f5f0ff !important;
+      }
+
+      /* Notification message text - purple and vertically centered */
+      .vocab-magic-meaning-notification-message {
+        color: #9527F5 !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        font-size: 14px !important;
+        line-height: 1.4 !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        flex: 1 !important;
+        height: 100% !important;
+      }
+
+      /* Speech bubble tail pointing from magic-meaning button to notification (on left side) */
+      .vocab-magic-meaning-notification::before {
+        content: '' !important;
+        position: absolute !important;
+        left: -10px !important;
+        top: 35px !important;
+        transform: rotate(45deg) !important;
+        width: 14px !important;
+        height: 14px !important;
+        background: white !important;
+        border-left: 1px solid #9527F5 !important;
+        border-bottom: 1px solid #9527F5 !important;
+        border-top: none !important;
+        border-right: none !important;
+        border-radius: 0 0 0 3px !important;
       }
 
 
@@ -13936,6 +14462,22 @@ const ButtonPanel = {
       }
       // Add visible class for initial slide-in animation
       this.panelContainer.classList.add('visible');
+      
+      // Get the wrapper container and trigger pop-in animation
+      const wrapperContainer = this.panelContainer.querySelector('.vocab-wrapper-container');
+      if (wrapperContainer) {
+        // Remove any previous animation classes
+        wrapperContainer.classList.remove('pop-out', 'pop-in');
+        // Force reflow to ensure class removal is processed
+        void wrapperContainer.offsetHeight;
+        // Add pop-in animation class
+        wrapperContainer.classList.add('pop-in');
+        // Remove animation class after animation completes
+        setTimeout(() => {
+          wrapperContainer.classList.remove('pop-in');
+        }, 500);
+      }
+      
       console.log('[ButtonPanel] Panel shown at left:', this.panelContainer.style.left);
     }
   },
@@ -13945,8 +14487,27 @@ const ButtonPanel = {
    */
   hide() {
     if (this.panelContainer) {
-      this.panelContainer.style.display = 'none';
-      console.log('[ButtonPanel] Panel hidden');
+      // Get the wrapper container and trigger pop-out animation
+      const wrapperContainer = this.panelContainer.querySelector('.vocab-wrapper-container');
+      if (wrapperContainer) {
+        // Remove any previous animation classes
+        wrapperContainer.classList.remove('pop-in', 'pop-out');
+        // Force reflow to ensure class removal is processed
+        void wrapperContainer.offsetHeight;
+        // Add pop-out animation class
+        wrapperContainer.classList.add('pop-out');
+        
+        // Wait for animation to complete before hiding
+        setTimeout(() => {
+          this.panelContainer.style.display = 'none';
+          wrapperContainer.classList.remove('pop-out');
+          console.log('[ButtonPanel] Panel hidden');
+        }, 300); // Match animation duration
+      } else {
+        // Fallback if wrapper container not found
+        this.panelContainer.style.display = 'none';
+        console.log('[ButtonPanel] Panel hidden');
+      }
     }
   },
 
@@ -14012,13 +14573,13 @@ const ButtonPanel = {
         magicMeaningBtn.classList.remove('disabled');
         magicMeaningBtn.disabled = false; // Remove disabled attribute
         
-        // If button was previously disabled and is now enabled, trigger attention animation
+        // If button was previously disabled and is now enabled, show notification popup
         if (wasDisabled && !magicMeaningBtn.classList.contains('processing') && !magicMeaningBtn.classList.contains('success')) {
-          magicMeaningBtn.classList.add('just-enabled');
-          // Remove the class after animation completes
-          setTimeout(() => {
-            magicMeaningBtn.classList.remove('just-enabled');
-          }, 600);
+          // Check if user has chosen to not show this notification
+          const dontShowAgain = localStorage.getItem('vocab-dont-show-magic-meaning-enabled');
+          if (!dontShowAgain) {
+            this.showMagicMeaningEnabledNotification(magicMeaningBtn);
+          }
         }
       } else {
         magicMeaningBtn.classList.add('disabled');
@@ -14034,6 +14595,132 @@ const ButtonPanel = {
       } else {
         this.hideButtonSmooth(askBtn);
       }
+    }
+  },
+
+  /**
+   * Show notification popup when magic meaning button is enabled
+   * @param {HTMLElement} button - The magic meaning button element
+   */
+  showMagicMeaningEnabledNotification(button) {
+    // Remove any existing notification
+    const existingNotification = document.querySelector('.vocab-magic-meaning-notification');
+    if (existingNotification) {
+      existingNotification.remove();
+    }
+
+    // Create notification popup
+    const notification = document.createElement('div');
+    notification.className = 'vocab-magic-meaning-notification';
+
+    // Create close button (cross icon in top-right)
+    const closeBtn = document.createElement('button');
+    closeBtn.className = 'vocab-magic-meaning-notification-close';
+    closeBtn.innerHTML = `
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M12 4L4 12M4 4L12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    `;
+    closeBtn.addEventListener('click', () => {
+      this.hideMagicMeaningEnabledNotification(notification);
+    });
+
+    // Create message text (no icon)
+    const message = document.createElement('div');
+    message.className = 'vocab-magic-meaning-notification-message';
+    message.textContent = 'Get contextual explanation';
+
+    // Create "Don't show again" button (bottom-right)
+    const dontShowBtn = document.createElement('button');
+    dontShowBtn.className = 'vocab-magic-meaning-dont-show';
+    dontShowBtn.textContent = "Don't show again";
+    dontShowBtn.addEventListener('click', () => {
+      // Save preference to localStorage
+      localStorage.setItem('vocab-dont-show-magic-meaning-enabled', 'true');
+      this.hideMagicMeaningEnabledNotification(notification);
+    });
+
+    // Append elements
+    notification.appendChild(closeBtn);
+    notification.appendChild(message);
+    notification.appendChild(dontShowBtn);
+
+    // Add to document first (needed for proper layout calculation)
+    notification.style.visibility = 'hidden'; // Hide until positioned
+    document.body.appendChild(notification);
+
+    // Position notification exactly on the right side of the magic-meaning button
+    // Use requestAnimationFrame to ensure layout is stable and get fresh button position
+    requestAnimationFrame(() => {
+      // Get fresh button position after layout is updated
+      const buttonRect = button.getBoundingClientRect();
+      const buttonCenterY = buttonRect.top + (buttonRect.height / 2);
+      
+      // Get notification dimensions to calculate pointer position
+      const notificationRect = notification.getBoundingClientRect();
+      const notificationHeight = notificationRect.height || notification.offsetHeight;
+      
+      // Pointer is positioned at top: 35px from notification top (CSS), height: 14px
+      // Pointer center = top + (height / 2) = 35px + 7px = 42px from notification top
+      // We need to calculate notification position so pointer center aligns with button center
+      const pointerTop = 35; // CSS top position of pointer
+      const pointerHeight = 14; // CSS height of pointer
+      const pointerCenterFromTop = pointerTop + (pointerHeight / 2); // Center of pointer: 42px
+      const buttonCenterYPosition = buttonCenterY; // Button center Y in viewport
+      
+      // Position notification so its pointer center (at 42px from top) aligns with button center
+      notification.style.position = 'fixed';
+      notification.style.top = (buttonCenterYPosition - pointerCenterFromTop) + 'px';
+      notification.style.left = (buttonRect.right + 10) + 'px';
+      notification.style.zIndex = '2147483647';
+      notification.style.visibility = 'visible'; // Show after positioning
+
+      // Double-check positioning after notification is visible (especially important for text selection)
+      requestAnimationFrame(() => {
+        // Recalculate after notification is rendered to ensure accurate positioning
+        const finalButtonRect = button.getBoundingClientRect();
+        const finalButtonCenterY = finalButtonRect.top + (finalButtonRect.height / 2);
+        notification.style.top = (finalButtonCenterY - pointerCenterFromTop) + 'px';
+        
+        // Trigger animation
+        setTimeout(() => {
+          notification.classList.add('visible');
+        }, 10);
+
+        // Auto-hide after 5 seconds if user doesn't interact (start after notification is visible)
+        const autoHideTimeout = setTimeout(() => {
+          this.hideMagicMeaningEnabledNotification(notification);
+        }, 5000);
+
+        // Clear auto-hide timeout if user interacts
+        notification.addEventListener('mouseenter', () => {
+          clearTimeout(autoHideTimeout);
+        });
+
+        // Additional check after a short delay to handle any layout shifts (especially for text selection)
+        setTimeout(() => {
+          requestAnimationFrame(() => {
+            const finalButtonRect2 = button.getBoundingClientRect();
+            const finalButtonCenterY2 = finalButtonRect2.top + (finalButtonRect2.height / 2);
+            notification.style.top = (finalButtonCenterY2 - pointerCenterFromTop) + 'px';
+          });
+        }, 50); // Small delay to catch layout shifts
+      });
+    });
+  },
+
+  /**
+   * Hide the magic meaning enabled notification
+   * @param {HTMLElement} notification - The notification element
+   */
+  hideMagicMeaningEnabledNotification(notification) {
+    if (notification) {
+      notification.classList.remove('visible');
+      setTimeout(() => {
+        if (notification.parentNode) {
+          notification.remove();
+        }
+      }, 300); // Match transition duration
     }
   },
 
@@ -15591,7 +16278,7 @@ const ButtonPanel = {
           
           // Continue with the rest of the cleanup
           this.continueModalCleanup();
-        }, 300); // 0.3s animation duration
+        }, 200); // 0.2s animation duration (faster)
         
         return; // Exit early, cleanup will continue in setTimeout
       } else {
