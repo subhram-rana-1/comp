@@ -3328,7 +3328,7 @@ const TextSelector = {
         text-decoration-line: underline;
         text-decoration-style: dashed;
         text-decoration-color: #9527F5;
-        text-decoration-thickness: 1px;
+        text-decoration-thickness: 0.6px;
         text-underline-offset: 2px;
         cursor: text;
         overflow: visible;
@@ -3586,7 +3586,7 @@ const TextSelector = {
       .vocab-text-simplified {
         text-decoration-color: #22c55e !important;
         text-decoration-style: dashed !important;
-        text-decoration-thickness: 2px !important;
+        text-decoration-thickness: 1.1px !important;
         transition: text-decoration-color 0.3s ease-out;
       }
       
@@ -5054,7 +5054,25 @@ const ChatDialog = {
     inputField.placeholder = 'Type your question here ...';
     inputField.rows = 1;
     
+    // Apply inline styles as a fallback to ensure visibility even if CSS is overridden
+    // Inline styles have the highest specificity and will override most site CSS
+    inputField.style.color = '#1f2937';
+    inputField.style.caretColor = '#9527F5';
+    inputField.style.backgroundColor = 'white';
+    
     console.log('[ChatDialog] Input field created with ID:', inputField.id);
+    
+    // Reapply visibility styles if they get removed (safeguard against site JavaScript)
+    const ensureVisibility = () => {
+      inputField.style.color = '#1f2937';
+      inputField.style.caretColor = '#9527F5';
+      inputField.style.backgroundColor = 'white';
+    };
+    
+    // Ensure visibility on focus and key events (in case site JavaScript tries to override)
+    inputField.addEventListener('focus', ensureVisibility);
+    inputField.addEventListener('keydown', ensureVisibility);
+    inputField.addEventListener('keyup', ensureVisibility);
     
     // Auto-resize textarea with scroll when max height reached
     inputField.addEventListener('input', (e) => {
@@ -5069,6 +5087,9 @@ const ChatDialog = {
       } else {
         e.target.style.overflowY = 'hidden';
       }
+      
+      // Ensure visibility is maintained during input
+      ensureVisibility();
     });
     
     // Handle Enter key (Shift+Enter for new line)
