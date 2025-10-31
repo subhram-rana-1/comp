@@ -17,23 +17,38 @@
   </div>
 
   
-  <!-- Cat Icon -->
-  <div class="icon-container">
-    <img src="/logo_1-removebg.png" alt="Cat with glasses" class="cat-icon">
+  <!-- Loading State -->
+  <div class="loading-state" id="loadingState">
+    <div class="loading-icon">
+      <svg class="loader-spinner" width="40" height="40" viewBox="0 0 40 40" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="20" cy="20" r="18" fill="none" stroke="#9527F5" stroke-width="3" stroke-linecap="round" stroke-dasharray="113" stroke-dashoffset="56.5">
+          <animate attributeName="stroke-dasharray" dur="1.5s" values="0 113;56.5 56.5;0 113;0 113" repeatCount="indefinite"/>
+          <animate attributeName="stroke-dashoffset" dur="1.5s" values="0;-56.5;-113;-113" repeatCount="indefinite"/>
+        </circle>
+      </svg>
+    </div>
+    <p class="loading-text">Page is loading</p>
   </div>
 
-  <!-- Title -->
-  <h1 class="title">Upskill Vocabulary and comprehension with AI</h1>
+  <!-- Normal Content (hidden by default) -->
+  <div class="normal-content" id="normalContent">
+    <!-- Cat Icon -->
+    <div class="icon-container">
+      <img src="/logo_1-removebg.png" alt="Cat with glasses" class="cat-icon">
+    </div>
 
+    <!-- Title -->
+    <h1 class="title">Upskill Vocabulary and comprehension with AI</h1>
 
-  <!-- Instructions -->
-  <div class="instructions">
-    <p class="instruction-item">
-      Double click a <span class="highlight">word</span> to select
-    </p>
-    <p class="instruction-item">
-      Select a <span class="highlight">passage containing multiple words</span> or sentences
-    </p>
+    <!-- Instructions -->
+    <div class="instructions">
+      <p class="instruction-item">
+        Double click a <span class="highlight">word</span> to select
+      </p>
+      <p class="instruction-item">
+        Select a <span class="highlight">passage containing multiple words</span> or sentences
+      </p>
+    </div>
   </div>
 
   <script src="/popup.js"></script>
