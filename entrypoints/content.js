@@ -3542,6 +3542,7 @@ const TextSelector = {
         z-index: 10000003;
         animation: vocab-icon-appear 0.4s ease-out;
         pointer-events: auto;
+        transition: opacity 0.3s ease-out, transform 0.3s ease-out;
       }
 
       /* Modal context: enhanced styling */
@@ -3750,6 +3751,8 @@ const TextSelector = {
         opacity: 0;
         transform: scale(0.8) translateY(-10px);
         pointer-events: none;
+        transition: opacity 0.3s ease-out, transform 0.3s ease-out;
+        animation: none; /* Disable appearance animation when vanishing */
       }
       
       /* Pulsate animation for text highlights - light purple */
@@ -9892,6 +9895,43 @@ const ButtonPanel = {
         border-radius: 100px;
         box-shadow: 0 4px 20px rgba(149, 39, 245, 0.3), 0 2px 8px rgba(149, 39, 245, 0.2);
         background: white;
+        transform-origin: center;
+      }
+
+      /* Pop-in animation for wrapper container appearing */
+      .vocab-wrapper-container.pop-in {
+        animation: wrapperContainerPopIn 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+      }
+
+      /* Pop-out animation for wrapper container disappearing */
+      .vocab-wrapper-container.pop-out {
+        animation: wrapperContainerPopOut 0.3s cubic-bezier(0.6, 0, 0.4, 1) forwards;
+      }
+
+      @keyframes wrapperContainerPopIn {
+        0% {
+          opacity: 0;
+          transform: scale(0);
+        }
+        60% {
+          opacity: 1;
+          transform: scale(1.1);
+        }
+        100% {
+          opacity: 1;
+          transform: scale(1);
+        }
+      }
+
+      @keyframes wrapperContainerPopOut {
+        0% {
+          opacity: 1;
+          transform: scale(1);
+        }
+        100% {
+          opacity: 0;
+          transform: scale(0);
+        }
       }
 
       /* Main Button Group with Purple Shadow */
@@ -14111,6 +14151,22 @@ const ButtonPanel = {
       }
       // Add visible class for initial slide-in animation
       this.panelContainer.classList.add('visible');
+      
+      // Get the wrapper container and trigger pop-in animation
+      const wrapperContainer = this.panelContainer.querySelector('.vocab-wrapper-container');
+      if (wrapperContainer) {
+        // Remove any previous animation classes
+        wrapperContainer.classList.remove('pop-out', 'pop-in');
+        // Force reflow to ensure class removal is processed
+        void wrapperContainer.offsetHeight;
+        // Add pop-in animation class
+        wrapperContainer.classList.add('pop-in');
+        // Remove animation class after animation completes
+        setTimeout(() => {
+          wrapperContainer.classList.remove('pop-in');
+        }, 500);
+      }
+      
       console.log('[ButtonPanel] Panel shown at left:', this.panelContainer.style.left);
     }
   },
@@ -14120,8 +14176,27 @@ const ButtonPanel = {
    */
   hide() {
     if (this.panelContainer) {
-      this.panelContainer.style.display = 'none';
-      console.log('[ButtonPanel] Panel hidden');
+      // Get the wrapper container and trigger pop-out animation
+      const wrapperContainer = this.panelContainer.querySelector('.vocab-wrapper-container');
+      if (wrapperContainer) {
+        // Remove any previous animation classes
+        wrapperContainer.classList.remove('pop-in', 'pop-out');
+        // Force reflow to ensure class removal is processed
+        void wrapperContainer.offsetHeight;
+        // Add pop-out animation class
+        wrapperContainer.classList.add('pop-out');
+        
+        // Wait for animation to complete before hiding
+        setTimeout(() => {
+          this.panelContainer.style.display = 'none';
+          wrapperContainer.classList.remove('pop-out');
+          console.log('[ButtonPanel] Panel hidden');
+        }, 300); // Match animation duration
+      } else {
+        // Fallback if wrapper container not found
+        this.panelContainer.style.display = 'none';
+        console.log('[ButtonPanel] Panel hidden');
+      }
     }
   },
 
