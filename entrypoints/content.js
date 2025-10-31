@@ -295,15 +295,60 @@ export default defineContentScript({
       console.log('[FIX] === END FIXING ===');
     };
     
-    // Get current domain
-    const currentDomain = window.location.hostname;
-    const storageKey = `isExtensionEnabledFor_${currentDomain}`;
+    // Global storage key for extension state
+    const GLOBAL_STORAGE_KEY = 'is_extension_globally_enabled';
     
-    console.log('[Content Script] Current domain:', currentDomain);
-    console.log('[Content Script] Storage key:', storageKey);
+    console.log('[Content Script] Initializing with global storage key:', GLOBAL_STORAGE_KEY);
     
     // Initialize the button panel when content script loads
     await ButtonPanel.init();
+    
+    // Initialize the word selector functionality (will check state internally)
+    await WordSelector.init();
+    
+    // Initialize the text selector functionality (will check state internally)
+    await TextSelector.init();
+    
+    // Initialize the chat dialog
+    ChatDialog.init();
+    
+    // Check global extension state on page load/reload AFTER initialization
+    const checkGlobalExtensionState = async () => {
+      try {
+        const result = await chrome.storage.local.get([GLOBAL_STORAGE_KEY]);
+        let isEnabled = result[GLOBAL_STORAGE_KEY];
+        
+        // If not found, create it and set to true (enabled by default)
+        if (isEnabled === undefined) {
+          isEnabled = true;
+          await chrome.storage.local.set({ [GLOBAL_STORAGE_KEY]: isEnabled });
+          console.log('[Content Script] Global toggle state not found, created with default value: true');
+        }
+        
+        console.log('[Content Script] Global extension state:', isEnabled);
+        
+        if (isEnabled) {
+          ButtonPanel.show();
+          WordSelector.enable();
+          TextSelector.enable();
+        } else {
+          ButtonPanel.hide();
+          WordSelector.disable();
+          TextSelector.disable();
+          WordSelector.clearAll();
+          TextSelector.clearAll();
+        }
+      } catch (error) {
+        console.error('[Content Script] Error checking global extension state:', error);
+        // Default to enabled on error
+        ButtonPanel.show();
+        WordSelector.enable();
+        TextSelector.enable();
+      }
+    };
+    
+    // Check state after initialization
+    await checkGlobalExtensionState();
     
     // PERMANENT FIX: Ensure import-content button always has indicator
     setTimeout(() => {
@@ -378,24 +423,15 @@ export default defineContentScript({
       }
     };
     
-    // Initialize the word selector functionality
-    await WordSelector.init();
-    
-    // Initialize the text selector functionality
-    await TextSelector.init();
-    
-    // Initialize the chat dialog
-    ChatDialog.init();
-    
-    // Listen for storage changes to show/hide panel (per-domain)
+    // Listen for storage changes to show/hide panel (global)
     chrome.storage.onChanged.addListener((changes, namespace) => {
       console.log('[Content Script] Storage changed:', changes, 'Namespace:', namespace);
       
       if (namespace === 'local') {
-        // Check if our domain's key changed
-        if (changes[storageKey]) {
-          const isEnabled = changes[storageKey].newValue;
-          console.log(`[Content Script] Toggle state changed for ${currentDomain}:`, isEnabled);
+        // Check if global key changed
+        if (changes[GLOBAL_STORAGE_KEY]) {
+          const isEnabled = changes[GLOBAL_STORAGE_KEY].newValue;
+          console.log(`[Content Script] Global toggle state changed:`, isEnabled);
           
           if (isEnabled) {
             ButtonPanel.show();
@@ -417,8 +453,8 @@ export default defineContentScript({
     chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       console.log('[Content Script] Message received:', message);
       
-      if (message.type === 'TOGGLE_EXTENSION' && message.domain === currentDomain) {
-        console.log(`[Content Script] Toggling extension for ${currentDomain}:`, message.isEnabled);
+      if (message.type === 'TOGGLE_EXTENSION_GLOBAL') {
+        console.log(`[Content Script] Global toggle changed:`, message.isEnabled);
         
         if (message.isEnabled) {
           ButtonPanel.show();
@@ -434,8 +470,8 @@ export default defineContentScript({
         }
         
         sendResponse({ success: true });
-      } else if (message.type === 'TAB_STATE_CHANGE' && message.domain === currentDomain) {
-        console.log(`[Content Script] Tab state change for ${currentDomain}:`, message.eventType);
+      } else if (message.type === 'TAB_STATE_CHANGE') {
+        console.log(`[Content Script] Tab state change:`, message.eventType);
         handleTabStateChange(message.domain, message.eventType, sendResponse);
       } else if (message.type === 'CHECK_EXTENSION_STATE') {
         handleExtensionStateCheck(message.domain, sendResponse);
@@ -458,14 +494,16 @@ async function handleTabStateChange(domain, eventType, sendResponse) {
   try {
     console.log(`[Content Script] Handling tab state change: ${eventType} for ${domain}`);
     
-    // Check if extension state exists in storage
-    const storageKey = `isExtensionEnabledFor_${domain}`;
-    const result = await chrome.storage.local.get([storageKey]);
-    const isEnabled = result[storageKey];
+    // Check global extension state in storage
+    const GLOBAL_STORAGE_KEY = 'is_extension_globally_enabled';
+    const result = await chrome.storage.local.get([GLOBAL_STORAGE_KEY]);
+    let isEnabled = result[GLOBAL_STORAGE_KEY];
     
     if (isEnabled === undefined) {
-      // No storage data found - this is a new domain, set to enabled (ON by default)
-      console.log(`[Content Script] New domain detected: ${domain}, setting to enabled`);
+      // No storage data found - create it and set to enabled (ON by default)
+      console.log(`[Content Script] Global toggle state not found, creating with default value: true`);
+      isEnabled = true;
+      await chrome.storage.local.set({ [GLOBAL_STORAGE_KEY]: isEnabled });
       
       // Ensure all components are enabled (default ON)
       ButtonPanel.show();
@@ -475,7 +513,7 @@ async function handleTabStateChange(domain, eventType, sendResponse) {
       sendResponse({ success: true, isEnabled: true, isNewDomain: true });
     } else {
       // Storage data exists, use the stored value
-      console.log(`[Content Script] Existing domain: ${domain}, enabled: ${isEnabled}`);
+      console.log(`[Content Script] Global extension state: ${isEnabled}`);
       
       if (isEnabled) {
         ButtonPanel.show();
@@ -504,11 +542,18 @@ async function handleTabStateChange(domain, eventType, sendResponse) {
  */
 async function handleExtensionStateCheck(domain, sendResponse) {
   try {
-    const storageKey = `isExtensionEnabledFor_${domain}`;
-    const result = await chrome.storage.local.get([storageKey]);
-    const isEnabled = result[storageKey] ?? true; // Default to true (enabled) for new domains
+    const GLOBAL_STORAGE_KEY = 'is_extension_globally_enabled';
+    const result = await chrome.storage.local.get([GLOBAL_STORAGE_KEY]);
+    let isEnabled = result[GLOBAL_STORAGE_KEY];
     
-    console.log(`[Content Script] Extension state check for ${domain}:`, isEnabled);
+    // If not found, create it and set to true (enabled by default)
+    if (isEnabled === undefined) {
+      isEnabled = true;
+      await chrome.storage.local.set({ [GLOBAL_STORAGE_KEY]: isEnabled });
+      console.log('[Content Script] Global toggle state not found, created with default value: true');
+    }
+    
+    console.log(`[Content Script] Global extension state:`, isEnabled);
     
     sendResponse({
       success: true,
@@ -516,7 +561,7 @@ async function handleExtensionStateCheck(domain, sendResponse) {
       domain: domain
     });
   } catch (error) {
-    console.error('[Content Script] Error checking extension state:', error);
+    console.error('[Content Script] Error checking global extension state:', error);
     sendResponse({
       success: false,
       error: error.message,
@@ -659,12 +704,20 @@ const WordSelector = {
    */
   async checkExtensionEnabled() {
     try {
-      const currentDomain = window.location.hostname;
-      const storageKey = `isExtensionEnabledFor_${currentDomain}`;
-      const result = await chrome.storage.local.get([storageKey]);
-      return result[storageKey] ?? true; // Default to true (enabled) for new domains
+      const GLOBAL_STORAGE_KEY = 'is_extension_globally_enabled';
+      const result = await chrome.storage.local.get([GLOBAL_STORAGE_KEY]);
+      let isEnabled = result[GLOBAL_STORAGE_KEY];
+      
+      // If not found, create it and set to true (enabled by default)
+      if (isEnabled === undefined) {
+        isEnabled = true;
+        await chrome.storage.local.set({ [GLOBAL_STORAGE_KEY]: isEnabled });
+        console.log('[WordSelector] Global toggle state not found, created with default value: true');
+      }
+      
+      return isEnabled;
     } catch (error) {
-      console.error('[WordSelector] Error checking extension state:', error);
+      console.error('[WordSelector] Error checking global extension state:', error);
       return true; // Default to true (enabled) on error
     }
   },
@@ -2485,12 +2538,20 @@ const TextSelector = {
    */
   async checkExtensionEnabled() {
     try {
-      const currentDomain = window.location.hostname;
-      const storageKey = `isExtensionEnabledFor_${currentDomain}`;
-      const result = await chrome.storage.local.get([storageKey]);
-      return result[storageKey] ?? true; // Default to true (enabled) for new domains
+      const GLOBAL_STORAGE_KEY = 'is_extension_globally_enabled';
+      const result = await chrome.storage.local.get([GLOBAL_STORAGE_KEY]);
+      let isEnabled = result[GLOBAL_STORAGE_KEY];
+      
+      // If not found, create it and set to true (enabled by default)
+      if (isEnabled === undefined) {
+        isEnabled = true;
+        await chrome.storage.local.set({ [GLOBAL_STORAGE_KEY]: isEnabled });
+        console.log('[TextSelector] Global toggle state not found, created with default value: true');
+      }
+      
+      return isEnabled;
     } catch (error) {
-      console.error('[TextSelector] Error checking extension state:', error);
+      console.error('[TextSelector] Error checking global extension state:', error);
       return true; // Default to true (enabled) on error
     }
   },
@@ -9098,12 +9159,20 @@ const ButtonPanel = {
    */
   async checkExtensionEnabled() {
     try {
-      const currentDomain = window.location.hostname;
-      const storageKey = `isExtensionEnabledFor_${currentDomain}`;
-      const result = await chrome.storage.local.get([storageKey]);
-      return result[storageKey] ?? true; // Default to true (enabled) for new domains
+      const GLOBAL_STORAGE_KEY = 'is_extension_globally_enabled';
+      const result = await chrome.storage.local.get([GLOBAL_STORAGE_KEY]);
+      let isEnabled = result[GLOBAL_STORAGE_KEY];
+      
+      // If not found, create it and set to true (enabled by default)
+      if (isEnabled === undefined) {
+        isEnabled = true;
+        await chrome.storage.local.set({ [GLOBAL_STORAGE_KEY]: isEnabled });
+        console.log('[ButtonPanel] Global toggle state not found, created with default value: true');
+      }
+      
+      return isEnabled;
     } catch (error) {
-      console.error('Error checking extension state:', error);
+      console.error('[ButtonPanel] Error checking global extension state:', error);
       return true; // Default to true (enabled) on error
     }
   },
