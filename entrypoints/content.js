@@ -312,6 +312,339 @@ export default defineContentScript({
     // Initialize the chat dialog
     ChatDialog.init();
     
+    // ===================================
+    // Banner Module - Shows welcome banner when extension is enabled
+    // ===================================
+    const BannerModule = {
+      STORAGE_KEY: 'magic_comprehension_banner_dismissed',
+      bannerContainer: null,
+      
+      /**
+       * Check if banner should be shown
+       * @returns {Promise<boolean>} Whether to show the banner
+       */
+      async shouldShowBanner() {
+        try {
+          // Check if extension is enabled
+          const result = await chrome.storage.local.get([GLOBAL_STORAGE_KEY]);
+          const isEnabled = result[GLOBAL_STORAGE_KEY] ?? true;
+          
+          if (!isEnabled) {
+            return false;
+          }
+          
+          // Check if user has dismissed the banner
+          const dismissedResult = await chrome.storage.local.get([this.STORAGE_KEY]);
+          const isDismissed = dismissedResult[this.STORAGE_KEY] ?? false;
+          
+          return !isDismissed;
+        } catch (error) {
+          console.error('[Banner] Error checking banner state:', error);
+          return false;
+        }
+      },
+      
+      /**
+       * Mark banner as dismissed
+       */
+      async dismissBanner() {
+        try {
+          await chrome.storage.local.set({ [this.STORAGE_KEY]: true });
+          console.log('[Banner] Banner dismissed');
+        } catch (error) {
+          console.error('[Banner] Error dismissing banner:', error);
+        }
+      },
+      
+      /**
+       * Create the banner HTML structure
+       */
+      createBanner() {
+        if (this.bannerContainer) {
+          return; // Already created
+        }
+        
+        // Create main container
+        this.bannerContainer = document.createElement('div');
+        this.bannerContainer.id = 'magic-comprehension-banner';
+        this.bannerContainer.className = 'magic-comprehension-banner';
+        
+        // Create header with close button (cross icon at top right)
+        const header = document.createElement('div');
+        header.className = 'banner-header';
+        
+        const closeButton = document.createElement('button');
+        closeButton.className = 'banner-close';
+        closeButton.innerHTML = `
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M12 4L4 12M4 4L12 12" stroke="#9527F5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        `;
+        closeButton.setAttribute('aria-label', 'Close banner');
+        closeButton.addEventListener('click', () => this.hideBanner());
+        
+        header.appendChild(closeButton);
+        
+        // Create heading container (below cross icon, vertically centered)
+        const headingContainer = document.createElement('div');
+        headingContainer.className = 'banner-heading-container';
+        
+        const heading = document.createElement('h2');
+        heading.className = 'banner-heading';
+        heading.textContent = 'Magic comprehension';
+        
+        headingContainer.appendChild(heading);
+        
+        // Create instructions container
+        const instructions = document.createElement('div');
+        instructions.className = 'banner-instructions';
+        
+        const instruction1 = document.createElement('p');
+        instruction1.className = 'banner-instruction-item';
+        instruction1.innerHTML = 'Double click a <span class="banner-highlight">word</span> to select';
+        
+        const instruction2 = document.createElement('p');
+        instruction2.className = 'banner-instruction-item';
+        instruction2.innerHTML = 'Select a <span class="banner-highlight">passage containing multiple words</span> or sentences';
+        
+        instructions.appendChild(instruction1);
+        instructions.appendChild(instruction2);
+        
+        // Create footer with "Don't show again" button
+        const footer = document.createElement('div');
+        footer.className = 'banner-footer';
+        
+        const dontShowButton = document.createElement('button');
+        dontShowButton.className = 'banner-dont-show';
+        dontShowButton.textContent = "Don't show again";
+        dontShowButton.addEventListener('click', () => {
+          this.dismissBanner();
+          this.hideBanner();
+        });
+        
+        footer.appendChild(dontShowButton);
+        
+        // Assemble banner
+        this.bannerContainer.appendChild(header);
+        this.bannerContainer.appendChild(headingContainer);
+        this.bannerContainer.appendChild(instructions);
+        this.bannerContainer.appendChild(footer);
+        
+        // Add styles
+        this.addStyles();
+        
+        // Append to body
+        document.body.appendChild(this.bannerContainer);
+      },
+      
+      /**
+       * Add CSS styles for the banner
+       */
+      addStyles() {
+        if (document.getElementById('magic-comprehension-banner-styles')) {
+          return; // Styles already added
+        }
+        
+        const style = document.createElement('style');
+        style.id = 'magic-comprehension-banner-styles';
+        style.textContent = `
+          .magic-comprehension-banner {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            width: 320px;
+            max-width: calc(100vw - 40px);
+            background: white;
+            border: 2px solid #9527F5;
+            border-radius: 16px;
+            padding: 20px;
+            box-shadow: 0 4px 20px rgba(149, 39, 245, 0.15);
+            z-index: 10000;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            transform: translateX(400px);
+            opacity: 0;
+            transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.4s ease;
+          }
+          
+          .magic-comprehension-banner.show {
+            transform: translateX(0);
+            opacity: 1;
+          }
+          
+          .magic-comprehension-banner.hide {
+            transform: translateX(400px);
+            opacity: 0;
+          }
+          
+          .banner-header {
+            display: flex;
+            justify-content: flex-end;
+            align-items: flex-start;
+            margin-bottom: 8px;
+          }
+          
+          .banner-heading-container {
+            display: flex;
+            align-items: center;
+            margin-bottom: 16px;
+          }
+          
+          .banner-heading {
+            margin: 0;
+            font-size: 18px;
+            font-weight: 600;
+            color: #9527F5;
+          }
+          
+          .banner-close {
+            background: none;
+            border: none;
+            cursor: pointer;
+            padding: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 4px;
+            transition: background-color 0.2s ease;
+          }
+          
+          .banner-close:hover {
+            background-color: rgba(149, 39, 245, 0.1);
+          }
+          
+          .banner-close:active {
+            background-color: rgba(149, 39, 245, 0.2);
+          }
+          
+          .banner-instructions {
+            margin-bottom: 16px;
+          }
+          
+          .banner-instruction-item {
+            font-size: 14px;
+            color: #333;
+            margin: 10px 0;
+            line-height: 1.6;
+            position: relative;
+            padding-left: 0;
+          }
+          
+          .banner-instruction-item::before {
+            content: "ⓘ";
+            color: #9527F5;
+            font-size: 16px;
+            font-weight: bold;
+            margin-right: 8px;
+            vertical-align: middle;
+            line-height: 1;
+          }
+          
+          .banner-highlight {
+            background-color: #ede6ff;
+            color: #7a1fd9;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-weight: 500;
+          }
+          
+          .banner-footer {
+            display: flex;
+            justify-content: flex-end;
+            padding-top: 8px;
+          }
+          
+          .banner-dont-show {
+            background: none;
+            border: none;
+            color: #9527F5;
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            padding: 6px 12px;
+            border-radius: 6px;
+            transition: background-color 0.2s ease;
+          }
+          
+          .banner-dont-show:hover {
+            background-color: rgba(149, 39, 245, 0.1);
+          }
+          
+          .banner-dont-show:active {
+            background-color: rgba(149, 39, 245, 0.2);
+          }
+        `;
+        
+        document.head.appendChild(style);
+      },
+      
+      /**
+       * Show the banner with sliding-in animation
+       */
+      async showBanner() {
+        if (!this.bannerContainer) {
+          this.createBanner();
+        }
+        
+        const shouldShow = await this.shouldShowBanner();
+        if (!shouldShow) {
+          return;
+        }
+        
+        // Remove hide class and add show class
+        this.bannerContainer.classList.remove('hide');
+        this.bannerContainer.classList.add('show');
+      },
+      
+      /**
+       * Hide the banner with sliding-out animation
+       */
+      hideBanner() {
+        if (!this.bannerContainer) {
+          return;
+        }
+        
+        this.bannerContainer.classList.remove('show');
+        this.bannerContainer.classList.add('hide');
+        
+        // Remove from DOM after animation
+        setTimeout(() => {
+          if (this.bannerContainer && this.bannerContainer.classList.contains('hide')) {
+            this.bannerContainer.remove();
+            this.bannerContainer = null;
+          }
+        }, 400);
+      },
+      
+      /**
+       * Initialize the banner - check if it should be shown
+       */
+      async init() {
+        const shouldShow = await this.shouldShowBanner();
+        if (shouldShow) {
+          // Wait a bit for page to load, then show banner
+          setTimeout(() => {
+            this.showBanner();
+          }, 500);
+        }
+      },
+      
+      /**
+       * Update banner visibility based on extension state
+       */
+      async updateVisibility(isEnabled) {
+        if (isEnabled) {
+          const shouldShow = await this.shouldShowBanner();
+          if (shouldShow) {
+            this.showBanner();
+          } else {
+            this.hideBanner();
+          }
+        } else {
+          this.hideBanner();
+        }
+      }
+    };
+    
     // Check global extension state on page load/reload AFTER initialization
     const checkGlobalExtensionState = async () => {
       try {
@@ -338,12 +671,18 @@ export default defineContentScript({
           WordSelector.clearAll();
           TextSelector.clearAll();
         }
+        
+        // Update banner visibility after state check
+        await BannerModule.updateVisibility(isEnabled);
       } catch (error) {
         console.error('[Content Script] Error checking global extension state:', error);
         // Default to enabled on error
         ButtonPanel.show();
         WordSelector.enable();
         TextSelector.enable();
+        
+        // Update banner visibility on error (default to enabled)
+        await BannerModule.updateVisibility(true);
       }
     };
     
@@ -445,6 +784,9 @@ export default defineContentScript({
             WordSelector.clearAll();
             TextSelector.clearAll();
           }
+          
+          // Update banner visibility
+          BannerModule.updateVisibility(isEnabled);
         }
       }
     });
@@ -469,6 +811,9 @@ export default defineContentScript({
           TextSelector.clearAll();
         }
         
+        // Update banner visibility
+        BannerModule.updateVisibility(message.isEnabled);
+        
         sendResponse({ success: true });
       } else if (message.type === 'TAB_STATE_CHANGE') {
         console.log(`[Content Script] Tab state change:`, message.eventType);
@@ -477,6 +822,9 @@ export default defineContentScript({
         handleExtensionStateCheck(message.domain, sendResponse);
       }
     });
+    
+    // Initialize banner after checking extension state
+    await BannerModule.init();
   },
 });
 
@@ -1054,10 +1402,10 @@ const WordSelector = {
           // Change background to green with breathing animation
           wordHighlight.classList.add('vocab-word-explained', 'word-breathing');
           
-          // Remove breathing animation after it completes (1.6s)
+          // Remove breathing animation after it completes (0.8s)
           setTimeout(() => {
             wordHighlight.classList.remove('word-breathing');
-          }, 1600);
+          }, 800);
           
           // Store explanation data on the element
           wordHighlight.setAttribute('data-meaning', wordInfo.meaning);
@@ -2447,31 +2795,27 @@ const WordSelector = {
         transition: background-color 0.3s ease-in-out, border-color 0.3s ease-in-out, opacity 0.3s ease-in-out;
       }
       
-      /* Breathing animation for green word when it first appears */
+      /* Breathing animation for green word when it first appears - breathes twice (same as book icon) */
       .vocab-word-explained.word-breathing {
-        animation: wordGreenBreathing 1.6s ease-in-out;
+        display: inline-block !important;
+        animation: wordGreenBreathing 0.8s ease-in-out;
       }
       
       @keyframes wordGreenBreathing {
         0% {
           transform: scale(1);
-          background-color: rgba(34, 197, 94, 0.20);
         }
         25% {
           transform: scale(1.15);
-          background-color: rgba(34, 197, 94, 0.30);
         }
         50% {
           transform: scale(1);
-          background-color: rgba(34, 197, 94, 0.20);
         }
         75% {
           transform: scale(1.15);
-          background-color: rgba(34, 197, 94, 0.30);
         }
         100% {
           transform: scale(1);
-          background-color: rgba(34, 197, 94, 0.20);
         }
       }
       
@@ -3885,6 +4229,7 @@ const TextSelector = {
         }
         
         // Open ChatDialog in simplified mode with selected context
+        // Always use 'selected' context when opening from book icon to ensure expansion animation
         ChatDialog.open(simplifiedData.text, textKey, 'simplified', simplifiedData, 'selected');
       }
     });
@@ -5001,8 +5346,7 @@ const ChatDialog = {
       console.log('[ChatDialog] Looking for book icon with textKeys to try:', textKeysToTry);
       console.log('[ChatDialog] Original textKey (without -selected):', originalTextKey);
       
-      // Find the book icon for this textKey
-      // Use querySelectorAll and filter to avoid CSS selector issues with special characters
+      // Find the book icon for this textKey - use multiple strategies
       const allIconsWrappers = document.querySelectorAll('.vocab-text-icons-wrapper');
       console.log('[ChatDialog] All icons wrappers found:', allIconsWrappers.length);
       
@@ -5016,15 +5360,63 @@ const ChatDialog = {
       console.log('[ChatDialog] Available textKeys in DOM:', availableTextKeys);
       
       let iconsWrapper = null;
+      let bookIcon = null;
+      
+      // Strategy 1: Try exact match with textKeysToTry
       for (const wrapper of allIconsWrappers) {
         const wrapperTextKey = wrapper.getAttribute('data-text-key');
         if (textKeysToTry.includes(wrapperTextKey)) {
           iconsWrapper = wrapper;
-          console.log('[ChatDialog] ✓✓✓ MATCH FOUND! Icons wrapper with textKey:', wrapperTextKey);
-          break;
+          bookIcon = iconsWrapper.querySelector('.vocab-text-book-btn');
+          if (bookIcon) {
+            console.log('[ChatDialog] ✓✓✓ MATCH FOUND! Icons wrapper with textKey:', wrapperTextKey);
+            break;
+          }
         }
       }
-      const bookIcon = iconsWrapper ? iconsWrapper.querySelector('.vocab-text-book-btn') : null;
+      
+      // Strategy 2: Try matching by simplifiedData if available
+      if (!bookIcon && this.simplifiedData) {
+        console.log('[ChatDialog] Trying to find book icon by matching simplifiedData...');
+        for (const wrapper of allIconsWrappers) {
+          const wrapperTextKey = wrapper.getAttribute('data-text-key');
+          const simplifiedData = TextSelector.simplifiedTexts.get(wrapperTextKey);
+          if (simplifiedData && 
+              simplifiedData.textStartIndex === this.simplifiedData.textStartIndex &&
+              simplifiedData.textLength === this.simplifiedData.textLength) {
+            iconsWrapper = wrapper;
+            bookIcon = iconsWrapper.querySelector('.vocab-text-book-btn');
+            if (bookIcon) {
+              console.log('[ChatDialog] ✓✓✓ FOUND BOOK ICON by matching simplifiedData with textKey:', wrapperTextKey);
+              break;
+            }
+          }
+        }
+      }
+      
+      // Strategy 3: Try partial matching (check if currentTextKey contains or is contained in wrapperTextKey)
+      if (!bookIcon) {
+        console.log('[ChatDialog] Trying partial textKey matching...');
+        for (const wrapper of allIconsWrappers) {
+          const wrapperTextKey = wrapper.getAttribute('data-text-key');
+          // Check if keys share common parts
+          const currentParts = this.currentTextKey.split('-');
+          const wrapperParts = wrapperTextKey.split('-');
+          
+          // Match if they share at least 3 common parts (contentType, tabId, and one more)
+          if (currentParts.length >= 3 && wrapperParts.length >= 3) {
+            const commonParts = currentParts.filter(part => wrapperParts.includes(part));
+            if (commonParts.length >= 3) {
+              iconsWrapper = wrapper;
+              bookIcon = iconsWrapper.querySelector('.vocab-text-book-btn');
+              if (bookIcon) {
+                console.log('[ChatDialog] ✓✓✓ FOUND BOOK ICON by partial matching with textKey:', wrapperTextKey);
+                break;
+              }
+            }
+          }
+        }
+      }
       
       console.log('[ChatDialog] ===== BOOK ICON SEARCH RESULTS =====');
       console.log('[ChatDialog] Total icons wrappers found:', allIconsWrappers.length);
@@ -5161,7 +5553,16 @@ const ChatDialog = {
     // Fallback to original behavior if no book icon found or not selected text chat
     console.log('[ChatDialog] ===== USING FALLBACK CLOSE (NO MINIMIZATION) =====');
     console.log('[ChatDialog] No book icon found or not selected text chat, using fallback close');
-    this.hide();
+    
+    // If dialog is visible, use slide-out animation
+    if (this.dialogContainer && this.dialogContainer.classList.contains('visible')) {
+      this.dialogContainer.classList.remove('visible');
+      setTimeout(() => {
+        this.hide();
+      }, 300);
+    } else {
+      this.hide();
+    }
     
     // Keep the chat icon on the text (don't remove it)
     // The text should remain in askedTexts container
@@ -5218,8 +5619,9 @@ const ChatDialog = {
     const focusButton = document.createElement('button');
     focusButton.className = 'vocab-chat-focus-btn-top-right';
     focusButton.innerHTML = `
-      <svg width="16" height="16" viewBox="0 0 20 20" fill="none">
-        <path d="M3 10l7-7v4c7 0 7 6 7 6s-3-3-7-3v4l-7-7z" fill="#9527F5"/>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <polygon points="10,7 4,12 10,17" fill="white"/>
+        <rect x="10" y="10.5" width="10" height="3" fill="white"/>
       </svg>
       <span>Focus</span>
     `;
@@ -6826,34 +7228,176 @@ const ChatDialog = {
     if (this.dialogContainer) {
       console.log('[ChatDialog] Setting isOpen to true');
       this.isOpen = true;
+      
+      // Check if we should expand from book icon (only for selected text chat with textKey)
+      const shouldExpandFromBook = this.currentTextKey && this.chatContext === 'selected';
+      
+      if (shouldExpandFromBook) {
+        console.log('[ChatDialog] Opening from book icon - setting up expansion animation');
+        
+        // Find the book icon - try multiple strategies
+        let bookIcon = null;
+        let iconsWrapper = null;
+        
+        // Strategy 1: Try exact match with currentTextKey
+        iconsWrapper = document.querySelector(`.vocab-text-icons-wrapper[data-text-key="${this.currentTextKey}"]`);
+        if (iconsWrapper) {
+          bookIcon = iconsWrapper.querySelector('.vocab-text-book-btn');
+          if (bookIcon) {
+            console.log('[ChatDialog] Found book icon with exact currentTextKey:', this.currentTextKey);
+          }
+        }
+        
+        // Strategy 2: Try variations of currentTextKey
+        if (!bookIcon) {
+          const textKeysToTry = [this.currentTextKey];
+          
+          // Remove -selected suffix if present
+          if (this.currentTextKey.endsWith('-selected')) {
+            textKeysToTry.push(this.currentTextKey.replace(/-selected$/, ''));
+          }
+          
+          // Try extracting base key from format: contentType-tabId-startIndex-length
+          const parts = this.currentTextKey.split('-');
+          if (parts.length >= 4) {
+            // Try: contentType-tabId-startIndex-length
+            textKeysToTry.push(this.currentTextKey);
+            // Try: contentType-tabId-startIndex (without length)
+            if (parts.length >= 3) {
+              textKeysToTry.push(parts.slice(0, -1).join('-'));
+            }
+          }
+          
+          for (const textKey of textKeysToTry) {
+            if (textKey === this.currentTextKey) continue; // Already tried
+            iconsWrapper = document.querySelector(`.vocab-text-icons-wrapper[data-text-key="${textKey}"]`);
+            if (iconsWrapper) {
+              bookIcon = iconsWrapper.querySelector('.vocab-text-book-btn');
+              if (bookIcon) {
+                console.log('[ChatDialog] Found book icon with textKey variation:', textKey);
+                break;
+              }
+            }
+          }
+        }
+        
+        // Strategy 3: Search all book icons and match by simplifiedData if available
+        if (!bookIcon && this.simplifiedData) {
+          console.log('[ChatDialog] Trying to find book icon by matching simplifiedData...');
+          const allIconsWrappers = document.querySelectorAll('.vocab-text-icons-wrapper');
+          for (const wrapper of allIconsWrappers) {
+            const wrapperTextKey = wrapper.getAttribute('data-text-key');
+            const simplifiedData = TextSelector.simplifiedTexts.get(wrapperTextKey);
+            if (simplifiedData && 
+                simplifiedData.textStartIndex === this.simplifiedData.textStartIndex &&
+                simplifiedData.textLength === this.simplifiedData.textLength) {
+              bookIcon = wrapper.querySelector('.vocab-text-book-btn');
+              if (bookIcon) {
+                console.log('[ChatDialog] Found book icon by matching simplifiedData with textKey:', wrapperTextKey);
+                iconsWrapper = wrapper;
+                break;
+              }
+            }
+          }
+        }
+        
+        if (bookIcon) {
+          console.log('[ChatDialog] ✓✓✓ FOUND BOOK ICON! Starting expansion animation...');
+          
+          // Get book icon position
+          const bookIconRect = bookIcon.getBoundingClientRect();
+          const bookIconCenterX = bookIconRect.left + bookIconRect.width / 2;
+          const bookIconCenterY = bookIconRect.top + bookIconRect.height / 2;
+          
+          // Get dialog dimensions
+          const dialogRect = this.dialogContainer.getBoundingClientRect();
+          const dialogHeight = dialogRect.height || 600;
+          const viewportHeight = window.innerHeight;
+          const dialogTop = viewportHeight / 2;
+          const currentCenterY = dialogTop;
+          const targetCenterY = bookIconCenterY;
+          const translateYOffset = targetCenterY - currentCenterY;
+          const finalTranslateY = -dialogHeight / 2 + translateYOffset;
+          
+          // Calculate target X (book icon center X - dialog center X)
+          const dialogWidth = dialogRect.width || 400;
+          const dialogCenterX = window.innerWidth - dialogWidth / 2;
+          const targetX = bookIconCenterX - dialogCenterX;
+          
+          // Set initial position at book icon (small scale)
+          const startTransform = `translateY(${finalTranslateY}px) translateX(${targetX}px) scale(0)`;
+          this.dialogContainer.style.setProperty('transform', startTransform);
+          this.dialogContainer.style.setProperty('transition', 'none');
+          
+          // Set CSS variables for expansion animation
+          this.dialogContainer.style.setProperty('--expand-target-x', `${targetX}px`);
+          this.dialogContainer.style.setProperty('--expand-target-y', `${finalTranslateY}px`);
+          this.dialogContainer.style.setProperty('--expand-start-transform', startTransform);
+          this.dialogContainer.style.setProperty('--expand-end-transform', 'translateY(-50%) translateX(0) scale(1)');
+          
+          // Force a reflow to ensure initial position is set
+          this.dialogContainer.offsetHeight;
+          
+          // Add expanding class to trigger animation
+          this.dialogContainer.classList.add('expanding');
+          
+          // Add visible class immediately (but animation will override transform)
+          this.dialogContainer.classList.add('visible');
+          
+          // Remove expanding class after animation completes and restore normal state
+          setTimeout(() => {
+            // Set final transform explicitly to ensure dialog stays in position
+            this.dialogContainer.style.setProperty('transform', 'translateY(-50%) translateX(0) scale(1)');
+            // Remove expanding class after transform is set
+            this.dialogContainer.classList.remove('expanding');
+            // Restore transition for normal interactions
+            this.dialogContainer.style.setProperty('transition', '');
+            // Clean up CSS variables
+            this.dialogContainer.style.removeProperty('--expand-target-x');
+            this.dialogContainer.style.removeProperty('--expand-target-y');
+            this.dialogContainer.style.removeProperty('--expand-start-transform');
+            this.dialogContainer.style.removeProperty('--expand-end-transform');
+            // Re-enable pointer events
+            this.dialogContainer.style.setProperty('pointer-events', '');
+            this.dialogContainer.style.setProperty('will-change', '');
+          }, 500);
+        } else {
+          console.log('[ChatDialog] Book icon not found, using normal slide-in animation');
+          setTimeout(() => {
+            this.dialogContainer.classList.add('visible');
+          }, 10);
+        }
+      } else {
+        // Normal slide-in animation
+        setTimeout(() => {
+          console.log('[ChatDialog] Adding visible class to dialog');
+          this.dialogContainer.classList.add('visible');
+          console.log('[ChatDialog] Dialog should now be visible');
+        }, 10);
+      }
+      
+      // Auto-focus the question input for both generic and selected text chat
       setTimeout(() => {
-        console.log('[ChatDialog] Adding visible class to dialog');
-        this.dialogContainer.classList.add('visible');
-        console.log('[ChatDialog] Dialog should now be visible');
-        
-        // Auto-focus the question input for both generic and selected text chat
-        setTimeout(() => {
-          const questionInput = this.dialogContainer.querySelector('.vocab-chat-input');
-          if (questionInput) {
-            questionInput.focus();
-            console.log(`[ChatDialog] Auto-focused question input for ${this.chatContext} chat`);
-          }
-        }, 100);
-        
-        // Auto-scroll to bottom when dialog opens (if there are messages)
-        setTimeout(() => {
-          const chatContainer = document.getElementById('vocab-chat-messages');
-          if (chatContainer && this.chatHistory.length > 0) {
-            this.scrollToBottom(chatContainer);
-            console.log('[ChatDialog] Auto-scrolled to bottom on dialog open');
-          }
-        }, 150);
-        
-        // Ensure focus buttons are hidden/shown based on chat context after dialog is rendered
-        setTimeout(() => {
-          this.hideFocusButtonsForCustomContent(this.currentTextKey);
-        }, 200);
-      }, 10);
+        const questionInput = this.dialogContainer.querySelector('.vocab-chat-input');
+        if (questionInput) {
+          questionInput.focus();
+          console.log(`[ChatDialog] Auto-focused question input for ${this.chatContext} chat`);
+        }
+      }, 100);
+      
+      // Auto-scroll to bottom when dialog opens (if there are messages)
+      setTimeout(() => {
+        const chatContainer = document.getElementById('vocab-chat-messages');
+        if (chatContainer && this.chatHistory.length > 0) {
+          this.scrollToBottom(chatContainer);
+          console.log('[ChatDialog] Auto-scrolled to bottom on dialog open');
+        }
+      }, 150);
+      
+      // Ensure focus buttons are hidden/shown based on chat context after dialog is rendered
+      setTimeout(() => {
+        this.hideFocusButtonsForCustomContent(this.currentTextKey);
+      }, 200);
     } else {
       console.log('[ChatDialog] ERROR: Dialog container not found!');
     }
@@ -6875,12 +7419,12 @@ const ChatDialog = {
   },
   
   /**
-   * Create collapse icon (left arrow)
+   * Create collapse icon (minus/hyphen icon)
    */
   createCollapseIcon() {
     return `
       <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M12.5 15L7.5 10L12.5 5" stroke="#9527F5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M4 10H16" stroke="#9527F5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
       </svg>
     `;
   },
@@ -7063,6 +7607,33 @@ const ChatDialog = {
         }
       }
       
+      /* Expand Animation - Scale up and move from book icon (reverse of minimize) */
+      .vocab-chat-dialog.expanding {
+        animation: expandChatDialogFromBook 0.5s ease-out forwards !important;
+        transition: none !important; /* Completely disable transition during animation */
+        pointer-events: none !important;
+        z-index: 10000010 !important; /* Ensure dialog appears above everything during animation */
+        will-change: transform !important; /* Optimize for animation */
+        opacity: 1 !important;
+      }
+      
+      /* Ensure dialog stays visible after expansion animation */
+      .vocab-chat-dialog.expanding.visible {
+        animation: expandChatDialogFromBook 0.5s ease-out forwards !important;
+        transition: none !important;
+      }
+      
+      @keyframes expandChatDialogFromBook {
+        0% {
+          transform: var(--expand-start-transform, translateY(-50%) translateX(0) scale(0)) !important;
+          opacity: 1;
+        }
+        100% {
+          transform: var(--expand-end-transform, translateY(-50%) translateX(0) scale(1)) !important;
+          opacity: 1;
+        }
+      }
+      
       /* Dialog Content */
       .vocab-chat-content {
         background: white !important;
@@ -7209,30 +7780,31 @@ const ChatDialog = {
         top: 20px;
         right: 20px;
         padding: 6px 12px;
-        background: white;
-        border: 1px solid #e5e7eb;
+        background: #9527F5;
+        border: none;
         border-radius: 6px;
         display: flex;
         align-items: center;
+        justify-content: center;
         gap: 6px;
         cursor: pointer;
         z-index: 10;
         transition: all 0.2s ease;
         font-size: 12px;
         font-weight: 500;
-        color: #9527F5;
+        color: white;
         text-decoration: none;
       }
       
       .vocab-chat-focus-btn-top-right:hover {
-        background: #f9fafb;
-        border-color: #9527F5;
+        background: #7a1fd9;
         text-decoration: none;
       }
       
       .vocab-chat-focus-btn-top-right span {
         font-size: 12px;
         font-weight: 500;
+        color: white;
       }
       
       /* Tabs */
@@ -12791,128 +13363,6 @@ const ButtonPanel = {
       }
 
       /* Attention-grabbing animation when button becomes enabled */
-      /* Magic meaning enabled notification popup - speech bubble design */
-      .vocab-magic-meaning-notification {
-        position: fixed !important;
-        background: white !important;
-        color: #333 !important;
-        padding: 12px 16px 32px 16px !important;
-        border-radius: 12px !important;
-        border: 1px solid #9527F5 !important;
-        font-size: 14px !important;
-        font-weight: 500 !important;
-        text-align: left !important;
-        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif !important;
-        box-shadow: 0 0 20px rgba(178, 156, 251, 0.3), 0 4px 12px rgba(178, 156, 251, 0.2) !important;
-        z-index: 2147483647 !important;
-        pointer-events: all !important;
-        opacity: 0 !important;
-        transform: translateY(5px) scale(0.95) !important;
-        transition: opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1), 
-                   transform 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
-        display: flex !important;
-        flex-direction: column !important;
-        align-items: flex-start !important;
-        justify-content: center !important;
-        visibility: visible !important;
-        width: auto !important;
-        min-width: 200px !important;
-        min-height: 55px !important;
-      }
-
-      .vocab-magic-meaning-notification.visible {
-        opacity: 1 !important;
-        transform: translateY(0) scale(1) !important;
-      }
-
-      /* Close button in top-right */
-      .vocab-magic-meaning-notification-close {
-        position: absolute !important;
-        top: 10px !important;
-        right: 10px !important;
-        width: 20px !important;
-        height: 20px !important;
-        border: none !important;
-        background: transparent !important;
-        cursor: pointer !important;
-        display: flex !important;
-        align-items: center !important;
-        justify-content: center !important;
-        padding: 0 !important;
-        opacity: 0.8 !important;
-        transition: opacity 0.2s ease, transform 0.2s ease !important;
-        z-index: 10 !important;
-      }
-
-      .vocab-magic-meaning-notification-close:hover {
-        opacity: 1 !important;
-        transform: scale(1.1) !important;
-      }
-
-      .vocab-magic-meaning-notification-close:active {
-        transform: scale(0.9) !important;
-      }
-
-      .vocab-magic-meaning-notification-close svg {
-        width: 14px !important;
-        height: 14px !important;
-        stroke: #9527F5 !important;
-      }
-
-      /* Don't show again button in bottom-right */
-      .vocab-magic-meaning-dont-show {
-        position: absolute !important;
-        bottom: 10px !important;
-        right: 10px !important;
-        background: white !important;
-        border: 1px solid #d4c4f0 !important;
-        color: #b29cfb !important;
-        font-size: 11px !important;
-        font-weight: 500 !important;
-        cursor: pointer !important;
-        padding: 4px 8px !important;
-        border-radius: 6px !important;
-        opacity: 1 !important;
-        transition: all 0.2s ease !important;
-        text-decoration: none !important;
-      }
-
-      .vocab-magic-meaning-dont-show:hover {
-        border-color: #9527F5 !important;
-        color: #9527F5 !important;
-        background: #f5f0ff !important;
-      }
-
-      /* Notification message text - purple and vertically centered */
-      .vocab-magic-meaning-notification-message {
-        color: #9527F5 !important;
-        margin: 0 !important;
-        padding: 0 !important;
-        font-size: 14px !important;
-        line-height: 1.4 !important;
-        display: flex !important;
-        align-items: center !important;
-        justify-content: center !important;
-        flex: 1 !important;
-        height: 100% !important;
-      }
-
-      /* Speech bubble tail pointing from magic-meaning button to notification (on left side) */
-      .vocab-magic-meaning-notification::before {
-        content: '' !important;
-        position: absolute !important;
-        left: -10px !important;
-        top: 35px !important;
-        transform: rotate(45deg) !important;
-        width: 14px !important;
-        height: 14px !important;
-        background: white !important;
-        border-left: 1px solid #9527F5 !important;
-        border-bottom: 1px solid #9527F5 !important;
-        border-top: none !important;
-        border-right: none !important;
-        border-radius: 0 0 0 3px !important;
-      }
 
 
     `;
@@ -14323,10 +14773,10 @@ const ButtonPanel = {
               console.log(`[ButtonPanel] Adding vocab-word-explained class for green background`);
               wordHighlight.classList.add('vocab-word-explained', 'word-breathing');
               
-              // Remove breathing animation after it completes (1.6s)
+              // Remove breathing animation after it completes (0.8s)
               setTimeout(() => {
                 wordHighlight.classList.remove('word-breathing');
-              }, 1600);
+              }, 800);
               
               // Store explanation data on the element
               console.log(`[ButtonPanel] Storing explanation data on element`);
@@ -15384,15 +15834,6 @@ const ButtonPanel = {
       if (this.state.isMagicMeaningEnabled) {
         magicMeaningBtn.classList.remove('disabled');
         magicMeaningBtn.disabled = false; // Remove disabled attribute
-        
-        // If button was previously disabled and is now enabled, show notification popup
-        if (wasDisabled && !magicMeaningBtn.classList.contains('processing') && !magicMeaningBtn.classList.contains('success')) {
-          // Check if user has chosen to not show this notification
-          const dontShowAgain = localStorage.getItem('vocab-dont-show-magic-meaning-enabled');
-          if (!dontShowAgain) {
-            this.showMagicMeaningEnabledNotification(magicMeaningBtn);
-          }
-        }
       } else {
         magicMeaningBtn.classList.add('disabled');
         magicMeaningBtn.disabled = true; // Add disabled attribute
@@ -15410,131 +15851,6 @@ const ButtonPanel = {
     }
   },
 
-  /**
-   * Show notification popup when magic meaning button is enabled
-   * @param {HTMLElement} button - The magic meaning button element
-   */
-  showMagicMeaningEnabledNotification(button) {
-    // Remove any existing notification
-    const existingNotification = document.querySelector('.vocab-magic-meaning-notification');
-    if (existingNotification) {
-      existingNotification.remove();
-    }
-
-    // Create notification popup
-    const notification = document.createElement('div');
-    notification.className = 'vocab-magic-meaning-notification';
-
-    // Create close button (cross icon in top-right)
-    const closeBtn = document.createElement('button');
-    closeBtn.className = 'vocab-magic-meaning-notification-close';
-    closeBtn.innerHTML = `
-      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M12 4L4 12M4 4L12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-      </svg>
-    `;
-    closeBtn.addEventListener('click', () => {
-      this.hideMagicMeaningEnabledNotification(notification);
-    });
-
-    // Create message text (no icon)
-    const message = document.createElement('div');
-    message.className = 'vocab-magic-meaning-notification-message';
-    message.textContent = 'Get contextual explanation';
-
-    // Create "Don't show again" button (bottom-right)
-    const dontShowBtn = document.createElement('button');
-    dontShowBtn.className = 'vocab-magic-meaning-dont-show';
-    dontShowBtn.textContent = "Don't show again";
-    dontShowBtn.addEventListener('click', () => {
-      // Save preference to localStorage
-      localStorage.setItem('vocab-dont-show-magic-meaning-enabled', 'true');
-      this.hideMagicMeaningEnabledNotification(notification);
-    });
-
-    // Append elements
-    notification.appendChild(closeBtn);
-    notification.appendChild(message);
-    notification.appendChild(dontShowBtn);
-
-    // Add to document first (needed for proper layout calculation)
-    notification.style.visibility = 'hidden'; // Hide until positioned
-    document.body.appendChild(notification);
-
-    // Position notification exactly on the right side of the magic-meaning button
-    // Use requestAnimationFrame to ensure layout is stable and get fresh button position
-    requestAnimationFrame(() => {
-      // Get fresh button position after layout is updated
-      const buttonRect = button.getBoundingClientRect();
-      const buttonCenterY = buttonRect.top + (buttonRect.height / 2);
-      
-      // Get notification dimensions to calculate pointer position
-      const notificationRect = notification.getBoundingClientRect();
-      const notificationHeight = notificationRect.height || notification.offsetHeight;
-      
-      // Pointer is positioned at top: 35px from notification top (CSS), height: 14px
-      // Pointer center = top + (height / 2) = 35px + 7px = 42px from notification top
-      // We need to calculate notification position so pointer center aligns with button center
-      const pointerTop = 35; // CSS top position of pointer
-      const pointerHeight = 14; // CSS height of pointer
-      const pointerCenterFromTop = pointerTop + (pointerHeight / 2); // Center of pointer: 42px
-      const buttonCenterYPosition = buttonCenterY; // Button center Y in viewport
-      
-      // Position notification so its pointer center (at 42px from top) aligns with button center
-      notification.style.position = 'fixed';
-      notification.style.top = (buttonCenterYPosition - pointerCenterFromTop) + 'px';
-      notification.style.left = (buttonRect.right + 10) + 'px';
-      notification.style.zIndex = '2147483647';
-      notification.style.visibility = 'visible'; // Show after positioning
-
-      // Double-check positioning after notification is visible (especially important for text selection)
-      requestAnimationFrame(() => {
-        // Recalculate after notification is rendered to ensure accurate positioning
-        const finalButtonRect = button.getBoundingClientRect();
-        const finalButtonCenterY = finalButtonRect.top + (finalButtonRect.height / 2);
-        notification.style.top = (finalButtonCenterY - pointerCenterFromTop) + 'px';
-        
-        // Trigger animation
-        setTimeout(() => {
-          notification.classList.add('visible');
-        }, 10);
-
-        // Auto-hide after 5 seconds if user doesn't interact (start after notification is visible)
-        const autoHideTimeout = setTimeout(() => {
-          this.hideMagicMeaningEnabledNotification(notification);
-        }, 5000);
-
-        // Clear auto-hide timeout if user interacts
-        notification.addEventListener('mouseenter', () => {
-          clearTimeout(autoHideTimeout);
-        });
-
-        // Additional check after a short delay to handle any layout shifts (especially for text selection)
-        setTimeout(() => {
-          requestAnimationFrame(() => {
-            const finalButtonRect2 = button.getBoundingClientRect();
-            const finalButtonCenterY2 = finalButtonRect2.top + (finalButtonRect2.height / 2);
-            notification.style.top = (finalButtonCenterY2 - pointerCenterFromTop) + 'px';
-          });
-        }, 50); // Small delay to catch layout shifts
-      });
-    });
-  },
-
-  /**
-   * Hide the magic meaning enabled notification
-   * @param {HTMLElement} notification - The notification element
-   */
-  hideMagicMeaningEnabledNotification(notification) {
-    if (notification) {
-      notification.classList.remove('visible');
-      setTimeout(() => {
-        if (notification.parentNode) {
-          notification.remove();
-        }
-      }, 300); // Match transition duration
-    }
-  },
 
   /**
    * Update state and refresh button states
