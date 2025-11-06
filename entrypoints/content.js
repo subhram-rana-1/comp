@@ -10738,7 +10738,7 @@ const ButtonPanel = {
 
       /* Main Button Group with Purple Shadow */
       .vocab-button-group-main {
-        display: flex;
+        display: none !important;
         flex-direction: column;
         gap: 0;
         background: white;
@@ -10787,7 +10787,7 @@ const ButtonPanel = {
 
       /* Drag Handle Styles - Semi-circular (bottom half rounded) */
       .vocab-drag-handle {
-        display: flex;
+        display: none !important;
         justify-content: center;
         align-items: center;
         padding: 6px 6px 8px 6px;
@@ -11110,6 +11110,7 @@ const ButtonPanel = {
         }
 
         .vocab-button-group-main {
+          display: none !important;
           padding: 4px;
         }
 
