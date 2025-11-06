@@ -2905,7 +2905,7 @@ const WordSelector = {
         border-radius: 14px;
         padding: 18px 20px 45px 20px; /* Reduced bottom padding for minimal spacing */
         box-shadow: 0 8px 24px rgba(149, 39, 245, 0.15), 0 2px 8px rgba(0, 0, 0, 0.1);
-        z-index: 9999999;
+        z-index: 10000010;
         max-width: 380px;
         min-width: 300px;
         font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
@@ -5180,12 +5180,33 @@ const ChatDialog = {
     // If dialog is open for different text, close it first
     if (this.isOpen) {
       console.log('[ChatDialog] Dialog open for different text, closing first');
+      // Force immediate cleanup if minimizing (to prevent invisible dialog)
+      const wasMinimizing = this.dialogContainer && this.dialogContainer.classList.contains('minimizing');
+      const wasExpanding = this.dialogContainer && this.dialogContainer.classList.contains('expanding');
+      
+      if (wasMinimizing || wasExpanding) {
+        // Cancel any ongoing animation and clean up immediately
+        if (this.dialogContainer) {
+          this.dialogContainer.classList.remove('minimizing', 'expanding');
+          this.dialogContainer.style.setProperty('transition', 'none');
+          this.dialogContainer.style.setProperty('animation', 'none');
+        }
+      }
+      
       this.close();
+      
       // Wait for close animation to complete and ensure cleanup
       setTimeout(() => {
+        // Double-check dialog is fully removed
+        if (this.dialogContainer && this.dialogContainer.parentNode) {
+          console.log('[ChatDialog] Dialog still exists, forcing removal');
+          this.dialogContainer.remove();
+          this.dialogContainer = null;
+          this.isOpen = false;
+        }
         console.log('[ChatDialog] Opening dialog after close delay');
         this.openDialog(text, contextualTextKey, mode, simplifiedData);
-      }, 400); // Increased delay to ensure proper cleanup
+      }, 500); // Increased delay to ensure proper cleanup
     } else {
       // Dialog is not open, open it
       console.log('[ChatDialog] Dialog not open, opening directly');
@@ -7239,12 +7260,17 @@ const ChatDialog = {
         let bookIcon = null;
         let iconsWrapper = null;
         
-        // Strategy 1: Try exact match with currentTextKey
-        iconsWrapper = document.querySelector(`.vocab-text-icons-wrapper[data-text-key="${this.currentTextKey}"]`);
-        if (iconsWrapper) {
-          bookIcon = iconsWrapper.querySelector('.vocab-text-book-btn');
-          if (bookIcon) {
-            console.log('[ChatDialog] Found book icon with exact currentTextKey:', this.currentTextKey);
+        // Strategy 1: Try exact match with currentTextKey (use safe method to avoid CSS selector issues)
+        const allIconsWrappersForExpansion = document.querySelectorAll('.vocab-text-icons-wrapper');
+        for (const wrapper of allIconsWrappersForExpansion) {
+          const wrapperTextKey = wrapper.getAttribute('data-text-key');
+          if (wrapperTextKey === this.currentTextKey) {
+            iconsWrapper = wrapper;
+            bookIcon = iconsWrapper.querySelector('.vocab-text-book-btn');
+            if (bookIcon) {
+              console.log('[ChatDialog] Found book icon with exact currentTextKey:', this.currentTextKey);
+              break;
+            }
           }
         }
         
@@ -7270,14 +7296,18 @@ const ChatDialog = {
           
           for (const textKey of textKeysToTry) {
             if (textKey === this.currentTextKey) continue; // Already tried
-            iconsWrapper = document.querySelector(`.vocab-text-icons-wrapper[data-text-key="${textKey}"]`);
-            if (iconsWrapper) {
-              bookIcon = iconsWrapper.querySelector('.vocab-text-book-btn');
-              if (bookIcon) {
-                console.log('[ChatDialog] Found book icon with textKey variation:', textKey);
-                break;
+            for (const wrapper of allIconsWrappersForExpansion) {
+              const wrapperTextKey = wrapper.getAttribute('data-text-key');
+              if (wrapperTextKey === textKey) {
+                iconsWrapper = wrapper;
+                bookIcon = iconsWrapper.querySelector('.vocab-text-book-btn');
+                if (bookIcon) {
+                  console.log('[ChatDialog] Found book icon with textKey variation:', textKey);
+                  break;
+                }
               }
             }
+            if (bookIcon) break;
           }
         }
         
@@ -7299,6 +7329,49 @@ const ChatDialog = {
               }
             }
           }
+        }
+        
+        // Strategy 4: Retry finding book icon with a small delay if not found (for auto-open case)
+        if (!bookIcon && this.simplifiedData) {
+          console.log('[ChatDialog] Book icon not found immediately, retrying after short delay...');
+          // Wait a bit and try again (book icon might still be animating in)
+          setTimeout(() => {
+            const allIconsWrappers = document.querySelectorAll('.vocab-text-icons-wrapper');
+            for (const wrapper of allIconsWrappers) {
+              const wrapperTextKey = wrapper.getAttribute('data-text-key');
+              const simplifiedData = TextSelector.simplifiedTexts.get(wrapperTextKey);
+              if (simplifiedData && 
+                  simplifiedData.textStartIndex === this.simplifiedData.textStartIndex &&
+                  simplifiedData.textLength === this.simplifiedData.textLength) {
+                const retryBookIcon = wrapper.querySelector('.vocab-text-book-btn');
+                if (retryBookIcon && this.dialogContainer && this.dialogContainer.classList.contains('expanding')) {
+                  console.log('[ChatDialog] Found book icon on retry, updating animation...');
+                  // Update animation if dialog is still expanding
+                  const bookIconRect = retryBookIcon.getBoundingClientRect();
+                  const bookIconCenterX = bookIconRect.left + bookIconRect.width / 2;
+                  const bookIconCenterY = bookIconRect.top + retryBookIcon.height / 2;
+                  
+                  const dialogRect = this.dialogContainer.getBoundingClientRect();
+                  const dialogHeight = dialogRect.height || 600;
+                  const viewportHeight = window.innerHeight;
+                  const dialogTop = viewportHeight / 2;
+                  const targetCenterY = bookIconCenterY;
+                  const translateYOffset = targetCenterY - dialogTop;
+                  const finalTranslateY = -dialogHeight / 2 + translateYOffset;
+                  
+                  const dialogWidth = dialogRect.width || 400;
+                  const dialogCenterX = window.innerWidth - dialogWidth / 2;
+                  const targetX = bookIconCenterX - dialogCenterX;
+                  
+                  const startTransform = `translateY(${finalTranslateY}px) translateX(${targetX}px) scale(0)`;
+                  this.dialogContainer.style.setProperty('--expand-start-transform', startTransform);
+                  this.dialogContainer.style.setProperty('--expand-end-transform', 'translateY(-50%) translateX(0) scale(1)');
+                  this.dialogContainer.style.setProperty('transform', startTransform);
+                  break;
+                }
+              }
+            }
+          }, 100);
         }
         
         if (bookIcon) {
@@ -14050,6 +14123,9 @@ const ButtonPanel = {
           // Append icons wrapper directly to highlight for absolute positioning
           highlight.appendChild(newIconsWrapper);
           
+          // Force a reflow to ensure book icon is in DOM
+          newIconsWrapper.offsetHeight;
+          
           // Automatically open chat dialog for simplified text
           const simplifiedData = {
             text: eventData.text,
@@ -14057,13 +14133,47 @@ const ButtonPanel = {
             textStartIndex: eventData.textStartIndex,
             textLength: eventData.textLength,
             previousSimplifiedTexts: eventData.previousSimplifiedTexts || [],
-            shouldAllowSimplifyMore: eventData.shouldAllowSimplifyMore || false
+            shouldAllowSimplifyMore: eventData.shouldAllowSimplifyMore || false,
+            highlight: highlight
           };
           
-          // Use a small delay to ensure DOM is updated
-          setTimeout(() => {
-            ChatDialog.open(eventData.text, textKey, 'simplified', simplifiedData, 'selected');
-          }, 100);
+          // Store simplified text data first so it's available when dialog opens
+          TextSelector.simplifiedTexts.set(textKey, {
+            textStartIndex: eventData.textStartIndex,
+            textLength: eventData.textLength,
+            text: eventData.text,
+            simplifiedText: eventData.simplifiedText,
+            previousSimplifiedTexts: eventData.previousSimplifiedTexts || [],
+            shouldAllowSimplifyMore: eventData.shouldAllowSimplifyMore || false,
+            highlight: highlight
+          });
+          
+          // Wait for book icon to be in DOM and visible before opening dialog
+          // Use requestAnimationFrame to ensure DOM is fully updated
+          requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+              // Verify book icon is in DOM before opening (use safe method to avoid CSS selector issues)
+              let verifyBookIcon = null;
+              const allIconsWrappers = document.querySelectorAll('.vocab-text-icons-wrapper');
+              for (const wrapper of allIconsWrappers) {
+                const wrapperTextKey = wrapper.getAttribute('data-text-key');
+                if (wrapperTextKey === textKey) {
+                  verifyBookIcon = wrapper.querySelector('.vocab-text-book-btn');
+                  if (verifyBookIcon) break;
+                }
+              }
+              
+              if (verifyBookIcon) {
+                console.log('[ButtonPanel] Book icon verified in DOM, opening dialog');
+                ChatDialog.open(eventData.text, textKey, 'simplified', simplifiedData, 'selected');
+              } else {
+                console.log('[ButtonPanel] Book icon not found, retrying after delay...');
+                setTimeout(() => {
+                  ChatDialog.open(eventData.text, textKey, 'simplified', simplifiedData, 'selected');
+                }, 200);
+              }
+            });
+          });
           
           // Position icons relative to highlight
           const highlightRect = highlight.getBoundingClientRect();
@@ -14079,16 +14189,7 @@ const ButtonPanel = {
             newIconsWrapper.style.setProperty('top', '0px', 'important');
           }
           
-          // Store simplified text data
-          TextSelector.simplifiedTexts.set(textKey, {
-            textStartIndex: eventData.textStartIndex,
-            textLength: eventData.textLength,
-            text: eventData.text,
-            simplifiedText: eventData.simplifiedText,
-            previousSimplifiedTexts: eventData.previousSimplifiedTexts || [],
-            shouldAllowSimplifyMore: eventData.shouldAllowSimplifyMore || false,
-            highlight: highlight
-          });
+          // Simplified text data already stored above before opening dialog
           
           // Store simplified text in analysis data for persistence
           if (this.topicsModal && this.topicsModal.customContentModal && this.topicsModal.customContentModal.activeTabId) {
