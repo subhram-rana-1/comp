@@ -2079,7 +2079,7 @@ const WordSelector = {
   createCloseIcon() {
     return `
       <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M18 6L6 18M6 6l12 12" stroke="#A020F0" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M18 6L6 18M6 6l12 12" stroke="#A020F0" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>
       </svg>
     `;
   },
@@ -3335,9 +3335,35 @@ const TextSelector = {
       range.insertNode(highlight);
     }
     
-    // Create and append remove button AFTER wrapping the content
+    // Create and append remove button FIRST (at top-left of highlight)
     const removeBtn = this.createRemoveButton(text);
     highlight.appendChild(removeBtn);
+    
+    // Create icons wrapper for magic-meaning button (positioned to the left)
+    const iconsWrapper = document.createElement('div');
+    iconsWrapper.className = 'vocab-text-icons-wrapper';
+    iconsWrapper.setAttribute('data-text-key', textKey);
+    
+    // Add magic-meaning button
+    const magicMeaningBtn = this.createMagicMeaningButton(textKey);
+    iconsWrapper.appendChild(magicMeaningBtn);
+    
+    // Append icons wrapper to highlight
+    highlight.appendChild(iconsWrapper);
+    
+    // Position icons relative to highlight
+    const highlightRect = highlight.getBoundingClientRect();
+    const isInModal = highlight.closest('.vocab-custom-content-modal');
+    
+    if (isInModal) {
+      // In modal context: position to the left with sufficient margin
+      iconsWrapper.style.setProperty('left', '-50px', 'important');
+      iconsWrapper.style.setProperty('top', '-2px', 'important');
+    } else {
+      // In main webpage context: position to the left
+      iconsWrapper.style.setProperty('left', '-40px', 'important');
+      iconsWrapper.style.setProperty('top', '0px', 'important');
+    }
     
     // Remove the appearing class after animation completes
     setTimeout(() => {
@@ -3875,6 +3901,55 @@ const TextSelector = {
   },
   
   /**
+   * Create magic-meaning button for text selection
+   * @param {string} textKey - The text key
+   * @returns {HTMLElement}
+   */
+  createMagicMeaningButton(textKey) {
+    const btn = document.createElement('button');
+    btn.className = 'vocab-text-magic-meaning-btn';
+    btn.setAttribute('aria-label', 'Get magic meaning');
+    btn.innerHTML = this.createMagicMeaningIcon();
+    
+    // Add click handler
+    btn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      
+      console.log('[TextSelector] Magic-meaning button clicked for:', textKey);
+      
+      // Get the highlight element
+      const highlight = this.textToHighlights.get(textKey);
+      if (!highlight) {
+        console.warn('[TextSelector] No highlight found for textKey:', textKey);
+        return;
+      }
+      
+      // Add fast pulsating animation to the text
+      highlight.classList.add('vocab-text-loading');
+      
+      // Call handleMagicMeaning
+      ButtonPanel.handleMagicMeaning();
+    });
+    
+    return btn;
+  },
+  
+  /**
+   * Create magic-meaning icon SVG - White sparkle icon (matching main button design)
+   * @returns {string} SVG markup
+   */
+  createMagicMeaningIcon() {
+    return `
+      <svg width="24" height="24" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M14 0L17 8L25 11L17 14L14 22L11 14L3 11L11 8L14 0Z" fill="#9527F5"/>
+        <path d="M22 16L23.5 20L27.5 21.5L23.5 23L22 27L20.5 23L16.5 21.5L20.5 20L22 16Z" fill="#9527F5"/>
+        <path d="M8 21L9.5 24.5L13 26L9.5 27.5L8 31L6.5 27.5L3 26L6.5 24.5L8 21Z" fill="#9527F5"/>
+      </svg>
+    `;
+  },
+  
+  /**
    * Pulsate text highlight with color (green for asked texts, purple for selected)
    * @param {HTMLElement} highlight - The highlight element
    * @param {boolean} isGreen - Whether to use green color (default: false for purple)
@@ -4153,6 +4228,45 @@ const TextSelector = {
         animation: bookBreathing 1.6s ease-in-out;
       }
       
+      /* Magic-meaning button - Purple sparkle icon with light purple background */
+      .vocab-text-magic-meaning-btn {
+        position: relative;
+        width: 28px;
+        height: 28px;
+        background: rgba(149, 39, 245, 0.15);
+        border: none;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        opacity: 0.95;
+        transition: opacity 0.2s ease, transform 0.15s ease, background-color 0.2s ease;
+        padding: 0;
+        flex-shrink: 0;
+        box-sizing: border-box;
+        padding-top: 1px;
+      }
+      
+      .vocab-text-magic-meaning-btn:hover {
+        transform: scale(1.1);
+        opacity: 1;
+        background-color: rgba(149, 39, 245, 0.25);
+      }
+      
+      .vocab-text-magic-meaning-btn:active {
+        transform: scale(0.9);
+      }
+      
+      .vocab-text-magic-meaning-btn svg {
+        pointer-events: none;
+        display: block;
+        width: 20px;
+        height: 20px;
+        filter: drop-shadow(0 1px 2px rgba(149, 39, 245, 0.3));
+        transform: translateY(-1px);
+      }
+      
       @keyframes bookBreathing {
         0% {
           transform: scale(1);
@@ -4278,7 +4392,7 @@ const TextSelector = {
         animation: vocab-text-pulsate 0.6s ease-in-out;
       }
       
-      /* Loading animation - pulsating light purple background */
+      /* Loading animation - pulsating light purple background (fast) */
       @keyframes vocab-text-loading-breathe {
         0%, 100% {
           background-color: transparent;
@@ -4289,7 +4403,7 @@ const TextSelector = {
       }
       
       .vocab-text-loading {
-        animation: vocab-text-loading-breathe 2s ease-in-out infinite;
+        animation: vocab-text-loading-breathe 0.75s ease-in-out infinite;
         text-decoration: none !important;
         border-radius: 3px;
       }
@@ -13311,10 +13425,21 @@ const ButtonPanel = {
         for (const textKey of textKeysToProcess) {
           const highlight = TextSelector.textToHighlights.get(textKey);
           if (highlight) {
-            // Remove any existing buttons
-            const existingBtn = highlight.querySelector('.vocab-text-remove-btn');
-            if (existingBtn) {
-              existingBtn.remove();
+            // Remove any existing buttons (remove button and magic-meaning button)
+            const existingRemoveBtn = highlight.querySelector('.vocab-text-remove-btn');
+            if (existingRemoveBtn) {
+              existingRemoveBtn.remove();
+            }
+            
+            const existingMagicBtn = highlight.querySelector('.vocab-text-magic-meaning-btn');
+            if (existingMagicBtn) {
+              existingMagicBtn.remove();
+            }
+            
+            // Remove icons wrapper if empty
+            const iconsWrapper = highlight.querySelector('.vocab-text-icons-wrapper');
+            if (iconsWrapper && iconsWrapper.children.length === 0) {
+              iconsWrapper.remove();
             }
             
             // Add loading animation class
