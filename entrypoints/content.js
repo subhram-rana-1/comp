@@ -879,7 +879,20 @@ const WordSelector = {
     console.log('[WordSelector] Original word:', selectedText);
     console.log('[WordSelector] Normalized word:', normalizedWord);
     
-    // Check if word is already selected - if so, deselect it
+    // Check if word is already explained (green) - if so, deselect it
+    if (this.explainedWords.has(normalizedWord)) {
+      // Check if clicking on the green highlight itself
+      const clickedHighlight = event.target.closest('.vocab-word-explained');
+      if (clickedHighlight) {
+        // Allow deselection of green highlights
+        this.removeExplainedWord(selectedText);
+        selection.removeAllRanges();
+        console.log('[WordSelector] Explained word deselected:', selectedText);
+        return;
+      }
+    }
+    
+    // Check if word is already selected (purple) - if so, deselect it
     if (this.isWordSelected(normalizedWord)) {
       this.removeWord(selectedText);
       selection.removeAllRanges();
@@ -899,6 +912,246 @@ const WordSelector = {
     console.log('[WordSelector] ✓ Word selected:', selectedText);
     console.log('[WordSelector] ✓ Normalized word stored:', normalizedWord);
     console.log('[WordSelector] ✓ Total selected words:', this.selectedWords.size);
+    
+    // Get the highlight element that was just created
+    const highlights = this.wordToHighlights.get(normalizedWord);
+    const highlight = highlights ? Array.from(highlights)[highlights.size - 1] : null;
+    
+    // Immediately trigger API call for this word
+    // Pass the highlight element directly to avoid timing issues
+    this.processWordExplanation(selectedText, normalizedWord, highlight);
+  },
+  
+  /**
+   * Process word explanation API call for a single word
+   * This is called automatically when a word is double-clicked
+   * @param {string} word - The original word (with case)
+   * @param {string} normalizedWord - The normalized word (lowercase)
+   * @param {HTMLElement} highlight - The highlight element (optional, will be looked up if not provided)
+   */
+  async processWordExplanation(word, normalizedWord, highlight = null) {
+    console.log('[WordSelector] ===== PROCESSING WORD EXPLANATION =====');
+    console.log('[WordSelector] Word:', word);
+    console.log('[WordSelector] Normalized word:', normalizedWord);
+    console.log('[WordSelector] Highlight provided:', highlight !== null);
+    
+    // Check if word is already explained (green)
+    if (this.explainedWords.has(normalizedWord)) {
+      console.log('[WordSelector] Word already explained, skipping API call:', normalizedWord);
+      return;
+    }
+    
+    // Get the highlight element for this word if not provided
+    if (!highlight) {
+      const highlights = this.wordToHighlights.get(normalizedWord);
+      if (!highlights || highlights.size === 0) {
+        console.warn('[WordSelector] No highlights found for word:', normalizedWord);
+        return;
+      }
+      // Use the most recently added highlight (last in the Set)
+      highlight = Array.from(highlights)[highlights.size - 1];
+    }
+    
+    // Check if highlight is already explained (has green class)
+    if (highlight.classList.contains('vocab-word-explained')) {
+      console.log('[WordSelector] Highlight already has green background, skipping API call');
+      return;
+    }
+    
+    // Build payload for this single word
+    const docText = this.getDocumentText();
+    const positions = this.findWordPositionsInDocument(normalizedWord);
+    
+    if (positions.length === 0) {
+      console.warn('[WordSelector] No positions found for word:', normalizedWord);
+      return;
+    }
+    
+    // Use the first position
+    const position = positions[0];
+    const context = this.extractWordContext(docText, position, word.length);
+    
+    console.log('[WordSelector] Context extracted:', {
+      textStartIndex: context.textStartIndex,
+      textPreview: context.text.substring(0, 50) + '...',
+      wordIndexInContext: context.wordIndexInText
+    });
+    
+    // Build payload segment
+    const payloadSegment = {
+      textStartIndex: context.textStartIndex,
+      text: context.text,
+      important_words_location: [{
+        word: word,
+        index: context.wordIndexInText,
+        length: word.length
+      }],
+      _wordHighlights: [highlight] // Keep for internal tracking
+    };
+    
+    // Remove purple cross button and add pulsating animation
+    const existingBtn = highlight.querySelector('.vocab-word-remove-btn');
+    if (existingBtn) {
+      existingBtn.remove();
+    }
+    
+    // Add pulsating purple animation
+    highlight.classList.add('vocab-word-loading');
+    console.log('[WordSelector] Added loading animation to highlight');
+    
+    // Prepare API payload (remove internal tracking property)
+    const apiPayload = [{
+      textStartIndex: payloadSegment.textStartIndex,
+      text: payloadSegment.text,
+      important_words_location: payloadSegment.important_words_location
+    }];
+    
+    console.log('[WordSelector] Sending API request for word:', word);
+    
+    // Call WordExplanationService with SSE
+    WordExplanationService.explainWords(
+      apiPayload,
+      // onEvent callback - called for each word explanation
+      (eventData) => {
+        console.log('[WordSelector] ===== SSE EVENT RECEIVED FOR DOUBLE-CLICKED WORD =====');
+        console.log('[WordSelector] Full event data:', JSON.stringify(eventData, null, 2));
+        
+        const wordInfo = eventData.word_info;
+        if (!wordInfo) {
+          console.warn('[WordSelector] No word_info in event data');
+          return;
+        }
+        
+        // Use word_info.location.word for matching
+        const targetWord = wordInfo.location?.word || wordInfo.word;
+        const normalizedTargetWord = targetWord.toLowerCase().trim();
+        
+        console.log('[WordSelector] Processing word explanation:', {
+          targetWord: targetWord,
+          normalizedTargetWord: normalizedTargetWord,
+          originalWord: word,
+          originalNormalized: normalizedWord
+        });
+        
+        // Find the matching highlight
+        const wordHighlight = highlight;
+        const highlightDataWord = wordHighlight.getAttribute('data-word');
+        
+        // Check if this is the correct highlight
+        if (highlightDataWord && highlightDataWord.toLowerCase() === normalizedTargetWord) {
+          console.log('[WordSelector] ===== APPLYING GREEN BACKGROUND =====');
+          console.log('[WordSelector] ✓ Found matching highlight for word:', targetWord);
+          
+          // Remove pulsating animation
+          wordHighlight.classList.remove('vocab-word-loading');
+          
+          // Remove old purple cross button if exists
+          const oldBtn = wordHighlight.querySelector('.vocab-word-remove-btn');
+          if (oldBtn) {
+            oldBtn.remove();
+          }
+          
+          // Change background to green with breathing animation
+          wordHighlight.classList.add('vocab-word-explained', 'word-breathing');
+          
+          // Remove breathing animation after it completes (1.6s)
+          setTimeout(() => {
+            wordHighlight.classList.remove('word-breathing');
+          }, 1600);
+          
+          // Store explanation data on the element
+          wordHighlight.setAttribute('data-meaning', wordInfo.meaning);
+          wordHighlight.setAttribute('data-examples', JSON.stringify(wordInfo.examples));
+          
+          // Store word explanation in analysis data for persistence
+          if (ButtonPanel.topicsModal && ButtonPanel.topicsModal.customContentModal && ButtonPanel.topicsModal.customContentModal.activeTabId) {
+            const activeContent = ButtonPanel.topicsModal.customContentModal.getContentByTabId(parseInt(ButtonPanel.topicsModal.customContentModal.activeTabId));
+            if (activeContent && activeContent.analysis) {
+              // Check if this word already exists in wordMeanings
+              const existingWordIndex = activeContent.analysis.wordMeanings.findIndex(w => 
+                w.word.toLowerCase() === normalizedTargetWord
+              );
+              
+              const wordExplanationData = {
+                word: targetWord,
+                normalizedWord: normalizedTargetWord,
+                meaning: wordInfo.meaning,
+                examples: wordInfo.examples,
+                shouldAllowFetchMoreExamples: wordInfo.shouldAllowFetchMoreExamples || false,
+                textStartIndex: wordInfo.textStartIndex,
+                location: wordInfo.location,
+                timestamp: new Date().toISOString()
+              };
+              
+              if (existingWordIndex !== -1) {
+                // Update existing word explanation
+                activeContent.analysis.wordMeanings[existingWordIndex] = wordExplanationData;
+                console.log('[WordSelector] Updated existing word explanation in analysis data');
+              } else {
+                // Add new word explanation
+                activeContent.analysis.wordMeanings.push(wordExplanationData);
+                console.log('[WordSelector] Added new word explanation to analysis data');
+              }
+            }
+          }
+          
+          // Add green wireframe cross button
+          const greenCrossBtn = this.createRemoveExplainedButton(targetWord);
+          wordHighlight.appendChild(greenCrossBtn);
+          
+          // Store in explainedWords map
+          if (!this.explainedWords.has(normalizedTargetWord)) {
+            this.explainedWords.set(normalizedTargetWord, {
+              word: targetWord,
+              meaning: wordInfo.meaning,
+              examples: wordInfo.examples,
+              shouldAllowFetchMoreExamples: wordInfo.shouldAllowFetchMoreExamples || false,
+              hasCalledGetMoreExamples: false,
+              highlights: new Set()
+            });
+          }
+          this.explainedWords.get(normalizedTargetWord).highlights.add(wordHighlight);
+          
+          // Setup hover and click interactions for this word
+          this.setupWordInteractions(wordHighlight);
+          
+          // Update button states
+          ButtonPanel.updateButtonStatesFromSelections();
+          
+          // Remove from selectedWords (since it's now explained)
+          this.selectedWords.delete(normalizedWord);
+          
+          console.log('[WordSelector] ===== GREEN BACKGROUND APPLIED SUCCESSFULLY =====');
+          console.log('[WordSelector] ✓ Word explanation complete:', targetWord);
+          
+          // Automatically show word meaning popup after green background is applied
+          // Use a small delay to ensure DOM is updated and breathing animation starts
+          setTimeout(() => {
+            console.log('[WordSelector] Auto-showing word meaning popup');
+            this.showWordPopup(wordHighlight, true); // Show as sticky popup
+          }, 100);
+        } else {
+          console.warn('[WordSelector] Highlight data-word mismatch:', {
+            highlightDataWord: highlightDataWord,
+            normalizedTargetWord: normalizedTargetWord
+          });
+        }
+      },
+      // onComplete callback
+      () => {
+        console.log('[WordSelector] Word explanation API call completed');
+      },
+      // onError callback
+      (error) => {
+        console.error('[WordSelector] Error during word explanation:', error);
+        
+        // Remove pulsating animation on error
+        highlight.classList.remove('vocab-word-loading');
+        
+        // Show error notification
+        TextSelector.showNotification('Error getting word meaning. Please try again.');
+      }
+    );
   },
   
   /**
@@ -2071,6 +2324,12 @@ const WordSelector = {
     // Remove from wordToHighlights Map
     this.wordToHighlights.delete(normalizedWord);
     
+    // Also remove from selectedWords if present (to allow re-selection)
+    if (this.selectedWords.has(normalizedWord)) {
+      this.selectedWords.delete(normalizedWord);
+      console.log('[WordSelector] Also removed from selectedWords:', normalizedWord);
+    }
+    
     // Also remove from analysis data structure for current tab
     ButtonPanel.removeWordFromAnalysisData(normalizedWord);
     
@@ -2079,6 +2338,7 @@ const WordSelector = {
     
     console.log('[WordSelector] Explained word removed:', word);
     console.log('[WordSelector] Remaining explained words:', this.explainedWords.size);
+    console.log('[WordSelector] Remaining selected words:', this.selectedWords.size);
     
     // Update button states
     ButtonPanel.updateButtonStatesFromSelections();
@@ -2174,7 +2434,7 @@ const WordSelector = {
       }
       
       .vocab-word-loading {
-        animation: vocab-word-loading-breathe 1.5s ease-in-out infinite;
+        animation: vocab-word-loading-breathe 0.75s ease-in-out infinite;
       }
       
       /* Green background for explained words */
@@ -2185,6 +2445,34 @@ const WordSelector = {
         border: 1px solid rgba(21, 128, 61, 0.4);
         padding: 0 2px;
         transition: background-color 0.3s ease-in-out, border-color 0.3s ease-in-out, opacity 0.3s ease-in-out;
+      }
+      
+      /* Breathing animation for green word when it first appears */
+      .vocab-word-explained.word-breathing {
+        animation: wordGreenBreathing 1.6s ease-in-out;
+      }
+      
+      @keyframes wordGreenBreathing {
+        0% {
+          transform: scale(1);
+          background-color: rgba(34, 197, 94, 0.20);
+        }
+        25% {
+          transform: scale(1.15);
+          background-color: rgba(34, 197, 94, 0.30);
+        }
+        50% {
+          transform: scale(1);
+          background-color: rgba(34, 197, 94, 0.20);
+        }
+        75% {
+          transform: scale(1.15);
+          background-color: rgba(34, 197, 94, 0.30);
+        }
+        100% {
+          transform: scale(1);
+          background-color: rgba(34, 197, 94, 0.20);
+        }
       }
       
       .vocab-word-explained:hover {
@@ -13519,9 +13807,14 @@ const ButtonPanel = {
                 oldBtn.remove();
               }
               
-              // Change background to green
+              // Change background to green with breathing animation
               console.log(`[ButtonPanel] Adding vocab-word-explained class for green background`);
-              wordHighlight.classList.add('vocab-word-explained');
+              wordHighlight.classList.add('vocab-word-explained', 'word-breathing');
+              
+              // Remove breathing animation after it completes (1.6s)
+              setTimeout(() => {
+                wordHighlight.classList.remove('word-breathing');
+              }, 1600);
               
               // Store explanation data on the element
               console.log(`[ButtonPanel] Storing explanation data on element`);
@@ -13596,6 +13889,13 @@ const ButtonPanel = {
                 hasExplainedClass: wordHighlight.classList.contains('vocab-word-explained')
               });
               console.log('[ButtonPanel] explainedWords container size:', WordSelector.explainedWords.size);
+              
+              // Automatically show word meaning popup after green background is applied
+              // Use a small delay to ensure DOM is updated and breathing animation starts
+              setTimeout(() => {
+                console.log('[ButtonPanel] Auto-showing word meaning popup');
+                WordSelector.showWordPopup(wordHighlight, true); // Show as sticky popup
+              }, 100);
             } else {
               console.error(`[ButtonPanel] ===== HIGHLIGHT MATCHING FAILED =====`);
               console.error(`[ButtonPanel] ✗ No matching highlight found for word "${targetWord}"`);
