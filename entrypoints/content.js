@@ -3685,6 +3685,16 @@ const TextSelector = {
       ChatDialog.close();
     }
     
+    // Immediately add disappearing animation to green cross button (same as purple cross)
+    const greenCrossBtn = highlight.querySelector('.vocab-text-remove-green-btn');
+    if (greenCrossBtn && !greenCrossBtn.classList.contains('button-disappearing')) {
+      greenCrossBtn.classList.add('button-disappearing');
+      // Remove button after animation completes (300ms)
+      setTimeout(() => {
+        greenCrossBtn.remove();
+      }, 300);
+    }
+    
     // Find icons wrapper
     let iconsWrapper = highlight.querySelector('.vocab-text-icons-wrapper');
     if (!iconsWrapper) {
@@ -3928,8 +3938,8 @@ const TextSelector = {
       // Add fast pulsating animation to the text
       highlight.classList.add('vocab-text-loading');
       
-      // Call handleMagicMeaning
-      ButtonPanel.handleMagicMeaning();
+      // Call handleMagicMeaning for this specific text only
+      ButtonPanel.handleMagicMeaningForText(textKey);
     });
     
     return btn;
@@ -4231,8 +4241,8 @@ const TextSelector = {
       /* Magic-meaning button - Purple sparkle icon with light purple background */
       .vocab-text-magic-meaning-btn {
         position: relative;
-        width: 28px;
-        height: 28px;
+        width: 32px;
+        height: 32px;
         background: rgba(149, 39, 245, 0.15);
         border: none;
         border-radius: 50%;
@@ -4261,8 +4271,8 @@ const TextSelector = {
       .vocab-text-magic-meaning-btn svg {
         pointer-events: none;
         display: block;
-        width: 20px;
-        height: 20px;
+        width: 22px;
+        height: 22px;
         filter: drop-shadow(0 1px 2px rgba(149, 39, 245, 0.3));
         transform: translateY(-1px);
       }
@@ -4342,6 +4352,10 @@ const TextSelector = {
       
       .vocab-text-remove-green-btn:active {
         transform: scale(0.95);
+      }
+      
+      .vocab-text-remove-green-btn.button-disappearing {
+        animation: buttonFadeOut 0.3s ease-in-out forwards;
       }
       
       .vocab-text-remove-green-btn svg {
@@ -4872,7 +4886,7 @@ const ChatDialog = {
     this.show();
     
     // Hide Focus buttons for custom content (pdf, text, topics, image)
-    this.hideFocusButtonsForCustomContent(textKey);
+    this.hideFocusButtonsForCustomContent(contextualTextKey);
     
     console.log('[ChatDialog] Opened in', mode, 'mode for text:', text.substring(0, 50) + '...');
     console.log('[ChatDialog] Loaded', this.chatHistory.length, 'chat messages');
@@ -4927,6 +4941,8 @@ const ChatDialog = {
   close() {
     console.log('[ChatDialog] ===== CLOSE FUNCTION CALLED =====');
     console.log('[ChatDialog] Current state - isOpen:', this.isOpen, 'currentTextKey:', this.currentTextKey);
+    console.log('[ChatDialog] chatContext:', this.chatContext);
+    console.log('[ChatDialog] dialogContainer exists:', !!this.dialogContainer);
     
     if (!this.isOpen) {
       console.log('[ChatDialog] Dialog not open, nothing to close');
@@ -4945,7 +4961,206 @@ const ChatDialog = {
     // Save current dimensions before closing
     this.saveDimensions();
     
-    console.log('[ChatDialog] Hiding dialog...');
+    // Check if we should minimize to book icon (only for selected text chat with textKey)
+    console.log('[ChatDialog] ===== CHECKING MINIMIZATION CONDITIONS =====');
+    console.log('[ChatDialog] Condition 1 - currentTextKey exists:', !!this.currentTextKey, 'value:', this.currentTextKey);
+    console.log('[ChatDialog] Condition 2 - chatContext === "selected":', this.chatContext === 'selected', 'value:', this.chatContext);
+    console.log('[ChatDialog] Condition 3 - dialogContainer exists:', !!this.dialogContainer);
+    
+    if (this.currentTextKey && this.chatContext === 'selected' && this.dialogContainer) {
+      console.log('[ChatDialog] ✓ All conditions met! Proceeding with minimization animation...');
+      // IMMEDIATELY disable transition to prevent slide-out animation
+      this.dialogContainer.style.setProperty('transition', 'none', 'important');
+      
+      // Extract original textKey from contextualTextKey
+      // contextualTextKey format can be:
+      // 1. Full text with "-selected" appended: "long text here-selected"
+      // 2. <contentType>-<tabId>-<startIndex>-<length>
+      // 3. <contentType>-<tabId>-selected
+      // The book icon uses the original textKey without "-selected"
+      
+      let originalTextKey = this.currentTextKey;
+      const textKeysToTry = [this.currentTextKey]; // Always try the current key first
+      
+      // If contextualTextKey ends with "-selected", remove it
+      if (this.currentTextKey.endsWith('-selected')) {
+        originalTextKey = this.currentTextKey.slice(0, -'-selected'.length);
+        textKeysToTry.push(originalTextKey);
+        console.log('[ChatDialog] Removed "-selected" suffix, originalTextKey:', originalTextKey);
+      }
+      
+      // Also try extracting from format: contentType-tabId-selected
+      const parts = this.currentTextKey.split('-');
+      if (parts.length >= 3 && parts[parts.length - 1] === 'selected') {
+        const baseKey = parts.slice(0, -1).join('-');
+        if (!textKeysToTry.includes(baseKey)) {
+          textKeysToTry.push(baseKey);
+        }
+      }
+      
+      console.log('[ChatDialog] Looking for book icon with textKeys to try:', textKeysToTry);
+      console.log('[ChatDialog] Original textKey (without -selected):', originalTextKey);
+      
+      // Find the book icon for this textKey
+      // Use querySelectorAll and filter to avoid CSS selector issues with special characters
+      const allIconsWrappers = document.querySelectorAll('.vocab-text-icons-wrapper');
+      console.log('[ChatDialog] All icons wrappers found:', allIconsWrappers.length);
+      
+      // Log all available textKeys for debugging
+      const availableTextKeys = [];
+      allIconsWrappers.forEach((wrapper, index) => {
+        const wrapperTextKey = wrapper.getAttribute('data-text-key');
+        availableTextKeys.push(wrapperTextKey);
+        console.log(`[ChatDialog] Icons wrapper ${index + 1} has textKey:`, wrapperTextKey);
+      });
+      console.log('[ChatDialog] Available textKeys in DOM:', availableTextKeys);
+      
+      let iconsWrapper = null;
+      for (const wrapper of allIconsWrappers) {
+        const wrapperTextKey = wrapper.getAttribute('data-text-key');
+        if (textKeysToTry.includes(wrapperTextKey)) {
+          iconsWrapper = wrapper;
+          console.log('[ChatDialog] ✓✓✓ MATCH FOUND! Icons wrapper with textKey:', wrapperTextKey);
+          break;
+        }
+      }
+      const bookIcon = iconsWrapper ? iconsWrapper.querySelector('.vocab-text-book-btn') : null;
+      
+      console.log('[ChatDialog] ===== BOOK ICON SEARCH RESULTS =====');
+      console.log('[ChatDialog] Total icons wrappers found:', allIconsWrappers.length);
+      console.log('[ChatDialog] Icons wrapper found:', !!iconsWrapper);
+      console.log('[ChatDialog] Book icon found:', !!bookIcon);
+      
+      if (bookIcon) {
+        console.log('[ChatDialog] ✓✓✓ FOUND BOOK ICON! Starting minimization animation...');
+        
+        // Get current dialog position and size
+        const dialogRect = this.dialogContainer.getBoundingClientRect();
+        const dialogCenterX = dialogRect.left + dialogRect.width / 2;
+        const dialogCenterY = dialogRect.top + dialogRect.height / 2;
+        
+        // Get book icon position
+        const bookIconRect = bookIcon.getBoundingClientRect();
+        const bookIconCenterX = bookIconRect.left + bookIconRect.width / 2;
+        const bookIconCenterY = bookIconRect.top + bookIconRect.height / 2;
+        
+        // Calculate the translation needed to move dialog center to book icon center
+        const targetX = bookIconCenterX - dialogCenterX;
+        const targetY = bookIconCenterY - dialogCenterY;
+        
+        console.log('[ChatDialog] Dialog center:', { x: dialogCenterX, y: dialogCenterY });
+        console.log('[ChatDialog] Book icon center:', { x: bookIconCenterX, y: bookIconCenterY });
+        console.log('[ChatDialog] Target translation:', { x: targetX, y: targetY });
+        
+        // Calculate the final transform value
+        // The dialog is positioned with top: 50% and transform: translateY(-50%) translateX(0)
+        // This means the dialog center is at viewportHeight / 2
+        // We need to move it to bookIconCenterY
+        // Since we start with translateY(-50%), we need to calculate the final absolute position
+        const dialogHeight = dialogRect.height;
+        const viewportHeight = window.innerHeight;
+        const dialogTop = viewportHeight / 2; // Current top position (50% of viewport)
+        const currentCenterY = dialogTop; // Dialog center Y (with -50% translateY, center is at top)
+        const targetCenterY = bookIconCenterY;
+        const translateYOffset = targetCenterY - currentCenterY; // How much to move from current center
+        
+        // Calculate final translateY in pixels (convert -50% to pixels and add offset)
+        // -50% of dialogHeight = -dialogHeight/2
+        // Final position = -dialogHeight/2 + translateYOffset
+        const finalTranslateY = -dialogHeight / 2 + translateYOffset;
+        
+        console.log('[ChatDialog] Transform calculation:');
+        console.log('[ChatDialog]   viewportHeight:', viewportHeight);
+        console.log('[ChatDialog]   dialogHeight:', dialogHeight);
+        console.log('[ChatDialog]   dialogTop (50%):', dialogTop);
+        console.log('[ChatDialog]   currentCenterY:', currentCenterY);
+        console.log('[ChatDialog]   targetCenterY (book icon):', targetCenterY);
+        console.log('[ChatDialog]   translateYOffset:', translateYOffset);
+        console.log('[ChatDialog]   finalTranslateY (pixels):', finalTranslateY);
+        
+        // Set CSS custom properties for the animation
+        this.dialogContainer.style.setProperty('--minimize-target-x', `${targetX}px`);
+        this.dialogContainer.style.setProperty('--minimize-target-y', `${targetY}px`);
+        this.dialogContainer.style.setProperty('--minimize-start-transform', 'translateY(-50%) translateX(0)');
+        this.dialogContainer.style.setProperty('--minimize-end-transform', `translateY(${finalTranslateY}px) translateX(${targetX}px)`);
+        
+        console.log('[ChatDialog] Set CSS properties:');
+        console.log('[ChatDialog] --minimize-target-x:', targetX);
+        console.log('[ChatDialog] --minimize-target-y:', targetY);
+        console.log('[ChatDialog] --minimize-start-transform: translateY(-50%) translateX(0)');
+        console.log('[ChatDialog] --minimize-end-transform:', `translateY(${finalTranslateY}px) translateX(${targetX}px)`);
+        console.log('[ChatDialog] Dialog height:', dialogHeight, 'finalTranslateY:', finalTranslateY);
+        
+        // Force a reflow to ensure styles are applied
+        void this.dialogContainer.offsetHeight;
+        
+        // Add minimizing class to trigger animation (DO NOT remove visible class)
+        this.dialogContainer.classList.add('minimizing');
+        
+        // Force a reflow to ensure animation starts
+        void this.dialogContainer.offsetHeight;
+        
+        // Verify animation is applied
+        const computedStyle = window.getComputedStyle(this.dialogContainer);
+        const animationName = computedStyle.animationName;
+        const animationDuration = computedStyle.animationDuration;
+        const animationState = computedStyle.animationPlayState;
+        const transform = computedStyle.transform;
+        
+        console.log('[ChatDialog] ===== ANIMATION VERIFICATION =====');
+        console.log('[ChatDialog] Minimization animation started');
+        console.log('[ChatDialog] Dialog has minimizing class:', this.dialogContainer.classList.contains('minimizing'));
+        console.log('[ChatDialog] Animation name:', animationName);
+        console.log('[ChatDialog] Animation duration:', animationDuration);
+        console.log('[ChatDialog] Animation play state:', animationState);
+        console.log('[ChatDialog] Current transform:', transform);
+        console.log('[ChatDialog] CSS custom properties:');
+        console.log('[ChatDialog]   --minimize-start-transform:', this.dialogContainer.style.getPropertyValue('--minimize-start-transform'));
+        console.log('[ChatDialog]   --minimize-end-transform:', this.dialogContainer.style.getPropertyValue('--minimize-end-transform'));
+        console.log('[ChatDialog]   --minimize-target-x:', this.dialogContainer.style.getPropertyValue('--minimize-target-x'));
+        console.log('[ChatDialog]   --minimize-target-y:', this.dialogContainer.style.getPropertyValue('--minimize-target-y'));
+        
+        // Wait for animation to complete, then hide dialog
+        setTimeout(() => {
+          console.log('[ChatDialog] Minimization animation completed, hiding dialog');
+          
+          // Clean up animation class and CSS properties
+          this.dialogContainer.classList.remove('minimizing');
+          this.dialogContainer.style.removeProperty('--minimize-target-x');
+          this.dialogContainer.style.removeProperty('--minimize-target-y');
+          this.dialogContainer.style.removeProperty('--minimize-start-transform');
+          this.dialogContainer.style.removeProperty('--minimize-end-transform');
+          
+          // Remove dialog container immediately (no need for hide() since animation is done)
+          console.log('[ChatDialog] Removing dialog container...');
+          if (this.dialogContainer) {
+            this.dialogContainer.remove();
+            this.dialogContainer = null;
+            console.log('[ChatDialog] Dialog container removed');
+          }
+          // Reset state
+          this.isOpen = false;
+          this.currentText = null;
+          this.currentTextKey = null;
+          console.log('[ChatDialog] Dialog state reset');
+        }, 500); // 0.5s animation duration (increased for visibility)
+        
+        return; // Exit early, cleanup will continue in setTimeout
+      } else {
+        console.log('[ChatDialog] ✗✗✗ BOOK ICON NOT FOUND! Cannot minimize to book icon.');
+        console.log('[ChatDialog] Falling back to regular close...');
+      }
+    } else {
+      console.log('[ChatDialog] ✗✗✗ MINIMIZATION CONDITIONS NOT MET!');
+      console.log('[ChatDialog] Reasons:');
+      if (!this.currentTextKey) console.log('[ChatDialog]   - currentTextKey is missing');
+      if (this.chatContext !== 'selected') console.log('[ChatDialog]   - chatContext is not "selected" (current:', this.chatContext, ')');
+      if (!this.dialogContainer) console.log('[ChatDialog]   - dialogContainer is missing');
+    }
+    
+    // Fallback to original behavior if no book icon found or not selected text chat
+    console.log('[ChatDialog] ===== USING FALLBACK CLOSE (NO MINIMIZATION) =====');
+    console.log('[ChatDialog] No book icon found or not selected text chat, using fallback close');
     this.hide();
     
     // Keep the chat icon on the text (don't remove it)
@@ -6819,6 +7034,33 @@ const ChatDialog = {
       
       .vocab-chat-dialog.visible {
         transform: translateY(-50%) translateX(0);
+      }
+      
+      /* Minimize Animation - Scale down and move to book icon */
+      /* IMPORTANT: When minimizing, completely override all transitions and use animation only */
+      .vocab-chat-dialog.minimizing {
+        animation: minimizeChatDialogToBook 0.5s ease-out forwards !important;
+        transition: none !important; /* Completely disable transition during animation */
+        pointer-events: none !important;
+        z-index: 10000010 !important; /* Ensure dialog appears above everything during animation */
+        will-change: transform !important; /* Optimize for animation */
+      }
+      
+      /* Completely disable transition when minimizing - even if visible class is present */
+      .vocab-chat-dialog.minimizing.visible {
+        transition: none !important;
+        /* Don't override transform - let animation handle it */
+      }
+
+      @keyframes minimizeChatDialogToBook {
+        0% {
+          transform: var(--minimize-start-transform, translateY(-50%) translateX(0)) scale(1) !important;
+          opacity: 1;
+        }
+        100% {
+          transform: var(--minimize-end-transform, translateY(-50%) translateX(0)) scale(0) !important;
+          opacity: 1;
+        }
       }
       
       /* Dialog Content */
@@ -10319,84 +10561,6 @@ const ButtonPanel = {
   },
 
   /**
-   * Check if success banner should be shown
-   * @returns {Promise<boolean>}
-   */
-  async shouldShowSuccessBanner() {
-    try {
-      const result = await chrome.storage.local.get(['dontShowSuccessBanner']);
-      return !result.dontShowSuccessBanner; // Show if not set or false
-    } catch (error) {
-      console.error('[ButtonPanel] Error checking success banner preference:', error);
-      return true; // Default to showing
-    }
-  },
-
-  /**
-   * Set success banner preference
-   * @param {boolean} dontShow - Whether to hide banner in future
-   */
-  async setSuccessBannerPreference(dontShow) {
-    try {
-      await chrome.storage.local.set({ dontShowSuccessBanner: dontShow });
-      console.log('[ButtonPanel] Success banner preference saved:', dontShow);
-    } catch (error) {
-      console.error('[ButtonPanel] Error saving success banner preference:', error);
-    }
-  },
-
-  /**
-   * Show success banner after API completion
-   */
-  async showSuccessBanner() {
-    // Check if user has opted out
-    const shouldShow = await this.shouldShowSuccessBanner();
-    if (!shouldShow) {
-      console.log('[ButtonPanel] Success banner hidden by user preference');
-      return;
-    }
-
-    // Create banner element
-    const banner = document.createElement('div');
-    banner.className = 'vocab-success-banner';
-    banner.innerHTML = `
-      <div class="vocab-success-banner-header">
-        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <circle cx="10" cy="10" r="9" stroke="#22c55e" stroke-width="2" fill="none"/>
-          <path d="M6 10L9 13L14 8" stroke="#22c55e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>
-        <span class="vocab-success-banner-text">Your contextual explanations are ready</span>
-      </div>
-      <div class="vocab-success-banner-footer">
-        <button class="vocab-success-banner-dismiss" title="Don't show again">Don't show again</button>
-      </div>
-    `;
-
-    // Add to body
-    document.body.appendChild(banner);
-
-    // Add dismiss handler
-    const dismissBtn = banner.querySelector('.vocab-success-banner-dismiss');
-    dismissBtn.addEventListener('click', async (e) => {
-      e.stopPropagation();
-      await this.setSuccessBannerPreference(true);
-      banner.classList.add('hiding');
-      setTimeout(() => banner.remove(), 300);
-    });
-
-    // Show banner with animation
-    requestAnimationFrame(() => {
-      banner.classList.add('visible');
-    });
-
-    // Auto-hide after 4 seconds
-    setTimeout(() => {
-      banner.classList.add('hiding');
-      setTimeout(() => banner.remove(), 300);
-    }, 4000);
-  },
-
-  /**
    * Update magic meaning button to show processing state
    */
   setMagicMeaningProcessing() {
@@ -10484,9 +10648,6 @@ const ButtonPanel = {
 
       // Show success state
       this.setMagicMeaningSuccess();
-
-      // Show success banner
-      this.showSuccessBanner();
 
       // Reset button after 2 seconds
       setTimeout(() => {
@@ -12588,76 +12749,6 @@ const ButtonPanel = {
       }
 
       /* ===================================
-         Success Banner Styles
-         =================================== */
-      .vocab-success-banner {
-        position: fixed;
-        top: 20px;
-        right: -350px;
-        background: white;
-        border: 2px solid #22c55e;
-        border-radius: 12px;
-        padding: 16px 20px 12px 20px;
-        box-shadow: 0 4px 12px rgba(34, 197, 94, 0.2);
-        z-index: 2147483647;
-        opacity: 0;
-        transition: opacity 0.4s ease, right 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
-        pointer-events: all;
-        display: flex;
-        flex-direction: column;
-        gap: 8px;
-        min-width: 300px;
-      }
-
-      .vocab-success-banner.visible {
-        opacity: 1;
-        right: 20px;
-      }
-
-      .vocab-success-banner.hiding {
-        opacity: 0;
-        right: -350px;
-        transition: opacity 0.3s ease, right 0.4s cubic-bezier(0.6, 0, 0.4, 1);
-      }
-
-      .vocab-success-banner-header {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-      }
-
-      .vocab-success-banner-text {
-        font-family: 'Inter', 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-        font-size: 14px;
-        font-weight: 500;
-        color: #16a34a;
-      }
-
-      .vocab-success-banner-footer {
-        display: flex;
-        justify-content: flex-end;
-        align-items: center;
-      }
-
-      .vocab-success-banner-dismiss {
-        background: transparent;
-        border: 1px solid #22c55e;
-        color: #16a34a;
-        padding: 4px 12px;
-        border-radius: 6px;
-        font-size: 11px;
-        font-family: 'Inter', 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-        cursor: pointer;
-        transition: all 0.2s ease;
-        white-space: nowrap;
-      }
-
-      .vocab-success-banner-dismiss:hover {
-        background: #22c55e;
-        color: white;
-      }
-
-      /* ===================================
          Processing Spinner Animation
          =================================== */
       .vocab-processing-spinner {
@@ -13366,6 +13457,253 @@ const ButtonPanel = {
 
 
   /**
+   * Handler for Magic meaning button for a specific text
+   * @param {string} textKey - The specific text key to process
+   */
+  async handleMagicMeaningForText(textKey) {
+    console.log('[ButtonPanel] Magic meaning clicked for specific text:', textKey);
+    
+    // Check if textKey exists in selectedTexts
+    if (!TextSelector.selectedTexts.has(textKey)) {
+      console.warn('[ButtonPanel] Text key not found in selectedTexts:', textKey);
+      return;
+    }
+    
+    // Get position data for this specific text
+    const positionData = TextSelector.textPositions.get(textKey);
+    if (!positionData) {
+      console.warn('[ButtonPanel] No position data found for textKey:', textKey);
+      return;
+    }
+    
+    // Get the highlight element
+    const highlight = TextSelector.textToHighlights.get(textKey);
+    if (!highlight) {
+      console.warn('[ButtonPanel] No highlight found for textKey:', textKey);
+      return;
+    }
+    
+    // Initialize API completion tracking for single text
+    this.apiCompletionState.simplifyCompleted = false;
+    this.apiCompletionState.wordsExplanationCompleted = true; // No words to process
+    this.apiCompletionState.shouldTrack = true;
+    
+    // Set button to processing state
+    this.setMagicMeaningProcessing();
+    
+    console.log('[ButtonPanel] Processing single text segment for:', textKey);
+    
+    // Build API request payload for this single text
+    const textSegments = [{
+      textStartIndex: positionData.textStartIndex,
+      textLength: positionData.textLength,
+      text: positionData.text,
+      previousSimplifiedTexts: []
+    }];
+    
+    // Remove text from selectedTexts container as API call starts
+    TextSelector.selectedTexts.delete(textKey);
+    
+    // Update button states after removing from selectedTexts
+    this.updateButtonStatesFromSelections();
+    
+    // Remove any existing buttons (remove button and magic-meaning button)
+    const existingRemoveBtn = highlight.querySelector('.vocab-text-remove-btn');
+    if (existingRemoveBtn) {
+      existingRemoveBtn.remove();
+    }
+    
+    const existingMagicBtn = highlight.querySelector('.vocab-text-magic-meaning-btn');
+    if (existingMagicBtn) {
+      existingMagicBtn.remove();
+    }
+    
+    // Remove icons wrapper if empty
+    const iconsWrapper = highlight.querySelector('.vocab-text-icons-wrapper');
+    if (iconsWrapper && iconsWrapper.children.length === 0) {
+      iconsWrapper.remove();
+    }
+    
+    // Add loading animation class (already added in click handler, but ensure it's there)
+    highlight.classList.add('vocab-text-loading');
+    
+    // Call SimplifyService with SSE for this single text
+    SimplifyService.simplify(
+      textSegments,
+      // onEvent callback - called for each SSE event
+      (eventData) => {
+        console.log('[ButtonPanel] Received simplified text:', eventData);
+        
+        // Verify this event matches our textKey
+        if (positionData.textStartIndex === eventData.textStartIndex &&
+            positionData.textLength === eventData.textLength) {
+          
+          // Remove loading animation
+          highlight.classList.remove('vocab-text-loading');
+          
+          // Change underline to light green
+          highlight.classList.add('vocab-text-simplified');
+          
+          // Replace purple cross button with green cross button at top-left
+          const existingPurpleCross = highlight.querySelector('.vocab-text-remove-btn');
+          if (existingPurpleCross) {
+            existingPurpleCross.remove();
+          }
+          
+          // Create green cross button at top-left (same position as purple cross)
+          const greenCrossBtn = document.createElement('button');
+          greenCrossBtn.className = 'vocab-text-remove-green-btn';
+          greenCrossBtn.setAttribute('aria-label', 'Remove simplified text');
+          greenCrossBtn.style.position = 'absolute';
+          greenCrossBtn.style.top = '-6px';
+          greenCrossBtn.style.left = '-6px';
+          greenCrossBtn.style.width = '14px';
+          greenCrossBtn.style.height = '14px';
+          greenCrossBtn.style.background = '#22c55e';
+          greenCrossBtn.style.borderRadius = '50%';
+          greenCrossBtn.style.zIndex = '10000003';
+          greenCrossBtn.style.boxShadow = '0 2px 4px rgba(34, 197, 94, 0.4)';
+          greenCrossBtn.style.display = 'flex';
+          greenCrossBtn.style.alignItems = 'center';
+          greenCrossBtn.style.justifyContent = 'center';
+          greenCrossBtn.style.cursor = 'pointer';
+          greenCrossBtn.style.opacity = '0.9';
+          greenCrossBtn.style.border = 'none';
+          greenCrossBtn.style.padding = '0';
+          // Use same cross icon as purple button (8px × 8px)
+          greenCrossBtn.innerHTML = `
+            <svg width="10" height="10" viewBox="0 0 10 10" fill="none" xmlns="http://www.w3.org/2000/svg" style="width: 8px; height: 8px;">
+              <path d="M2 2L8 8M8 2L2 8" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          `;
+          // Add click handler - same functionality as green remove button
+          greenCrossBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            console.log('[TextSelector] Green cross button clicked for simplified text:', textKey);
+            TextSelector.removeFromSimplifiedTexts(textKey);
+          });
+          highlight.appendChild(greenCrossBtn);
+          
+          // Create wrapper for icons
+          const newIconsWrapper = document.createElement('div');
+          newIconsWrapper.className = 'vocab-text-icons-wrapper';
+          newIconsWrapper.setAttribute('data-text-key', textKey);
+          
+          // Add book icon first (top position)
+          const bookBtn = TextSelector.createBookButton(textKey);
+          newIconsWrapper.appendChild(bookBtn);
+          
+          // Don't add green remove button - green cross button at top-left has same functionality
+          
+          // Append icons wrapper directly to highlight for absolute positioning
+          highlight.appendChild(newIconsWrapper);
+          
+          // Automatically open chat dialog for simplified text
+          const simplifiedData = {
+            text: eventData.text,
+            simplifiedText: eventData.simplifiedText,
+            textStartIndex: eventData.textStartIndex,
+            textLength: eventData.textLength,
+            previousSimplifiedTexts: eventData.previousSimplifiedTexts || [],
+            shouldAllowSimplifyMore: eventData.shouldAllowSimplifyMore || false
+          };
+          
+          // Use a small delay to ensure DOM is updated
+          setTimeout(() => {
+            ChatDialog.open(eventData.text, textKey, 'simplified', simplifiedData, 'selected');
+          }, 100);
+          
+          // Position icons relative to highlight
+          const highlightRect = highlight.getBoundingClientRect();
+          const isInModal = highlight.closest('.vocab-custom-content-modal');
+          
+          if (isInModal) {
+            // In modal context: position to the left with sufficient margin
+            newIconsWrapper.style.setProperty('left', '-50px', 'important');
+            newIconsWrapper.style.setProperty('top', '-2px', 'important');
+          } else {
+            // In main webpage context: position to the left
+            newIconsWrapper.style.setProperty('left', '-40px', 'important');
+            newIconsWrapper.style.setProperty('top', '0px', 'important');
+          }
+          
+          // Store simplified text data
+          TextSelector.simplifiedTexts.set(textKey, {
+            textStartIndex: eventData.textStartIndex,
+            textLength: eventData.textLength,
+            text: eventData.text,
+            simplifiedText: eventData.simplifiedText,
+            previousSimplifiedTexts: eventData.previousSimplifiedTexts || [],
+            shouldAllowSimplifyMore: eventData.shouldAllowSimplifyMore || false,
+            highlight: highlight
+          });
+          
+          // Store simplified text in analysis data for persistence
+          if (this.topicsModal && this.topicsModal.customContentModal && this.topicsModal.customContentModal.activeTabId) {
+            const activeContent = this.topicsModal.customContentModal.getContentByTabId(parseInt(this.topicsModal.customContentModal.activeTabId));
+            if (activeContent && activeContent.analysis) {
+              const simplifiedTextData = {
+                textKey: textKey,
+                textStartIndex: eventData.textStartIndex,
+                textLength: eventData.textLength,
+                originalText: eventData.text,
+                simplifiedText: eventData.simplifiedText,
+                previousSimplifiedTexts: eventData.previousSimplifiedTexts || [],
+                shouldAllowSimplifyMore: eventData.shouldAllowSimplifyMore || false,
+                timestamp: new Date().toISOString()
+              };
+              
+              // Check if this text already exists in simplifiedMeanings
+              const existingTextIndex = activeContent.analysis.simplifiedMeanings.findIndex(s => 
+                s.textKey === textKey
+              );
+              
+              if (existingTextIndex !== -1) {
+                // Update existing simplified text
+                activeContent.analysis.simplifiedMeanings[existingTextIndex] = simplifiedTextData;
+                console.log(`[ButtonPanel] Updated existing simplified text for textKey "${textKey}" in analysis data`);
+              } else {
+                // Add new simplified text
+                activeContent.analysis.simplifiedMeanings.push(simplifiedTextData);
+                console.log(`[ButtonPanel] Added new simplified text for textKey "${textKey}" to analysis data`);
+              }
+            }
+          }
+          
+          // Update button states after adding to simplifiedTexts
+          this.updateButtonStatesFromSelections();
+          
+          console.log('[ButtonPanel] Text simplified successfully for:', textKey);
+        }
+      },
+      // onComplete callback
+      () => {
+        console.log('[ButtonPanel] Single text simplification API call completed for:', textKey);
+        
+        // Mark simplify as completed
+        this.apiCompletionState.simplifyCompleted = true;
+        
+        // Check if all APIs are completed
+        this.checkAPICompletion();
+      },
+      // onError callback
+      (error) => {
+        console.error('[ButtonPanel] Error during single text simplification:', error);
+        
+        // Remove loading animation on error
+        highlight.classList.remove('vocab-text-loading');
+        
+        // Mark simplify as completed (even on error) to allow button reset
+        this.apiCompletionState.simplifyCompleted = true;
+        
+        // Check if all APIs are completed
+        this.checkAPICompletion();
+      }
+    );
+  },
+
+  /**
    * Handler for Magic meaning button
    */
   async handleMagicMeaning() {
@@ -13473,11 +13811,46 @@ const ButtonPanel = {
                 // Change underline to light green
                 highlight.classList.add('vocab-text-simplified');
                 
-                // Replace cross button with book icon
-                const existingBtn = highlight.querySelector('.vocab-text-remove-btn');
-                if (existingBtn) {
-                  existingBtn.remove();
+                // Replace purple cross button with green cross button at top-left
+                const existingPurpleCross = highlight.querySelector('.vocab-text-remove-btn');
+                if (existingPurpleCross) {
+                  existingPurpleCross.remove();
                 }
+                
+                // Create green cross button at top-left (same position as purple cross)
+                const greenCrossBtn = document.createElement('button');
+                greenCrossBtn.className = 'vocab-text-remove-green-btn';
+                greenCrossBtn.setAttribute('aria-label', 'Remove simplified text');
+                greenCrossBtn.style.position = 'absolute';
+                greenCrossBtn.style.top = '-6px';
+                greenCrossBtn.style.left = '-6px';
+                greenCrossBtn.style.width = '14px';
+                greenCrossBtn.style.height = '14px';
+                greenCrossBtn.style.background = '#22c55e';
+                greenCrossBtn.style.borderRadius = '50%';
+                greenCrossBtn.style.zIndex = '10000003';
+                greenCrossBtn.style.boxShadow = '0 2px 4px rgba(34, 197, 94, 0.4)';
+                greenCrossBtn.style.display = 'flex';
+                greenCrossBtn.style.alignItems = 'center';
+                greenCrossBtn.style.justifyContent = 'center';
+                greenCrossBtn.style.cursor = 'pointer';
+                greenCrossBtn.style.opacity = '0.9';
+                greenCrossBtn.style.border = 'none';
+                greenCrossBtn.style.padding = '0';
+                // Use same cross icon as purple button (8px × 8px)
+                greenCrossBtn.innerHTML = `
+                  <svg width="10" height="10" viewBox="0 0 10 10" fill="none" xmlns="http://www.w3.org/2000/svg" style="width: 8px; height: 8px;">
+                    <path d="M2 2L8 8M8 2L2 8" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                  </svg>
+                `;
+                // Add click handler - same functionality as green remove button
+                greenCrossBtn.addEventListener('click', (e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  console.log('[TextSelector] Green cross button clicked for simplified text:', matchingTextKey);
+                  TextSelector.removeFromSimplifiedTexts(matchingTextKey);
+                });
+                highlight.appendChild(greenCrossBtn);
                 
                 // Create wrapper for icons
                 const iconsWrapper = document.createElement('div');
@@ -13488,9 +13861,22 @@ const ButtonPanel = {
                 const bookBtn = TextSelector.createBookButton(matchingTextKey);
                 iconsWrapper.appendChild(bookBtn);
                 
-                // Add green remove button second (bottom position)
-                const greenRemoveBtn = TextSelector.createGreenRemoveButtonForSimplifiedText(matchingTextKey);
-                iconsWrapper.appendChild(greenRemoveBtn);
+                // Don't add green remove button - green cross button at top-left has same functionality
+                
+                // Automatically open chat dialog for simplified text
+                const simplifiedData = {
+                  text: eventData.text,
+                  simplifiedText: eventData.simplifiedText,
+                  textStartIndex: eventData.textStartIndex,
+                  textLength: eventData.textLength,
+                  previousSimplifiedTexts: eventData.previousSimplifiedTexts || [],
+                  shouldAllowSimplifyMore: eventData.shouldAllowSimplifyMore || false
+                };
+                
+                // Use a small delay to ensure DOM is updated
+                setTimeout(() => {
+                  ChatDialog.open(eventData.text, matchingTextKey, 'simplified', simplifiedData, 'selected');
+                }, 100);
                 
                 // Append icons wrapper directly to highlight for absolute positioning
                 highlight.appendChild(iconsWrapper);
