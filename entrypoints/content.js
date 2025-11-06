@@ -312,6 +312,339 @@ export default defineContentScript({
     // Initialize the chat dialog
     ChatDialog.init();
     
+    // ===================================
+    // Banner Module - Shows welcome banner when extension is enabled
+    // ===================================
+    const BannerModule = {
+      STORAGE_KEY: 'magic_comprehension_banner_dismissed',
+      bannerContainer: null,
+      
+      /**
+       * Check if banner should be shown
+       * @returns {Promise<boolean>} Whether to show the banner
+       */
+      async shouldShowBanner() {
+        try {
+          // Check if extension is enabled
+          const result = await chrome.storage.local.get([GLOBAL_STORAGE_KEY]);
+          const isEnabled = result[GLOBAL_STORAGE_KEY] ?? true;
+          
+          if (!isEnabled) {
+            return false;
+          }
+          
+          // Check if user has dismissed the banner
+          const dismissedResult = await chrome.storage.local.get([this.STORAGE_KEY]);
+          const isDismissed = dismissedResult[this.STORAGE_KEY] ?? false;
+          
+          return !isDismissed;
+        } catch (error) {
+          console.error('[Banner] Error checking banner state:', error);
+          return false;
+        }
+      },
+      
+      /**
+       * Mark banner as dismissed
+       */
+      async dismissBanner() {
+        try {
+          await chrome.storage.local.set({ [this.STORAGE_KEY]: true });
+          console.log('[Banner] Banner dismissed');
+        } catch (error) {
+          console.error('[Banner] Error dismissing banner:', error);
+        }
+      },
+      
+      /**
+       * Create the banner HTML structure
+       */
+      createBanner() {
+        if (this.bannerContainer) {
+          return; // Already created
+        }
+        
+        // Create main container
+        this.bannerContainer = document.createElement('div');
+        this.bannerContainer.id = 'magic-comprehension-banner';
+        this.bannerContainer.className = 'magic-comprehension-banner';
+        
+        // Create header with close button (cross icon at top right)
+        const header = document.createElement('div');
+        header.className = 'banner-header';
+        
+        const closeButton = document.createElement('button');
+        closeButton.className = 'banner-close';
+        closeButton.innerHTML = `
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M12 4L4 12M4 4L12 12" stroke="#9527F5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        `;
+        closeButton.setAttribute('aria-label', 'Close banner');
+        closeButton.addEventListener('click', () => this.hideBanner());
+        
+        header.appendChild(closeButton);
+        
+        // Create heading container (below cross icon, vertically centered)
+        const headingContainer = document.createElement('div');
+        headingContainer.className = 'banner-heading-container';
+        
+        const heading = document.createElement('h2');
+        heading.className = 'banner-heading';
+        heading.textContent = 'Magic comprehension';
+        
+        headingContainer.appendChild(heading);
+        
+        // Create instructions container
+        const instructions = document.createElement('div');
+        instructions.className = 'banner-instructions';
+        
+        const instruction1 = document.createElement('p');
+        instruction1.className = 'banner-instruction-item';
+        instruction1.innerHTML = 'Double click a <span class="banner-highlight">word</span> to select';
+        
+        const instruction2 = document.createElement('p');
+        instruction2.className = 'banner-instruction-item';
+        instruction2.innerHTML = 'Select a <span class="banner-highlight">passage containing multiple words</span> or sentences';
+        
+        instructions.appendChild(instruction1);
+        instructions.appendChild(instruction2);
+        
+        // Create footer with "Don't show again" button
+        const footer = document.createElement('div');
+        footer.className = 'banner-footer';
+        
+        const dontShowButton = document.createElement('button');
+        dontShowButton.className = 'banner-dont-show';
+        dontShowButton.textContent = "Don't show again";
+        dontShowButton.addEventListener('click', () => {
+          this.dismissBanner();
+          this.hideBanner();
+        });
+        
+        footer.appendChild(dontShowButton);
+        
+        // Assemble banner
+        this.bannerContainer.appendChild(header);
+        this.bannerContainer.appendChild(headingContainer);
+        this.bannerContainer.appendChild(instructions);
+        this.bannerContainer.appendChild(footer);
+        
+        // Add styles
+        this.addStyles();
+        
+        // Append to body
+        document.body.appendChild(this.bannerContainer);
+      },
+      
+      /**
+       * Add CSS styles for the banner
+       */
+      addStyles() {
+        if (document.getElementById('magic-comprehension-banner-styles')) {
+          return; // Styles already added
+        }
+        
+        const style = document.createElement('style');
+        style.id = 'magic-comprehension-banner-styles';
+        style.textContent = `
+          .magic-comprehension-banner {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            width: 320px;
+            max-width: calc(100vw - 40px);
+            background: white;
+            border: 2px solid #9527F5;
+            border-radius: 16px;
+            padding: 20px;
+            box-shadow: 0 4px 20px rgba(149, 39, 245, 0.15);
+            z-index: 10000;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            transform: translateX(400px);
+            opacity: 0;
+            transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.4s ease;
+          }
+          
+          .magic-comprehension-banner.show {
+            transform: translateX(0);
+            opacity: 1;
+          }
+          
+          .magic-comprehension-banner.hide {
+            transform: translateX(400px);
+            opacity: 0;
+          }
+          
+          .banner-header {
+            display: flex;
+            justify-content: flex-end;
+            align-items: flex-start;
+            margin-bottom: 8px;
+          }
+          
+          .banner-heading-container {
+            display: flex;
+            align-items: center;
+            margin-bottom: 16px;
+          }
+          
+          .banner-heading {
+            margin: 0;
+            font-size: 18px;
+            font-weight: 600;
+            color: #9527F5;
+          }
+          
+          .banner-close {
+            background: none;
+            border: none;
+            cursor: pointer;
+            padding: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 4px;
+            transition: background-color 0.2s ease;
+          }
+          
+          .banner-close:hover {
+            background-color: rgba(149, 39, 245, 0.1);
+          }
+          
+          .banner-close:active {
+            background-color: rgba(149, 39, 245, 0.2);
+          }
+          
+          .banner-instructions {
+            margin-bottom: 16px;
+          }
+          
+          .banner-instruction-item {
+            font-size: 14px;
+            color: #333;
+            margin: 10px 0;
+            line-height: 1.6;
+            position: relative;
+            padding-left: 0;
+          }
+          
+          .banner-instruction-item::before {
+            content: "ⓘ";
+            color: #9527F5;
+            font-size: 16px;
+            font-weight: bold;
+            margin-right: 8px;
+            vertical-align: middle;
+            line-height: 1;
+          }
+          
+          .banner-highlight {
+            background-color: #ede6ff;
+            color: #7a1fd9;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-weight: 500;
+          }
+          
+          .banner-footer {
+            display: flex;
+            justify-content: flex-end;
+            padding-top: 8px;
+          }
+          
+          .banner-dont-show {
+            background: none;
+            border: none;
+            color: #9527F5;
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            padding: 6px 12px;
+            border-radius: 6px;
+            transition: background-color 0.2s ease;
+          }
+          
+          .banner-dont-show:hover {
+            background-color: rgba(149, 39, 245, 0.1);
+          }
+          
+          .banner-dont-show:active {
+            background-color: rgba(149, 39, 245, 0.2);
+          }
+        `;
+        
+        document.head.appendChild(style);
+      },
+      
+      /**
+       * Show the banner with sliding-in animation
+       */
+      async showBanner() {
+        if (!this.bannerContainer) {
+          this.createBanner();
+        }
+        
+        const shouldShow = await this.shouldShowBanner();
+        if (!shouldShow) {
+          return;
+        }
+        
+        // Remove hide class and add show class
+        this.bannerContainer.classList.remove('hide');
+        this.bannerContainer.classList.add('show');
+      },
+      
+      /**
+       * Hide the banner with sliding-out animation
+       */
+      hideBanner() {
+        if (!this.bannerContainer) {
+          return;
+        }
+        
+        this.bannerContainer.classList.remove('show');
+        this.bannerContainer.classList.add('hide');
+        
+        // Remove from DOM after animation
+        setTimeout(() => {
+          if (this.bannerContainer && this.bannerContainer.classList.contains('hide')) {
+            this.bannerContainer.remove();
+            this.bannerContainer = null;
+          }
+        }, 400);
+      },
+      
+      /**
+       * Initialize the banner - check if it should be shown
+       */
+      async init() {
+        const shouldShow = await this.shouldShowBanner();
+        if (shouldShow) {
+          // Wait a bit for page to load, then show banner
+          setTimeout(() => {
+            this.showBanner();
+          }, 500);
+        }
+      },
+      
+      /**
+       * Update banner visibility based on extension state
+       */
+      async updateVisibility(isEnabled) {
+        if (isEnabled) {
+          const shouldShow = await this.shouldShowBanner();
+          if (shouldShow) {
+            this.showBanner();
+          } else {
+            this.hideBanner();
+          }
+        } else {
+          this.hideBanner();
+        }
+      }
+    };
+    
     // Check global extension state on page load/reload AFTER initialization
     const checkGlobalExtensionState = async () => {
       try {
@@ -338,12 +671,18 @@ export default defineContentScript({
           WordSelector.clearAll();
           TextSelector.clearAll();
         }
+        
+        // Update banner visibility after state check
+        await BannerModule.updateVisibility(isEnabled);
       } catch (error) {
         console.error('[Content Script] Error checking global extension state:', error);
         // Default to enabled on error
         ButtonPanel.show();
         WordSelector.enable();
         TextSelector.enable();
+        
+        // Update banner visibility on error (default to enabled)
+        await BannerModule.updateVisibility(true);
       }
     };
     
@@ -445,6 +784,9 @@ export default defineContentScript({
             WordSelector.clearAll();
             TextSelector.clearAll();
           }
+          
+          // Update banner visibility
+          BannerModule.updateVisibility(isEnabled);
         }
       }
     });
@@ -469,6 +811,9 @@ export default defineContentScript({
           TextSelector.clearAll();
         }
         
+        // Update banner visibility
+        BannerModule.updateVisibility(message.isEnabled);
+        
         sendResponse({ success: true });
       } else if (message.type === 'TAB_STATE_CHANGE') {
         console.log(`[Content Script] Tab state change:`, message.eventType);
@@ -477,6 +822,9 @@ export default defineContentScript({
         handleExtensionStateCheck(message.domain, sendResponse);
       }
     });
+    
+    // Initialize banner after checking extension state
+    await BannerModule.init();
   },
 });
 
@@ -879,7 +1227,20 @@ const WordSelector = {
     console.log('[WordSelector] Original word:', selectedText);
     console.log('[WordSelector] Normalized word:', normalizedWord);
     
-    // Check if word is already selected - if so, deselect it
+    // Check if word is already explained (green) - if so, deselect it
+    if (this.explainedWords.has(normalizedWord)) {
+      // Check if clicking on the green highlight itself
+      const clickedHighlight = event.target.closest('.vocab-word-explained');
+      if (clickedHighlight) {
+        // Allow deselection of green highlights
+        this.removeExplainedWord(selectedText);
+        selection.removeAllRanges();
+        console.log('[WordSelector] Explained word deselected:', selectedText);
+        return;
+      }
+    }
+    
+    // Check if word is already selected (purple) - if so, deselect it
     if (this.isWordSelected(normalizedWord)) {
       this.removeWord(selectedText);
       selection.removeAllRanges();
@@ -899,6 +1260,246 @@ const WordSelector = {
     console.log('[WordSelector] ✓ Word selected:', selectedText);
     console.log('[WordSelector] ✓ Normalized word stored:', normalizedWord);
     console.log('[WordSelector] ✓ Total selected words:', this.selectedWords.size);
+    
+    // Get the highlight element that was just created
+    const highlights = this.wordToHighlights.get(normalizedWord);
+    const highlight = highlights ? Array.from(highlights)[highlights.size - 1] : null;
+    
+    // Immediately trigger API call for this word
+    // Pass the highlight element directly to avoid timing issues
+    this.processWordExplanation(selectedText, normalizedWord, highlight);
+  },
+  
+  /**
+   * Process word explanation API call for a single word
+   * This is called automatically when a word is double-clicked
+   * @param {string} word - The original word (with case)
+   * @param {string} normalizedWord - The normalized word (lowercase)
+   * @param {HTMLElement} highlight - The highlight element (optional, will be looked up if not provided)
+   */
+  async processWordExplanation(word, normalizedWord, highlight = null) {
+    console.log('[WordSelector] ===== PROCESSING WORD EXPLANATION =====');
+    console.log('[WordSelector] Word:', word);
+    console.log('[WordSelector] Normalized word:', normalizedWord);
+    console.log('[WordSelector] Highlight provided:', highlight !== null);
+    
+    // Check if word is already explained (green)
+    if (this.explainedWords.has(normalizedWord)) {
+      console.log('[WordSelector] Word already explained, skipping API call:', normalizedWord);
+      return;
+    }
+    
+    // Get the highlight element for this word if not provided
+    if (!highlight) {
+      const highlights = this.wordToHighlights.get(normalizedWord);
+      if (!highlights || highlights.size === 0) {
+        console.warn('[WordSelector] No highlights found for word:', normalizedWord);
+        return;
+      }
+      // Use the most recently added highlight (last in the Set)
+      highlight = Array.from(highlights)[highlights.size - 1];
+    }
+    
+    // Check if highlight is already explained (has green class)
+    if (highlight.classList.contains('vocab-word-explained')) {
+      console.log('[WordSelector] Highlight already has green background, skipping API call');
+      return;
+    }
+    
+    // Build payload for this single word
+    const docText = this.getDocumentText();
+    const positions = this.findWordPositionsInDocument(normalizedWord);
+    
+    if (positions.length === 0) {
+      console.warn('[WordSelector] No positions found for word:', normalizedWord);
+      return;
+    }
+    
+    // Use the first position
+    const position = positions[0];
+    const context = this.extractWordContext(docText, position, word.length);
+    
+    console.log('[WordSelector] Context extracted:', {
+      textStartIndex: context.textStartIndex,
+      textPreview: context.text.substring(0, 50) + '...',
+      wordIndexInContext: context.wordIndexInText
+    });
+    
+    // Build payload segment
+    const payloadSegment = {
+      textStartIndex: context.textStartIndex,
+      text: context.text,
+      important_words_location: [{
+        word: word,
+        index: context.wordIndexInText,
+        length: word.length
+      }],
+      _wordHighlights: [highlight] // Keep for internal tracking
+    };
+    
+    // Remove purple cross button and add pulsating animation
+    const existingBtn = highlight.querySelector('.vocab-word-remove-btn');
+    if (existingBtn) {
+      existingBtn.remove();
+    }
+    
+    // Add pulsating purple animation
+    highlight.classList.add('vocab-word-loading');
+    console.log('[WordSelector] Added loading animation to highlight');
+    
+    // Prepare API payload (remove internal tracking property)
+    const apiPayload = [{
+      textStartIndex: payloadSegment.textStartIndex,
+      text: payloadSegment.text,
+      important_words_location: payloadSegment.important_words_location
+    }];
+    
+    console.log('[WordSelector] Sending API request for word:', word);
+    
+    // Call WordExplanationService with SSE
+    WordExplanationService.explainWords(
+      apiPayload,
+      // onEvent callback - called for each word explanation
+      (eventData) => {
+        console.log('[WordSelector] ===== SSE EVENT RECEIVED FOR DOUBLE-CLICKED WORD =====');
+        console.log('[WordSelector] Full event data:', JSON.stringify(eventData, null, 2));
+        
+        const wordInfo = eventData.word_info;
+        if (!wordInfo) {
+          console.warn('[WordSelector] No word_info in event data');
+          return;
+        }
+        
+        // Use word_info.location.word for matching
+        const targetWord = wordInfo.location?.word || wordInfo.word;
+        const normalizedTargetWord = targetWord.toLowerCase().trim();
+        
+        console.log('[WordSelector] Processing word explanation:', {
+          targetWord: targetWord,
+          normalizedTargetWord: normalizedTargetWord,
+          originalWord: word,
+          originalNormalized: normalizedWord
+        });
+        
+        // Find the matching highlight
+        const wordHighlight = highlight;
+        const highlightDataWord = wordHighlight.getAttribute('data-word');
+        
+        // Check if this is the correct highlight
+        if (highlightDataWord && highlightDataWord.toLowerCase() === normalizedTargetWord) {
+          console.log('[WordSelector] ===== APPLYING GREEN BACKGROUND =====');
+          console.log('[WordSelector] ✓ Found matching highlight for word:', targetWord);
+          
+          // Remove pulsating animation
+          wordHighlight.classList.remove('vocab-word-loading');
+          
+          // Remove old purple cross button if exists
+          const oldBtn = wordHighlight.querySelector('.vocab-word-remove-btn');
+          if (oldBtn) {
+            oldBtn.remove();
+          }
+          
+          // Change background to green with breathing animation
+          wordHighlight.classList.add('vocab-word-explained', 'word-breathing');
+          
+          // Remove breathing animation after it completes (0.8s)
+          setTimeout(() => {
+            wordHighlight.classList.remove('word-breathing');
+          }, 800);
+          
+          // Store explanation data on the element
+          wordHighlight.setAttribute('data-meaning', wordInfo.meaning);
+          wordHighlight.setAttribute('data-examples', JSON.stringify(wordInfo.examples));
+          
+          // Store word explanation in analysis data for persistence
+          if (ButtonPanel.topicsModal && ButtonPanel.topicsModal.customContentModal && ButtonPanel.topicsModal.customContentModal.activeTabId) {
+            const activeContent = ButtonPanel.topicsModal.customContentModal.getContentByTabId(parseInt(ButtonPanel.topicsModal.customContentModal.activeTabId));
+            if (activeContent && activeContent.analysis) {
+              // Check if this word already exists in wordMeanings
+              const existingWordIndex = activeContent.analysis.wordMeanings.findIndex(w => 
+                w.word.toLowerCase() === normalizedTargetWord
+              );
+              
+              const wordExplanationData = {
+                word: targetWord,
+                normalizedWord: normalizedTargetWord,
+                meaning: wordInfo.meaning,
+                examples: wordInfo.examples,
+                shouldAllowFetchMoreExamples: wordInfo.shouldAllowFetchMoreExamples || false,
+                textStartIndex: wordInfo.textStartIndex,
+                location: wordInfo.location,
+                timestamp: new Date().toISOString()
+              };
+              
+              if (existingWordIndex !== -1) {
+                // Update existing word explanation
+                activeContent.analysis.wordMeanings[existingWordIndex] = wordExplanationData;
+                console.log('[WordSelector] Updated existing word explanation in analysis data');
+              } else {
+                // Add new word explanation
+                activeContent.analysis.wordMeanings.push(wordExplanationData);
+                console.log('[WordSelector] Added new word explanation to analysis data');
+              }
+            }
+          }
+          
+          // Add green wireframe cross button
+          const greenCrossBtn = this.createRemoveExplainedButton(targetWord);
+          wordHighlight.appendChild(greenCrossBtn);
+          
+          // Store in explainedWords map
+          if (!this.explainedWords.has(normalizedTargetWord)) {
+            this.explainedWords.set(normalizedTargetWord, {
+              word: targetWord,
+              meaning: wordInfo.meaning,
+              examples: wordInfo.examples,
+              shouldAllowFetchMoreExamples: wordInfo.shouldAllowFetchMoreExamples || false,
+              hasCalledGetMoreExamples: false,
+              highlights: new Set()
+            });
+          }
+          this.explainedWords.get(normalizedTargetWord).highlights.add(wordHighlight);
+          
+          // Setup hover and click interactions for this word
+          this.setupWordInteractions(wordHighlight);
+          
+          // Update button states
+          ButtonPanel.updateButtonStatesFromSelections();
+          
+          // Remove from selectedWords (since it's now explained)
+          this.selectedWords.delete(normalizedWord);
+          
+          console.log('[WordSelector] ===== GREEN BACKGROUND APPLIED SUCCESSFULLY =====');
+          console.log('[WordSelector] ✓ Word explanation complete:', targetWord);
+          
+          // Automatically show word meaning popup after green background is applied
+          // Use a small delay to ensure DOM is updated and breathing animation starts
+          setTimeout(() => {
+            console.log('[WordSelector] Auto-showing word meaning popup');
+            this.showWordPopup(wordHighlight, true); // Show as sticky popup
+          }, 100);
+        } else {
+          console.warn('[WordSelector] Highlight data-word mismatch:', {
+            highlightDataWord: highlightDataWord,
+            normalizedTargetWord: normalizedTargetWord
+          });
+        }
+      },
+      // onComplete callback
+      () => {
+        console.log('[WordSelector] Word explanation API call completed');
+      },
+      // onError callback
+      (error) => {
+        console.error('[WordSelector] Error during word explanation:', error);
+        
+        // Remove pulsating animation on error
+        highlight.classList.remove('vocab-word-loading');
+        
+        // Show error notification
+        TextSelector.showNotification('Error getting word meaning. Please try again.');
+      }
+    );
   },
   
   /**
@@ -1826,7 +2427,7 @@ const WordSelector = {
   createCloseIcon() {
     return `
       <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M18 6L6 18M6 6l12 12" stroke="#A020F0" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M18 6L6 18M6 6l12 12" stroke="#A020F0" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>
       </svg>
     `;
   },
@@ -2071,6 +2672,12 @@ const WordSelector = {
     // Remove from wordToHighlights Map
     this.wordToHighlights.delete(normalizedWord);
     
+    // Also remove from selectedWords if present (to allow re-selection)
+    if (this.selectedWords.has(normalizedWord)) {
+      this.selectedWords.delete(normalizedWord);
+      console.log('[WordSelector] Also removed from selectedWords:', normalizedWord);
+    }
+    
     // Also remove from analysis data structure for current tab
     ButtonPanel.removeWordFromAnalysisData(normalizedWord);
     
@@ -2079,6 +2686,7 @@ const WordSelector = {
     
     console.log('[WordSelector] Explained word removed:', word);
     console.log('[WordSelector] Remaining explained words:', this.explainedWords.size);
+    console.log('[WordSelector] Remaining selected words:', this.selectedWords.size);
     
     // Update button states
     ButtonPanel.updateButtonStatesFromSelections();
@@ -2174,7 +2782,7 @@ const WordSelector = {
       }
       
       .vocab-word-loading {
-        animation: vocab-word-loading-breathe 1.5s ease-in-out infinite;
+        animation: vocab-word-loading-breathe 0.75s ease-in-out infinite;
       }
       
       /* Green background for explained words */
@@ -2185,6 +2793,30 @@ const WordSelector = {
         border: 1px solid rgba(21, 128, 61, 0.4);
         padding: 0 2px;
         transition: background-color 0.3s ease-in-out, border-color 0.3s ease-in-out, opacity 0.3s ease-in-out;
+      }
+      
+      /* Breathing animation for green word when it first appears - breathes twice (same as book icon) */
+      .vocab-word-explained.word-breathing {
+        display: inline-block !important;
+        animation: wordGreenBreathing 0.8s ease-in-out;
+      }
+      
+      @keyframes wordGreenBreathing {
+        0% {
+          transform: scale(1);
+        }
+        25% {
+          transform: scale(1.15);
+        }
+        50% {
+          transform: scale(1);
+        }
+        75% {
+          transform: scale(1.15);
+        }
+        100% {
+          transform: scale(1);
+        }
       }
       
       .vocab-word-explained:hover {
@@ -2273,7 +2905,7 @@ const WordSelector = {
         border-radius: 14px;
         padding: 18px 20px 45px 20px; /* Reduced bottom padding for minimal spacing */
         box-shadow: 0 8px 24px rgba(149, 39, 245, 0.15), 0 2px 8px rgba(0, 0, 0, 0.1);
-        z-index: 9999999;
+        z-index: 10000010;
         max-width: 380px;
         min-width: 300px;
         font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
@@ -3047,9 +3679,35 @@ const TextSelector = {
       range.insertNode(highlight);
     }
     
-    // Create and append remove button AFTER wrapping the content
+    // Create and append remove button FIRST (at top-left of highlight)
     const removeBtn = this.createRemoveButton(text);
     highlight.appendChild(removeBtn);
+    
+    // Create icons wrapper for magic-meaning button (positioned to the left)
+    const iconsWrapper = document.createElement('div');
+    iconsWrapper.className = 'vocab-text-icons-wrapper';
+    iconsWrapper.setAttribute('data-text-key', textKey);
+    
+    // Add magic-meaning button
+    const magicMeaningBtn = this.createMagicMeaningButton(textKey);
+    iconsWrapper.appendChild(magicMeaningBtn);
+    
+    // Append icons wrapper to highlight
+    highlight.appendChild(iconsWrapper);
+    
+    // Position icons relative to highlight
+    const highlightRect = highlight.getBoundingClientRect();
+    const isInModal = highlight.closest('.vocab-custom-content-modal');
+    
+    if (isInModal) {
+      // In modal context: position to the left with sufficient margin
+      iconsWrapper.style.setProperty('left', '-50px', 'important');
+      iconsWrapper.style.setProperty('top', '-2px', 'important');
+    } else {
+      // In main webpage context: position to the left
+      iconsWrapper.style.setProperty('left', '-40px', 'important');
+      iconsWrapper.style.setProperty('top', '0px', 'important');
+    }
     
     // Remove the appearing class after animation completes
     setTimeout(() => {
@@ -3371,6 +4029,16 @@ const TextSelector = {
       ChatDialog.close();
     }
     
+    // Immediately add disappearing animation to green cross button (same as purple cross)
+    const greenCrossBtn = highlight.querySelector('.vocab-text-remove-green-btn');
+    if (greenCrossBtn && !greenCrossBtn.classList.contains('button-disappearing')) {
+      greenCrossBtn.classList.add('button-disappearing');
+      // Remove button after animation completes (300ms)
+      setTimeout(() => {
+        greenCrossBtn.remove();
+      }, 300);
+    }
+    
     // Find icons wrapper
     let iconsWrapper = highlight.querySelector('.vocab-text-icons-wrapper');
     if (!iconsWrapper) {
@@ -3561,6 +4229,7 @@ const TextSelector = {
         }
         
         // Open ChatDialog in simplified mode with selected context
+        // Always use 'selected' context when opening from book icon to ensure expansion animation
         ChatDialog.open(simplifiedData.text, textKey, 'simplified', simplifiedData, 'selected');
       }
     });
@@ -3582,6 +4251,55 @@ const TextSelector = {
       <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
         <path d="M4 19.5C4 18.837 4.526 18 5.5 18H11M20 19.5C20 18.837 19.474 18 18.5 18H13" stroke="#22c55e" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/>
         <path d="M12 18V6M12 6C12 6 10 4 6.5 4C4.5 4 4 5 4 6V18C4 18 4.5 18 6.5 18C10 18 12 18 12 18M12 6C12 6 14 4 17.5 4C19.5 4 20 5 20 6V18C20 18 19.5 18 17.5 18C14 18 12 18 12 18" stroke="#22c55e" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    `;
+  },
+  
+  /**
+   * Create magic-meaning button for text selection
+   * @param {string} textKey - The text key
+   * @returns {HTMLElement}
+   */
+  createMagicMeaningButton(textKey) {
+    const btn = document.createElement('button');
+    btn.className = 'vocab-text-magic-meaning-btn';
+    btn.setAttribute('aria-label', 'Get magic meaning');
+    btn.innerHTML = this.createMagicMeaningIcon();
+    
+    // Add click handler
+    btn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      
+      console.log('[TextSelector] Magic-meaning button clicked for:', textKey);
+      
+      // Get the highlight element
+      const highlight = this.textToHighlights.get(textKey);
+      if (!highlight) {
+        console.warn('[TextSelector] No highlight found for textKey:', textKey);
+        return;
+      }
+      
+      // Add fast pulsating animation to the text
+      highlight.classList.add('vocab-text-loading');
+      
+      // Call handleMagicMeaning for this specific text only
+      ButtonPanel.handleMagicMeaningForText(textKey);
+    });
+    
+    return btn;
+  },
+  
+  /**
+   * Create magic-meaning icon SVG - White sparkle icon (matching main button design)
+   * @returns {string} SVG markup
+   */
+  createMagicMeaningIcon() {
+    return `
+      <svg width="24" height="24" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M14 0L17 8L25 11L17 14L14 22L11 14L3 11L11 8L14 0Z" fill="#9527F5"/>
+        <path d="M22 16L23.5 20L27.5 21.5L23.5 23L22 27L20.5 23L16.5 21.5L20.5 20L22 16Z" fill="#9527F5"/>
+        <path d="M8 21L9.5 24.5L13 26L9.5 27.5L8 31L6.5 27.5L3 26L6.5 24.5L8 21Z" fill="#9527F5"/>
       </svg>
     `;
   },
@@ -3865,6 +4583,45 @@ const TextSelector = {
         animation: bookBreathing 1.6s ease-in-out;
       }
       
+      /* Magic-meaning button - Purple sparkle icon with light purple background */
+      .vocab-text-magic-meaning-btn {
+        position: relative;
+        width: 32px;
+        height: 32px;
+        background: rgba(149, 39, 245, 0.15);
+        border: none;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        opacity: 0.95;
+        transition: opacity 0.2s ease, transform 0.15s ease, background-color 0.2s ease;
+        padding: 0;
+        flex-shrink: 0;
+        box-sizing: border-box;
+        padding-top: 1px;
+      }
+      
+      .vocab-text-magic-meaning-btn:hover {
+        transform: scale(1.1);
+        opacity: 1;
+        background-color: rgba(149, 39, 245, 0.25);
+      }
+      
+      .vocab-text-magic-meaning-btn:active {
+        transform: scale(0.9);
+      }
+      
+      .vocab-text-magic-meaning-btn svg {
+        pointer-events: none;
+        display: block;
+        width: 22px;
+        height: 22px;
+        filter: drop-shadow(0 1px 2px rgba(149, 39, 245, 0.3));
+        transform: translateY(-1px);
+      }
+      
       @keyframes bookBreathing {
         0% {
           transform: scale(1);
@@ -3942,6 +4699,10 @@ const TextSelector = {
         transform: scale(0.95);
       }
       
+      .vocab-text-remove-green-btn.button-disappearing {
+        animation: buttonFadeOut 0.3s ease-in-out forwards;
+      }
+      
       .vocab-text-remove-green-btn svg {
         pointer-events: none;
         display: block;
@@ -3990,7 +4751,7 @@ const TextSelector = {
         animation: vocab-text-pulsate 0.6s ease-in-out;
       }
       
-      /* Loading animation - pulsating light purple background */
+      /* Loading animation - pulsating light purple background (fast) */
       @keyframes vocab-text-loading-breathe {
         0%, 100% {
           background-color: transparent;
@@ -4001,7 +4762,7 @@ const TextSelector = {
       }
       
       .vocab-text-loading {
-        animation: vocab-text-loading-breathe 2s ease-in-out infinite;
+        animation: vocab-text-loading-breathe 0.75s ease-in-out infinite;
         text-decoration: none !important;
         border-radius: 3px;
       }
@@ -4419,12 +5180,33 @@ const ChatDialog = {
     // If dialog is open for different text, close it first
     if (this.isOpen) {
       console.log('[ChatDialog] Dialog open for different text, closing first');
+      // Force immediate cleanup if minimizing (to prevent invisible dialog)
+      const wasMinimizing = this.dialogContainer && this.dialogContainer.classList.contains('minimizing');
+      const wasExpanding = this.dialogContainer && this.dialogContainer.classList.contains('expanding');
+      
+      if (wasMinimizing || wasExpanding) {
+        // Cancel any ongoing animation and clean up immediately
+        if (this.dialogContainer) {
+          this.dialogContainer.classList.remove('minimizing', 'expanding');
+          this.dialogContainer.style.setProperty('transition', 'none');
+          this.dialogContainer.style.setProperty('animation', 'none');
+        }
+      }
+      
       this.close();
+      
       // Wait for close animation to complete and ensure cleanup
       setTimeout(() => {
+        // Double-check dialog is fully removed
+        if (this.dialogContainer && this.dialogContainer.parentNode) {
+          console.log('[ChatDialog] Dialog still exists, forcing removal');
+          this.dialogContainer.remove();
+          this.dialogContainer = null;
+          this.isOpen = false;
+        }
         console.log('[ChatDialog] Opening dialog after close delay');
         this.openDialog(text, contextualTextKey, mode, simplifiedData);
-      }, 400); // Increased delay to ensure proper cleanup
+      }, 500); // Increased delay to ensure proper cleanup
     } else {
       // Dialog is not open, open it
       console.log('[ChatDialog] Dialog not open, opening directly');
@@ -4470,7 +5252,7 @@ const ChatDialog = {
     this.show();
     
     // Hide Focus buttons for custom content (pdf, text, topics, image)
-    this.hideFocusButtonsForCustomContent(textKey);
+    this.hideFocusButtonsForCustomContent(contextualTextKey);
     
     console.log('[ChatDialog] Opened in', mode, 'mode for text:', text.substring(0, 50) + '...');
     console.log('[ChatDialog] Loaded', this.chatHistory.length, 'chat messages');
@@ -4525,6 +5307,8 @@ const ChatDialog = {
   close() {
     console.log('[ChatDialog] ===== CLOSE FUNCTION CALLED =====');
     console.log('[ChatDialog] Current state - isOpen:', this.isOpen, 'currentTextKey:', this.currentTextKey);
+    console.log('[ChatDialog] chatContext:', this.chatContext);
+    console.log('[ChatDialog] dialogContainer exists:', !!this.dialogContainer);
     
     if (!this.isOpen) {
       console.log('[ChatDialog] Dialog not open, nothing to close');
@@ -4543,8 +5327,263 @@ const ChatDialog = {
     // Save current dimensions before closing
     this.saveDimensions();
     
-    console.log('[ChatDialog] Hiding dialog...');
-    this.hide();
+    // Check if we should minimize to book icon (only for selected text chat with textKey)
+    console.log('[ChatDialog] ===== CHECKING MINIMIZATION CONDITIONS =====');
+    console.log('[ChatDialog] Condition 1 - currentTextKey exists:', !!this.currentTextKey, 'value:', this.currentTextKey);
+    console.log('[ChatDialog] Condition 2 - chatContext === "selected":', this.chatContext === 'selected', 'value:', this.chatContext);
+    console.log('[ChatDialog] Condition 3 - dialogContainer exists:', !!this.dialogContainer);
+    
+    if (this.currentTextKey && this.chatContext === 'selected' && this.dialogContainer) {
+      console.log('[ChatDialog] ✓ All conditions met! Proceeding with minimization animation...');
+      // IMMEDIATELY disable transition to prevent slide-out animation
+      this.dialogContainer.style.setProperty('transition', 'none', 'important');
+      
+      // Extract original textKey from contextualTextKey
+      // contextualTextKey format can be:
+      // 1. Full text with "-selected" appended: "long text here-selected"
+      // 2. <contentType>-<tabId>-<startIndex>-<length>
+      // 3. <contentType>-<tabId>-selected
+      // The book icon uses the original textKey without "-selected"
+      
+      let originalTextKey = this.currentTextKey;
+      const textKeysToTry = [this.currentTextKey]; // Always try the current key first
+      
+      // If contextualTextKey ends with "-selected", remove it
+      if (this.currentTextKey.endsWith('-selected')) {
+        originalTextKey = this.currentTextKey.slice(0, -'-selected'.length);
+        textKeysToTry.push(originalTextKey);
+        console.log('[ChatDialog] Removed "-selected" suffix, originalTextKey:', originalTextKey);
+      }
+      
+      // Also try extracting from format: contentType-tabId-selected
+      const parts = this.currentTextKey.split('-');
+      if (parts.length >= 3 && parts[parts.length - 1] === 'selected') {
+        const baseKey = parts.slice(0, -1).join('-');
+        if (!textKeysToTry.includes(baseKey)) {
+          textKeysToTry.push(baseKey);
+        }
+      }
+      
+      console.log('[ChatDialog] Looking for book icon with textKeys to try:', textKeysToTry);
+      console.log('[ChatDialog] Original textKey (without -selected):', originalTextKey);
+      
+      // Find the book icon for this textKey - use multiple strategies
+      const allIconsWrappers = document.querySelectorAll('.vocab-text-icons-wrapper');
+      console.log('[ChatDialog] All icons wrappers found:', allIconsWrappers.length);
+      
+      // Log all available textKeys for debugging
+      const availableTextKeys = [];
+      allIconsWrappers.forEach((wrapper, index) => {
+        const wrapperTextKey = wrapper.getAttribute('data-text-key');
+        availableTextKeys.push(wrapperTextKey);
+        console.log(`[ChatDialog] Icons wrapper ${index + 1} has textKey:`, wrapperTextKey);
+      });
+      console.log('[ChatDialog] Available textKeys in DOM:', availableTextKeys);
+      
+      let iconsWrapper = null;
+      let bookIcon = null;
+      
+      // Strategy 1: Try exact match with textKeysToTry
+      for (const wrapper of allIconsWrappers) {
+        const wrapperTextKey = wrapper.getAttribute('data-text-key');
+        if (textKeysToTry.includes(wrapperTextKey)) {
+          iconsWrapper = wrapper;
+          bookIcon = iconsWrapper.querySelector('.vocab-text-book-btn');
+          if (bookIcon) {
+            console.log('[ChatDialog] ✓✓✓ MATCH FOUND! Icons wrapper with textKey:', wrapperTextKey);
+            break;
+          }
+        }
+      }
+      
+      // Strategy 2: Try matching by simplifiedData if available
+      if (!bookIcon && this.simplifiedData) {
+        console.log('[ChatDialog] Trying to find book icon by matching simplifiedData...');
+        for (const wrapper of allIconsWrappers) {
+          const wrapperTextKey = wrapper.getAttribute('data-text-key');
+          const simplifiedData = TextSelector.simplifiedTexts.get(wrapperTextKey);
+          if (simplifiedData && 
+              simplifiedData.textStartIndex === this.simplifiedData.textStartIndex &&
+              simplifiedData.textLength === this.simplifiedData.textLength) {
+            iconsWrapper = wrapper;
+            bookIcon = iconsWrapper.querySelector('.vocab-text-book-btn');
+            if (bookIcon) {
+              console.log('[ChatDialog] ✓✓✓ FOUND BOOK ICON by matching simplifiedData with textKey:', wrapperTextKey);
+              break;
+            }
+          }
+        }
+      }
+      
+      // Strategy 3: Try partial matching (check if currentTextKey contains or is contained in wrapperTextKey)
+      if (!bookIcon) {
+        console.log('[ChatDialog] Trying partial textKey matching...');
+        for (const wrapper of allIconsWrappers) {
+          const wrapperTextKey = wrapper.getAttribute('data-text-key');
+          // Check if keys share common parts
+          const currentParts = this.currentTextKey.split('-');
+          const wrapperParts = wrapperTextKey.split('-');
+          
+          // Match if they share at least 3 common parts (contentType, tabId, and one more)
+          if (currentParts.length >= 3 && wrapperParts.length >= 3) {
+            const commonParts = currentParts.filter(part => wrapperParts.includes(part));
+            if (commonParts.length >= 3) {
+              iconsWrapper = wrapper;
+              bookIcon = iconsWrapper.querySelector('.vocab-text-book-btn');
+              if (bookIcon) {
+                console.log('[ChatDialog] ✓✓✓ FOUND BOOK ICON by partial matching with textKey:', wrapperTextKey);
+                break;
+              }
+            }
+          }
+        }
+      }
+      
+      console.log('[ChatDialog] ===== BOOK ICON SEARCH RESULTS =====');
+      console.log('[ChatDialog] Total icons wrappers found:', allIconsWrappers.length);
+      console.log('[ChatDialog] Icons wrapper found:', !!iconsWrapper);
+      console.log('[ChatDialog] Book icon found:', !!bookIcon);
+      
+      if (bookIcon) {
+        console.log('[ChatDialog] ✓✓✓ FOUND BOOK ICON! Starting minimization animation...');
+        
+        // Get current dialog position and size
+        const dialogRect = this.dialogContainer.getBoundingClientRect();
+        const dialogCenterX = dialogRect.left + dialogRect.width / 2;
+        const dialogCenterY = dialogRect.top + dialogRect.height / 2;
+        
+        // Get book icon position
+        const bookIconRect = bookIcon.getBoundingClientRect();
+        const bookIconCenterX = bookIconRect.left + bookIconRect.width / 2;
+        const bookIconCenterY = bookIconRect.top + bookIconRect.height / 2;
+        
+        // Calculate the translation needed to move dialog center to book icon center
+        const targetX = bookIconCenterX - dialogCenterX;
+        const targetY = bookIconCenterY - dialogCenterY;
+        
+        console.log('[ChatDialog] Dialog center:', { x: dialogCenterX, y: dialogCenterY });
+        console.log('[ChatDialog] Book icon center:', { x: bookIconCenterX, y: bookIconCenterY });
+        console.log('[ChatDialog] Target translation:', { x: targetX, y: targetY });
+        
+        // Calculate the final transform value
+        // The dialog is positioned with top: 50% and transform: translateY(-50%) translateX(0)
+        // This means the dialog center is at viewportHeight / 2
+        // We need to move it to bookIconCenterY
+        // Since we start with translateY(-50%), we need to calculate the final absolute position
+        const dialogHeight = dialogRect.height;
+        const viewportHeight = window.innerHeight;
+        const dialogTop = viewportHeight / 2; // Current top position (50% of viewport)
+        const currentCenterY = dialogTop; // Dialog center Y (with -50% translateY, center is at top)
+        const targetCenterY = bookIconCenterY;
+        const translateYOffset = targetCenterY - currentCenterY; // How much to move from current center
+        
+        // Calculate final translateY in pixels (convert -50% to pixels and add offset)
+        // -50% of dialogHeight = -dialogHeight/2
+        // Final position = -dialogHeight/2 + translateYOffset
+        const finalTranslateY = -dialogHeight / 2 + translateYOffset;
+        
+        console.log('[ChatDialog] Transform calculation:');
+        console.log('[ChatDialog]   viewportHeight:', viewportHeight);
+        console.log('[ChatDialog]   dialogHeight:', dialogHeight);
+        console.log('[ChatDialog]   dialogTop (50%):', dialogTop);
+        console.log('[ChatDialog]   currentCenterY:', currentCenterY);
+        console.log('[ChatDialog]   targetCenterY (book icon):', targetCenterY);
+        console.log('[ChatDialog]   translateYOffset:', translateYOffset);
+        console.log('[ChatDialog]   finalTranslateY (pixels):', finalTranslateY);
+        
+        // Set CSS custom properties for the animation
+        this.dialogContainer.style.setProperty('--minimize-target-x', `${targetX}px`);
+        this.dialogContainer.style.setProperty('--minimize-target-y', `${targetY}px`);
+        this.dialogContainer.style.setProperty('--minimize-start-transform', 'translateY(-50%) translateX(0)');
+        this.dialogContainer.style.setProperty('--minimize-end-transform', `translateY(${finalTranslateY}px) translateX(${targetX}px)`);
+        
+        console.log('[ChatDialog] Set CSS properties:');
+        console.log('[ChatDialog] --minimize-target-x:', targetX);
+        console.log('[ChatDialog] --minimize-target-y:', targetY);
+        console.log('[ChatDialog] --minimize-start-transform: translateY(-50%) translateX(0)');
+        console.log('[ChatDialog] --minimize-end-transform:', `translateY(${finalTranslateY}px) translateX(${targetX}px)`);
+        console.log('[ChatDialog] Dialog height:', dialogHeight, 'finalTranslateY:', finalTranslateY);
+        
+        // Force a reflow to ensure styles are applied
+        void this.dialogContainer.offsetHeight;
+        
+        // Add minimizing class to trigger animation (DO NOT remove visible class)
+        this.dialogContainer.classList.add('minimizing');
+        
+        // Force a reflow to ensure animation starts
+        void this.dialogContainer.offsetHeight;
+        
+        // Verify animation is applied
+        const computedStyle = window.getComputedStyle(this.dialogContainer);
+        const animationName = computedStyle.animationName;
+        const animationDuration = computedStyle.animationDuration;
+        const animationState = computedStyle.animationPlayState;
+        const transform = computedStyle.transform;
+        
+        console.log('[ChatDialog] ===== ANIMATION VERIFICATION =====');
+        console.log('[ChatDialog] Minimization animation started');
+        console.log('[ChatDialog] Dialog has minimizing class:', this.dialogContainer.classList.contains('minimizing'));
+        console.log('[ChatDialog] Animation name:', animationName);
+        console.log('[ChatDialog] Animation duration:', animationDuration);
+        console.log('[ChatDialog] Animation play state:', animationState);
+        console.log('[ChatDialog] Current transform:', transform);
+        console.log('[ChatDialog] CSS custom properties:');
+        console.log('[ChatDialog]   --minimize-start-transform:', this.dialogContainer.style.getPropertyValue('--minimize-start-transform'));
+        console.log('[ChatDialog]   --minimize-end-transform:', this.dialogContainer.style.getPropertyValue('--minimize-end-transform'));
+        console.log('[ChatDialog]   --minimize-target-x:', this.dialogContainer.style.getPropertyValue('--minimize-target-x'));
+        console.log('[ChatDialog]   --minimize-target-y:', this.dialogContainer.style.getPropertyValue('--minimize-target-y'));
+        
+        // Wait for animation to complete, then hide dialog
+        setTimeout(() => {
+          console.log('[ChatDialog] Minimization animation completed, hiding dialog');
+          
+          // Clean up animation class and CSS properties
+          this.dialogContainer.classList.remove('minimizing');
+          this.dialogContainer.style.removeProperty('--minimize-target-x');
+          this.dialogContainer.style.removeProperty('--minimize-target-y');
+          this.dialogContainer.style.removeProperty('--minimize-start-transform');
+          this.dialogContainer.style.removeProperty('--minimize-end-transform');
+          
+          // Remove dialog container immediately (no need for hide() since animation is done)
+          console.log('[ChatDialog] Removing dialog container...');
+          if (this.dialogContainer) {
+            this.dialogContainer.remove();
+            this.dialogContainer = null;
+            console.log('[ChatDialog] Dialog container removed');
+          }
+          // Reset state
+          this.isOpen = false;
+          this.currentText = null;
+          this.currentTextKey = null;
+          console.log('[ChatDialog] Dialog state reset');
+        }, 500); // 0.5s animation duration (increased for visibility)
+        
+        return; // Exit early, cleanup will continue in setTimeout
+      } else {
+        console.log('[ChatDialog] ✗✗✗ BOOK ICON NOT FOUND! Cannot minimize to book icon.');
+        console.log('[ChatDialog] Falling back to regular close...');
+      }
+    } else {
+      console.log('[ChatDialog] ✗✗✗ MINIMIZATION CONDITIONS NOT MET!');
+      console.log('[ChatDialog] Reasons:');
+      if (!this.currentTextKey) console.log('[ChatDialog]   - currentTextKey is missing');
+      if (this.chatContext !== 'selected') console.log('[ChatDialog]   - chatContext is not "selected" (current:', this.chatContext, ')');
+      if (!this.dialogContainer) console.log('[ChatDialog]   - dialogContainer is missing');
+    }
+    
+    // Fallback to original behavior if no book icon found or not selected text chat
+    console.log('[ChatDialog] ===== USING FALLBACK CLOSE (NO MINIMIZATION) =====');
+    console.log('[ChatDialog] No book icon found or not selected text chat, using fallback close');
+    
+    // If dialog is visible, use slide-out animation
+    if (this.dialogContainer && this.dialogContainer.classList.contains('visible')) {
+      this.dialogContainer.classList.remove('visible');
+      setTimeout(() => {
+        this.hide();
+      }, 300);
+    } else {
+      this.hide();
+    }
     
     // Keep the chat icon on the text (don't remove it)
     // The text should remain in askedTexts container
@@ -4601,8 +5640,9 @@ const ChatDialog = {
     const focusButton = document.createElement('button');
     focusButton.className = 'vocab-chat-focus-btn-top-right';
     focusButton.innerHTML = `
-      <svg width="16" height="16" viewBox="0 0 20 20" fill="none">
-        <path d="M3 10l7-7v4c7 0 7 6 7 6s-3-3-7-3v4l-7-7z" fill="#9527F5"/>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <polygon points="10,7 4,12 10,17" fill="white"/>
+        <rect x="10" y="10.5" width="10" height="3" fill="white"/>
       </svg>
       <span>Focus</span>
     `;
@@ -6209,34 +7249,228 @@ const ChatDialog = {
     if (this.dialogContainer) {
       console.log('[ChatDialog] Setting isOpen to true');
       this.isOpen = true;
+      
+      // Check if we should expand from book icon (only for selected text chat with textKey)
+      const shouldExpandFromBook = this.currentTextKey && this.chatContext === 'selected';
+      
+      if (shouldExpandFromBook) {
+        console.log('[ChatDialog] Opening from book icon - setting up expansion animation');
+        
+        // Find the book icon - try multiple strategies
+        let bookIcon = null;
+        let iconsWrapper = null;
+        
+        // Strategy 1: Try exact match with currentTextKey (use safe method to avoid CSS selector issues)
+        const allIconsWrappersForExpansion = document.querySelectorAll('.vocab-text-icons-wrapper');
+        for (const wrapper of allIconsWrappersForExpansion) {
+          const wrapperTextKey = wrapper.getAttribute('data-text-key');
+          if (wrapperTextKey === this.currentTextKey) {
+            iconsWrapper = wrapper;
+            bookIcon = iconsWrapper.querySelector('.vocab-text-book-btn');
+            if (bookIcon) {
+              console.log('[ChatDialog] Found book icon with exact currentTextKey:', this.currentTextKey);
+              break;
+            }
+          }
+        }
+        
+        // Strategy 2: Try variations of currentTextKey
+        if (!bookIcon) {
+          const textKeysToTry = [this.currentTextKey];
+          
+          // Remove -selected suffix if present
+          if (this.currentTextKey.endsWith('-selected')) {
+            textKeysToTry.push(this.currentTextKey.replace(/-selected$/, ''));
+          }
+          
+          // Try extracting base key from format: contentType-tabId-startIndex-length
+          const parts = this.currentTextKey.split('-');
+          if (parts.length >= 4) {
+            // Try: contentType-tabId-startIndex-length
+            textKeysToTry.push(this.currentTextKey);
+            // Try: contentType-tabId-startIndex (without length)
+            if (parts.length >= 3) {
+              textKeysToTry.push(parts.slice(0, -1).join('-'));
+            }
+          }
+          
+          for (const textKey of textKeysToTry) {
+            if (textKey === this.currentTextKey) continue; // Already tried
+            for (const wrapper of allIconsWrappersForExpansion) {
+              const wrapperTextKey = wrapper.getAttribute('data-text-key');
+              if (wrapperTextKey === textKey) {
+                iconsWrapper = wrapper;
+                bookIcon = iconsWrapper.querySelector('.vocab-text-book-btn');
+                if (bookIcon) {
+                  console.log('[ChatDialog] Found book icon with textKey variation:', textKey);
+                  break;
+                }
+              }
+            }
+            if (bookIcon) break;
+          }
+        }
+        
+        // Strategy 3: Search all book icons and match by simplifiedData if available
+        if (!bookIcon && this.simplifiedData) {
+          console.log('[ChatDialog] Trying to find book icon by matching simplifiedData...');
+          const allIconsWrappers = document.querySelectorAll('.vocab-text-icons-wrapper');
+          for (const wrapper of allIconsWrappers) {
+            const wrapperTextKey = wrapper.getAttribute('data-text-key');
+            const simplifiedData = TextSelector.simplifiedTexts.get(wrapperTextKey);
+            if (simplifiedData && 
+                simplifiedData.textStartIndex === this.simplifiedData.textStartIndex &&
+                simplifiedData.textLength === this.simplifiedData.textLength) {
+              bookIcon = wrapper.querySelector('.vocab-text-book-btn');
+              if (bookIcon) {
+                console.log('[ChatDialog] Found book icon by matching simplifiedData with textKey:', wrapperTextKey);
+                iconsWrapper = wrapper;
+                break;
+              }
+            }
+          }
+        }
+        
+        // Strategy 4: Retry finding book icon with a small delay if not found (for auto-open case)
+        if (!bookIcon && this.simplifiedData) {
+          console.log('[ChatDialog] Book icon not found immediately, retrying after short delay...');
+          // Wait a bit and try again (book icon might still be animating in)
+          setTimeout(() => {
+            const allIconsWrappers = document.querySelectorAll('.vocab-text-icons-wrapper');
+            for (const wrapper of allIconsWrappers) {
+              const wrapperTextKey = wrapper.getAttribute('data-text-key');
+              const simplifiedData = TextSelector.simplifiedTexts.get(wrapperTextKey);
+              if (simplifiedData && 
+                  simplifiedData.textStartIndex === this.simplifiedData.textStartIndex &&
+                  simplifiedData.textLength === this.simplifiedData.textLength) {
+                const retryBookIcon = wrapper.querySelector('.vocab-text-book-btn');
+                if (retryBookIcon && this.dialogContainer && this.dialogContainer.classList.contains('expanding')) {
+                  console.log('[ChatDialog] Found book icon on retry, updating animation...');
+                  // Update animation if dialog is still expanding
+                  const bookIconRect = retryBookIcon.getBoundingClientRect();
+                  const bookIconCenterX = bookIconRect.left + bookIconRect.width / 2;
+                  const bookIconCenterY = bookIconRect.top + retryBookIcon.height / 2;
+                  
+                  const dialogRect = this.dialogContainer.getBoundingClientRect();
+                  const dialogHeight = dialogRect.height || 600;
+                  const viewportHeight = window.innerHeight;
+                  const dialogTop = viewportHeight / 2;
+                  const targetCenterY = bookIconCenterY;
+                  const translateYOffset = targetCenterY - dialogTop;
+                  const finalTranslateY = -dialogHeight / 2 + translateYOffset;
+                  
+                  const dialogWidth = dialogRect.width || 400;
+                  const dialogCenterX = window.innerWidth - dialogWidth / 2;
+                  const targetX = bookIconCenterX - dialogCenterX;
+                  
+                  const startTransform = `translateY(${finalTranslateY}px) translateX(${targetX}px) scale(0)`;
+                  this.dialogContainer.style.setProperty('--expand-start-transform', startTransform);
+                  this.dialogContainer.style.setProperty('--expand-end-transform', 'translateY(-50%) translateX(0) scale(1)');
+                  this.dialogContainer.style.setProperty('transform', startTransform);
+                  break;
+                }
+              }
+            }
+          }, 100);
+        }
+        
+        if (bookIcon) {
+          console.log('[ChatDialog] ✓✓✓ FOUND BOOK ICON! Starting expansion animation...');
+          
+          // Get book icon position
+          const bookIconRect = bookIcon.getBoundingClientRect();
+          const bookIconCenterX = bookIconRect.left + bookIconRect.width / 2;
+          const bookIconCenterY = bookIconRect.top + bookIconRect.height / 2;
+          
+          // Get dialog dimensions
+          const dialogRect = this.dialogContainer.getBoundingClientRect();
+          const dialogHeight = dialogRect.height || 600;
+          const viewportHeight = window.innerHeight;
+          const dialogTop = viewportHeight / 2;
+          const currentCenterY = dialogTop;
+          const targetCenterY = bookIconCenterY;
+          const translateYOffset = targetCenterY - currentCenterY;
+          const finalTranslateY = -dialogHeight / 2 + translateYOffset;
+          
+          // Calculate target X (book icon center X - dialog center X)
+          const dialogWidth = dialogRect.width || 400;
+          const dialogCenterX = window.innerWidth - dialogWidth / 2;
+          const targetX = bookIconCenterX - dialogCenterX;
+          
+          // Set initial position at book icon (small scale)
+          const startTransform = `translateY(${finalTranslateY}px) translateX(${targetX}px) scale(0)`;
+          this.dialogContainer.style.setProperty('transform', startTransform);
+          this.dialogContainer.style.setProperty('transition', 'none');
+          
+          // Set CSS variables for expansion animation
+          this.dialogContainer.style.setProperty('--expand-target-x', `${targetX}px`);
+          this.dialogContainer.style.setProperty('--expand-target-y', `${finalTranslateY}px`);
+          this.dialogContainer.style.setProperty('--expand-start-transform', startTransform);
+          this.dialogContainer.style.setProperty('--expand-end-transform', 'translateY(-50%) translateX(0) scale(1)');
+          
+          // Force a reflow to ensure initial position is set
+          this.dialogContainer.offsetHeight;
+          
+          // Add expanding class to trigger animation
+          this.dialogContainer.classList.add('expanding');
+          
+          // Add visible class immediately (but animation will override transform)
+          this.dialogContainer.classList.add('visible');
+          
+          // Remove expanding class after animation completes and restore normal state
+          setTimeout(() => {
+            // Set final transform explicitly to ensure dialog stays in position
+            this.dialogContainer.style.setProperty('transform', 'translateY(-50%) translateX(0) scale(1)');
+            // Remove expanding class after transform is set
+            this.dialogContainer.classList.remove('expanding');
+            // Restore transition for normal interactions
+            this.dialogContainer.style.setProperty('transition', '');
+            // Clean up CSS variables
+            this.dialogContainer.style.removeProperty('--expand-target-x');
+            this.dialogContainer.style.removeProperty('--expand-target-y');
+            this.dialogContainer.style.removeProperty('--expand-start-transform');
+            this.dialogContainer.style.removeProperty('--expand-end-transform');
+            // Re-enable pointer events
+            this.dialogContainer.style.setProperty('pointer-events', '');
+            this.dialogContainer.style.setProperty('will-change', '');
+          }, 500);
+        } else {
+          console.log('[ChatDialog] Book icon not found, using normal slide-in animation');
+          setTimeout(() => {
+            this.dialogContainer.classList.add('visible');
+          }, 10);
+        }
+      } else {
+        // Normal slide-in animation
+        setTimeout(() => {
+          console.log('[ChatDialog] Adding visible class to dialog');
+          this.dialogContainer.classList.add('visible');
+          console.log('[ChatDialog] Dialog should now be visible');
+        }, 10);
+      }
+      
+      // Auto-focus the question input for both generic and selected text chat
       setTimeout(() => {
-        console.log('[ChatDialog] Adding visible class to dialog');
-        this.dialogContainer.classList.add('visible');
-        console.log('[ChatDialog] Dialog should now be visible');
-        
-        // Auto-focus the question input for both generic and selected text chat
-        setTimeout(() => {
-          const questionInput = this.dialogContainer.querySelector('.vocab-chat-input');
-          if (questionInput) {
-            questionInput.focus();
-            console.log(`[ChatDialog] Auto-focused question input for ${this.chatContext} chat`);
-          }
-        }, 100);
-        
-        // Auto-scroll to bottom when dialog opens (if there are messages)
-        setTimeout(() => {
-          const chatContainer = document.getElementById('vocab-chat-messages');
-          if (chatContainer && this.chatHistory.length > 0) {
-            this.scrollToBottom(chatContainer);
-            console.log('[ChatDialog] Auto-scrolled to bottom on dialog open');
-          }
-        }, 150);
-        
-        // Ensure focus buttons are hidden/shown based on chat context after dialog is rendered
-        setTimeout(() => {
-          this.hideFocusButtonsForCustomContent(this.currentTextKey);
-        }, 200);
-      }, 10);
+        const questionInput = this.dialogContainer.querySelector('.vocab-chat-input');
+        if (questionInput) {
+          questionInput.focus();
+          console.log(`[ChatDialog] Auto-focused question input for ${this.chatContext} chat`);
+        }
+      }, 100);
+      
+      // Auto-scroll to bottom when dialog opens (if there are messages)
+      setTimeout(() => {
+        const chatContainer = document.getElementById('vocab-chat-messages');
+        if (chatContainer && this.chatHistory.length > 0) {
+          this.scrollToBottom(chatContainer);
+          console.log('[ChatDialog] Auto-scrolled to bottom on dialog open');
+        }
+      }, 150);
+      
+      // Ensure focus buttons are hidden/shown based on chat context after dialog is rendered
+      setTimeout(() => {
+        this.hideFocusButtonsForCustomContent(this.currentTextKey);
+      }, 200);
     } else {
       console.log('[ChatDialog] ERROR: Dialog container not found!');
     }
@@ -6258,12 +7492,12 @@ const ChatDialog = {
   },
   
   /**
-   * Create collapse icon (left arrow)
+   * Create collapse icon (minus/hyphen icon)
    */
   createCollapseIcon() {
     return `
       <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M12.5 15L7.5 10L12.5 5" stroke="#9527F5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M4 10H16" stroke="#9527F5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
       </svg>
     `;
   },
@@ -6419,6 +7653,60 @@ const ChatDialog = {
         transform: translateY(-50%) translateX(0);
       }
       
+      /* Minimize Animation - Scale down and move to book icon */
+      /* IMPORTANT: When minimizing, completely override all transitions and use animation only */
+      .vocab-chat-dialog.minimizing {
+        animation: minimizeChatDialogToBook 0.5s ease-out forwards !important;
+        transition: none !important; /* Completely disable transition during animation */
+        pointer-events: none !important;
+        z-index: 10000010 !important; /* Ensure dialog appears above everything during animation */
+        will-change: transform !important; /* Optimize for animation */
+      }
+      
+      /* Completely disable transition when minimizing - even if visible class is present */
+      .vocab-chat-dialog.minimizing.visible {
+        transition: none !important;
+        /* Don't override transform - let animation handle it */
+      }
+
+      @keyframes minimizeChatDialogToBook {
+        0% {
+          transform: var(--minimize-start-transform, translateY(-50%) translateX(0)) scale(1) !important;
+          opacity: 1;
+        }
+        100% {
+          transform: var(--minimize-end-transform, translateY(-50%) translateX(0)) scale(0) !important;
+          opacity: 1;
+        }
+      }
+      
+      /* Expand Animation - Scale up and move from book icon (reverse of minimize) */
+      .vocab-chat-dialog.expanding {
+        animation: expandChatDialogFromBook 0.5s ease-out forwards !important;
+        transition: none !important; /* Completely disable transition during animation */
+        pointer-events: none !important;
+        z-index: 10000010 !important; /* Ensure dialog appears above everything during animation */
+        will-change: transform !important; /* Optimize for animation */
+        opacity: 1 !important;
+      }
+      
+      /* Ensure dialog stays visible after expansion animation */
+      .vocab-chat-dialog.expanding.visible {
+        animation: expandChatDialogFromBook 0.5s ease-out forwards !important;
+        transition: none !important;
+      }
+      
+      @keyframes expandChatDialogFromBook {
+        0% {
+          transform: var(--expand-start-transform, translateY(-50%) translateX(0) scale(0)) !important;
+          opacity: 1;
+        }
+        100% {
+          transform: var(--expand-end-transform, translateY(-50%) translateX(0) scale(1)) !important;
+          opacity: 1;
+        }
+      }
+      
       /* Dialog Content */
       .vocab-chat-content {
         background: white !important;
@@ -6565,30 +7853,31 @@ const ChatDialog = {
         top: 20px;
         right: 20px;
         padding: 6px 12px;
-        background: white;
-        border: 1px solid #e5e7eb;
+        background: #9527F5;
+        border: none;
         border-radius: 6px;
         display: flex;
         align-items: center;
+        justify-content: center;
         gap: 6px;
         cursor: pointer;
         z-index: 10;
         transition: all 0.2s ease;
         font-size: 12px;
         font-weight: 500;
-        color: #9527F5;
+        color: white;
         text-decoration: none;
       }
       
       .vocab-chat-focus-btn-top-right:hover {
-        background: #f9fafb;
-        border-color: #9527F5;
+        background: #7a1fd9;
         text-decoration: none;
       }
       
       .vocab-chat-focus-btn-top-right span {
         font-size: 12px;
         font-weight: 500;
+        color: white;
       }
       
       /* Tabs */
@@ -9917,84 +11206,6 @@ const ButtonPanel = {
   },
 
   /**
-   * Check if success banner should be shown
-   * @returns {Promise<boolean>}
-   */
-  async shouldShowSuccessBanner() {
-    try {
-      const result = await chrome.storage.local.get(['dontShowSuccessBanner']);
-      return !result.dontShowSuccessBanner; // Show if not set or false
-    } catch (error) {
-      console.error('[ButtonPanel] Error checking success banner preference:', error);
-      return true; // Default to showing
-    }
-  },
-
-  /**
-   * Set success banner preference
-   * @param {boolean} dontShow - Whether to hide banner in future
-   */
-  async setSuccessBannerPreference(dontShow) {
-    try {
-      await chrome.storage.local.set({ dontShowSuccessBanner: dontShow });
-      console.log('[ButtonPanel] Success banner preference saved:', dontShow);
-    } catch (error) {
-      console.error('[ButtonPanel] Error saving success banner preference:', error);
-    }
-  },
-
-  /**
-   * Show success banner after API completion
-   */
-  async showSuccessBanner() {
-    // Check if user has opted out
-    const shouldShow = await this.shouldShowSuccessBanner();
-    if (!shouldShow) {
-      console.log('[ButtonPanel] Success banner hidden by user preference');
-      return;
-    }
-
-    // Create banner element
-    const banner = document.createElement('div');
-    banner.className = 'vocab-success-banner';
-    banner.innerHTML = `
-      <div class="vocab-success-banner-header">
-        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <circle cx="10" cy="10" r="9" stroke="#22c55e" stroke-width="2" fill="none"/>
-          <path d="M6 10L9 13L14 8" stroke="#22c55e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>
-        <span class="vocab-success-banner-text">Your contextual explanations are ready</span>
-      </div>
-      <div class="vocab-success-banner-footer">
-        <button class="vocab-success-banner-dismiss" title="Don't show again">Don't show again</button>
-      </div>
-    `;
-
-    // Add to body
-    document.body.appendChild(banner);
-
-    // Add dismiss handler
-    const dismissBtn = banner.querySelector('.vocab-success-banner-dismiss');
-    dismissBtn.addEventListener('click', async (e) => {
-      e.stopPropagation();
-      await this.setSuccessBannerPreference(true);
-      banner.classList.add('hiding');
-      setTimeout(() => banner.remove(), 300);
-    });
-
-    // Show banner with animation
-    requestAnimationFrame(() => {
-      banner.classList.add('visible');
-    });
-
-    // Auto-hide after 4 seconds
-    setTimeout(() => {
-      banner.classList.add('hiding');
-      setTimeout(() => banner.remove(), 300);
-    }, 4000);
-  },
-
-  /**
    * Update magic meaning button to show processing state
    */
   setMagicMeaningProcessing() {
@@ -10082,9 +11293,6 @@ const ButtonPanel = {
 
       // Show success state
       this.setMagicMeaningSuccess();
-
-      // Show success banner
-      this.showSuccessBanner();
 
       // Reset button after 2 seconds
       setTimeout(() => {
@@ -10175,7 +11383,7 @@ const ButtonPanel = {
 
       /* Main Button Group with Purple Shadow */
       .vocab-button-group-main {
-        display: flex;
+        display: none !important;
         flex-direction: column;
         gap: 0;
         background: white;
@@ -10224,7 +11432,7 @@ const ButtonPanel = {
 
       /* Drag Handle Styles - Semi-circular (bottom half rounded) */
       .vocab-drag-handle {
-        display: flex;
+        display: none !important;
         justify-content: center;
         align-items: center;
         padding: 6px 6px 8px 6px;
@@ -10547,6 +11755,7 @@ const ButtonPanel = {
         }
 
         .vocab-button-group-main {
+          display: none !important;
           padding: 4px;
         }
 
@@ -12186,76 +13395,6 @@ const ButtonPanel = {
       }
 
       /* ===================================
-         Success Banner Styles
-         =================================== */
-      .vocab-success-banner {
-        position: fixed;
-        top: 20px;
-        right: -350px;
-        background: white;
-        border: 2px solid #22c55e;
-        border-radius: 12px;
-        padding: 16px 20px 12px 20px;
-        box-shadow: 0 4px 12px rgba(34, 197, 94, 0.2);
-        z-index: 2147483647;
-        opacity: 0;
-        transition: opacity 0.4s ease, right 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
-        pointer-events: all;
-        display: flex;
-        flex-direction: column;
-        gap: 8px;
-        min-width: 300px;
-      }
-
-      .vocab-success-banner.visible {
-        opacity: 1;
-        right: 20px;
-      }
-
-      .vocab-success-banner.hiding {
-        opacity: 0;
-        right: -350px;
-        transition: opacity 0.3s ease, right 0.4s cubic-bezier(0.6, 0, 0.4, 1);
-      }
-
-      .vocab-success-banner-header {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-      }
-
-      .vocab-success-banner-text {
-        font-family: 'Inter', 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-        font-size: 14px;
-        font-weight: 500;
-        color: #16a34a;
-      }
-
-      .vocab-success-banner-footer {
-        display: flex;
-        justify-content: flex-end;
-        align-items: center;
-      }
-
-      .vocab-success-banner-dismiss {
-        background: transparent;
-        border: 1px solid #22c55e;
-        color: #16a34a;
-        padding: 4px 12px;
-        border-radius: 6px;
-        font-size: 11px;
-        font-family: 'Inter', 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-        cursor: pointer;
-        transition: all 0.2s ease;
-        white-space: nowrap;
-      }
-
-      .vocab-success-banner-dismiss:hover {
-        background: #22c55e;
-        color: white;
-      }
-
-      /* ===================================
          Processing Spinner Animation
          =================================== */
       .vocab-processing-spinner {
@@ -12297,128 +13436,6 @@ const ButtonPanel = {
       }
 
       /* Attention-grabbing animation when button becomes enabled */
-      /* Magic meaning enabled notification popup - speech bubble design */
-      .vocab-magic-meaning-notification {
-        position: fixed !important;
-        background: white !important;
-        color: #333 !important;
-        padding: 12px 16px 32px 16px !important;
-        border-radius: 12px !important;
-        border: 1px solid #9527F5 !important;
-        font-size: 14px !important;
-        font-weight: 500 !important;
-        text-align: left !important;
-        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif !important;
-        box-shadow: 0 0 20px rgba(178, 156, 251, 0.3), 0 4px 12px rgba(178, 156, 251, 0.2) !important;
-        z-index: 2147483647 !important;
-        pointer-events: all !important;
-        opacity: 0 !important;
-        transform: translateY(5px) scale(0.95) !important;
-        transition: opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1), 
-                   transform 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
-        display: flex !important;
-        flex-direction: column !important;
-        align-items: flex-start !important;
-        justify-content: center !important;
-        visibility: visible !important;
-        width: auto !important;
-        min-width: 200px !important;
-        min-height: 55px !important;
-      }
-
-      .vocab-magic-meaning-notification.visible {
-        opacity: 1 !important;
-        transform: translateY(0) scale(1) !important;
-      }
-
-      /* Close button in top-right */
-      .vocab-magic-meaning-notification-close {
-        position: absolute !important;
-        top: 10px !important;
-        right: 10px !important;
-        width: 20px !important;
-        height: 20px !important;
-        border: none !important;
-        background: transparent !important;
-        cursor: pointer !important;
-        display: flex !important;
-        align-items: center !important;
-        justify-content: center !important;
-        padding: 0 !important;
-        opacity: 0.8 !important;
-        transition: opacity 0.2s ease, transform 0.2s ease !important;
-        z-index: 10 !important;
-      }
-
-      .vocab-magic-meaning-notification-close:hover {
-        opacity: 1 !important;
-        transform: scale(1.1) !important;
-      }
-
-      .vocab-magic-meaning-notification-close:active {
-        transform: scale(0.9) !important;
-      }
-
-      .vocab-magic-meaning-notification-close svg {
-        width: 14px !important;
-        height: 14px !important;
-        stroke: #9527F5 !important;
-      }
-
-      /* Don't show again button in bottom-right */
-      .vocab-magic-meaning-dont-show {
-        position: absolute !important;
-        bottom: 10px !important;
-        right: 10px !important;
-        background: white !important;
-        border: 1px solid #d4c4f0 !important;
-        color: #b29cfb !important;
-        font-size: 11px !important;
-        font-weight: 500 !important;
-        cursor: pointer !important;
-        padding: 4px 8px !important;
-        border-radius: 6px !important;
-        opacity: 1 !important;
-        transition: all 0.2s ease !important;
-        text-decoration: none !important;
-      }
-
-      .vocab-magic-meaning-dont-show:hover {
-        border-color: #9527F5 !important;
-        color: #9527F5 !important;
-        background: #f5f0ff !important;
-      }
-
-      /* Notification message text - purple and vertically centered */
-      .vocab-magic-meaning-notification-message {
-        color: #9527F5 !important;
-        margin: 0 !important;
-        padding: 0 !important;
-        font-size: 14px !important;
-        line-height: 1.4 !important;
-        display: flex !important;
-        align-items: center !important;
-        justify-content: center !important;
-        flex: 1 !important;
-        height: 100% !important;
-      }
-
-      /* Speech bubble tail pointing from magic-meaning button to notification (on left side) */
-      .vocab-magic-meaning-notification::before {
-        content: '' !important;
-        position: absolute !important;
-        left: -10px !important;
-        top: 35px !important;
-        transform: rotate(45deg) !important;
-        width: 14px !important;
-        height: 14px !important;
-        background: white !important;
-        border-left: 1px solid #9527F5 !important;
-        border-bottom: 1px solid #9527F5 !important;
-        border-top: none !important;
-        border-right: none !important;
-        border-radius: 0 0 0 3px !important;
-      }
 
 
     `;
@@ -12964,6 +13981,281 @@ const ButtonPanel = {
 
 
   /**
+   * Handler for Magic meaning button for a specific text
+   * @param {string} textKey - The specific text key to process
+   */
+  async handleMagicMeaningForText(textKey) {
+    console.log('[ButtonPanel] Magic meaning clicked for specific text:', textKey);
+    
+    // Check if textKey exists in selectedTexts
+    if (!TextSelector.selectedTexts.has(textKey)) {
+      console.warn('[ButtonPanel] Text key not found in selectedTexts:', textKey);
+      return;
+    }
+    
+    // Get position data for this specific text
+    const positionData = TextSelector.textPositions.get(textKey);
+    if (!positionData) {
+      console.warn('[ButtonPanel] No position data found for textKey:', textKey);
+      return;
+    }
+    
+    // Get the highlight element
+    const highlight = TextSelector.textToHighlights.get(textKey);
+    if (!highlight) {
+      console.warn('[ButtonPanel] No highlight found for textKey:', textKey);
+      return;
+    }
+    
+    // Initialize API completion tracking for single text
+    this.apiCompletionState.simplifyCompleted = false;
+    this.apiCompletionState.wordsExplanationCompleted = true; // No words to process
+    this.apiCompletionState.shouldTrack = true;
+    
+    // Set button to processing state
+    this.setMagicMeaningProcessing();
+    
+    console.log('[ButtonPanel] Processing single text segment for:', textKey);
+    
+    // Build API request payload for this single text
+    const textSegments = [{
+      textStartIndex: positionData.textStartIndex,
+      textLength: positionData.textLength,
+      text: positionData.text,
+      previousSimplifiedTexts: []
+    }];
+    
+    // Remove text from selectedTexts container as API call starts
+    TextSelector.selectedTexts.delete(textKey);
+    
+    // Update button states after removing from selectedTexts
+    this.updateButtonStatesFromSelections();
+    
+    // Remove any existing buttons (remove button and magic-meaning button)
+    const existingRemoveBtn = highlight.querySelector('.vocab-text-remove-btn');
+    if (existingRemoveBtn) {
+      existingRemoveBtn.remove();
+    }
+    
+    const existingMagicBtn = highlight.querySelector('.vocab-text-magic-meaning-btn');
+    if (existingMagicBtn) {
+      existingMagicBtn.remove();
+    }
+    
+    // Remove icons wrapper if empty
+    const iconsWrapper = highlight.querySelector('.vocab-text-icons-wrapper');
+    if (iconsWrapper && iconsWrapper.children.length === 0) {
+      iconsWrapper.remove();
+    }
+    
+    // Add loading animation class (already added in click handler, but ensure it's there)
+    highlight.classList.add('vocab-text-loading');
+    
+    // Call SimplifyService with SSE for this single text
+    SimplifyService.simplify(
+      textSegments,
+      // onEvent callback - called for each SSE event
+      (eventData) => {
+        console.log('[ButtonPanel] Received simplified text:', eventData);
+        
+        // Verify this event matches our textKey
+        if (positionData.textStartIndex === eventData.textStartIndex &&
+            positionData.textLength === eventData.textLength) {
+          
+          // Remove loading animation
+          highlight.classList.remove('vocab-text-loading');
+          
+          // Change underline to light green
+          highlight.classList.add('vocab-text-simplified');
+          
+          // Replace purple cross button with green cross button at top-left
+          const existingPurpleCross = highlight.querySelector('.vocab-text-remove-btn');
+          if (existingPurpleCross) {
+            existingPurpleCross.remove();
+          }
+          
+          // Create green cross button at top-left (same position as purple cross)
+          const greenCrossBtn = document.createElement('button');
+          greenCrossBtn.className = 'vocab-text-remove-green-btn';
+          greenCrossBtn.setAttribute('aria-label', 'Remove simplified text');
+          greenCrossBtn.style.position = 'absolute';
+          greenCrossBtn.style.top = '-6px';
+          greenCrossBtn.style.left = '-6px';
+          greenCrossBtn.style.width = '14px';
+          greenCrossBtn.style.height = '14px';
+          greenCrossBtn.style.background = '#22c55e';
+          greenCrossBtn.style.borderRadius = '50%';
+          greenCrossBtn.style.zIndex = '10000003';
+          greenCrossBtn.style.boxShadow = '0 2px 4px rgba(34, 197, 94, 0.4)';
+          greenCrossBtn.style.display = 'flex';
+          greenCrossBtn.style.alignItems = 'center';
+          greenCrossBtn.style.justifyContent = 'center';
+          greenCrossBtn.style.cursor = 'pointer';
+          greenCrossBtn.style.opacity = '0.9';
+          greenCrossBtn.style.border = 'none';
+          greenCrossBtn.style.padding = '0';
+          // Use same cross icon as purple button (8px × 8px)
+          greenCrossBtn.innerHTML = `
+            <svg width="10" height="10" viewBox="0 0 10 10" fill="none" xmlns="http://www.w3.org/2000/svg" style="width: 8px; height: 8px;">
+              <path d="M2 2L8 8M8 2L2 8" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          `;
+          // Add click handler - same functionality as green remove button
+          greenCrossBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            console.log('[TextSelector] Green cross button clicked for simplified text:', textKey);
+            TextSelector.removeFromSimplifiedTexts(textKey);
+          });
+          highlight.appendChild(greenCrossBtn);
+          
+          // Create wrapper for icons
+          const newIconsWrapper = document.createElement('div');
+          newIconsWrapper.className = 'vocab-text-icons-wrapper';
+          newIconsWrapper.setAttribute('data-text-key', textKey);
+          
+          // Add book icon first (top position)
+          const bookBtn = TextSelector.createBookButton(textKey);
+          newIconsWrapper.appendChild(bookBtn);
+          
+          // Don't add green remove button - green cross button at top-left has same functionality
+          
+          // Append icons wrapper directly to highlight for absolute positioning
+          highlight.appendChild(newIconsWrapper);
+          
+          // Force a reflow to ensure book icon is in DOM
+          newIconsWrapper.offsetHeight;
+          
+          // Automatically open chat dialog for simplified text
+          const simplifiedData = {
+            text: eventData.text,
+            simplifiedText: eventData.simplifiedText,
+            textStartIndex: eventData.textStartIndex,
+            textLength: eventData.textLength,
+            previousSimplifiedTexts: eventData.previousSimplifiedTexts || [],
+            shouldAllowSimplifyMore: eventData.shouldAllowSimplifyMore || false,
+            highlight: highlight
+          };
+          
+          // Store simplified text data first so it's available when dialog opens
+          TextSelector.simplifiedTexts.set(textKey, {
+            textStartIndex: eventData.textStartIndex,
+            textLength: eventData.textLength,
+            text: eventData.text,
+            simplifiedText: eventData.simplifiedText,
+            previousSimplifiedTexts: eventData.previousSimplifiedTexts || [],
+            shouldAllowSimplifyMore: eventData.shouldAllowSimplifyMore || false,
+            highlight: highlight
+          });
+          
+          // Wait for book icon to be in DOM and visible before opening dialog
+          // Use requestAnimationFrame to ensure DOM is fully updated
+          requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+              // Verify book icon is in DOM before opening (use safe method to avoid CSS selector issues)
+              let verifyBookIcon = null;
+              const allIconsWrappers = document.querySelectorAll('.vocab-text-icons-wrapper');
+              for (const wrapper of allIconsWrappers) {
+                const wrapperTextKey = wrapper.getAttribute('data-text-key');
+                if (wrapperTextKey === textKey) {
+                  verifyBookIcon = wrapper.querySelector('.vocab-text-book-btn');
+                  if (verifyBookIcon) break;
+                }
+              }
+              
+              if (verifyBookIcon) {
+                console.log('[ButtonPanel] Book icon verified in DOM, opening dialog');
+                ChatDialog.open(eventData.text, textKey, 'simplified', simplifiedData, 'selected');
+              } else {
+                console.log('[ButtonPanel] Book icon not found, retrying after delay...');
+                setTimeout(() => {
+                  ChatDialog.open(eventData.text, textKey, 'simplified', simplifiedData, 'selected');
+                }, 200);
+              }
+            });
+          });
+          
+          // Position icons relative to highlight
+          const highlightRect = highlight.getBoundingClientRect();
+          const isInModal = highlight.closest('.vocab-custom-content-modal');
+          
+          if (isInModal) {
+            // In modal context: position to the left with sufficient margin
+            newIconsWrapper.style.setProperty('left', '-50px', 'important');
+            newIconsWrapper.style.setProperty('top', '-2px', 'important');
+          } else {
+            // In main webpage context: position to the left
+            newIconsWrapper.style.setProperty('left', '-40px', 'important');
+            newIconsWrapper.style.setProperty('top', '0px', 'important');
+          }
+          
+          // Simplified text data already stored above before opening dialog
+          
+          // Store simplified text in analysis data for persistence
+          if (this.topicsModal && this.topicsModal.customContentModal && this.topicsModal.customContentModal.activeTabId) {
+            const activeContent = this.topicsModal.customContentModal.getContentByTabId(parseInt(this.topicsModal.customContentModal.activeTabId));
+            if (activeContent && activeContent.analysis) {
+              const simplifiedTextData = {
+                textKey: textKey,
+                textStartIndex: eventData.textStartIndex,
+                textLength: eventData.textLength,
+                originalText: eventData.text,
+                simplifiedText: eventData.simplifiedText,
+                previousSimplifiedTexts: eventData.previousSimplifiedTexts || [],
+                shouldAllowSimplifyMore: eventData.shouldAllowSimplifyMore || false,
+                timestamp: new Date().toISOString()
+              };
+              
+              // Check if this text already exists in simplifiedMeanings
+              const existingTextIndex = activeContent.analysis.simplifiedMeanings.findIndex(s => 
+                s.textKey === textKey
+              );
+              
+              if (existingTextIndex !== -1) {
+                // Update existing simplified text
+                activeContent.analysis.simplifiedMeanings[existingTextIndex] = simplifiedTextData;
+                console.log(`[ButtonPanel] Updated existing simplified text for textKey "${textKey}" in analysis data`);
+              } else {
+                // Add new simplified text
+                activeContent.analysis.simplifiedMeanings.push(simplifiedTextData);
+                console.log(`[ButtonPanel] Added new simplified text for textKey "${textKey}" to analysis data`);
+              }
+            }
+          }
+          
+          // Update button states after adding to simplifiedTexts
+          this.updateButtonStatesFromSelections();
+          
+          console.log('[ButtonPanel] Text simplified successfully for:', textKey);
+        }
+      },
+      // onComplete callback
+      () => {
+        console.log('[ButtonPanel] Single text simplification API call completed for:', textKey);
+        
+        // Mark simplify as completed
+        this.apiCompletionState.simplifyCompleted = true;
+        
+        // Check if all APIs are completed
+        this.checkAPICompletion();
+      },
+      // onError callback
+      (error) => {
+        console.error('[ButtonPanel] Error during single text simplification:', error);
+        
+        // Remove loading animation on error
+        highlight.classList.remove('vocab-text-loading');
+        
+        // Mark simplify as completed (even on error) to allow button reset
+        this.apiCompletionState.simplifyCompleted = true;
+        
+        // Check if all APIs are completed
+        this.checkAPICompletion();
+      }
+    );
+  },
+
+  /**
    * Handler for Magic meaning button
    */
   async handleMagicMeaning() {
@@ -13023,10 +14315,21 @@ const ButtonPanel = {
         for (const textKey of textKeysToProcess) {
           const highlight = TextSelector.textToHighlights.get(textKey);
           if (highlight) {
-            // Remove any existing buttons
-            const existingBtn = highlight.querySelector('.vocab-text-remove-btn');
-            if (existingBtn) {
-              existingBtn.remove();
+            // Remove any existing buttons (remove button and magic-meaning button)
+            const existingRemoveBtn = highlight.querySelector('.vocab-text-remove-btn');
+            if (existingRemoveBtn) {
+              existingRemoveBtn.remove();
+            }
+            
+            const existingMagicBtn = highlight.querySelector('.vocab-text-magic-meaning-btn');
+            if (existingMagicBtn) {
+              existingMagicBtn.remove();
+            }
+            
+            // Remove icons wrapper if empty
+            const iconsWrapper = highlight.querySelector('.vocab-text-icons-wrapper');
+            if (iconsWrapper && iconsWrapper.children.length === 0) {
+              iconsWrapper.remove();
             }
             
             // Add loading animation class
@@ -13060,11 +14363,46 @@ const ButtonPanel = {
                 // Change underline to light green
                 highlight.classList.add('vocab-text-simplified');
                 
-                // Replace cross button with book icon
-                const existingBtn = highlight.querySelector('.vocab-text-remove-btn');
-                if (existingBtn) {
-                  existingBtn.remove();
+                // Replace purple cross button with green cross button at top-left
+                const existingPurpleCross = highlight.querySelector('.vocab-text-remove-btn');
+                if (existingPurpleCross) {
+                  existingPurpleCross.remove();
                 }
+                
+                // Create green cross button at top-left (same position as purple cross)
+                const greenCrossBtn = document.createElement('button');
+                greenCrossBtn.className = 'vocab-text-remove-green-btn';
+                greenCrossBtn.setAttribute('aria-label', 'Remove simplified text');
+                greenCrossBtn.style.position = 'absolute';
+                greenCrossBtn.style.top = '-6px';
+                greenCrossBtn.style.left = '-6px';
+                greenCrossBtn.style.width = '14px';
+                greenCrossBtn.style.height = '14px';
+                greenCrossBtn.style.background = '#22c55e';
+                greenCrossBtn.style.borderRadius = '50%';
+                greenCrossBtn.style.zIndex = '10000003';
+                greenCrossBtn.style.boxShadow = '0 2px 4px rgba(34, 197, 94, 0.4)';
+                greenCrossBtn.style.display = 'flex';
+                greenCrossBtn.style.alignItems = 'center';
+                greenCrossBtn.style.justifyContent = 'center';
+                greenCrossBtn.style.cursor = 'pointer';
+                greenCrossBtn.style.opacity = '0.9';
+                greenCrossBtn.style.border = 'none';
+                greenCrossBtn.style.padding = '0';
+                // Use same cross icon as purple button (8px × 8px)
+                greenCrossBtn.innerHTML = `
+                  <svg width="10" height="10" viewBox="0 0 10 10" fill="none" xmlns="http://www.w3.org/2000/svg" style="width: 8px; height: 8px;">
+                    <path d="M2 2L8 8M8 2L2 8" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                  </svg>
+                `;
+                // Add click handler - same functionality as green remove button
+                greenCrossBtn.addEventListener('click', (e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  console.log('[TextSelector] Green cross button clicked for simplified text:', matchingTextKey);
+                  TextSelector.removeFromSimplifiedTexts(matchingTextKey);
+                });
+                highlight.appendChild(greenCrossBtn);
                 
                 // Create wrapper for icons
                 const iconsWrapper = document.createElement('div');
@@ -13075,9 +14413,22 @@ const ButtonPanel = {
                 const bookBtn = TextSelector.createBookButton(matchingTextKey);
                 iconsWrapper.appendChild(bookBtn);
                 
-                // Add green remove button second (bottom position)
-                const greenRemoveBtn = TextSelector.createGreenRemoveButtonForSimplifiedText(matchingTextKey);
-                iconsWrapper.appendChild(greenRemoveBtn);
+                // Don't add green remove button - green cross button at top-left has same functionality
+                
+                // Automatically open chat dialog for simplified text
+                const simplifiedData = {
+                  text: eventData.text,
+                  simplifiedText: eventData.simplifiedText,
+                  textStartIndex: eventData.textStartIndex,
+                  textLength: eventData.textLength,
+                  previousSimplifiedTexts: eventData.previousSimplifiedTexts || [],
+                  shouldAllowSimplifyMore: eventData.shouldAllowSimplifyMore || false
+                };
+                
+                // Use a small delay to ensure DOM is updated
+                setTimeout(() => {
+                  ChatDialog.open(eventData.text, matchingTextKey, 'simplified', simplifiedData, 'selected');
+                }, 100);
                 
                 // Append icons wrapper directly to highlight for absolute positioning
                 highlight.appendChild(iconsWrapper);
@@ -13519,9 +14870,14 @@ const ButtonPanel = {
                 oldBtn.remove();
               }
               
-              // Change background to green
+              // Change background to green with breathing animation
               console.log(`[ButtonPanel] Adding vocab-word-explained class for green background`);
-              wordHighlight.classList.add('vocab-word-explained');
+              wordHighlight.classList.add('vocab-word-explained', 'word-breathing');
+              
+              // Remove breathing animation after it completes (0.8s)
+              setTimeout(() => {
+                wordHighlight.classList.remove('word-breathing');
+              }, 800);
               
               // Store explanation data on the element
               console.log(`[ButtonPanel] Storing explanation data on element`);
@@ -13596,6 +14952,13 @@ const ButtonPanel = {
                 hasExplainedClass: wordHighlight.classList.contains('vocab-word-explained')
               });
               console.log('[ButtonPanel] explainedWords container size:', WordSelector.explainedWords.size);
+              
+              // Automatically show word meaning popup after green background is applied
+              // Use a small delay to ensure DOM is updated and breathing animation starts
+              setTimeout(() => {
+                console.log('[ButtonPanel] Auto-showing word meaning popup');
+                WordSelector.showWordPopup(wordHighlight, true); // Show as sticky popup
+              }, 100);
             } else {
               console.error(`[ButtonPanel] ===== HIGHLIGHT MATCHING FAILED =====`);
               console.error(`[ButtonPanel] ✗ No matching highlight found for word "${targetWord}"`);
@@ -14572,15 +15935,6 @@ const ButtonPanel = {
       if (this.state.isMagicMeaningEnabled) {
         magicMeaningBtn.classList.remove('disabled');
         magicMeaningBtn.disabled = false; // Remove disabled attribute
-        
-        // If button was previously disabled and is now enabled, show notification popup
-        if (wasDisabled && !magicMeaningBtn.classList.contains('processing') && !magicMeaningBtn.classList.contains('success')) {
-          // Check if user has chosen to not show this notification
-          const dontShowAgain = localStorage.getItem('vocab-dont-show-magic-meaning-enabled');
-          if (!dontShowAgain) {
-            this.showMagicMeaningEnabledNotification(magicMeaningBtn);
-          }
-        }
       } else {
         magicMeaningBtn.classList.add('disabled');
         magicMeaningBtn.disabled = true; // Add disabled attribute
@@ -14598,131 +15952,6 @@ const ButtonPanel = {
     }
   },
 
-  /**
-   * Show notification popup when magic meaning button is enabled
-   * @param {HTMLElement} button - The magic meaning button element
-   */
-  showMagicMeaningEnabledNotification(button) {
-    // Remove any existing notification
-    const existingNotification = document.querySelector('.vocab-magic-meaning-notification');
-    if (existingNotification) {
-      existingNotification.remove();
-    }
-
-    // Create notification popup
-    const notification = document.createElement('div');
-    notification.className = 'vocab-magic-meaning-notification';
-
-    // Create close button (cross icon in top-right)
-    const closeBtn = document.createElement('button');
-    closeBtn.className = 'vocab-magic-meaning-notification-close';
-    closeBtn.innerHTML = `
-      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M12 4L4 12M4 4L12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-      </svg>
-    `;
-    closeBtn.addEventListener('click', () => {
-      this.hideMagicMeaningEnabledNotification(notification);
-    });
-
-    // Create message text (no icon)
-    const message = document.createElement('div');
-    message.className = 'vocab-magic-meaning-notification-message';
-    message.textContent = 'Get contextual explanation';
-
-    // Create "Don't show again" button (bottom-right)
-    const dontShowBtn = document.createElement('button');
-    dontShowBtn.className = 'vocab-magic-meaning-dont-show';
-    dontShowBtn.textContent = "Don't show again";
-    dontShowBtn.addEventListener('click', () => {
-      // Save preference to localStorage
-      localStorage.setItem('vocab-dont-show-magic-meaning-enabled', 'true');
-      this.hideMagicMeaningEnabledNotification(notification);
-    });
-
-    // Append elements
-    notification.appendChild(closeBtn);
-    notification.appendChild(message);
-    notification.appendChild(dontShowBtn);
-
-    // Add to document first (needed for proper layout calculation)
-    notification.style.visibility = 'hidden'; // Hide until positioned
-    document.body.appendChild(notification);
-
-    // Position notification exactly on the right side of the magic-meaning button
-    // Use requestAnimationFrame to ensure layout is stable and get fresh button position
-    requestAnimationFrame(() => {
-      // Get fresh button position after layout is updated
-      const buttonRect = button.getBoundingClientRect();
-      const buttonCenterY = buttonRect.top + (buttonRect.height / 2);
-      
-      // Get notification dimensions to calculate pointer position
-      const notificationRect = notification.getBoundingClientRect();
-      const notificationHeight = notificationRect.height || notification.offsetHeight;
-      
-      // Pointer is positioned at top: 35px from notification top (CSS), height: 14px
-      // Pointer center = top + (height / 2) = 35px + 7px = 42px from notification top
-      // We need to calculate notification position so pointer center aligns with button center
-      const pointerTop = 35; // CSS top position of pointer
-      const pointerHeight = 14; // CSS height of pointer
-      const pointerCenterFromTop = pointerTop + (pointerHeight / 2); // Center of pointer: 42px
-      const buttonCenterYPosition = buttonCenterY; // Button center Y in viewport
-      
-      // Position notification so its pointer center (at 42px from top) aligns with button center
-      notification.style.position = 'fixed';
-      notification.style.top = (buttonCenterYPosition - pointerCenterFromTop) + 'px';
-      notification.style.left = (buttonRect.right + 10) + 'px';
-      notification.style.zIndex = '2147483647';
-      notification.style.visibility = 'visible'; // Show after positioning
-
-      // Double-check positioning after notification is visible (especially important for text selection)
-      requestAnimationFrame(() => {
-        // Recalculate after notification is rendered to ensure accurate positioning
-        const finalButtonRect = button.getBoundingClientRect();
-        const finalButtonCenterY = finalButtonRect.top + (finalButtonRect.height / 2);
-        notification.style.top = (finalButtonCenterY - pointerCenterFromTop) + 'px';
-        
-        // Trigger animation
-        setTimeout(() => {
-          notification.classList.add('visible');
-        }, 10);
-
-        // Auto-hide after 5 seconds if user doesn't interact (start after notification is visible)
-        const autoHideTimeout = setTimeout(() => {
-          this.hideMagicMeaningEnabledNotification(notification);
-        }, 5000);
-
-        // Clear auto-hide timeout if user interacts
-        notification.addEventListener('mouseenter', () => {
-          clearTimeout(autoHideTimeout);
-        });
-
-        // Additional check after a short delay to handle any layout shifts (especially for text selection)
-        setTimeout(() => {
-          requestAnimationFrame(() => {
-            const finalButtonRect2 = button.getBoundingClientRect();
-            const finalButtonCenterY2 = finalButtonRect2.top + (finalButtonRect2.height / 2);
-            notification.style.top = (finalButtonCenterY2 - pointerCenterFromTop) + 'px';
-          });
-        }, 50); // Small delay to catch layout shifts
-      });
-    });
-  },
-
-  /**
-   * Hide the magic meaning enabled notification
-   * @param {HTMLElement} notification - The notification element
-   */
-  hideMagicMeaningEnabledNotification(notification) {
-    if (notification) {
-      notification.classList.remove('visible');
-      setTimeout(() => {
-        if (notification.parentNode) {
-          notification.remove();
-        }
-      }, 300); // Match transition duration
-    }
-  },
 
   /**
    * Update state and refresh button states
