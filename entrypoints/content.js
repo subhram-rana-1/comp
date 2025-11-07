@@ -978,8 +978,14 @@ const WordSelector = {
   // Container for explained words (moved from selectedWords after API call)
   explainedWords: new Map(), // Map of word -> {word, meaning, examples, highlights, hasCalledGetMoreExamples}
   
+  // Track if popup is open for each word (boolean flag)
+  wordPopupOpen: new Map(), // Map of normalizedWord -> boolean
+  
   // Cache for pronunciation audio blobs
   pronunciationCache: new Map(), // Map of word -> audio blob
+  
+  // Cache for translated word explanations (EN translations)
+  translationCache: new Map(), // Map of normalizedWord -> {meaning, examples}
   
   // Track if the feature is enabled
   isEnabled: false,
@@ -1176,8 +1182,14 @@ const WordSelector = {
       // Allow deselection of highlights anywhere (they should be removable)
       const word = clickedHighlight.getAttribute('data-word');
       if (word) {
-        this.removeWord(word);
-        console.log('[WordSelector] Word deselected via double-click:', word);
+        // Check if it's a green explained word - if so, use removeExplainedWord
+        if (clickedHighlight.classList.contains('vocab-word-explained')) {
+          this.removeExplainedWord(word);
+          console.log('[WordSelector] Explained word deselected via double-click:', word);
+        } else {
+          this.removeWord(word);
+          console.log('[WordSelector] Word deselected via double-click:', word);
+        }
       }
       return;
     }
@@ -1448,6 +1460,9 @@ const WordSelector = {
           wordHighlight.appendChild(greenCrossBtn);
           
           // Store in explainedWords map
+          // Extract languageCode from eventData (could be at top level or in word_info)
+          const languageCode = eventData.languageCode || wordInfo.languageCode || null;
+          
           if (!this.explainedWords.has(normalizedTargetWord)) {
             this.explainedWords.set(normalizedTargetWord, {
               word: targetWord,
@@ -1455,8 +1470,15 @@ const WordSelector = {
               examples: wordInfo.examples,
               shouldAllowFetchMoreExamples: wordInfo.shouldAllowFetchMoreExamples || false,
               hasCalledGetMoreExamples: false,
+              languageCode: languageCode,
               highlights: new Set()
             });
+          } else {
+            // Update existing entry with languageCode if not already set
+            const existingEntry = this.explainedWords.get(normalizedTargetWord);
+            if (!existingEntry.languageCode && languageCode) {
+              existingEntry.languageCode = languageCode;
+            }
           }
           this.explainedWords.get(normalizedTargetWord).highlights.add(wordHighlight);
           
@@ -1475,7 +1497,37 @@ const WordSelector = {
           // Automatically show word meaning popup after green background is applied
           // Use a small delay to ensure DOM is updated and breathing animation starts
           setTimeout(() => {
-            console.log('[WordSelector] Auto-showing word meaning popup');
+            console.log('[WordSelector] ===== AUTO-SHOWING WORD MEANING POPUP =====');
+            console.log('[WordSelector] Word highlight element:', {
+              element: wordHighlight,
+              isInDOM: document.body.contains(wordHighlight),
+              classes: wordHighlight.className,
+              hasExplainedClass: wordHighlight.classList.contains('vocab-word-explained'),
+              textContent: wordHighlight.textContent.trim(),
+              dataWord: wordHighlight.getAttribute('data-word'),
+              normalizedWord: normalizedWord,
+              isInExplainedWords: this.explainedWords.has(normalizedWord)
+            });
+            
+            // Validate element before showing popup
+            if (!wordHighlight || !document.body.contains(wordHighlight)) {
+              console.error('[WordSelector] ✗ Word highlight element is not in DOM, cannot show popup');
+              return;
+            }
+            
+            if (!wordHighlight.classList.contains('vocab-word-explained')) {
+              console.error('[WordSelector] ✗ Word highlight does not have vocab-word-explained class, cannot show popup');
+              console.error('[WordSelector] Current classes:', wordHighlight.className);
+              return;
+            }
+            
+            if (!this.explainedWords.has(normalizedWord)) {
+              console.error('[WordSelector] ✗ Word not found in explainedWords map, cannot show popup');
+              console.error('[WordSelector] Available words in map:', Array.from(this.explainedWords.keys()));
+              return;
+            }
+            
+            console.log('[WordSelector] ✓ All validations passed, showing popup');
             this.showWordPopup(wordHighlight, true); // Show as sticky popup
           }, 100);
         } else {
@@ -1533,6 +1585,13 @@ const WordSelector = {
     const normalizedWord = word.toLowerCase().trim();
     
     console.log(`[WordSelector] Removing word: "${word}" (normalized: "${normalizedWord}")`);
+    
+    // Check if word is in explainedWords - if so, use removeExplainedWord instead
+    if (this.explainedWords.has(normalizedWord)) {
+      console.log('[WordSelector] Word is in explainedWords, using removeExplainedWord instead');
+      this.removeExplainedWord(word);
+      return;
+    }
     
     // Get all highlights for this word
     const highlights = this.wordToHighlights.get(normalizedWord);
@@ -1979,12 +2038,21 @@ const WordSelector = {
    * @param {string} meaning - The meaning
    * @param {Array<string>} examples - Example sentences
    * @param {boolean} shouldAllowFetchMoreExamples - Whether to show the "View more examples" button
+   * @param {string|null} languageCode - Language code from API response (e.g., "EN"). If "EN", shows speaker icon for pronunciation
    * @returns {HTMLElement} Popup element
    */
-  createWordPopup(word, meaning, examples, shouldAllowFetchMoreExamples = true) {
+  createWordPopup(word, meaning, examples, shouldAllowFetchMoreExamples = true, languageCode = null) {
     const popup = document.createElement('div');
     popup.className = 'vocab-word-popup';
     popup.setAttribute('data-word', word.toLowerCase());
+    
+    // Add inline styles to ensure popup is visible and not overridden by website CSS
+    popup.style.setProperty('position', 'absolute', 'important');
+    popup.style.setProperty('z-index', '10000010', 'important');
+    popup.style.setProperty('display', 'block', 'important');
+    popup.style.setProperty('visibility', 'visible', 'important');
+    popup.style.setProperty('opacity', '0', 'important'); // Will be set to 1 when visible class is added
+    popup.style.setProperty('pointer-events', 'none', 'important'); // Will be set to 'all' when visible
     
     // Header
     const header = document.createElement('div');
@@ -1992,27 +2060,18 @@ const WordSelector = {
     header.textContent = 'Contextual Meaning';
     popup.appendChild(header);
     
-    // Speaker icon for pronunciation
-    const speakerBtn = document.createElement('button');
-    speakerBtn.className = 'vocab-word-popup-speaker';
-    speakerBtn.setAttribute('aria-label', `Pronounce "${word}"`);
-    speakerBtn.innerHTML = this.createSpeakerIcon();
-    speakerBtn.addEventListener('click', async (e) => {
-      e.stopPropagation();
-      await this.handlePronunciation(word, speakerBtn);
-    });
-    popup.appendChild(speakerBtn);
-    
-    // Close button for popup
-    const closeBtn = document.createElement('button');
-    closeBtn.className = 'vocab-word-popup-close';
-    closeBtn.setAttribute('aria-label', 'Close popup');
-    closeBtn.innerHTML = this.createCloseIcon();
-    closeBtn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      this.hideAllPopups();
-    });
-    popup.appendChild(closeBtn);
+    // Speaker icon for pronunciation - only show if languageCode is "EN"
+    if (languageCode === 'EN') {
+      const speakerBtn = document.createElement('button');
+      speakerBtn.className = 'vocab-word-popup-speaker';
+      speakerBtn.setAttribute('aria-label', `Pronounce "${word}"`);
+      speakerBtn.innerHTML = this.createSpeakerIcon();
+      speakerBtn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        await this.handlePronunciation(word, speakerBtn);
+      });
+      popup.appendChild(speakerBtn);
+    }
     
     // Meaning
     const meaningDiv = document.createElement('div');
@@ -2043,24 +2102,99 @@ const WordSelector = {
     
     popup.appendChild(examplesContainer);
     
-    // View more button - smaller, bottom-left positioned
+    // Store original meaning and examples for translation
+    popup.setAttribute('data-original-meaning', meaning);
+    popup.setAttribute('data-original-examples', JSON.stringify(examples));
+    popup.setAttribute('data-language-code', languageCode || '');
+    popup.setAttribute('data-current-tab', languageCode || 'EN'); // Track current active tab
+    
+    // Create bottom container for tab group and button
+    const bottomContainer = document.createElement('div');
+    bottomContainer.className = 'vocab-word-popup-bottom-container';
+    
+    // Language tab group - show if languageCode is not "EN"
+    if (languageCode && languageCode !== 'EN') {
+      const tabGroup = document.createElement('div');
+      tabGroup.className = 'vocab-word-popup-tab-group';
+      
+      // Local language tab (initially active)
+      const localTab = document.createElement('button');
+      localTab.className = 'vocab-word-popup-tab vocab-word-popup-tab-active';
+      localTab.textContent = languageCode;
+      localTab.setAttribute('data-tab', languageCode);
+      localTab.setAttribute('aria-label', `Show ${languageCode} content`);
+      localTab.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        // Only switch if not already active
+        if (!localTab.classList.contains('vocab-word-popup-tab-active')) {
+          await this.switchLanguageTab(popup, word, languageCode, localTab, enTab, languageCode);
+        }
+      });
+      
+      // EN tab
+      const enTab = document.createElement('button');
+      enTab.className = 'vocab-word-popup-tab';
+      enTab.textContent = 'EN';
+      enTab.setAttribute('data-tab', 'EN');
+      enTab.setAttribute('aria-label', 'Show English content');
+      enTab.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        // Only switch if not already active
+        if (!enTab.classList.contains('vocab-word-popup-tab-active')) {
+          await this.switchLanguageTab(popup, word, languageCode, localTab, enTab, 'EN');
+        }
+      });
+      
+      tabGroup.appendChild(localTab);
+      tabGroup.appendChild(enTab);
+      bottomContainer.appendChild(tabGroup);
+      
+      // Set initial active tab for CSS sliding animation
+      tabGroup.setAttribute('data-active-tab', languageCode);
+      
+      // Store tab references for later use
+      popup.setAttribute('data-local-tab', '');
+      popup.setAttribute('data-en-tab', '');
+    }
+    
+    // View more button - bigger, bottom-right positioned
     const button = document.createElement('button');
     button.className = 'vocab-word-popup-button';
     button.textContent = 'Get more examples';
     button.setAttribute('data-word', word.toLowerCase());
     button.setAttribute('data-meaning', meaning);
     
-    // Set initial button visibility based on shouldAllowFetchMoreExamples
-    if (!shouldAllowFetchMoreExamples) {
+    // Check if tabs exist (languageCode is not "EN" and not null)
+    const hasTabs = languageCode && languageCode !== 'EN';
+    const currentTab = popup.getAttribute('data-current-tab');
+    const isEnTabActive = currentTab === 'EN';
+    
+    // Set initial button visibility:
+    // - If tabs exist and EN tab is active: always hide
+    // - If tabs exist and local language tab is active: show based on shouldAllowFetchMoreExamples
+    // - If no tabs exist: show based on shouldAllowFetchMoreExamples
+    if (hasTabs && isEnTabActive) {
+      // EN tab is active, always hide button
       button.style.display = 'none';
+      popup.classList.add('no-more-examples-button');
+    } else if (!shouldAllowFetchMoreExamples) {
+      // Local language tab active or no tabs, but shouldAllowFetchMoreExamples is false
+      button.style.display = 'none';
+      popup.classList.add('no-more-examples-button');
+    } else {
+      // Local language tab active or no tabs, and shouldAllowFetchMoreExamples is true
+      button.style.display = 'block';
     }
     
     button.addEventListener('click', async (e) => {
       e.stopPropagation();
       console.log('[WordSelector] View more examples clicked for:', word);
-      await this.handleViewMoreExamples(word, meaning, examples, button);
+      await this.handleViewMoreExamples(word, meaning, examples, button, popup);
     });
-    popup.appendChild(button);
+    bottomContainer.appendChild(button);
+    
+    // Append bottom container to popup
+    popup.appendChild(bottomContainer);
     
     return popup;
   },
@@ -2071,8 +2205,9 @@ const WordSelector = {
    * @param {string} meaning - The meaning
    * @param {Array<string>} currentExamples - Current examples
    * @param {HTMLElement} button - The button element
+   * @param {HTMLElement} popup - The popup element
    */
-  async handleViewMoreExamples(word, meaning, currentExamples, button) {
+  async handleViewMoreExamples(word, meaning, currentExamples, button, popup) {
     // Show loading state
     button.disabled = true;
     button.classList.add('loading');
@@ -2097,12 +2232,81 @@ const WordSelector = {
       console.log('[WordSelector] Current examples in popup:', allCurrentExamples);
       console.log('[WordSelector] Original examples passed:', currentExamples);
       
-      // Use all currently displayed examples for the API call
-      const response = await WordExplanationService.getMoreExplanations(word, meaning, allCurrentExamples);
+      // Check current active tab to determine which language to use for API call
+      const currentTab = popup ? popup.getAttribute('data-current-tab') : 'EN';
+      const languageCode = popup ? popup.getAttribute('data-language-code') : '';
+      const hasTabs = languageCode && languageCode !== 'EN';
+      const isEnTabActive = currentTab === 'EN';
+      
+      // Use meaning and examples in the current tab's language for API call
+      let meaningForApi = meaning;
+      let examplesForApi = allCurrentExamples;
+      
+      if (hasTabs && popup) {
+        if (isEnTabActive) {
+          // If EN tab is active, get the English meaning and examples from cache
+          const normalizedWord = word.toLowerCase();
+          if (this.translationCache.has(normalizedWord)) {
+            const cached = this.translationCache.get(normalizedWord);
+            meaningForApi = cached.meaning;
+            examplesForApi = cached.examples || [];
+          }
+        } else {
+          // If local language tab is active, use original meaning and examples
+          const originalMeaning = popup.getAttribute('data-original-meaning');
+          const originalExamplesJson = popup.getAttribute('data-original-examples');
+          if (originalMeaning) {
+            meaningForApi = originalMeaning;
+          }
+          if (originalExamplesJson) {
+            try {
+              const originalExamples = JSON.parse(originalExamplesJson) || [];
+              examplesForApi = originalExamples;
+            } catch (e) {
+              console.error('[WordSelector] Error parsing original examples for API:', e);
+            }
+          }
+        }
+      }
+      
+      console.log('[WordSelector] Using for API - tab:', currentTab, 'meaning:', meaningForApi, 'examples count:', examplesForApi.length);
+      
+      // Use meaning and examples in the current tab's language for the API call
+      const response = await WordExplanationService.getMoreExplanations(word, meaningForApi, examplesForApi);
       
       if (response.success && response.data) {
         const newExamples = response.data.examples || [];
         const shouldAllowFetchMoreExamples = response.data.shouldAllowFetchMoreExamples || false;
+        
+        // Get original examples count to identify new examples
+        const originalExamplesJson = popup ? popup.getAttribute('data-original-examples') : '[]';
+        let originalExamples = [];
+        try {
+          originalExamples = JSON.parse(originalExamplesJson) || [];
+        } catch (e) {
+          console.error('[WordSelector] Error parsing original examples:', e);
+        }
+        
+        // Determine which examples are new (added after initial load)
+        const originalCount = originalExamples.length;
+        const newExamplesOnly = newExamples.slice(originalCount);
+        
+        // If EN tab is active, new examples will be in English - store them separately
+        if (isEnTabActive && newExamplesOnly.length > 0) {
+          // Store English-only examples
+          const existingEnExamplesJson = popup.getAttribute('data-en-examples-only') || '[]';
+          let existingEnExamples = [];
+          try {
+            existingEnExamples = JSON.parse(existingEnExamplesJson) || [];
+          } catch (e) {
+            console.error('[WordSelector] Error parsing existing EN-only examples:', e);
+          }
+          
+          // Combine with new English examples
+          const allEnExamplesOnly = [...existingEnExamples, ...newExamplesOnly];
+          popup.setAttribute('data-en-examples-only', JSON.stringify(allEnExamplesOnly));
+          console.log('[WordSelector] Stored English-only examples:', allEnExamplesOnly);
+        }
         
         // Update the examples list in the popup
         const examplesList = document.getElementById(`vocab-word-examples-${word.toLowerCase()}`);
@@ -2135,7 +2339,12 @@ const WordSelector = {
         const normalizedWord = word.toLowerCase();
         if (this.explainedWords.has(normalizedWord)) {
           const wordData = this.explainedWords.get(normalizedWord);
-          wordData.examples = newExamples; // Update with all examples from API response
+          // If local language tab is active, update original examples
+          if (!isEnTabActive && popup) {
+            wordData.examples = newExamples; // Update with all examples from API response
+            // Also update the data-original-examples attribute
+            popup.setAttribute('data-original-examples', JSON.stringify(newExamples));
+          }
           wordData.shouldAllowFetchMoreExamples = shouldAllowFetchMoreExamples;
           wordData.hasCalledGetMoreExamples = true; // Mark that API has been called
           console.log('[WordSelector] Updated examples and shouldAllowFetchMoreExamples for word:', word);
@@ -2158,38 +2367,426 @@ const WordSelector = {
   },
   
   /**
+   * Switch language tab (local language <-> EN)
+   * @param {HTMLElement} popup - The popup element
+   * @param {string} word - The word
+   * @param {string} localLanguageCode - The local language code
+   * @param {HTMLElement} localTab - The local language tab element
+   * @param {HTMLElement} enTab - The EN tab element
+   * @param {string} targetTab - The target tab to switch to ('EN' or localLanguageCode)
+   */
+  async switchLanguageTab(popup, word, localLanguageCode, localTab, enTab, targetTab) {
+    const normalizedWord = word.toLowerCase();
+    const currentTab = popup.getAttribute('data-current-tab');
+    
+    // If already on the target tab, do nothing
+    if (currentTab === targetTab) {
+      console.log('[WordSelector] Already on target tab, no action needed');
+      return;
+    }
+    
+    console.log('[WordSelector] Switching language tab:', {
+      word: word,
+      currentTab: currentTab,
+      targetTab: targetTab,
+      localLanguageCode: localLanguageCode
+    });
+    
+    // Update tab group data attribute for sliding animation
+    const tabGroup = popup.querySelector('.vocab-word-popup-tab-group');
+    if (tabGroup) {
+      tabGroup.setAttribute('data-active-tab', targetTab);
+    }
+    
+    // Update tab active classes immediately for visual feedback
+    if (targetTab === localLanguageCode) {
+      localTab.classList.add('vocab-word-popup-tab-active');
+      enTab.classList.remove('vocab-word-popup-tab-active');
+    } else {
+      enTab.classList.add('vocab-word-popup-tab-active');
+      localTab.classList.remove('vocab-word-popup-tab-active');
+    }
+    
+    // Wait for slide animation to complete before showing spinner
+    await new Promise(resolve => setTimeout(resolve, 300));
+    
+    // If switching to local language, show original content
+    if (targetTab === localLanguageCode) {
+      const originalMeaning = popup.getAttribute('data-original-meaning');
+      const originalExamplesJson = popup.getAttribute('data-original-examples');
+      let originalExamples = [];
+      
+      try {
+        originalExamples = JSON.parse(originalExamplesJson) || [];
+      } catch (e) {
+        console.error('[WordSelector] Error parsing original examples:', e);
+      }
+      
+      // Get current English examples from cache to compare counts
+      let cachedEnExamples = [];
+      if (this.translationCache.has(normalizedWord)) {
+        const cached = this.translationCache.get(normalizedWord);
+        cachedEnExamples = cached.examples || [];
+      }
+      
+      // Check if there are English-only examples that need translation
+      const enExamplesJson = popup.getAttribute('data-en-examples-only') || '[]';
+      let enExamplesOnly = [];
+      try {
+        enExamplesOnly = JSON.parse(enExamplesJson) || [];
+      } catch (e) {
+        console.error('[WordSelector] Error parsing EN-only examples:', e);
+      }
+      
+      // Compare example counts: if English has more examples than original, translate the new ones
+      const totalEnExamples = cachedEnExamples.length + enExamplesOnly.length;
+      const needsTranslation = totalEnExamples > originalExamples.length;
+      
+      if (needsTranslation) {
+        console.log('[WordSelector] Example count mismatch - original:', originalExamples.length, 'total EN:', totalEnExamples);
+        console.log('[WordSelector] Translating new English examples to local language');
+        
+        // Get the examples that need translation (the ones beyond original count)
+        const examplesToTranslate = totalEnExamples > originalExamples.length 
+          ? cachedEnExamples.slice(originalExamples.length) 
+          : [];
+        
+        // Also include any English-only examples
+        const allExamplesToTranslate = [...examplesToTranslate, ...enExamplesOnly];
+        
+        if (allExamplesToTranslate.length > 0) {
+          console.log('[WordSelector] Translating new English examples to local language:', allExamplesToTranslate);
+          
+          // Show loading on local tab after slide animation
+          localTab.disabled = true;
+          localTab.classList.add('loading');
+          const originalTabText = localTab.textContent;
+          localTab.innerHTML = '<div class="vocab-loading-spinner" style="width: 10px; height: 10px; border: 2px solid white; border-top-color: transparent; border-radius: 50%; animation: vocab-spin 0.8s linear infinite;"></div>';
+          
+          try {
+            // Translate new English examples to local language
+            const payload = {
+              targetLangugeCode: localLanguageCode,
+              texts: allExamplesToTranslate
+            };
+            
+            const url = `${ApiConfig.getCurrentBaseUrl()}${ApiConfig.ENDPOINTS.TRANSLATE}`;
+            const response = await fetch(url, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify(payload)
+            });
+            
+            if (response.ok) {
+              const data = await response.json();
+              const translatedNewExamples = data.translatedTexts || [];
+              
+              // Combine original examples with translated new examples
+              const allExamples = [...originalExamples, ...translatedNewExamples];
+              
+              // Update popup with local language content
+              this.updatePopupContent(popup, word, originalMeaning, allExamples);
+              
+              // Update original examples to include translated new examples
+              popup.setAttribute('data-original-examples', JSON.stringify(allExamples));
+              
+              // Update stored word data
+              const normalizedWord = word.toLowerCase();
+              if (this.explainedWords.has(normalizedWord)) {
+                const wordData = this.explainedWords.get(normalizedWord);
+                wordData.examples = allExamples;
+              }
+              
+              // Clear English-only examples since they're now translated
+              popup.removeAttribute('data-en-examples-only');
+              
+              // Update cache to reflect the new count
+              if (this.translationCache.has(normalizedWord)) {
+                const cached = this.translationCache.get(normalizedWord);
+                // Keep the same meaning, but update examples count awareness
+                // The cache will be updated when switching back to EN
+              }
+            } else {
+              // If translation fails, just show original examples
+              this.updatePopupContent(popup, word, originalMeaning, originalExamples);
+            }
+          } catch (error) {
+            console.error('[WordSelector] Error translating new English examples:', error);
+            // Fallback to original examples
+            this.updatePopupContent(popup, word, originalMeaning, originalExamples);
+          } finally {
+            localTab.disabled = false;
+            localTab.classList.remove('loading');
+            localTab.textContent = originalTabText;
+          }
+        } else {
+          // No examples to translate, just show original content
+          this.updatePopupContent(popup, word, originalMeaning, originalExamples);
+        }
+      } else {
+        // No translation needed, just show original content
+        this.updatePopupContent(popup, word, originalMeaning, originalExamples);
+      }
+      
+      // Update current tab attribute
+      popup.setAttribute('data-current-tab', localLanguageCode);
+      
+      // Update button visibility: show button when local language tab is active
+      const button = popup.querySelector('.vocab-word-popup-button');
+      if (button) {
+        // Get shouldAllowFetchMoreExamples from wordData
+        const normalizedWord = word.toLowerCase();
+        let shouldAllowFetchMoreExamples = true;
+        if (this.explainedWords.has(normalizedWord)) {
+          const wordData = this.explainedWords.get(normalizedWord);
+          if (wordData.hasCalledGetMoreExamples) {
+            shouldAllowFetchMoreExamples = wordData.shouldAllowFetchMoreExamples || false;
+          }
+        }
+        
+        if (shouldAllowFetchMoreExamples) {
+          button.style.display = 'block';
+          popup.classList.remove('no-more-examples-button');
+        } else {
+          button.style.display = 'none';
+          popup.classList.add('no-more-examples-button');
+        }
+      }
+      
+    } else {
+      // Switching to EN - translate to English
+      const originalMeaning = popup.getAttribute('data-original-meaning');
+      const originalExamplesJson = popup.getAttribute('data-original-examples');
+      let originalExamples = [];
+      
+      try {
+        originalExamples = JSON.parse(originalExamplesJson) || [];
+      } catch (e) {
+        console.error('[WordSelector] Error parsing original examples:', e);
+      }
+      
+      // Show loading on EN tab after slide animation
+      enTab.disabled = true;
+      enTab.classList.add('loading');
+      const originalTabText = enTab.textContent;
+      enTab.innerHTML = '<div class="vocab-loading-spinner" style="width: 10px; height: 10px; border: 2px solid white; border-top-color: transparent; border-radius: 50%; animation: vocab-spin 0.8s linear infinite;"></div>';
+      
+      try {
+        // Check cache first
+        let translatedMeaning, translatedExamples;
+        
+        if (this.translationCache.has(normalizedWord)) {
+          console.log('[WordSelector] Using cached translation for:', word);
+          const cached = this.translationCache.get(normalizedWord);
+          translatedMeaning = cached.meaning;
+          translatedExamples = cached.examples;
+          
+          // Compare number of examples: if original has more examples than cached, re-translate
+          if (originalExamples.length !== translatedExamples.length) {
+            console.log('[WordSelector] Example count mismatch - original:', originalExamples.length, 'cached EN:', translatedExamples.length);
+            console.log('[WordSelector] Re-translating all examples to English');
+            
+            // Clear cache and re-translate
+            this.translationCache.delete(normalizedWord);
+            translatedMeaning = null;
+            translatedExamples = null;
+          }
+        }
+        
+        // If no cache or cache was invalid, translate
+        if (!translatedMeaning || !translatedExamples) {
+          // Prepare API payload - combine explanation_text and examples into texts array
+          const texts = [originalMeaning, ...originalExamples];
+          const payload = {
+            targetLangugeCode: "EN",
+            texts: texts
+          };
+          
+          console.log('[WordSelector] Calling translate API with payload:', payload);
+          
+          // Call translate API
+          const url = `${ApiConfig.getCurrentBaseUrl()}${ApiConfig.ENDPOINTS.TRANSLATE}`;
+          const response = await fetch(url, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(payload)
+          });
+          
+          if (!response.ok) {
+            throw new Error(`Translation API failed: ${response.status} ${response.statusText}`);
+          }
+          
+          const data = await response.json();
+          console.log('[WordSelector] Translation API response:', data);
+          
+          // Extract translated meaning and examples from translatedTexts array
+          const translatedTexts = data.translatedTexts || [];
+          translatedMeaning = translatedTexts[0] || originalMeaning;
+          translatedExamples = translatedTexts.slice(1) || [];
+          
+          // Cache the translation
+          this.translationCache.set(normalizedWord, {
+            meaning: translatedMeaning,
+            examples: translatedExamples
+          });
+          
+          console.log('[WordSelector] Translation cached for:', word);
+        }
+        
+        // Update popup with English content
+        this.updatePopupContent(popup, word, translatedMeaning, translatedExamples);
+        
+        // Update current tab attribute
+        popup.setAttribute('data-current-tab', 'EN');
+        
+        // Update button visibility: always hide button when EN tab is active
+        const button = popup.querySelector('.vocab-word-popup-button');
+        if (button) {
+          button.style.display = 'none';
+          popup.classList.add('no-more-examples-button');
+        }
+        
+      } catch (error) {
+        console.error('[WordSelector] Error translating to English:', error);
+        alert('Failed to translate to English. Please try again.');
+      } finally {
+        enTab.disabled = false;
+        enTab.classList.remove('loading');
+        enTab.textContent = originalTabText;
+      }
+    }
+  },
+  
+  /**
+   * Update popup content with text (meaning and examples)
+   * @param {HTMLElement} popup - The popup element
+   * @param {string} word - The word
+   * @param {string} meaning - The meaning to display
+   * @param {Array<string>} examples - The examples to display
+   */
+  updatePopupContent(popup, word, meaning, examples) {
+    // Update meaning
+    const meaningDiv = popup.querySelector('.vocab-word-popup-meaning');
+    if (meaningDiv) {
+      meaningDiv.innerHTML = `<span class="word-bold">${word}</span> means ${meaning}`;
+    }
+    
+    // Update examples
+    const examplesList = popup.querySelector('.vocab-word-popup-examples');
+    if (examplesList) {
+      examplesList.innerHTML = '';
+      if (examples && examples.length > 0) {
+        examples.forEach(example => {
+          const li = document.createElement('li');
+          const regex = new RegExp(`\\b${word}\\b`, 'gi');
+          const highlightedExample = example.replace(regex, `<span class="word-bold">${word}</span>`);
+          li.innerHTML = highlightedExample;
+          examplesList.appendChild(li);
+        });
+      }
+    }
+    
+    console.log('[WordSelector] Popup content updated');
+  },
+  
+  /**
    * Position popup relative to word highlight
    * @param {HTMLElement} popup - The popup element
    * @param {HTMLElement} wordElement - The word highlight element
    */
   positionPopup(popup, wordElement) {
+    console.log('[WordSelector] ===== POSITIONING POPUP =====');
+    
+    // Validate inputs
+    if (!popup || !wordElement) {
+      console.error('[WordSelector] ✗ Invalid inputs for positionPopup:', { popup, wordElement });
+      return;
+    }
+    
+    if (!document.body.contains(wordElement)) {
+      console.error('[WordSelector] ✗ wordElement is not in DOM');
+      return;
+    }
+    
+    if (!document.body.contains(popup)) {
+      console.error('[WordSelector] ✗ popup is not in DOM');
+      return;
+    }
+    
     const rect = wordElement.getBoundingClientRect();
+    console.log('[WordSelector] Word element bounding rect:', {
+      top: rect.top,
+      left: rect.left,
+      bottom: rect.bottom,
+      right: rect.right,
+      width: rect.width,
+      height: rect.height,
+      scrollY: window.scrollY,
+      scrollX: window.scrollX
+    });
+    
+    // Check if element is visible
+    if (rect.width === 0 || rect.height === 0) {
+      console.warn('[WordSelector] ⚠ Word element has zero dimensions, may not be visible');
+    }
+    
     const popupHeight = popup.offsetHeight || 250; // Estimated height
     const popupWidth = popup.offsetWidth || 340;
+    
+    console.log('[WordSelector] Popup dimensions:', {
+      width: popupWidth,
+      height: popupHeight,
+      offsetWidth: popup.offsetWidth,
+      offsetHeight: popup.offsetHeight
+    });
     
     // Calculate position (bottom-right of word, not overlapping)
     let top = rect.bottom + window.scrollY + 8; // 8px gap below word
     let left = rect.right + window.scrollX - popupWidth / 2; // Center horizontally with word
     
+    console.log('[WordSelector] Initial calculated position:', { top, left });
+    
     // Adjust if popup goes off-screen
     const viewportWidth = window.innerWidth;
     const viewportHeight = window.innerHeight;
     
+    console.log('[WordSelector] Viewport dimensions:', {
+      width: viewportWidth,
+      height: viewportHeight
+    });
+    
     // Horizontal adjustment
     if (left + popupWidth > viewportWidth + window.scrollX) {
+      const oldLeft = left;
       left = viewportWidth + window.scrollX - popupWidth - 10;
+      console.log('[WordSelector] Adjusted left (right edge):', { oldLeft, newLeft: left });
     }
     if (left < window.scrollX + 10) {
+      const oldLeft = left;
       left = window.scrollX + 10;
+      console.log('[WordSelector] Adjusted left (left edge):', { oldLeft, newLeft: left });
     }
     
     // Vertical adjustment (if not enough space below, show above)
     if (rect.bottom + popupHeight > viewportHeight + window.scrollY) {
+      const oldTop = top;
       top = rect.top + window.scrollY - popupHeight - 8; // Show above
+      console.log('[WordSelector] Adjusted top (showing above):', { oldTop, newTop: top });
     }
     
     popup.style.top = `${top}px`;
     popup.style.left = `${left}px`;
+    
+    console.log('[WordSelector] ✓ Final popup position set:', {
+      top: `${top}px`,
+      left: `${left}px`,
+      styleTop: popup.style.top,
+      styleLeft: popup.style.left
+    });
   },
   
   /**
@@ -2198,22 +2795,54 @@ const WordSelector = {
    * @param {boolean} sticky - Whether popup should stay (click) or disappear on mouseleave (hover)
    */
   showWordPopup(wordElement, sticky = false) {
+    console.log('[WordSelector] ===== SHOW WORD POPUP CALLED =====');
+    console.log('[WordSelector] Parameters:', {
+      wordElement: wordElement,
+      sticky: sticky,
+      isInDOM: wordElement ? document.body.contains(wordElement) : false,
+      elementClasses: wordElement ? wordElement.className : 'N/A',
+      elementText: wordElement ? wordElement.textContent.trim() : 'N/A'
+    });
+    
+    // Validate wordElement
+    if (!wordElement) {
+      console.error('[WordSelector] ✗ showWordPopup called with null/undefined wordElement');
+      return;
+    }
+    
+    if (!document.body.contains(wordElement)) {
+      console.error('[WordSelector] ✗ wordElement is not in DOM');
+      console.error('[WordSelector] Element:', wordElement);
+      return;
+    }
+    
     // Remove any existing popups
     this.hideAllPopups();
     
     const word = wordElement.textContent.trim();
     const normalizedWord = word.toLowerCase();
     
+    console.log('[WordSelector] Extracted word data:', {
+      word: word,
+      normalizedWord: normalizedWord,
+      elementHasExplainedClass: wordElement.classList.contains('vocab-word-explained')
+    });
+    
     // Get word data from explainedWords map (this contains the most up-to-date data)
     let wordData = null;
     let meaning = '';
     let examples = [];
     let shouldAllowFetchMoreExamples = true; // Default to true
+    let languageCode = null;
     
     if (this.explainedWords.has(normalizedWord)) {
       wordData = this.explainedWords.get(normalizedWord);
       meaning = wordData.meaning;
       examples = wordData.examples || [];
+      languageCode = wordData.languageCode || null;
+      
+      // IMPORTANT: Always use original content from explainedWords, never use cached translations
+      // The translation cache is only used when switching tabs, not for initial display
       
       // If get-more-explanations API has been called, use the field from response
       // Otherwise, show button by default
@@ -2223,19 +2852,29 @@ const WordSelector = {
         shouldAllowFetchMoreExamples = true; // Show by default before first API call
       }
       
-      console.log(`[WordSelector] Using updated data from explainedWords for "${word}":`, {
+      console.log(`[WordSelector] ✓ Using updated data from explainedWords for "${word}":`, {
         meaning: meaning,
         examplesCount: examples.length,
         shouldAllowFetchMoreExamples: shouldAllowFetchMoreExamples,
-        hasCalledGetMoreExamples: wordData.hasCalledGetMoreExamples
+        hasCalledGetMoreExamples: wordData.hasCalledGetMoreExamples,
+        languageCode: languageCode
       });
     } else {
       // Fallback to DOM attributes if not found in explainedWords (shouldn't happen normally)
-      console.warn(`[WordSelector] Word "${word}" not found in explainedWords, using DOM attributes as fallback`);
+      console.warn(`[WordSelector] ⚠ Word "${word}" not found in explainedWords, using DOM attributes as fallback`);
+      console.warn(`[WordSelector] Available words in explainedWords:`, Array.from(this.explainedWords.keys()));
       meaning = wordElement.getAttribute('data-meaning');
       const examplesJson = wordElement.getAttribute('data-examples');
       
-      if (!meaning) return;
+      if (!meaning) {
+        console.error('[WordSelector] ✗ No meaning found in DOM attributes either, cannot show popup');
+        console.error('[WordSelector] Element attributes:', {
+          dataWord: wordElement.getAttribute('data-word'),
+          dataMeaning: wordElement.getAttribute('data-meaning'),
+          dataExamples: wordElement.getAttribute('data-examples')
+        });
+        return;
+      }
       
       try {
         examples = JSON.parse(examplesJson) || [];
@@ -2244,30 +2883,195 @@ const WordSelector = {
       }
     }
     
-    if (!meaning) return;
+    if (!meaning) {
+      console.error('[WordSelector] ✗ No meaning available, cannot show popup');
+      return;
+    }
+    
+    console.log('[WordSelector] ✓ Meaning found, proceeding to create popup');
     
     // Create popup
-    const popup = this.createWordPopup(word, meaning, examples, shouldAllowFetchMoreExamples);
+    console.log('[WordSelector] Creating popup element...');
+    // Use languageCode from wordData (already extracted above)
+    console.log('[WordSelector] Language code for popup:', languageCode);
+    // IMPORTANT: Always pass original meaning and examples, never cached translations
+    const popup = this.createWordPopup(word, meaning, examples, shouldAllowFetchMoreExamples, languageCode);
+    
+    if (!popup) {
+      console.error('[WordSelector] ✗ Failed to create popup element');
+      return;
+    }
+    
+    console.log('[WordSelector] ✓ Popup element created');
     
     // Mark as sticky or not
     if (sticky) {
       popup.classList.add('sticky');
       popup.setAttribute('data-sticky', 'true');
+      console.log('[WordSelector] Popup marked as sticky');
     } else {
       popup.setAttribute('data-sticky', 'false');
+      console.log('[WordSelector] Popup marked as non-sticky (hover mode)');
     }
     
     // Append to body
-    document.body.appendChild(popup);
+    console.log('[WordSelector] Appending popup to document.body...');
+    try {
+      document.body.appendChild(popup);
+      console.log('[WordSelector] ✓ Popup appended to body');
+    } catch (error) {
+      console.error('[WordSelector] ✗ Failed to append popup to body:', error);
+      return;
+    }
     
-    // Position it
+    // Verify popup is in DOM
+    if (!document.body.contains(popup)) {
+      console.error('[WordSelector] ✗ Popup was not successfully added to DOM');
+      return;
+    }
+    
+    // Position it and animate from word element
     setTimeout(() => {
-      this.positionPopup(popup, wordElement);
-      popup.classList.add('visible');
+      console.log('[WordSelector] Positioning popup...');
+      try {
+        const wordRect = wordElement.getBoundingClientRect();
+        console.log('[WordSelector] Word element position:', {
+          top: wordRect.top,
+          left: wordRect.left,
+          bottom: wordRect.bottom,
+          right: wordRect.right,
+          width: wordRect.width,
+          height: wordRect.height,
+          isVisible: wordRect.width > 0 && wordRect.height > 0
+        });
+        
+        // Calculate final position first
+        this.positionPopup(popup, wordElement);
+        
+        // Get final position after positioning (in viewport coordinates)
+        const popupRect = popup.getBoundingClientRect();
+        const popupCenterX = popupRect.left + popupRect.width / 2;
+        const popupCenterY = popupRect.top + popupRect.height / 2;
+        
+        // Calculate word element center (in viewport coordinates)
+        const wordCenterX = wordRect.left + wordRect.width / 2;
+        const wordCenterY = wordRect.top + wordRect.height / 2;
+        
+        // Calculate offset from popup's center to word center (in viewport coordinates)
+        // Since transform translate() is relative to the element's position,
+        // we need the offset from the popup's current center to the word center
+        const startX = wordCenterX - popupCenterX;
+        const startY = wordCenterY - popupCenterY;
+        
+        console.log('[WordSelector] Animation positions:', {
+          wordRect: {
+            left: wordRect.left,
+            top: wordRect.top,
+            width: wordRect.width,
+            height: wordRect.height
+          },
+          wordCenter: {
+            x: wordCenterX,
+            y: wordCenterY
+          },
+          popupRect: {
+            left: popupRect.left,
+            top: popupRect.top,
+            width: popupRect.width,
+            height: popupRect.height
+          },
+          popupCenter: {
+            x: popupCenterX,
+            y: popupCenterY
+          },
+          startOffset: {
+            x: startX,
+            y: startY
+          }
+        });
+        
+        // Set CSS variables for animation
+        popup.style.setProperty('--expand-start-transform', `translate(${startX}px, ${startY}px) scale(0)`);
+        popup.style.setProperty('--expand-end-transform', `translate(0, 0) scale(1)`);
+        
+        // Force a reflow to ensure initial position is set
+        popup.offsetHeight;
+        
+        // Add expanding class to trigger animation
+        popup.classList.add('expanding');
+        
+        // Add visible class immediately (but animation will override transform)
+        popup.classList.add('visible');
+        
+        // Ensure inline styles are set correctly for visibility
+        popup.style.setProperty('opacity', '1', 'important');
+        
+        console.log('[WordSelector] ✓ Popup animation started');
+        
+        // Remove expanding class after animation completes and restore normal state
+        setTimeout(() => {
+          // Set final transform explicitly to ensure popup stays in position
+          popup.style.setProperty('transform', 'translate(0, 0) scale(1)');
+          // Remove expanding class after transform is set
+          popup.classList.remove('expanding');
+          // Restore transition for normal interactions
+          popup.style.setProperty('transition', '');
+          // Clean up CSS variables
+          popup.style.removeProperty('--expand-start-transform');
+          popup.style.removeProperty('--expand-end-transform');
+          // Re-enable pointer events
+          popup.style.setProperty('pointer-events', 'all', 'important');
+          popup.style.setProperty('will-change', '');
+          
+          console.log('[WordSelector] ✓ Popup animation completed');
+        }, 400); // Match animation duration (0.4s)
+        
+        // Verify popup is actually visible
+        setTimeout(() => {
+          const finalRect = popup.getBoundingClientRect();
+          const finalStyle = window.getComputedStyle(popup);
+          console.log('[WordSelector] Final popup state:', {
+            isInDOM: document.body.contains(popup),
+            hasVisibleClass: popup.classList.contains('visible'),
+            display: finalStyle.display,
+            visibility: finalStyle.visibility,
+            opacity: finalStyle.opacity,
+            zIndex: finalStyle.zIndex,
+            position: finalStyle.position,
+            top: finalStyle.top,
+            left: finalStyle.left,
+            width: finalRect.width,
+            height: finalRect.height,
+            isVisible: finalRect.width > 0 && finalRect.height > 0 && finalStyle.display !== 'none' && finalStyle.visibility !== 'hidden' && parseFloat(finalStyle.opacity) > 0
+          });
+          
+          if (finalRect.width === 0 || finalRect.height === 0 || finalStyle.display === 'none' || finalStyle.visibility === 'hidden' || parseFloat(finalStyle.opacity) === 0) {
+            console.error('[WordSelector] ✗ Popup is not visible! This might be due to website CSS interference.');
+            console.error('[WordSelector] Check if website has CSS that hides elements or overrides z-index');
+            console.error('[WordSelector] Attempting to force visibility with inline styles...');
+            
+            // Force visibility with inline styles
+            popup.style.setProperty('display', 'block', 'important');
+            popup.style.setProperty('visibility', 'visible', 'important');
+            popup.style.setProperty('opacity', '1', 'important');
+            popup.style.setProperty('z-index', '10000010', 'important');
+            popup.style.setProperty('position', 'absolute', 'important');
+          }
+        }, 50);
+      } catch (error) {
+        console.error('[WordSelector] ✗ Error during popup positioning:', error);
+      }
     }, 10);
     
     // Store reference
     wordElement.setAttribute('data-popup-id', 'active');
+    
+    // Set boolean flag to true (popup is now open)
+    // normalizedWord is already declared above at line 2345
+    this.wordPopupOpen.set(normalizedWord, true);
+    
+    console.log('[WordSelector] ✓ Popup reference stored on word element');
+    console.log('[WordSelector] ✓ Popup open flag set to true for:', normalizedWord);
     
     // Add mouse event handlers to prevent popup from closing when moving cursor into it
     if (sticky) {
@@ -2338,19 +3142,122 @@ const WordSelector = {
   },
   
   /**
-   * Hide all popups
+   * Hide all popups with animation (move to word position while scaling down)
    */
   hideAllPopups() {
     const popups = document.querySelectorAll('.vocab-word-popup');
     popups.forEach(popup => {
-      popup.classList.remove('visible');
-      setTimeout(() => popup.remove(), 200);
+      // Find the associated word element
+      const wordData = popup.getAttribute('data-word');
+      let wordElement = null;
+      
+      if (wordData) {
+        // Find word element with data-popup-id="active" and matching data-word
+        // First try to find by data-popup-id="active"
+        const activeWordElements = document.querySelectorAll('[data-popup-id="active"]');
+        for (const element of activeWordElements) {
+          const elementWord = element.getAttribute('data-word') || element.textContent.trim().toLowerCase();
+          if (elementWord === wordData.toLowerCase()) {
+            wordElement = element;
+            break;
+          }
+        }
+        
+        // If not found, try to find any vocab-word-explained element with matching data-word
+        if (!wordElement) {
+          const allExplainedWords = document.querySelectorAll('.vocab-word-explained[data-word]');
+          for (const element of allExplainedWords) {
+            const elementWord = element.getAttribute('data-word');
+            if (elementWord && elementWord.toLowerCase() === wordData.toLowerCase()) {
+              wordElement = element;
+              break;
+            }
+          }
+        }
+      }
+      
+      if (wordElement && document.body.contains(wordElement)) {
+        // Animate popup closing: move to word position while scaling down
+        this.animatePopupClose(popup, wordElement);
+      } else {
+        // Fallback: simple fade out if word element not found
+        // Still need to clear the flag
+        if (wordData) {
+          const normalizedWord = wordData.toLowerCase();
+          this.wordPopupOpen.set(normalizedWord, false);
+          console.log('[WordSelector] ✓ Popup open flag set to false (fallback) for:', normalizedWord);
+        }
+        popup.classList.remove('visible');
+        setTimeout(() => popup.remove(), 200);
+      }
     });
     
-    // Clear popup references
-    document.querySelectorAll('[data-popup-id="active"]').forEach(el => {
-      el.removeAttribute('data-popup-id');
+    // Clear popup references after animation (already cleared in animatePopupClose, but keep this as fallback)
+    setTimeout(() => {
+      document.querySelectorAll('[data-popup-id="active"]').forEach(el => {
+        el.removeAttribute('data-popup-id');
+      });
+      // Also remove any closing markers
+      document.querySelectorAll('[data-closing="true"]').forEach(el => {
+        el.removeAttribute('data-closing');
+      });
+    }, 400); // Match animation duration
+  },
+  
+  /**
+   * Animate popup closing: move to word position while scaling down
+   * @param {HTMLElement} popup - The popup element
+   * @param {HTMLElement} wordElement - The associated word element
+   */
+  animatePopupClose(popup, wordElement) {
+    // Immediately remove the data-popup-id attribute to prevent reopening during animation
+    wordElement.removeAttribute('data-popup-id');
+    
+    // Set boolean flag to false (popup is now closing/closed)
+    const normalizedWord = wordElement.getAttribute('data-word') || wordElement.textContent.trim().toLowerCase();
+    this.wordPopupOpen.set(normalizedWord, false);
+    
+    console.log('[WordSelector] ✓ Popup open flag set to false for:', normalizedWord);
+    
+    // Mark popup as closing to prevent reopening
+    popup.setAttribute('data-closing', 'true');
+    
+    // Get current popup position
+    const popupRect = popup.getBoundingClientRect();
+    const popupCenterX = popupRect.left + popupRect.width / 2;
+    const popupCenterY = popupRect.top + popupRect.height / 2;
+    
+    // Get word element position
+    const wordRect = wordElement.getBoundingClientRect();
+    const wordCenterX = wordRect.left + wordRect.width / 2;
+    const wordCenterY = wordRect.top + wordRect.height / 2;
+    
+    // Calculate offset from popup center to word center
+    const endX = wordCenterX - popupCenterX;
+    const endY = wordCenterY - popupCenterY;
+    
+    console.log('[WordSelector] Closing animation positions:', {
+      popupCenter: { x: popupCenterX, y: popupCenterY },
+      wordCenter: { x: wordCenterX, y: wordCenterY },
+      endOffset: { x: endX, y: endY }
     });
+    
+    // Set CSS variables for closing animation
+    popup.style.setProperty('--close-start-transform', `translate(0, 0) scale(1)`);
+    popup.style.setProperty('--close-end-transform', `translate(${endX}px, ${endY}px) scale(0)`);
+    
+    // Force a reflow
+    popup.offsetHeight;
+    
+    // Add closing class to trigger animation
+    popup.classList.add('closing');
+    popup.classList.remove('visible');
+    
+    // Remove popup after animation completes
+    setTimeout(() => {
+      popup.remove();
+      console.log('[WordSelector] ✓ Popup closing animation completed');
+    }, 400); // Match animation duration
   },
   
   /**
@@ -2359,28 +3266,87 @@ const WordSelector = {
    * @param {HTMLElement} wordElement - The word highlight element
    */
   setupWordInteractions(wordElement) {
-    // Hover: show popup (non-sticky) only if no popup is currently active
-    wordElement.addEventListener('mouseenter', () => {
-      if (!wordElement.classList.contains('vocab-word-explained')) return;
-      
-      // Don't show hover popup if a sticky popup is already visible
-      const activeStickyPopup = document.querySelector('.vocab-word-popup[data-sticky="true"]');
-      if (activeStickyPopup) return;
-      
-      if (wordElement.getAttribute('data-popup-id') === 'active') return; // Already showing
-      
-      this.showWordPopup(wordElement, false);
+    console.log('[WordSelector] ===== SETUP WORD INTERACTIONS =====');
+    console.log('[WordSelector] Setting up interactions for element:', {
+      element: wordElement,
+      isInDOM: document.body.contains(wordElement),
+      classes: wordElement.className,
+      hasExplainedClass: wordElement.classList.contains('vocab-word-explained'),
+      textContent: wordElement.textContent.trim()
+    });
+    
+    // Add mousedown handler to ensure click animation works
+    wordElement.addEventListener('mousedown', (e) => {
+      if (wordElement.classList.contains('vocab-word-explained')) {
+        // Add a class to ensure the active state is visible
+        wordElement.classList.add('vocab-word-clicking');
+        setTimeout(() => {
+          wordElement.classList.remove('vocab-word-clicking');
+        }, 150);
+      }
     });
     
     // Click: show popup (sticky) - stays visible until closed by close button or outside click
+    // If popup is already open for this word, close it instead
     wordElement.addEventListener('click', (e) => {
-      if (!wordElement.classList.contains('vocab-word-explained')) return;
+      console.log('[WordSelector] ===== CLICK EVENT =====');
+      console.log('[WordSelector] Element state:', {
+        hasExplainedClass: wordElement.classList.contains('vocab-word-explained'),
+        isInDOM: document.body.contains(wordElement),
+        textContent: wordElement.textContent.trim(),
+        eventTarget: e.target,
+        eventCurrentTarget: e.currentTarget
+      });
+      
+      if (!wordElement.classList.contains('vocab-word-explained')) {
+        console.log('[WordSelector] Element does not have vocab-word-explained class, ignoring click');
+        return;
+      }
       
       e.stopPropagation();
       
-      // Show sticky popup
+      // Get normalized word to check popup state
+      const normalizedWord = wordElement.getAttribute('data-word') || wordElement.textContent.trim().toLowerCase();
+      const isPopupOpen = this.wordPopupOpen.get(normalizedWord) === true;
+      
+      console.log('[WordSelector] Popup state check:', {
+        normalizedWord: normalizedWord,
+        isPopupOpen: isPopupOpen
+      });
+      
+      // If popup is already open for this word, close it (show closing animation)
+      if (isPopupOpen) {
+        console.log('[WordSelector] Popup is open for this word, closing it');
+        this.hideAllPopups();
+        return;
+      }
+      
+      // If a popup is currently closing, don't open a new one
+      const closingPopup = document.querySelector('.vocab-word-popup[data-closing="true"]');
+      if (closingPopup) {
+        console.log('[WordSelector] Popup is currently closing, ignoring click');
+        return;
+      }
+      
+      // If a sticky popup is already visible for a different word, close it first
+      const activeStickyPopup = document.querySelector('.vocab-word-popup[data-sticky="true"]:not([data-closing="true"])');
+      if (activeStickyPopup) {
+        console.log('[WordSelector] Sticky popup already visible for different word, closing it first');
+        this.hideAllPopups();
+        // Small delay to ensure the previous popup is closed before showing the new one
+        setTimeout(() => {
+          console.log('[WordSelector] ✓ Showing sticky popup on click for new word');
+          this.showWordPopup(wordElement, true);
+        }, 50);
+        return;
+      }
+      
+      console.log('[WordSelector] ✓ Showing sticky popup on click (opening animation)');
+      // Show sticky popup (opening animation)
       this.showWordPopup(wordElement, true);
     });
+    
+    console.log('[WordSelector] ✓ Word interactions setup complete');
   },
   
   /**
@@ -2412,7 +3378,7 @@ const WordSelector = {
    */
   createSpeakerIcon() {
     return `
-      <svg width="18" height="18" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <svg width="14" height="14" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
         <path d="M2 8v4h3l4 4V4L5 8H2z" fill="white"/>
         <path d="M13 7c.6.6 1 1.4 1 2.3s-.4 1.7-1 2.3" stroke="white" stroke-width="1.5" stroke-linecap="round"/>
         <path d="M15.5 4.5c1.2 1.2 2 2.8 2 4.6s-.8 3.4-2 4.6" stroke="white" stroke-width="1.5" stroke-linecap="round"/>
@@ -2792,7 +3758,10 @@ const WordSelector = {
         border-radius: 8px;
         border: 1px solid rgba(21, 128, 61, 0.4);
         padding: 0 2px;
-        transition: background-color 0.3s ease-in-out, border-color 0.3s ease-in-out, opacity 0.3s ease-in-out;
+        display: inline-block;
+        user-select: none;
+        -webkit-user-select: none;
+        transition: background-color 0.3s ease-in-out, border-color 0.3s ease-in-out, opacity 0.3s ease-in-out, transform 0.15s ease-out;
       }
       
       /* Breathing animation for green word when it first appears - breathes twice (same as book icon) */
@@ -2820,8 +3789,14 @@ const WordSelector = {
       }
       
       .vocab-word-explained:hover {
-        background-color: rgba(34, 197, 94, 0.30) !important;
-        border-color: rgba(21, 128, 61, 0.6);
+        background-color: rgba(22, 163, 74, 0.40) !important;
+        border-color: rgba(21, 128, 61, 0.7);
+      }
+      
+      .vocab-word-explained:active,
+      .vocab-word-explained.vocab-word-clicking {
+        transform: scale(0.9) !important;
+        background-color: rgba(22, 163, 74, 0.35) !important;
       }
       
       /* Smooth animation for green word highlight disappearance - 0.3s duration */
@@ -2910,15 +3885,69 @@ const WordSelector = {
         min-width: 300px;
         font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
         opacity: 0;
-        transform: translateY(-5px);
-        transition: opacity 0.2s ease, transform 0.2s ease;
+        transform: none;
+        transition: opacity 0.2s ease;
         pointer-events: none;
+      }
+      
+      /* Reduce padding and margin when "Get more examples" button is hidden */
+      .vocab-word-popup.no-more-examples-button {
+        padding: 18px 20px 18px 20px; /* Reduced bottom padding when button is hidden */
+      }
+      
+      .vocab-word-popup.no-more-examples-button .vocab-word-popup-examples-container {
+        margin-bottom: 50px; /* Keep margin for tab group even when button is hidden */
       }
       
       .vocab-word-popup.visible {
         opacity: 1;
-        transform: translateY(0);
+        transform: none;
         pointer-events: all;
+      }
+      
+      /* Expanding animation - scale up from word element position */
+      .vocab-word-popup.expanding {
+        animation: expandWordPopupFromWord 0.4s cubic-bezier(0.4, 0, 0.2, 1) forwards !important;
+        transition: none !important; /* Disable transition during animation */
+        pointer-events: none !important;
+        will-change: transform !important; /* Optimize for animation */
+        opacity: 1 !important;
+      }
+      
+      .vocab-word-popup.expanding.visible {
+        animation: expandWordPopupFromWord 0.4s cubic-bezier(0.4, 0, 0.2, 1) forwards !important;
+        transition: none !important;
+      }
+      
+      @keyframes expandWordPopupFromWord {
+        0% {
+          transform: var(--expand-start-transform, translate(0, 0) scale(0)) !important;
+          opacity: 1;
+        }
+        100% {
+          transform: var(--expand-end-transform, translate(0, 0) scale(1)) !important;
+          opacity: 1;
+        }
+      }
+      
+      /* Closing animation - move to word position while scaling down */
+      .vocab-word-popup.closing {
+        animation: closeWordPopupToWord 0.4s cubic-bezier(0.4, 0, 0.2, 1) forwards !important;
+        transition: none !important;
+        pointer-events: none !important;
+        will-change: transform !important;
+        opacity: 1 !important;
+      }
+      
+      @keyframes closeWordPopupToWord {
+        0% {
+          transform: var(--close-start-transform, translate(0, 0) scale(1)) !important;
+          opacity: 1;
+        }
+        100% {
+          transform: var(--close-end-transform, translate(0, 0) scale(0)) !important;
+          opacity: 0;
+        }
       }
       
       .vocab-word-popup.sticky {
@@ -2949,7 +3978,8 @@ const WordSelector = {
       .vocab-word-popup-examples-container {
         max-height: 200px;
         overflow-y: auto;
-        margin-bottom: 30px; /* Reduced margin for minimal spacing */
+        margin-bottom: 60px; /* Increased margin to prevent overlap with tab group and button */
+        padding-bottom: 8px; /* Additional padding at bottom */
       }
       
       .vocab-word-popup-examples-container::-webkit-scrollbar {
@@ -3001,23 +4031,113 @@ const WordSelector = {
         color: #A020F0;
       }
       
-      /* View more button - smaller, bottom-right positioned */
+      /* Bottom container for tab group and button */
+      .vocab-word-popup-bottom-container {
+        position: absolute;
+        bottom: 12px;
+        left: 12px;
+        right: 12px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        z-index: 10;
+        gap: 12px;
+      }
+      
+      /* Language tab group - left side */
+      .vocab-word-popup-tab-group {
+        display: inline-flex;
+        gap: 0;
+        background: #e5e7eb;
+        border-radius: 8px;
+        padding: 3px;
+        position: relative;
+        width: auto;
+        min-width: fit-content;
+        flex-shrink: 0;
+      }
+      
+      .vocab-word-popup-tab-group::before {
+        content: '';
+        position: absolute;
+        top: 3px;
+        left: 3px;
+        height: calc(100% - 6px);
+        background: #A020F0;
+        border-radius: 5px;
+        transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        z-index: 0;
+        width: calc(50% - 3px);
+        transform: translateX(0);
+      }
+      
+      .vocab-word-popup-tab-group[data-active-tab="EN"]::before {
+        transform: translateX(calc(100% + 3px));
+      }
+      
+      .vocab-word-popup-tab {
+        padding: 6px 10px;
+        border: none;
+        border-radius: 5px;
+        background: transparent;
+        color: #6b7280;
+        font-weight: 600;
+        font-size: 11px;
+        cursor: pointer;
+        transition: color 0.2s ease;
+        text-align: center;
+        width: 50%;
+        box-sizing: border-box;
+        min-width: 36px;
+        flex: 0 0 auto;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        position: relative;
+        z-index: 1;
+        white-space: nowrap;
+      }
+      
+      .vocab-word-popup-tab.vocab-word-popup-tab-active {
+        color: white;
+      }
+      
+      .vocab-word-popup-tab:hover:not(.loading):not(.vocab-word-popup-tab-active) {
+        color: #4b5563;
+      }
+      
+      .vocab-word-popup-tab:active:not(.loading) {
+        transform: scale(0.95);
+      }
+      
+      .vocab-word-popup-tab.loading {
+        cursor: not-allowed;
+        pointer-events: none;
+      }
+      
+      .vocab-word-popup-tab.loading .vocab-loading-spinner {
+        width: 8px;
+        height: 8px;
+        border: 1.5px solid white;
+        border-top-color: transparent;
+        border-radius: 50%;
+        animation: vocab-spin 0.8s linear infinite;
+      }
+      
+      /* View more button - bigger, right side */
       .vocab-word-popup-button {
-        padding: 8px 16px;
+        padding: 10px 18px;
         border: none;
         border-radius: 10px;
         background: #A020F0;
         color: white;
-        font-weight: 500;
-        font-size: 12px;
+        font-weight: 600;
+        font-size: 13px;
         cursor: pointer;
         transition: background-color 0.2s ease, opacity 0.2s ease, transform 0.2s ease;
         text-align: center;
-        position: absolute;
-        bottom: 16px;
-        right: 16px;
-        min-width: 120px; /* Ensure button has minimum width */
-        z-index: 10; /* Ensure button is above other content */
+        min-width: 140px; /* Ensure button has minimum width */
+        flex-shrink: 0;
       }
       
       .vocab-word-popup-button:hover:not(.loading) {
@@ -3077,8 +4197,8 @@ const WordSelector = {
         position: absolute;
         top: 12px;
         left: 12px;
-        width: 36px;
-        height: 36px;
+        width: 28px;
+        height: 28px;
         background: #9527F5;
         border: none;
         border-radius: 50%;
@@ -3110,8 +4230,8 @@ const WordSelector = {
       }
       
       .vocab-word-popup-speaker svg {
-        width: 18px;
-        height: 18px;
+        width: 14px;
+        height: 14px;
         pointer-events: none;
       }
       
@@ -7763,28 +8883,44 @@ const ChatDialog = {
       
       /* Small Collapse Button */
       .vocab-chat-collapse-btn-small {
-        width: 24px;
-        height: 24px;
+        width: 32px;
+        height: 32px;
         background: white;
-        border: 1px solid #e5e7eb;
-        border-radius: 6px;
+        border: 1.5px solid #d1d5db;
+        border-radius: 8px;
         display: flex;
         align-items: center;
         justify-content: center;
         cursor: pointer;
         transition: all 0.2s ease;
         text-decoration: none;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
+        opacity: 0.95;
       }
       
       .vocab-chat-collapse-btn-small:hover {
-        background: #f9fafb;
+        background: #f3f4f6;
         border-color: #9527F5;
+        box-shadow: 0 3px 6px rgba(149, 39, 245, 0.15);
+        transform: scale(1.05);
+        opacity: 1;
         text-decoration: none;
       }
       
+      .vocab-chat-collapse-btn-small:active {
+        transform: scale(0.95);
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+      }
+      
       .vocab-chat-collapse-btn-small svg {
-        width: 14px;
-        height: 14px;
+        width: 16px;
+        height: 16px;
+        opacity: 0.7;
+        transition: opacity 0.2s ease;
+      }
+      
+      .vocab-chat-collapse-btn-small:hover svg {
+        opacity: 1;
       }
       
       /* Small Delete Button */
@@ -7856,10 +8992,11 @@ const ChatDialog = {
         background: #9527F5;
         border: none;
         border-radius: 6px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        gap: 6px;
+        display: flex !important;
+        flex-direction: row !important;
+        align-items: center !important;
+        justify-content: center !important;
+        gap: 6px !important;
         cursor: pointer;
         z-index: 10;
         transition: all 0.2s ease;
@@ -7874,10 +9011,20 @@ const ChatDialog = {
         text-decoration: none;
       }
       
+      .vocab-chat-focus-btn-top-right svg {
+        flex-shrink: 0 !important;
+        display: inline-block !important;
+        width: 16px !important;
+        height: 16px !important;
+        order: 1 !important;
+      }
+      
       .vocab-chat-focus-btn-top-right span {
         font-size: 12px;
         font-weight: 500;
         color: white;
+        order: 2 !important;
+        display: inline-block !important;
       }
       
       /* Tabs */
@@ -8868,10 +10015,11 @@ const ChatDialog = {
       }
       
       .vocab-chat-focus-btn {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        gap: 6px;
+        display: inline-flex !important;
+        flex-direction: row !important;
+        align-items: center !important;
+        justify-content: center !important;
+        gap: 6px !important;
         width: auto;
         padding: 8px 14px;
         margin: 0;
@@ -8899,14 +10047,18 @@ const ChatDialog = {
       }
       
       .vocab-chat-focus-btn svg {
-        flex-shrink: 0;
-        width: 16px;
-        height: 16px;
+        flex-shrink: 0 !important;
+        display: inline-block !important;
+        width: 16px !important;
+        height: 16px !important;
+        order: 1 !important;
       }
       
       .vocab-chat-focus-btn span {
         color: #9527F5;
         font-weight: 500;
+        order: 2 !important;
+        display: inline-block !important;
       }
       
       /* Responsive */
@@ -14922,7 +16074,10 @@ const ButtonPanel = {
               wordHighlight.appendChild(greenCrossBtn);
               
               // Store in explainedWords map
+              // Extract languageCode from eventData (could be at top level or in word_info)
+              const languageCode = eventData.languageCode || wordInfo.languageCode || null;
               const normalizedWord = normalizedTargetWord;
+              
               if (!WordSelector.explainedWords.has(normalizedWord)) {
                 console.log(`[ButtonPanel] Creating new entry in explainedWords map for "${normalizedWord}"`);
                 WordSelector.explainedWords.set(normalizedWord, {
@@ -14931,8 +16086,15 @@ const ButtonPanel = {
                   examples: wordInfo.examples,
                   shouldAllowFetchMoreExamples: wordInfo.shouldAllowFetchMoreExamples || false,
                   hasCalledGetMoreExamples: false, // Track if get-more-explanations API has been called
+                  languageCode: languageCode,
                   highlights: new Set()
                 });
+              } else {
+                // Update existing entry with languageCode if not already set
+                const existingEntry = WordSelector.explainedWords.get(normalizedWord);
+                if (!existingEntry.languageCode && languageCode) {
+                  existingEntry.languageCode = languageCode;
+                }
               }
               WordSelector.explainedWords.get(normalizedWord).highlights.add(wordHighlight);
               
@@ -14956,7 +16118,38 @@ const ButtonPanel = {
               // Automatically show word meaning popup after green background is applied
               // Use a small delay to ensure DOM is updated and breathing animation starts
               setTimeout(() => {
-                console.log('[ButtonPanel] Auto-showing word meaning popup');
+                console.log('[ButtonPanel] ===== AUTO-SHOWING WORD MEANING POPUP =====');
+                const normalizedTargetWord = targetWord.toLowerCase();
+                console.log('[ButtonPanel] Word highlight element:', {
+                  element: wordHighlight,
+                  isInDOM: document.body.contains(wordHighlight),
+                  classes: wordHighlight.className,
+                  hasExplainedClass: wordHighlight.classList.contains('vocab-word-explained'),
+                  textContent: wordHighlight.textContent.trim(),
+                  dataWord: wordHighlight.getAttribute('data-word'),
+                  normalizedWord: normalizedTargetWord,
+                  isInExplainedWords: WordSelector.explainedWords.has(normalizedTargetWord)
+                });
+                
+                // Validate element before showing popup
+                if (!wordHighlight || !document.body.contains(wordHighlight)) {
+                  console.error('[ButtonPanel] ✗ Word highlight element is not in DOM, cannot show popup');
+                  return;
+                }
+                
+                if (!wordHighlight.classList.contains('vocab-word-explained')) {
+                  console.error('[ButtonPanel] ✗ Word highlight does not have vocab-word-explained class, cannot show popup');
+                  console.error('[ButtonPanel] Current classes:', wordHighlight.className);
+                  return;
+                }
+                
+                if (!WordSelector.explainedWords.has(normalizedTargetWord)) {
+                  console.error('[ButtonPanel] ✗ Word not found in explainedWords map, cannot show popup');
+                  console.error('[ButtonPanel] Available words in map:', Array.from(WordSelector.explainedWords.keys()));
+                  return;
+                }
+                
+                console.log('[ButtonPanel] ✓ All validations passed, showing popup');
                 WordSelector.showWordPopup(wordHighlight, true); // Show as sticky popup
               }, 100);
             } else {
@@ -19580,6 +20773,7 @@ const ButtonPanel = {
         examples: wordData.examples,
         shouldAllowFetchMoreExamples: wordData.shouldAllowFetchMoreExamples || false,
         hasCalledGetMoreExamples: false,
+        languageCode: wordData.languageCode || null,
         highlights: new Set()
       });
     }
@@ -19623,6 +20817,7 @@ const ButtonPanel = {
         examples: wordData.examples,
         shouldAllowFetchMoreExamples: wordData.shouldAllowFetchMoreExamples || false,
         hasCalledGetMoreExamples: false,
+        languageCode: wordData.languageCode || null,
         highlights: new Set()
       });
     }
@@ -19726,6 +20921,7 @@ const ButtonPanel = {
             examples: wordData.examples,
             shouldAllowFetchMoreExamples: wordData.shouldAllowFetchMoreExamples || false,
             hasCalledGetMoreExamples: false,
+            languageCode: wordData.languageCode || null,
             highlights: new Set()
           });
         }
