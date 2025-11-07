@@ -25,7 +25,8 @@ class ApiConfig {
     GET_RANDOM_PARAGRAPH: '/api/v1/get-random-paragraph',
     SIMPLIFY: '/api/v2/simplify',
     WORDS_EXPLANATION: '/api/v2/words-explanation',
-    VOICE_TO_TEXT: '/api/v2/voice-to-text'
+    VOICE_TO_TEXT: '/api/v2/voice-to-text',
+    TRANSLATE: '/api/v2/translate'
   };
   
   // Helper method to get full URL for an endpoint
