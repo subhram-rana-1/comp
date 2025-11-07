@@ -14,8 +14,11 @@ const packageJson = JSON.parse(readFileSync(join(rootDir, 'package.json'), 'utf-
 const version = packageJson.version;
 const packageName = packageJson.name;
 
+// Use "Magic comprehension" for the zip filename (replace spaces with hyphens for filename)
+const extensionDisplayName = 'Magic comprehension';
+const zipFileName = `${extensionDisplayName.replace(/\s+/g, '-').toLowerCase()}-${version}.zip`;
+
 const outputDir = join(rootDir, '.output');
-const zipFileName = `${packageName}-${version}.zip`;
 const zipFilePath = join(outputDir, zipFileName);
 
 // Use WXT to create zip (it creates <name>-<version>-<browser>.zip)

@@ -1,6 +1,6 @@
 {
-  "name": "CompreAI",
-  "version": "1.0.1",
+  "name": "magic-comprehension",
+  "version": "1.0.2",
   "description": "Enhance your reading, vocabulary, and comprehension instantly with AI-powered insights.",
   "type": "module",
   "private": true,
