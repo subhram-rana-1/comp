@@ -3753,10 +3753,10 @@ const WordSelector = {
       
       /* Green background for explained words */
       .vocab-word-explained {
-        background-color: rgba(34, 197, 94, 0.20) !important;
+        background-color: #22c55e !important; /* 100% opaque green - no transparency */
         cursor: pointer;
         border-radius: 8px;
-        border: 1px solid rgba(21, 128, 61, 0.4);
+        border: 1px solid #15803d !important; /* 100% opaque green border - no transparency */
         padding: 0 2px;
         margin-top: 0 !important; /* Prevent top margin from affecting line spacing */
         margin-bottom: 0 !important; /* Prevent bottom margin from affecting line spacing */
@@ -3804,14 +3804,14 @@ const WordSelector = {
       }
       
       .vocab-word-explained:hover {
-        background-color: rgba(22, 163, 74, 0.40) !important;
-        border-color: rgba(21, 128, 61, 0.7);
+        background-color: #16a34a !important; /* 100% opaque green on hover - no transparency */
+        border-color: #15803d !important; /* 100% opaque green border on hover - no transparency */
       }
       
       .vocab-word-explained:active,
       .vocab-word-explained.vocab-word-clicking {
         transform: scale(0.9) !important;
-        background-color: rgba(22, 163, 74, 0.35) !important;
+        background-color: #16a34a !important; /* 100% opaque green on active - no transparency */
       }
       
       /* Smooth animation for green word highlight disappearance - 0.3s duration */
@@ -3821,8 +3821,8 @@ const WordSelector = {
       
       @keyframes wordFadeOut {
         0% {
-          background-color: rgba(34, 197, 94, 0.20);
-          border-color: rgba(21, 128, 61, 0.4);
+          background-color: #22c55e; /* 100% opaque green - no transparency */
+          border-color: #15803d; /* 100% opaque green border - no transparency */
           opacity: 1;
         }
         100% {
@@ -5392,70 +5392,94 @@ const TextSelector = {
       
       // Comprehensive check if chat dialog is already open for this text segment
       // Handle all possible textKey format variations
+      // Also check if dialog is currently opening (expanding) to prevent race conditions
       let isChatOpenForThisText = false;
+      let isDialogOpening = false;
       
-      if (typeof ChatDialog !== 'undefined' && ChatDialog.isOpen && ChatDialog.currentTextKey) {
-        const currentKey = ChatDialog.currentTextKey;
-        const originalTextKey = textKey;
+      if (typeof ChatDialog !== 'undefined') {
+        // Check if dialog is currently opening (expanding animation)
+        if (ChatDialog.dialogContainer && ChatDialog.dialogContainer.classList.contains('expanding')) {
+          isDialogOpening = true;
+          console.log('[TextSelector] Dialog is currently opening (expanding), waiting...');
+        }
         
-        // Strategy 1: Exact match
-        if (currentKey === originalTextKey) {
-          isChatOpenForThisText = true;
-        }
-        // Strategy 2: Match with -selected suffix
-        else if (currentKey === `${originalTextKey}-selected`) {
-          isChatOpenForThisText = true;
-        }
-        // Strategy 3: Match when currentKey starts with textKey
-        else if (currentKey.startsWith(originalTextKey + '-')) {
-          isChatOpenForThisText = true;
-        }
-        // Strategy 4: Match when textKey is part of currentKey (for complex formats)
-        else if (currentKey.includes(originalTextKey)) {
-          isChatOpenForThisText = true;
-        }
-        // Strategy 5: Match by simplifiedData (textStartIndex and textLength)
-        else if (simplifiedData && simplifiedData.textStartIndex !== undefined && simplifiedData.textLength !== undefined) {
-          // Extract start index and length from currentKey if it's in format: contentType-tabId-startIndex-length
-          const currentKeyParts = currentKey.split('-');
-          if (currentKeyParts.length >= 4) {
-            const currentStartIndex = parseInt(currentKeyParts[currentKeyParts.length - 2]);
-            const currentLength = parseInt(currentKeyParts[currentKeyParts.length - 1]);
-            
-            if (currentStartIndex === simplifiedData.textStartIndex && 
-                currentLength === simplifiedData.textLength) {
+        // Only check if dialog is open if it's not currently opening
+        if (ChatDialog.isOpen && ChatDialog.currentTextKey && !isDialogOpening) {
+          const currentKey = ChatDialog.currentTextKey;
+          const originalTextKey = textKey;
+          
+          // Strategy 1: Exact match
+          if (currentKey === originalTextKey) {
+            isChatOpenForThisText = true;
+          }
+          // Strategy 2: Match with -selected suffix
+          else if (currentKey === `${originalTextKey}-selected`) {
+            isChatOpenForThisText = true;
+          }
+          // Strategy 3: Match when currentKey starts with textKey
+          else if (currentKey.startsWith(originalTextKey + '-')) {
+            isChatOpenForThisText = true;
+          }
+          // Strategy 4: Match when textKey is part of currentKey (for complex formats)
+          else if (currentKey.includes(originalTextKey)) {
+            isChatOpenForThisText = true;
+          }
+          // Strategy 5: Match by simplifiedData (textStartIndex and textLength)
+          else if (simplifiedData && simplifiedData.textStartIndex !== undefined && simplifiedData.textLength !== undefined) {
+            // Extract start index and length from currentKey if it's in format: contentType-tabId-startIndex-length
+            const currentKeyParts = currentKey.split('-');
+            if (currentKeyParts.length >= 4) {
+              const currentStartIndex = parseInt(currentKeyParts[currentKeyParts.length - 2]);
+              const currentLength = parseInt(currentKeyParts[currentKeyParts.length - 1]);
+              
+              if (currentStartIndex === simplifiedData.textStartIndex && 
+                  currentLength === simplifiedData.textLength) {
+                isChatOpenForThisText = true;
+              }
+            }
+            // Strategy 6: Match by checking if currentKey ends with startIndex-length pattern
+            const expectedSuffix = `${simplifiedData.textStartIndex}-${simplifiedData.textLength}`;
+            if (currentKey.endsWith(expectedSuffix)) {
               isChatOpenForThisText = true;
             }
           }
-          // Strategy 6: Match by checking if currentKey ends with startIndex-length pattern
-          const expectedSuffix = `${simplifiedData.textStartIndex}-${simplifiedData.textLength}`;
-          if (currentKey.endsWith(expectedSuffix)) {
-            isChatOpenForThisText = true;
-          }
-        }
-        // Strategy 7: Reverse check - check if originalTextKey contains parts of currentKey
-        if (!isChatOpenForThisText) {
-          const currentKeyPartsForBase = currentKey.split('-');
-          const originalKeyParts = originalTextKey.split('-');
-          if (currentKeyPartsForBase.length >= 2 && originalKeyParts.length >= 2) {
-            // Compare base parts (contentType-tabId)
-            const currentBase = currentKeyPartsForBase.slice(0, 2).join('-');
-            const originalBase = originalKeyParts.slice(0, 2).join('-');
-            if (currentBase === originalBase && simplifiedData) {
-              // If base matches and we have simplifiedData, check by position
-              if (currentKeyPartsForBase.length >= 4) {
-                const currentStartIndex = parseInt(currentKeyPartsForBase[currentKeyPartsForBase.length - 2]);
-                const currentLength = parseInt(currentKeyPartsForBase[currentKeyPartsForBase.length - 1]);
-                if (currentStartIndex === simplifiedData.textStartIndex && 
-                    currentLength === simplifiedData.textLength) {
-                  isChatOpenForThisText = true;
+          // Strategy 7: Reverse check - check if originalTextKey contains parts of currentKey
+          if (!isChatOpenForThisText) {
+            const currentKeyPartsForBase = currentKey.split('-');
+            const originalKeyParts = originalTextKey.split('-');
+            if (currentKeyPartsForBase.length >= 2 && originalKeyParts.length >= 2) {
+              // Compare base parts (contentType-tabId)
+              const currentBase = currentKeyPartsForBase.slice(0, 2).join('-');
+              const originalBase = originalKeyParts.slice(0, 2).join('-');
+              if (currentBase === originalBase && simplifiedData) {
+                // If base matches and we have simplifiedData, check by position
+                if (currentKeyPartsForBase.length >= 4) {
+                  const currentStartIndex = parseInt(currentKeyPartsForBase[currentKeyPartsForBase.length - 2]);
+                  const currentLength = parseInt(currentKeyPartsForBase[currentKeyPartsForBase.length - 1]);
+                  if (currentStartIndex === simplifiedData.textStartIndex && 
+                      currentLength === simplifiedData.textLength) {
+                    isChatOpenForThisText = true;
+                  }
                 }
               }
             }
           }
+          
+          console.log('[TextSelector] Toggle check - isOpen:', ChatDialog.isOpen, 'currentTextKey:', currentKey, 'originalTextKey:', originalTextKey, 'isChatOpenForThisText:', isChatOpenForThisText);
         }
-        
-        console.log('[TextSelector] Toggle check - isOpen:', ChatDialog.isOpen, 'currentTextKey:', currentKey, 'originalTextKey:', originalTextKey, 'isChatOpenForThisText:', isChatOpenForThisText);
+      }
+      
+      // If dialog is currently opening, wait a bit and check again
+      if (isDialogOpening) {
+        console.log('[TextSelector] Dialog is opening, waiting before checking toggle state...');
+        setTimeout(() => {
+          isProcessing = false;
+          // Re-trigger the click after dialog finishes opening
+          setTimeout(() => {
+            handleBookClick(e);
+          }, 350); // Wait for expansion animation to complete (0.3s + small buffer)
+        }, 50);
+        return;
       }
       
       if (isChatOpenForThisText) {
@@ -5475,12 +5499,14 @@ const TextSelector = {
       
       // Open ChatDialog in simplified mode with selected context
       // Always use 'selected' context when opening from book icon to ensure expansion animation
+      // Note: ChatDialog.open() will handle the toggle if dialog is already open for same text
       ChatDialog.open(simplifiedData.text, textKey, 'simplified', simplifiedData, 'selected');
       
-      // Reset processing flag after a short delay to allow for state changes
+      // Reset processing flag after a delay to allow for state changes
+      // Use longer delay to ensure dialog is fully opened before allowing another click
       setTimeout(() => {
         isProcessing = false;
-      }, 100);
+      }, 600); // Wait for dialog to fully open (0.3s animation + buffer)
     };
     
     // Add both click and mousedown handlers to ensure it works on all websites
@@ -5632,6 +5658,12 @@ const TextSelector = {
         overflow: visible;
         transition: text-decoration-color 0.3s ease-in-out, opacity 0.3s ease-in-out;
         opacity: 1;
+        font-size: inherit !important; /* Preserve original font size */
+        font-family: inherit !important; /* Preserve original font family */
+        font-weight: inherit !important; /* Preserve original font weight */
+        line-height: inherit !important; /* Preserve original line height */
+        color: inherit !important; /* Preserve original text color */
+        letter-spacing: inherit !important; /* Preserve original letter spacing */
       }
       
       /* Smooth animation for underline appearance - 0.3s duration */
@@ -5674,6 +5706,12 @@ const TextSelector = {
       .vocab-text-highlight * {
         text-decoration: inherit;
         box-sizing: border-box;
+        font-size: inherit !important; /* Preserve original font size for child elements */
+        font-family: inherit !important; /* Preserve original font family for child elements */
+        font-weight: inherit !important; /* Preserve original font weight for child elements */
+        line-height: inherit !important; /* Preserve original line height for child elements */
+        color: inherit !important; /* Preserve original text color for child elements */
+        letter-spacing: inherit !important; /* Preserve original letter spacing for child elements */
       }
       
       /* Remove button - Solid purple circle with white cross on top-left */
@@ -6536,8 +6574,9 @@ const ChatDialog = {
       console.log('[ChatDialog] Dialog already open for same textKey and context:', contextualTextKey);
       // If opening in simplified mode and already open for same text
       if (mode === 'simplified') {
-        // Do nothing - popup is already open for this text
-        console.log('[ChatDialog] Already open for this text, doing nothing');
+        // Dialog is already open - this means user clicked book icon again, so close it
+        console.log('[ChatDialog] Already open for this text, closing it (toggle off)');
+        this.close();
         return;
       }
       // If opening in 'ask' mode, just switch to ask tab
@@ -6677,6 +6716,12 @@ const ChatDialog = {
    */
   close() {
     console.log('[ChatDialog] ===== CLOSE FUNCTION CALLED =====');
+    
+    // Prevent closing if dialog is currently opening (expanding)
+    if (this.dialogContainer && this.dialogContainer.classList.contains('expanding')) {
+      console.log('[ChatDialog] Dialog is currently opening (expanding), cannot close yet');
+      return;
+    }
     console.log('[ChatDialog] Current state - isOpen:', this.isOpen, 'currentTextKey:', this.currentTextKey);
     console.log('[ChatDialog] chatContext:', this.chatContext);
     console.log('[ChatDialog] dialogContainer exists:', !!this.dialogContainer);
@@ -6818,73 +6863,194 @@ const ChatDialog = {
       if (bookIcon) {
         console.log('[ChatDialog] ✓✓✓ FOUND BOOK ICON! Starting minimization animation...');
         
-        // Get current dialog position and size
-        const dialogRect = this.dialogContainer.getBoundingClientRect();
-        const dialogCenterX = dialogRect.left + dialogRect.width / 2;
-        const dialogCenterY = dialogRect.top + dialogRect.height / 2;
+        // Check if dialogContainer still exists before proceeding
+        if (!this.dialogContainer) {
+          console.error('[ChatDialog] ERROR: dialogContainer is null, cannot minimize');
+          return;
+        }
         
-        // Get book icon position
+        // Force a reflow to ensure book icon is in its final position
+        void bookIcon.offsetHeight;
+        
+        // Get dialog size (use getBoundingClientRect for accurate size)
+        const dialogRect = this.dialogContainer.getBoundingClientRect();
+        const dialogHeight = dialogRect.height;
+        const dialogWidth = dialogRect.width;
+        
+        // Get book icon position (use getBoundingClientRect for accurate viewport coordinates)
+        // Force a reflow before getting position to ensure accurate coordinates
+        void bookIcon.offsetHeight;
         const bookIconRect = bookIcon.getBoundingClientRect();
         const bookIconCenterX = bookIconRect.left + bookIconRect.width / 2;
         const bookIconCenterY = bookIconRect.top + bookIconRect.height / 2;
         
-        // Calculate the translation needed to move dialog center to book icon center
-        const targetX = bookIconCenterX - dialogCenterX;
-        const targetY = bookIconCenterY - dialogCenterY;
-        
-        console.log('[ChatDialog] Dialog center:', { x: dialogCenterX, y: dialogCenterY });
         console.log('[ChatDialog] Book icon center:', { x: bookIconCenterX, y: bookIconCenterY });
-        console.log('[ChatDialog] Target translation:', { x: targetX, y: targetY });
+        console.log('[ChatDialog] Book icon rect:', { left: bookIconRect.left, top: bookIconRect.top, width: bookIconRect.width, height: bookIconRect.height });
+        console.log('[ChatDialog] Dialog size:', { width: dialogWidth, height: dialogHeight });
         
-        // Calculate the final transform value
-        // The dialog is positioned with top: 50% and transform: translateY(-50%) translateX(0)
-        // This means the dialog center is at viewportHeight / 2
-        // We need to move it to bookIconCenterY
-        // Since we start with translateY(-50%), we need to calculate the final absolute position
-        const dialogHeight = dialogRect.height;
+        // Calculate the translation needed to move dialog center to book icon center
+        // IMPORTANT: Always calculate from the dialog's DEFAULT position, not its current position
+        // This ensures consistent minimization regardless of where the dialog was moved to
+        // The dialog's default position is:
+        // - position: fixed
+        // - right: 0
+        // - top: 50%
+        // - transform: translateY(-50%) translateX(0) when visible
+        // This means the dialog center is at:
+        // X: viewportWidth - dialogWidth/2 (from right edge)
+        // Y: viewportHeight / 2 (from top: 50% with translateY(-50%))
+        
         const viewportHeight = window.innerHeight;
-        const dialogTop = viewportHeight / 2; // Current top position (50% of viewport)
-        const currentCenterY = dialogTop; // Dialog center Y (with -50% translateY, center is at top)
+        const viewportWidth = window.innerWidth;
+        
+        // Calculate DEFAULT dialog center position (not current position)
+        // Default X: from right edge (right: 0), center is at viewportWidth - dialogWidth/2
+        const defaultDialogCenterX = viewportWidth - dialogWidth / 2;
+        // Default Y: from top: 50% with translateY(-50%), center is at viewportHeight / 2
+        const defaultDialogCenterY = viewportHeight / 2;
+        
+        // Calculate target position: book icon center (viewport coordinates)
+        // This is ALWAYS the same - the book icon's position is fixed
+        const targetCenterX = bookIconCenterX;
         const targetCenterY = bookIconCenterY;
-        const translateYOffset = targetCenterY - currentCenterY; // How much to move from current center
         
-        // Calculate final translateY in pixels (convert -50% to pixels and add offset)
-        // -50% of dialogHeight = -dialogHeight/2
-        // Final position = -dialogHeight/2 + translateYOffset
-        const finalTranslateY = -dialogHeight / 2 + translateYOffset;
+        // Calculate how much to move from DEFAULT center to target center
+        // This ensures consistent calculation regardless of dialog's current position
+        const deltaX = targetCenterX - defaultDialogCenterX;
+        const deltaY = targetCenterY - defaultDialogCenterY;
         
-        console.log('[ChatDialog] Transform calculation:');
-        console.log('[ChatDialog]   viewportHeight:', viewportHeight);
-        console.log('[ChatDialog]   dialogHeight:', dialogHeight);
-        console.log('[ChatDialog]   dialogTop (50%):', dialogTop);
-        console.log('[ChatDialog]   currentCenterY:', currentCenterY);
-        console.log('[ChatDialog]   targetCenterY (book icon):', targetCenterY);
-        console.log('[ChatDialog]   translateYOffset:', translateYOffset);
-        console.log('[ChatDialog]   finalTranslateY (pixels):', finalTranslateY);
+        // Calculate final transform values
+        // Start transform: translateY(-50%) translateX(0) (default position)
+        // To move the center to the book icon:
+        // - translateY: -50% (to center vertically) + deltaY in pixels
+        // - translateX: 0 (from right edge) + deltaX in pixels
+        
+        // Convert -50% to pixels: -dialogHeight / 2
+        const negativeHalfHeight = -dialogHeight / 2; // -50% of height in pixels
+        const finalTranslateY = negativeHalfHeight + deltaY;
+        
+        // For X: dialog is positioned from right edge, so translateX(0) means no horizontal offset
+        // To move center to book icon center, we need to move by deltaX
+        const finalTranslateX = deltaX;
+        
+        console.log('[ChatDialog] Transform calculation (using DEFAULT position for consistency):');
+        console.log('[ChatDialog]   viewportHeight:', viewportHeight, 'viewportWidth:', viewportWidth);
+        console.log('[ChatDialog]   dialogHeight:', dialogHeight, 'dialogWidth:', dialogWidth);
+        console.log('[ChatDialog]   defaultDialogCenterX:', defaultDialogCenterX, 'defaultDialogCenterY:', defaultDialogCenterY);
+        console.log('[ChatDialog]   targetCenterX (book icon):', targetCenterX, 'targetCenterY (book icon):', targetCenterY);
+        console.log('[ChatDialog]   deltaX:', deltaX, 'deltaY:', deltaY);
+        console.log('[ChatDialog]   finalTranslateX:', finalTranslateX, 'finalTranslateY:', finalTranslateY);
+        
+        // Get current transform to use as start transform
+        const currentComputedStyle = window.getComputedStyle(this.dialogContainer);
+        const currentTransform = currentComputedStyle.transform;
+        const currentTop = currentComputedStyle.top;
+        const currentRight = currentComputedStyle.right;
+        
+        // Calculate current dialog center from actual position
+        const currentDialogCenterX = dialogRect.left + dialogWidth / 2;
+        const currentDialogCenterY = dialogRect.top + dialogHeight / 2;
+        
+        // Calculate delta from CURRENT position to book icon (not default position)
+        // This ensures smooth animation from wherever the dialog currently is
+        const deltaXFromCurrent = targetCenterX - currentDialogCenterX;
+        const deltaYFromCurrent = targetCenterY - currentDialogCenterY;
+        
+        // Parse current transform to get translate values
+        // If transform is "none" or doesn't match expected format, use default
+        let startTranslateX = 0;
+        let startTranslateY = -dialogHeight / 2; // Default: -50% of height
+        
+        if (currentTransform && currentTransform !== 'none') {
+          // Try to extract translate values from matrix or translate string
+          const matrixMatch = currentTransform.match(/matrix\([^)]+\)/);
+          if (matrixMatch) {
+            // For matrix, we need to extract translateX and translateY
+            // Matrix format: matrix(a, b, c, d, tx, ty)
+            const values = currentTransform.match(/[-+]?[0-9]*\.?[0-9]+/g);
+            if (values && values.length >= 6) {
+              startTranslateX = parseFloat(values[4]) || 0;
+              startTranslateY = parseFloat(values[5]) || -dialogHeight / 2;
+            }
+          } else {
+            // Try to match translateX and translateY
+            const translateXMatch = currentTransform.match(/translateX\(([^)]+)\)/);
+            const translateYMatch = currentTransform.match(/translateY\(([^)]+)\)/);
+            if (translateXMatch) {
+              const val = translateXMatch[1].replace('px', '').trim();
+              startTranslateX = parseFloat(val) || 0;
+            }
+            if (translateYMatch) {
+              const val = translateYMatch[1].replace('px', '').replace('%', '').trim();
+              if (translateYMatch[1].includes('%')) {
+                startTranslateY = (parseFloat(val) / 100) * dialogHeight;
+              } else {
+                startTranslateY = parseFloat(val) || -dialogHeight / 2;
+              }
+            }
+          }
+        }
+        
+        // Calculate end transform from current position
+        const endTranslateX = startTranslateX + deltaXFromCurrent;
+        const endTranslateY = startTranslateY + deltaYFromCurrent;
+        
+        console.log('[ChatDialog] Animation calculation from CURRENT position:');
+        console.log('[ChatDialog]   currentTransform:', currentTransform);
+        console.log('[ChatDialog]   currentDialogCenterX:', currentDialogCenterX, 'currentDialogCenterY:', currentDialogCenterY);
+        console.log('[ChatDialog]   startTranslateX:', startTranslateX, 'startTranslateY:', startTranslateY);
+        console.log('[ChatDialog]   deltaXFromCurrent:', deltaXFromCurrent, 'deltaYFromCurrent:', deltaYFromCurrent);
+        console.log('[ChatDialog]   endTranslateX:', endTranslateX, 'endTranslateY:', endTranslateY);
         
         // Set CSS custom properties for the animation
-        this.dialogContainer.style.setProperty('--minimize-target-x', `${targetX}px`);
-        this.dialogContainer.style.setProperty('--minimize-target-y', `${targetY}px`);
-        this.dialogContainer.style.setProperty('--minimize-start-transform', 'translateY(-50%) translateX(0)');
-        this.dialogContainer.style.setProperty('--minimize-end-transform', `translateY(${finalTranslateY}px) translateX(${targetX}px)`);
+        // Use current transform as start, and calculate end from current position
+        this.dialogContainer.style.setProperty('--minimize-target-x', `${targetCenterX}px`);
+        this.dialogContainer.style.setProperty('--minimize-target-y', `${targetCenterY}px`);
+        this.dialogContainer.style.setProperty('--minimize-start-transform', `translateY(${startTranslateY}px) translateX(${startTranslateX}px)`);
+        this.dialogContainer.style.setProperty('--minimize-end-transform', `translateY(${endTranslateY}px) translateX(${endTranslateX}px)`);
+        
+        // Ensure dialog is visible before animation starts
+        if (!this.dialogContainer.classList.contains('visible')) {
+          this.dialogContainer.classList.add('visible');
+        }
+        
+        // Force a reflow to ensure styles are applied
+        void this.dialogContainer.offsetHeight;
         
         console.log('[ChatDialog] Set CSS properties:');
-        console.log('[ChatDialog] --minimize-target-x:', targetX);
-        console.log('[ChatDialog] --minimize-target-y:', targetY);
-        console.log('[ChatDialog] --minimize-start-transform: translateY(-50%) translateX(0)');
-        console.log('[ChatDialog] --minimize-end-transform:', `translateY(${finalTranslateY}px) translateX(${targetX}px)`);
-        console.log('[ChatDialog] Dialog height:', dialogHeight, 'finalTranslateY:', finalTranslateY);
+        console.log('[ChatDialog] --minimize-target-x:', targetCenterX);
+        console.log('[ChatDialog] --minimize-target-y:', targetCenterY);
+        console.log('[ChatDialog] --minimize-start-transform:', `translateY(${startTranslateY}px) translateX(${startTranslateX}px)`);
+        console.log('[ChatDialog] --minimize-end-transform:', `translateY(${endTranslateY}px) translateX(${endTranslateX}px)`);
+        console.log('[ChatDialog] Dialog height:', dialogHeight);
         
         // Force a reflow to ensure styles are applied
         void this.dialogContainer.offsetHeight;
         
         // Add minimizing class to trigger animation (DO NOT remove visible class)
+        // Check if dialogContainer still exists before accessing classList
+        if (!this.dialogContainer) {
+          console.error('[ChatDialog] ERROR: dialogContainer is null before adding minimizing class');
+          return;
+        }
+        
+        // Remove any existing minimizing class first to ensure animation restarts
+        this.dialogContainer.classList.remove('minimizing');
+        
+        // Force a reflow to ensure class removal is applied
+        void this.dialogContainer.offsetHeight;
+        
+        // Now add the minimizing class to trigger animation
         this.dialogContainer.classList.add('minimizing');
         
         // Force a reflow to ensure animation starts
         void this.dialogContainer.offsetHeight;
         
         // Verify animation is applied
+        if (!this.dialogContainer) {
+          console.error('[ChatDialog] ERROR: dialogContainer is null before getting computed style');
+          return;
+        }
         const computedStyle = window.getComputedStyle(this.dialogContainer);
         const animationName = computedStyle.animationName;
         const animationDuration = computedStyle.animationDuration;
@@ -6893,20 +7059,28 @@ const ChatDialog = {
         
         console.log('[ChatDialog] ===== ANIMATION VERIFICATION =====');
         console.log('[ChatDialog] Minimization animation started');
-        console.log('[ChatDialog] Dialog has minimizing class:', this.dialogContainer.classList.contains('minimizing'));
+        console.log('[ChatDialog] Dialog has minimizing class:', this.dialogContainer && this.dialogContainer.classList.contains('minimizing'));
         console.log('[ChatDialog] Animation name:', animationName);
         console.log('[ChatDialog] Animation duration:', animationDuration);
         console.log('[ChatDialog] Animation play state:', animationState);
         console.log('[ChatDialog] Current transform:', transform);
         console.log('[ChatDialog] CSS custom properties:');
-        console.log('[ChatDialog]   --minimize-start-transform:', this.dialogContainer.style.getPropertyValue('--minimize-start-transform'));
-        console.log('[ChatDialog]   --minimize-end-transform:', this.dialogContainer.style.getPropertyValue('--minimize-end-transform'));
-        console.log('[ChatDialog]   --minimize-target-x:', this.dialogContainer.style.getPropertyValue('--minimize-target-x'));
-        console.log('[ChatDialog]   --minimize-target-y:', this.dialogContainer.style.getPropertyValue('--minimize-target-y'));
+        if (this.dialogContainer) {
+          console.log('[ChatDialog]   --minimize-start-transform:', this.dialogContainer.style.getPropertyValue('--minimize-start-transform'));
+          console.log('[ChatDialog]   --minimize-end-transform:', this.dialogContainer.style.getPropertyValue('--minimize-end-transform'));
+          console.log('[ChatDialog]   --minimize-target-x:', this.dialogContainer.style.getPropertyValue('--minimize-target-x'));
+          console.log('[ChatDialog]   --minimize-target-y:', this.dialogContainer.style.getPropertyValue('--minimize-target-y'));
+        }
         
         // Wait for animation to complete, then hide dialog
         setTimeout(() => {
           console.log('[ChatDialog] Minimization animation completed, hiding dialog');
+          
+          // Check if dialogContainer still exists before accessing it
+          if (!this.dialogContainer) {
+            console.log('[ChatDialog] Dialog container already removed, skipping cleanup');
+            return;
+          }
           
           // Clean up animation class and CSS properties
           this.dialogContainer.classList.remove('minimizing');
