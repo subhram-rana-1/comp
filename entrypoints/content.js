@@ -3758,15 +3758,30 @@ const WordSelector = {
         border-radius: 8px;
         border: 1px solid rgba(21, 128, 61, 0.4);
         padding: 0 2px;
-        display: inline-block;
+        margin-top: 0 !important; /* Prevent top margin from affecting line spacing */
+        margin-bottom: 0 !important; /* Prevent bottom margin from affecting line spacing */
+        display: inline-block !important; /* Use inline-block for transform support */
+        width: auto !important; /* Prevent width from expanding to full line */
+        max-width: fit-content !important; /* Ensure it only wraps the text content */
+        min-width: auto !important; /* Prevent min-width from forcing expansion */
         user-select: none;
         -webkit-user-select: none;
         transition: background-color 0.3s ease-in-out, border-color 0.3s ease-in-out, opacity 0.3s ease-in-out, transform 0.15s ease-out;
+        box-decoration-break: clone; /* Ensure background wraps correctly on line breaks */
+        -webkit-box-decoration-break: clone;
+        line-height: normal !important; /* Use normal line height to prevent expansion */
+        vertical-align: middle !important; /* Align to middle to minimize line height impact */
+        height: auto !important; /* Ensure height doesn't expand */
+        max-height: none !important; /* Remove max-height constraints */
+        box-sizing: border-box !important; /* Include padding in width calculation */
+        margin: 0 !important; /* Remove any margins that could affect spacing */
       }
       
       /* Breathing animation for green word when it first appears - breathes twice (same as book icon) */
       .vocab-word-explained.word-breathing {
-        display: inline-block !important;
+        display: inline-block !important; /* Need inline-block for transform animation */
+        width: auto !important; /* Prevent width from expanding */
+        max-width: fit-content !important; /* Ensure it only wraps the text content */
         animation: wordGreenBreathing 0.8s ease-in-out;
       }
       
@@ -4815,17 +4830,25 @@ const TextSelector = {
     // Append icons wrapper to highlight
     highlight.appendChild(iconsWrapper);
     
-    // Position icons relative to highlight
+    // Position icons relative to highlight - on the left side, outside text content
+    // Force absolute positioning to ensure it's always outside the text
+    iconsWrapper.style.setProperty('position', 'absolute', 'important');
+    iconsWrapper.style.setProperty('display', 'flex', 'important');
+    iconsWrapper.style.setProperty('margin', '0', 'important');
+    iconsWrapper.style.setProperty('padding', '0', 'important');
+    
     const highlightRect = highlight.getBoundingClientRect();
     const isInModal = highlight.closest('.vocab-custom-content-modal');
     
     if (isInModal) {
       // In modal context: position to the left with sufficient margin
       iconsWrapper.style.setProperty('left', '-50px', 'important');
+      iconsWrapper.style.setProperty('right', 'auto', 'important');
       iconsWrapper.style.setProperty('top', '-2px', 'important');
     } else {
-      // In main webpage context: position to the left
-      iconsWrapper.style.setProperty('left', '-40px', 'important');
+      // In main webpage context: position to the left, outside text content
+      iconsWrapper.style.setProperty('left', '-45px', 'important');
+      iconsWrapper.style.setProperty('right', 'auto', 'important');
       iconsWrapper.style.setProperty('top', '0px', 'important');
     }
     
@@ -5040,17 +5063,25 @@ const TextSelector = {
     // Append wrapper to highlight
     highlight.appendChild(iconsWrapper);
     
-    // Position icons relative to highlight
+    // Position icons relative to highlight - on the left side, outside text content
+    // Force absolute positioning to ensure it's always outside the text
+    iconsWrapper.style.setProperty('position', 'absolute', 'important');
+    iconsWrapper.style.setProperty('display', 'flex', 'important');
+    iconsWrapper.style.setProperty('margin', '0', 'important');
+    iconsWrapper.style.setProperty('padding', '0', 'important');
+    
     const highlightRect = highlight.getBoundingClientRect();
     
     if (isInModal) {
       // In modal context: position to the left with sufficient margin to avoid overlap
       iconsWrapper.style.setProperty('left', '-50px', 'important'); // 50px to the left with !important
+      iconsWrapper.style.setProperty('right', 'auto', 'important');
       // Align upper border with text upper border by adjusting top position
       iconsWrapper.style.setProperty('top', '-2px', 'important'); // Slight adjustment to align upper borders
     } else {
-      // In main webpage context: position to the left as before
-      iconsWrapper.style.setProperty('left', '-40px', 'important'); // 40px to the left of the highlight
+      // In main webpage context: position to the left, outside text content
+      iconsWrapper.style.setProperty('left', '-45px', 'important'); // 45px to the left of the highlight
+      iconsWrapper.style.setProperty('right', 'auto', 'important');
       iconsWrapper.style.setProperty('top', '0px', 'important'); // Align with top edge of selected text
     }
     
@@ -5332,27 +5363,140 @@ const TextSelector = {
     btn.setAttribute('aria-label', 'View simplified text');
     btn.innerHTML = this.createBookIcon();
     
-    // Add click handler
-    btn.addEventListener('click', (e) => {
+    // Add click handler with improved toggle logic - use capture phase to ensure it fires
+    // Use a flag to prevent double-triggering from multiple event handlers
+    let isProcessing = false;
+    
+    const handleBookClick = (e) => {
+      // Prevent double-triggering
+      if (isProcessing) {
+        console.log('[TextSelector] Book click already processing, ignoring duplicate event');
+        return;
+      }
+      
       e.preventDefault();
       e.stopPropagation();
+      e.stopImmediatePropagation(); // Prevent other handlers from interfering
+      
+      isProcessing = true;
       
       console.log('[TextSelector] Book icon clicked for:', textKey);
       
-      // Get simplified text data
+      // Get simplified text data first
       const simplifiedData = this.simplifiedTexts.get(textKey);
-      if (simplifiedData) {
-        // Pulsate the text
-        const highlight = this.textToHighlights.get(textKey);
-        if (highlight) {
-          this.pulsateText(highlight, true);
+      if (!simplifiedData) {
+        console.warn('[TextSelector] No simplified data found for textKey:', textKey);
+        isProcessing = false;
+        return;
+      }
+      
+      // Comprehensive check if chat dialog is already open for this text segment
+      // Handle all possible textKey format variations
+      let isChatOpenForThisText = false;
+      
+      if (typeof ChatDialog !== 'undefined' && ChatDialog.isOpen && ChatDialog.currentTextKey) {
+        const currentKey = ChatDialog.currentTextKey;
+        const originalTextKey = textKey;
+        
+        // Strategy 1: Exact match
+        if (currentKey === originalTextKey) {
+          isChatOpenForThisText = true;
+        }
+        // Strategy 2: Match with -selected suffix
+        else if (currentKey === `${originalTextKey}-selected`) {
+          isChatOpenForThisText = true;
+        }
+        // Strategy 3: Match when currentKey starts with textKey
+        else if (currentKey.startsWith(originalTextKey + '-')) {
+          isChatOpenForThisText = true;
+        }
+        // Strategy 4: Match when textKey is part of currentKey (for complex formats)
+        else if (currentKey.includes(originalTextKey)) {
+          isChatOpenForThisText = true;
+        }
+        // Strategy 5: Match by simplifiedData (textStartIndex and textLength)
+        else if (simplifiedData && simplifiedData.textStartIndex !== undefined && simplifiedData.textLength !== undefined) {
+          // Extract start index and length from currentKey if it's in format: contentType-tabId-startIndex-length
+          const currentKeyParts = currentKey.split('-');
+          if (currentKeyParts.length >= 4) {
+            const currentStartIndex = parseInt(currentKeyParts[currentKeyParts.length - 2]);
+            const currentLength = parseInt(currentKeyParts[currentKeyParts.length - 1]);
+            
+            if (currentStartIndex === simplifiedData.textStartIndex && 
+                currentLength === simplifiedData.textLength) {
+              isChatOpenForThisText = true;
+            }
+          }
+          // Strategy 6: Match by checking if currentKey ends with startIndex-length pattern
+          const expectedSuffix = `${simplifiedData.textStartIndex}-${simplifiedData.textLength}`;
+          if (currentKey.endsWith(expectedSuffix)) {
+            isChatOpenForThisText = true;
+          }
+        }
+        // Strategy 7: Reverse check - check if originalTextKey contains parts of currentKey
+        if (!isChatOpenForThisText) {
+          const currentKeyPartsForBase = currentKey.split('-');
+          const originalKeyParts = originalTextKey.split('-');
+          if (currentKeyPartsForBase.length >= 2 && originalKeyParts.length >= 2) {
+            // Compare base parts (contentType-tabId)
+            const currentBase = currentKeyPartsForBase.slice(0, 2).join('-');
+            const originalBase = originalKeyParts.slice(0, 2).join('-');
+            if (currentBase === originalBase && simplifiedData) {
+              // If base matches and we have simplifiedData, check by position
+              if (currentKeyPartsForBase.length >= 4) {
+                const currentStartIndex = parseInt(currentKeyPartsForBase[currentKeyPartsForBase.length - 2]);
+                const currentLength = parseInt(currentKeyPartsForBase[currentKeyPartsForBase.length - 1]);
+                if (currentStartIndex === simplifiedData.textStartIndex && 
+                    currentLength === simplifiedData.textLength) {
+                  isChatOpenForThisText = true;
+                }
+              }
+            }
+          }
         }
         
-        // Open ChatDialog in simplified mode with selected context
-        // Always use 'selected' context when opening from book icon to ensure expansion animation
-        ChatDialog.open(simplifiedData.text, textKey, 'simplified', simplifiedData, 'selected');
+        console.log('[TextSelector] Toggle check - isOpen:', ChatDialog.isOpen, 'currentTextKey:', currentKey, 'originalTextKey:', originalTextKey, 'isChatOpenForThisText:', isChatOpenForThisText);
       }
-    });
+      
+      if (isChatOpenForThisText) {
+        // Chat is already open for this text - close it (toggle off)
+        console.log('[TextSelector] Chat dialog is already open for this text, closing it');
+        ChatDialog.close();
+        isProcessing = false;
+        return;
+      }
+      
+      // Chat is not open for this text - open it (toggle on)
+      // Pulsate the text
+      const highlight = this.textToHighlights.get(textKey);
+      if (highlight) {
+        this.pulsateText(highlight, true);
+      }
+      
+      // Open ChatDialog in simplified mode with selected context
+      // Always use 'selected' context when opening from book icon to ensure expansion animation
+      ChatDialog.open(simplifiedData.text, textKey, 'simplified', simplifiedData, 'selected');
+      
+      // Reset processing flag after a short delay to allow for state changes
+      setTimeout(() => {
+        isProcessing = false;
+      }, 100);
+    };
+    
+    // Add both click and mousedown handlers to ensure it works on all websites
+    // Use capture phase to ensure handlers fire before website handlers
+    btn.addEventListener('click', handleBookClick, { capture: true, passive: false });
+    btn.addEventListener('mousedown', (e) => {
+      // Only trigger on left mouse button and if click handler didn't fire
+      if (e.button === 0 && !isProcessing) {
+        // Small delay to let click handler run first if it exists
+        setTimeout(() => {
+          if (!isProcessing) {
+            handleBookClick(e);
+          }
+        }, 10);
+      }
+    }, { capture: true, passive: false });
     
     // Remove breathing class after animation completes
     setTimeout(() => {
@@ -5402,6 +5546,27 @@ const TextSelector = {
       
       // Add fast pulsating animation to the text
       highlight.classList.add('vocab-text-loading');
+      
+      // Show spinner in place of magic-meaning button
+      const iconsWrapper = highlight.querySelector('.vocab-text-icons-wrapper');
+      if (iconsWrapper) {
+        const magicBtn = iconsWrapper.querySelector('.vocab-text-magic-meaning-btn');
+        if (magicBtn) {
+          // Hide the button and show spinner
+          magicBtn.style.display = 'none';
+          
+          // Create and show spinner
+          const spinnerContainer = document.createElement('div');
+          spinnerContainer.className = 'vocab-magic-meaning-spinner-container';
+          spinnerContainer.setAttribute('data-text-key', textKey);
+          
+          const spinner = document.createElement('div');
+          spinner.className = 'vocab-magic-meaning-spinner';
+          
+          spinnerContainer.appendChild(spinner);
+          iconsWrapper.appendChild(spinnerContainer);
+        }
+      }
       
       // Call handleMagicMeaning for this specific text only
       ButtonPanel.handleMagicMeaningForText(textKey);
@@ -5590,15 +5755,24 @@ const TextSelector = {
       
       /* Wrapper containers for icon groups */
       .vocab-text-icons-wrapper {
-        position: absolute;
-        display: flex;
+        position: absolute !important; /* Force absolute positioning */
+        display: flex !important;
         flex-direction: column;
         align-items: center;
         gap: 4px;
-        z-index: 10000003;
+        z-index: 10000003 !important;
         animation: vocab-icon-appear 0.4s ease-out;
-        pointer-events: auto;
+        pointer-events: auto !important;
         transition: opacity 0.3s ease-out, transform 0.3s ease-out;
+        left: -45px !important; /* Default: position on left side, outside text */
+        right: auto !important; /* Ensure right is not set */
+        top: 0px !important; /* Align with top of text */
+        margin: 0 !important; /* Remove any margins */
+        padding: 0 !important; /* Remove any padding */
+        width: auto !important; /* Auto width */
+        height: auto !important; /* Auto height */
+        min-width: 0 !important; /* No min-width */
+        max-width: none !important; /* No max-width */
       }
 
       /* Modal context: enhanced styling */
@@ -5608,6 +5782,8 @@ const TextSelector = {
         border-radius: 8px;
         padding: 4px;
         box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+        left: -50px !important; /* Position on left side in modal context */
+        right: auto !important; /* Ensure right is not set */
       }
       
       /* Chat button - Solid purple circle with white chat icon on top-left (bigger) */
@@ -5615,7 +5791,7 @@ const TextSelector = {
       @keyframes vocab-icon-appear {
         0% {
           opacity: 0;
-          transform: translateX(-15px) scale(0.8);
+          transform: translateX(-15px) scale(0.8); /* Slide from left */
         }
         60% {
           transform: translateX(0) scale(1.05);
@@ -5666,19 +5842,24 @@ const TextSelector = {
       /* Book button - Wireframe open book icon on top-left */
       .vocab-text-book-btn {
         position: relative;
-        width: 24px;
-        height: 24px;
-        background: transparent;
-        border: none;
-        border-radius: 4px;
-        display: flex;
+        width: 28px;
+        height: 28px;
+        background: #d1fae5 !important; /* Circular light green opaque container (no transparency) */
+        border: 1px solid rgba(34, 197, 94, 0.4) !important; /* Thin green border */
+        border-radius: 50% !important; /* Circular shape */
+        display: flex !important;
         align-items: center;
         justify-content: center;
-        cursor: pointer;
+        cursor: pointer !important;
         opacity: 0.95;
         transition: opacity 0.2s ease, transform 0.15s ease;
         padding: 0;
         flex-shrink: 0;
+        box-shadow: 0 2px 4px rgba(34, 197, 94, 0.2); /* Subtle green shadow for depth */
+        pointer-events: auto !important; /* Ensure button is clickable on all websites */
+        z-index: 10000004 !important; /* Ensure button is above other elements */
+        user-select: none !important; /* Prevent text selection */
+        -webkit-user-select: none !important;
       }
       
       .vocab-text-book-btn:hover {
@@ -5703,30 +5884,36 @@ const TextSelector = {
         animation: bookBreathing 1.6s ease-in-out;
       }
       
-      /* Magic-meaning button - Purple sparkle icon with light purple background */
+      /* Magic-meaning button - Purple sparkle icon with light purple opaque background */
       .vocab-text-magic-meaning-btn {
-        position: relative;
-        width: 32px;
-        height: 32px;
-        background: rgba(149, 39, 245, 0.15);
-        border: none;
-        border-radius: 50%;
-        display: flex;
+        position: relative !important;
+        width: 32px !important;
+        height: 32px !important;
+        min-width: 32px !important; /* Ensure minimum width */
+        min-height: 32px !important; /* Ensure minimum height */
+        max-width: 32px !important; /* Ensure maximum width */
+        max-height: 32px !important; /* Ensure maximum height */
+        aspect-ratio: 1 / 1 !important; /* Force perfect square/circle */
+        background: #e9d5ff !important; /* Circular light purple opaque container (no transparency) */
+        border: 1px solid rgba(149, 39, 245, 0.4) !important; /* Thin purple border */
+        border-radius: 50% !important; /* Circular shape */
+        display: flex !important;
         align-items: center;
         justify-content: center;
-        cursor: pointer;
+        cursor: pointer !important;
         opacity: 0.95;
         transition: opacity 0.2s ease, transform 0.15s ease, background-color 0.2s ease;
-        padding: 0;
+        padding: 0 !important;
         flex-shrink: 0;
-        box-sizing: border-box;
-        padding-top: 1px;
+        box-sizing: border-box !important; /* Include border in width/height */
+        box-shadow: 0 2px 4px rgba(149, 39, 245, 0.2); /* Subtle purple shadow for depth */
+        margin: 0 !important; /* No margin */
       }
       
       .vocab-text-magic-meaning-btn:hover {
         transform: scale(1.1);
         opacity: 1;
-        background-color: rgba(149, 39, 245, 0.25);
+        background-color: #ddd6fe !important; /* Slightly darker purple on hover */
       }
       
       .vocab-text-magic-meaning-btn:active {
@@ -5740,6 +5927,70 @@ const TextSelector = {
         height: 22px;
         filter: drop-shadow(0 1px 2px rgba(149, 39, 245, 0.3));
         transform: translateY(-1px);
+      }
+      
+      /* Spinner container for magic-meaning button during API call */
+      .vocab-magic-meaning-spinner-container {
+        position: relative !important;
+        width: 32px !important;
+        height: 32px !important;
+        min-width: 32px !important; /* Ensure minimum width */
+        min-height: 32px !important; /* Ensure minimum height */
+        max-width: 32px !important; /* Ensure maximum width */
+        max-height: 32px !important; /* Ensure maximum height */
+        aspect-ratio: 1 / 1 !important; /* Force perfect square/circle */
+        background: white !important; /* Circular white opaque container */
+        border: 1px solid rgba(149, 39, 245, 0.4) !important; /* Thin purple border */
+        border-radius: 50% !important; /* Circular shape */
+        display: block !important; /* Block display for absolute child positioning */
+        flex-shrink: 0 !important;
+        box-shadow: 0 2px 4px rgba(149, 39, 245, 0.2); /* Subtle purple shadow */
+        box-sizing: border-box !important; /* Include border in width/height */
+        padding: 0 !important; /* No padding */
+        margin: 0 !important; /* No margin */
+        overflow: visible !important; /* Ensure spinner is visible */
+        line-height: 0 !important; /* Remove line height */
+        vertical-align: middle !important; /* Vertical alignment */
+      }
+      
+      /* Spinner - dark purple spinning circle */
+      .vocab-magic-meaning-spinner {
+        position: absolute !important; /* Use absolute positioning for perfect centering */
+        width: 18px !important;
+        height: 18px !important;
+        min-width: 18px !important; /* Ensure minimum width */
+        min-height: 18px !important; /* Ensure minimum height */
+        max-width: 18px !important; /* Ensure maximum width */
+        max-height: 18px !important; /* Ensure maximum height */
+        aspect-ratio: 1 / 1 !important; /* Force perfect square/circle */
+        border-width: 2px 2px 2px 2px !important; /* Uniform border width on all sides */
+        border-style: solid !important; /* Solid border style */
+        border-color: rgba(149, 39, 245, 0.2) !important; /* Light purple border */
+        border-top-color: #9527F5 !important; /* Dark purple top border for spinner effect */
+        border-radius: 50% !important; /* Perfect circle */
+        animation: vocab-magic-spinner-spin 0.8s linear infinite !important; /* Ensure animation runs */
+        box-sizing: border-box !important; /* Include border in width/height */
+        padding: 0 !important; /* No padding */
+        margin: 0 !important; /* No margin */
+        flex-shrink: 0 !important; /* Prevent shrinking */
+        display: block !important; /* Block display */
+        top: 50% !important; /* Center vertically */
+        left: 50% !important; /* Center horizontally */
+        transform-origin: center center !important; /* Rotation center */
+        line-height: 0 !important; /* Remove line height */
+        vertical-align: middle !important; /* Vertical alignment */
+        overflow: visible !important; /* Allow spinner to be visible */
+        will-change: transform !important; /* Optimize animation */
+        /* Initial transform will be set by animation */
+      }
+      
+      @keyframes vocab-magic-spinner-spin {
+        0% {
+          transform: translate(-50%, -50%) rotate(0deg);
+        }
+        100% {
+          transform: translate(-50%, -50%) rotate(360deg);
+        }
       }
       
       @keyframes bookBreathing {
@@ -6676,7 +6927,7 @@ const ChatDialog = {
           this.currentText = null;
           this.currentTextKey = null;
           console.log('[ChatDialog] Dialog state reset');
-        }, 500); // 0.5s animation duration (increased for visibility)
+        }, 300); // 0.3s animation duration (same as appearing animation)
         
         return; // Exit early, cleanup will continue in setTimeout
       } else {
@@ -8553,7 +8804,7 @@ const ChatDialog = {
             // Re-enable pointer events
             this.dialogContainer.style.setProperty('pointer-events', '');
             this.dialogContainer.style.setProperty('will-change', '');
-          }, 500);
+          }, 300); // 0.3s animation duration (same as appearing animation)
         } else {
           console.log('[ChatDialog] Book icon not found, using normal slide-in animation');
           setTimeout(() => {
@@ -8761,7 +9012,7 @@ const ChatDialog = {
         max-width: 90vw;
         height: 600px;
         max-height: 80vh;
-        z-index: 1000000;
+        z-index: 2147483647 !important; /* Maximum z-index to ensure chat dialog is always on top of ads and other elements */
         transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
         user-select: none;  /* Disable text selection in popup */
@@ -8776,10 +9027,10 @@ const ChatDialog = {
       /* Minimize Animation - Scale down and move to book icon */
       /* IMPORTANT: When minimizing, completely override all transitions and use animation only */
       .vocab-chat-dialog.minimizing {
-        animation: minimizeChatDialogToBook 0.5s ease-out forwards !important;
+        animation: minimizeChatDialogToBook 0.3s cubic-bezier(0.4, 0, 0.2, 1) forwards !important; /* Same duration as appearing animation */
         transition: none !important; /* Completely disable transition during animation */
         pointer-events: none !important;
-        z-index: 10000010 !important; /* Ensure dialog appears above everything during animation */
+        z-index: 2147483647 !important; /* Maximum z-index to ensure dialog appears above everything during animation */
         will-change: transform !important; /* Optimize for animation */
       }
       
@@ -8802,17 +9053,17 @@ const ChatDialog = {
       
       /* Expand Animation - Scale up and move from book icon (reverse of minimize) */
       .vocab-chat-dialog.expanding {
-        animation: expandChatDialogFromBook 0.5s ease-out forwards !important;
+        animation: expandChatDialogFromBook 0.3s cubic-bezier(0.4, 0, 0.2, 1) forwards !important; /* Same duration as appearing animation */
         transition: none !important; /* Completely disable transition during animation */
         pointer-events: none !important;
-        z-index: 10000010 !important; /* Ensure dialog appears above everything during animation */
+        z-index: 2147483647 !important; /* Maximum z-index to ensure dialog appears above everything during animation */
         will-change: transform !important; /* Optimize for animation */
         opacity: 1 !important;
       }
       
       /* Ensure dialog stays visible after expansion animation */
       .vocab-chat-dialog.expanding.visible {
-        animation: expandChatDialogFromBook 0.5s ease-out forwards !important;
+        animation: expandChatDialogFromBook 0.3s cubic-bezier(0.4, 0, 0.2, 1) forwards !important; /* Same duration as appearing animation */
         transition: none !important;
       }
       
@@ -15217,6 +15468,21 @@ const ButtonPanel = {
           // Remove loading animation
           highlight.classList.remove('vocab-text-loading');
           
+          // Hide spinner if it exists and restore button
+          const iconsWrapper = highlight.querySelector('.vocab-text-icons-wrapper');
+          if (iconsWrapper) {
+            const spinnerContainer = iconsWrapper.querySelector('.vocab-magic-meaning-spinner-container');
+            if (spinnerContainer) {
+              spinnerContainer.remove();
+            }
+            
+            // Restore magic-meaning button (though it won't be needed since book icon will be shown)
+            const magicBtn = iconsWrapper.querySelector('.vocab-text-magic-meaning-btn');
+            if (magicBtn) {
+              magicBtn.style.display = '';
+            }
+          }
+          
           // Change underline to light green
           highlight.classList.add('vocab-text-simplified');
           
@@ -15397,6 +15663,22 @@ const ButtonPanel = {
         
         // Remove loading animation on error
         highlight.classList.remove('vocab-text-loading');
+        
+        // Hide spinner and restore button on error
+        const iconsWrapper = highlight.querySelector('.vocab-text-icons-wrapper');
+        if (iconsWrapper) {
+          // Hide spinner
+          const spinnerContainer = iconsWrapper.querySelector('.vocab-magic-meaning-spinner-container');
+          if (spinnerContainer) {
+            spinnerContainer.remove();
+          }
+          
+          // Restore magic-meaning button
+          const magicBtn = iconsWrapper.querySelector('.vocab-text-magic-meaning-btn');
+          if (magicBtn) {
+            magicBtn.style.display = '';
+          }
+        }
         
         // Mark simplify as completed (even on error) to allow button reset
         this.apiCompletionState.simplifyCompleted = true;
