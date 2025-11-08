@@ -1055,6 +1055,10 @@ export default defineContentScript({
           ButtonPanel.show();
           WordSelector.enable();
           TextSelector.enable();
+          // Show ask-about-page button if pageTextContent is available
+          if (window.pageTextContent) {
+            showAskAboutPageButton();
+          }
         } else {
           ButtonPanel.hide();
           WordSelector.disable();
@@ -1062,6 +1066,16 @@ export default defineContentScript({
           // Clear all selections when toggling off
           WordSelector.clearAll();
           TextSelector.clearAll();
+          // Hide ask-about-page button with slide-out animation when extension is disabled
+          hideAskAboutPageButton();
+          // Close chat dialog if it's open for ask-about-page context
+          if (typeof ChatDialog !== 'undefined' && ChatDialog.isOpen && ChatDialog.currentTextKey) {
+            const isPageGeneral = ChatDialog.currentTextKey === 'page-general' || ChatDialog.currentTextKey.startsWith('page-general');
+            if (isPageGeneral) {
+              console.log('[Content Script] Closing chat dialog for ask-about-page when extension is disabled');
+              ChatDialog.close();
+            }
+          }
         }
         
         // Update banner visibility
@@ -1120,12 +1134,26 @@ async function handleTabStateChange(domain, eventType, sendResponse) {
         ButtonPanel.show();
         WordSelector.enable();
         TextSelector.enable();
+        // Show ask-about-page button if pageTextContent is available
+        if (window.pageTextContent) {
+          showAskAboutPageButton();
+        }
       } else {
         ButtonPanel.hide();
         WordSelector.disable();
         TextSelector.disable();
         WordSelector.clearAll();
         TextSelector.clearAll();
+        // Hide ask-about-page button with slide-out animation when extension is disabled
+        hideAskAboutPageButton();
+        // Close chat dialog if it's open for ask-about-page context
+        if (typeof ChatDialog !== 'undefined' && ChatDialog.isOpen && ChatDialog.currentTextKey) {
+          const isPageGeneral = ChatDialog.currentTextKey === 'page-general' || ChatDialog.currentTextKey.startsWith('page-general');
+          if (isPageGeneral) {
+            console.log('[Content Script] Closing chat dialog for ask-about-page when extension is disabled');
+            ChatDialog.close();
+          }
+        }
       }
       
       sendResponse({ success: true, isEnabled: isEnabled, isNewDomain: false });
@@ -6599,11 +6627,12 @@ const TextSelector = {
         -webkit-user-select: none;
       }
       
-      /* Hidden state - button is off-screen to the right */
+      /* Hidden state - button is off-screen to the right with slide-out animation */
       .vocab-ask-about-page-btn-hidden {
         transform: translateX(100px);
         opacity: 0;
         pointer-events: none;
+        transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.4s ease;
       }
       
       /* Visible state - button slides in from the right */
