@@ -1,6 +1,6 @@
 # Chrome Extension Description
 
-Transform your reading experience with ComprehensionAI, an intelligent Chrome extension powered by advanced AI (OpenAI/ChatGPT) that enhances vocabulary, comprehension, and multilingual learning in real-time. Whether you're reading content in English, Arabic, Spanish, French, Hindi, Chinese, Japanese, German, Portuguese, Italian, Russian, or any other language, ComprehensionAI acts as your personal AI tutor, making complex text accessible and helping you learn effortlessly.
+Transform your reading experience with ExplainAI, an intelligent Chrome extension powered by advanced AI (OpenAI/ChatGPT) that enhances vocabulary, comprehension, and multilingual learning in real-time. Whether you're reading content in English, Arabic, Spanish, French, Hindi, Chinese, Japanese, German, Portuguese, Italian, Russian, or any other language, ExplainAI acts as your personal AI tutor, making complex text accessible and helping you learn effortlessly.
 
 🎯 Key Features:
 
@@ -45,7 +45,7 @@ Transform your reading experience with ComprehensionAI, an intelligent Chrome ex
 
 💡 How It Works:
 
-🟣 Enable ComprehensionAI with a simple toggle
+🟣 Enable ExplainAI with a simple toggle
 🟣 Double-click any word for instant AI-powered word meanings and vocabulary explanations
 🟣 Select passages for comprehensive text explanations and summaries
 🟣 Chat with AI in your preferred language (Arabic, Spanish, French, Hindi, Chinese, Japanese, etc.) for any questions
@@ -59,5 +59,5 @@ Transform your reading experience with ComprehensionAI, an intelligent Chrome ex
 🟣 Secure API integration with robust error handling
 🟣 Optimized for performance with minimal impact on browsing speed
 
-ComprehensionAI transforms every webpage into a learning opportunity, helping you build vocabulary, improve comprehension, and understand complex content in any language with ease. Whether you're reading in English, Arabic, Spanish, French, or any other language, ComprehensionAI's AI-powered word meaning, text summary, and multilingual chat features make reading accessible and enjoyable for everyone. Start enhancing your reading skills today!
+ExplainAI transforms every webpage into a learning opportunity, helping you build vocabulary, improve comprehension, and understand complex content in any language with ease. Whether you're reading in English, Arabic, Spanish, French, or any other language, ExplainAI's AI-powered word meaning, text summary, and multilingual chat features make reading accessible and enjoyable for everyone. Start enhancing your reading skills today!
 
