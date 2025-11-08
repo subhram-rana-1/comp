@@ -44,7 +44,18 @@ class SimplifyService {
       });
       
       if (!response.ok) {
-        throw new Error(`API request failed: ${response.status} ${response.statusText}`);
+        // Try to read error response body for more details
+        let errorMessage = `API request failed: ${response.status} ${response.statusText}`;
+        try {
+          const errorData = await response.json();
+          if (errorData.error || errorData.message) {
+            errorMessage = `API request failed: ${response.status} ${response.statusText}. ${errorData.error || errorData.message}`;
+          }
+        } catch (e) {
+          // If we can't parse the error response, use the default message
+          console.warn('[SimplifyService] Could not parse error response:', e);
+        }
+        throw new Error(errorMessage);
       }
       
       // Process the SSE stream

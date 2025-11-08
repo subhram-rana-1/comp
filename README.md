@@ -48,9 +48,12 @@ This will create a ZIP file ready for Chrome Web Store submission.
 - 🔄 iOS-style toggle switch (ON/OFF)
 - 📝 Word Meaning: Get instant AI-powered word definitions and explanations
 - 📖 Text Explanation: Receive comprehensive explanations of selected text passages
+- 📄 **Page Summarisation:** One-click AI-powered summarisation of entire webpages using the `/api/v2/summarise` API
+- 🔍 **Ask About Page:** Click the "Ask about page" button to open a chat interface for page-wide questions and summaries
 - 🌍 Multilingual AI Chat: Communicate with AI in any language (Arabic, Spanish, French, Hindi, Chinese, Japanese, and more) regardless of the website's content language
 - 💬 Conversational AI: Ask questions and get responses in your preferred regional language
 - 💜 Highlighted key terms with purple pill styling
+- ⚡ Background content processing for efficient page summarisation
 
 ## Project Structure
 
@@ -59,9 +62,31 @@ This will create a ZIP file ready for Chrome Web Store submission.
 - `assets/popup.js` - Toggle functionality JavaScript
 - `assets/logo_1-removebg.png` - Cat logo image
 - `core/services/` - Service files for API integration, word explanations, and text simplification
+  - `SimplifyService.js` - Handles `/api/v2/simplify` API calls for text simplification
+  - `SummariseService.js` - Handles `/api/v2/summarise` API calls for page summarisation
+  - `WordExplanationService.js` - Handles word explanation API calls
+  - `ApiService.js` - General API service for chat functionality
 - `core/config/` - Configuration files for API and build settings
 - `wxt.config.ts` - WXT configuration file
 - `package.json` - Project dependencies and scripts
+
+## API Integration
+
+### Page Summarisation API
+
+The extension uses the `/api/v2/summarise` endpoint for page summarisation:
+
+- **Endpoint:** `/api/v2/summarise`
+- **Method:** POST
+- **Format:** JSON request/response
+- **Request Payload:** `{ "text": "..." }`
+- **Response:** `{ "summary": "..." }`
+- **Features:**
+  - Automatic page content extraction in background threads
+  - Content caching in JSON format (`pageTextContent` variable)
+  - Simple JSON-based API (not SSE)
+  - Error handling with detailed error messages
+  - Text length limiting (50,000 characters max) for optimal performance
 
 ## Learn More
 
