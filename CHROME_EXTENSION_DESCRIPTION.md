@@ -12,8 +12,11 @@ Transform your reading experience with ExplainAI, an intelligent Chrome extensio
 
 2. **Intelligent Text Explanation & Summary:**
    🟣 Select complex passages and receive AI-generated text explanations and summaries
-   🟣 Perfect for students, professionals, and anyone dealing with technical or academic content
    🟣 Get comprehensive text summaries that maintain the original meaning while making content more accessible
+   🟣 **Page Summarisation:** Click the "Ask about page" button to instantly get an AI-powered summary of the entire webpage
+   🟣 One-click page summarisation that processes the full page content automatically
+   🟣 Perfect for students, professionals, and anyone dealing with technical or academic content
+   🟣 Quickly understand long articles, research papers, and documentation without reading everything
 
 3. **Multilingual AI Chat - Communicate in Any Language:**
    🟣 Chat with AI in your preferred language - Arabic, Spanish, French, Hindi, Chinese, Japanese, German, Portuguese, Italian, Russian, Korean, Turkish, and more
@@ -48,6 +51,8 @@ Transform your reading experience with ExplainAI, an intelligent Chrome extensio
 🟣 Enable ExplainAI with a simple toggle
 🟣 Double-click any word for instant AI-powered word meanings and vocabulary explanations
 🟣 Select passages for comprehensive text explanations and summaries
+🟣 Click the "Ask about page" button to get instant AI-powered summaries of entire webpages
+🟣 Use "Summarise the page" feature to quickly understand long articles and documents
 🟣 Chat with AI in your preferred language (Arabic, Spanish, French, Hindi, Chinese, Japanese, etc.) for any questions
 🟣 Learn and understand content more effectively, regardless of the website's language
 
@@ -55,9 +60,12 @@ Transform your reading experience with ExplainAI, an intelligent Chrome extensio
 
 🟣 Powered by advanced AI (OpenAI/ChatGPT) for accurate word meanings and text explanations
 🟣 Multilingual AI chat support for 50+ languages including Arabic, Spanish, French, Hindi, Chinese, Japanese, German, Portuguese, Italian, Russian, Korean, Turkish, and more
+   🟣 **Page Summarisation API:** Advanced AI-powered summarisation using `/api/v2/summarise` endpoint
+🟣 Automatic page content extraction and processing in background threads
 🟣 Real-time processing with fast AI responses
 🟣 Secure API integration with robust error handling
 🟣 Optimized for performance with minimal impact on browsing speed
+🟣 Smart content caching for efficient page summarisation
 
 ExplainAI transforms every webpage into a learning opportunity, helping you build vocabulary, improve comprehension, and understand complex content in any language with ease. Whether you're reading in English, Arabic, Spanish, French, or any other language, ExplainAI's AI-powered word meaning, text summary, and multilingual chat features make reading accessible and enjoyable for everyone. Start enhancing your reading skills today!
 

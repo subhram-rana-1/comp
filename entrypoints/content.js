@@ -1,5 +1,6 @@
 import ApiService from '../core/services/ApiService.js';
 import SimplifyService from '../core/services/SimplifyService.js';
+import SummariseService from '../core/services/SummariseService.js';
 import WordExplanationService from '../core/services/WordExplanationService.js';
 import ApiConfig from '../core/config/apiConfig.js';
 
@@ -298,6 +299,241 @@ export default defineContentScript({
     // Global storage key for extension state
     const GLOBAL_STORAGE_KEY = 'is_extension_globally_enabled';
     
+    // Page text content variable - initially null
+    let pageTextContent = null;
+    
+    // Make pageTextContent accessible globally for ChatDialog
+    window.pageTextContent = pageTextContent;
+    
+    /**
+     * Fetch page text content in a separate thread
+     */
+    async function fetchPageTextContent() {
+      try {
+        console.log('[Content Script] Starting to fetch page text content...');
+        
+        // Use a web worker or setTimeout to run in a separate thread
+        // For simplicity, we'll use setTimeout with 0 delay to run after current execution
+        await new Promise(resolve => setTimeout(resolve, 0));
+        
+        // Get all text content from the page
+        const pageText = document.body.innerText || document.body.textContent || '';
+        
+        // Store as JSON
+        pageTextContent = JSON.stringify({
+          text: pageText,
+          timestamp: new Date().toISOString(),
+          url: window.location.href,
+          title: document.title
+        });
+        
+        // Update global reference
+        window.pageTextContent = pageTextContent;
+        
+        console.log('[Content Script] Page text content fetched and stored. Length:', pageText.length);
+        console.log('[Content Script] pageTextContent variable:', pageTextContent);
+        
+        // Show the button now that content is available
+        showAskAboutPageButton();
+      } catch (error) {
+        console.error('[Content Script] Error fetching page text content:', error);
+      }
+    }
+    
+    /**
+     * Show ask-about-page button with animation from the right
+     */
+    function showAskAboutPageButton() {
+      const button = document.getElementById('vocab-ask-about-page-btn');
+      if (!button) {
+        console.warn('[Content Script] Ask-about-page button not found when trying to show it');
+        return;
+      }
+      
+      // Remove hidden class and add visible class for animation
+      button.classList.remove('vocab-ask-about-page-btn-hidden');
+      button.classList.add('vocab-ask-about-page-btn-visible');
+      
+      console.log('[Content Script] Ask-about-page button shown with animation');
+    }
+    
+    /**
+     * Hide ask-about-page button
+     */
+    function hideAskAboutPageButton() {
+      const button = document.getElementById('vocab-ask-about-page-btn');
+      if (!button) {
+        return;
+      }
+      
+      button.classList.remove('vocab-ask-about-page-btn-visible');
+      button.classList.add('vocab-ask-about-page-btn-hidden');
+    }
+    
+    /**
+     * Create top-right ask-about-page button
+     */
+    function createAskAboutPageButton() {
+      // Check if button already exists
+      if (document.getElementById('vocab-ask-about-page-btn')) {
+        return;
+      }
+      
+      // Create button element
+      const button = document.createElement('button');
+      button.id = 'vocab-ask-about-page-btn';
+      button.className = 'vocab-ask-about-page-btn vocab-ask-about-page-btn-hidden';
+      button.setAttribute('aria-label', 'Ask anything about this page');
+      
+      // Use white wireframe book icon
+      button.innerHTML = `
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M4 19.5C4 18.837 4.526 18 5.5 18H11M20 19.5C20 18.837 19.474 18 18.5 18H13" stroke="white" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M12 18V6M12 6C12 6 10 4 6.5 4C4.5 4 4 5 4 6V18C4 18 4.5 18 6.5 18C10 18 12 18 12 18M12 6C12 6 14 4 17.5 4C19.5 4 20 5 20 6V18C20 18 19.5 18 17.5 18C14 18 12 18 12 18" stroke="white" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      `;
+      
+      // Append to body
+      document.body.appendChild(button);
+      
+      // Attach tooltip listeners
+      attachAskAboutPageTooltipListeners(button);
+      
+      // Attach click handler to open chat dialog
+      attachAskAboutPageClickHandler(button);
+      
+      console.log('[Content Script] Ask-about-page button created (hidden initially)');
+    }
+    
+    /**
+     * Attach click handler to open chat dialog
+     */
+    function attachAskAboutPageClickHandler(button) {
+      if (!button) {
+        return;
+      }
+      
+      button.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        
+        // Check if dialog is already open for page-general context
+        // Check for both 'page-general' and 'page-general-generic' (the transformed key)
+        const isPageGeneralOpen = ChatDialog.isOpen && ChatDialog.currentTextKey && 
+          (ChatDialog.currentTextKey === 'page-general' || ChatDialog.currentTextKey.startsWith('page-general'));
+        
+        if (isPageGeneralOpen) {
+          // Toggle off - close the dialog
+          console.log('[AskAboutPage] Dialog already open for page-general, closing it. currentTextKey:', ChatDialog.currentTextKey);
+          ChatDialog.close();
+          return;
+        }
+        
+        // Open chat dialog for general page chat
+        // Use 'page-general' as textKey for general page chat
+        // Use pageTextContent if available, otherwise fallback to current page text
+        let pageText = '';
+        if (pageTextContent) {
+          try {
+            const contentData = JSON.parse(pageTextContent);
+            pageText = contentData.text || '';
+          } catch (e) {
+            console.warn('[AskAboutPage] Error parsing pageTextContent, using fallback');
+            pageText = document.body.innerText || document.body.textContent || '';
+          }
+        } else {
+          pageText = document.body.innerText || document.body.textContent || '';
+        }
+        ChatDialog.open(pageText.substring(0, 1000), 'page-general', 'ask', null, 'general');
+      });
+    }
+    
+    /**
+     * Attach tooltip event listeners to ask-about-page button
+     * Similar to ButtonPanel.attachTooltipListeners
+     */
+    function attachAskAboutPageTooltipListeners(button) {
+      if (!button) {
+        return;
+      }
+      
+      let tooltip = null;
+      
+      button.addEventListener('mouseenter', () => {
+        // Clean up any existing tooltips first
+        removeAskAboutPageTooltip();
+        
+        // Create tooltip
+        tooltip = createAskAboutPageTooltip('Ask anything about this page');
+        document.body.appendChild(tooltip);
+        
+        // Position tooltip at the bottom left of the button (to the left of the button)
+        const buttonRect = button.getBoundingClientRect();
+        tooltip.style.position = 'fixed';
+        // Position below the button, aligned to the left side (tooltip's right edge aligns with button's left edge)
+        // Position it so the arrow tip touches the button's bottom edge (6px arrow height)
+        tooltip.style.top = buttonRect.bottom + 'px'; // Arrow tip will be at buttonRect.bottom
+        tooltip.style.right = (window.innerWidth - buttonRect.left) + 'px';
+        tooltip.style.left = 'auto';
+        tooltip.style.zIndex = '9999999';
+        
+        // Trigger animation
+        setTimeout(() => {
+          tooltip.classList.add('visible');
+        }, 10);
+      });
+      
+      button.addEventListener('mouseleave', () => {
+        if (tooltip) {
+          tooltip.classList.remove('visible');
+          setTimeout(() => {
+            if (tooltip && tooltip.parentNode) {
+              tooltip.remove();
+            }
+            tooltip = null;
+          }, 200);
+        }
+      });
+      
+      button.addEventListener('click', () => {
+        if (tooltip) {
+          tooltip.classList.remove('visible');
+          setTimeout(() => {
+            if (tooltip && tooltip.parentNode) {
+              tooltip.remove();
+            }
+            tooltip = null;
+          }, 200);
+        }
+      });
+    }
+    
+    /**
+     * Create tooltip element for ask-about-page button
+     * Similar to ButtonPanel.createTooltip
+     */
+    function createAskAboutPageTooltip(message) {
+      const tooltip = document.createElement('div');
+      tooltip.className = 'vocab-ask-about-page-tooltip';
+      tooltip.textContent = message;
+      return tooltip;
+    }
+    
+    /**
+     * Remove ask-about-page tooltip
+     */
+    function removeAskAboutPageTooltip() {
+      const tooltips = document.querySelectorAll('.vocab-ask-about-page-tooltip');
+      tooltips.forEach(tooltip => {
+        tooltip.classList.remove('visible');
+        setTimeout(() => {
+          if (tooltip.parentNode) {
+            tooltip.remove();
+          }
+        }, 200);
+      });
+    }
+    
     console.log('[Content Script] Initializing with global storage key:', GLOBAL_STORAGE_KEY);
     
     // Initialize the button panel when content script loads
@@ -311,6 +547,23 @@ export default defineContentScript({
     
     // Initialize the chat dialog
     ChatDialog.init();
+    
+    // Create top-right ask-about-page button (initially hidden)
+    createAskAboutPageButton();
+    
+    // Wait for page to load completely, then fetch page text content in a separate thread
+    if (document.readyState === 'complete') {
+      // Page already loaded, fetch content immediately
+      fetchPageTextContent();
+    } else {
+      // Wait for page to load
+      window.addEventListener('load', () => {
+        // Use setTimeout to run in a separate thread after page load
+        setTimeout(() => {
+          fetchPageTextContent();
+        }, 100); // Small delay to ensure page is fully rendered
+      });
+    }
     
     // ===================================
     // Banner Module - Shows welcome banner when extension is enabled
@@ -3740,10 +3993,10 @@ const WordSelector = {
       /* Pulsating purple animation for words being processed */
       @keyframes vocab-word-loading-breathe {
         0%, 100% {
-          background-color: rgba(149, 39, 245, 0.15);
+          background-color: rgba(196, 181, 253, 0.7); /* Purple with slight transparency - lighter shade */
         }
         50% {
-          background-color: rgba(149, 39, 245, 0.35);
+          background-color: rgba(167, 139, 250, 0.8); /* Purple with slight transparency - darker shade */
         }
       }
       
@@ -3753,20 +4006,35 @@ const WordSelector = {
       
       /* Green background for explained words */
       .vocab-word-explained {
-        background-color: rgba(34, 197, 94, 0.20) !important;
+        background-color: rgba(134, 239, 172, 0.7) !important; /* Lighter green with slight transparency */
         cursor: pointer;
         border-radius: 8px;
-        border: 1px solid rgba(21, 128, 61, 0.4);
+        border: 1px solid rgba(74, 222, 128, 0.8) !important; /* Lighter green border with slight transparency */
         padding: 0 2px;
-        display: inline-block;
+        margin-top: 0 !important; /* Prevent top margin from affecting line spacing */
+        margin-bottom: 0 !important; /* Prevent bottom margin from affecting line spacing */
+        display: inline-block !important; /* Use inline-block for transform support */
+        width: auto !important; /* Prevent width from expanding to full line */
+        max-width: fit-content !important; /* Ensure it only wraps the text content */
+        min-width: auto !important; /* Prevent min-width from forcing expansion */
         user-select: none;
         -webkit-user-select: none;
         transition: background-color 0.3s ease-in-out, border-color 0.3s ease-in-out, opacity 0.3s ease-in-out, transform 0.15s ease-out;
+        box-decoration-break: clone; /* Ensure background wraps correctly on line breaks */
+        -webkit-box-decoration-break: clone;
+        line-height: normal !important; /* Use normal line height to prevent expansion */
+        vertical-align: middle !important; /* Align to middle to minimize line height impact */
+        height: auto !important; /* Ensure height doesn't expand */
+        max-height: none !important; /* Remove max-height constraints */
+        box-sizing: border-box !important; /* Include padding in width calculation */
+        margin: 0 !important; /* Remove any margins that could affect spacing */
       }
       
       /* Breathing animation for green word when it first appears - breathes twice (same as book icon) */
       .vocab-word-explained.word-breathing {
-        display: inline-block !important;
+        display: inline-block !important; /* Need inline-block for transform animation */
+        width: auto !important; /* Prevent width from expanding */
+        max-width: fit-content !important; /* Ensure it only wraps the text content */
         animation: wordGreenBreathing 0.8s ease-in-out;
       }
       
@@ -3789,14 +4057,14 @@ const WordSelector = {
       }
       
       .vocab-word-explained:hover {
-        background-color: rgba(22, 163, 74, 0.40) !important;
-        border-color: rgba(21, 128, 61, 0.7);
+        background-color: rgba(74, 222, 128, 0.8) !important; /* Lighter green on hover with slight transparency */
+        border-color: rgba(34, 197, 94, 0.9) !important; /* Lighter green border on hover with slight transparency */
       }
       
       .vocab-word-explained:active,
       .vocab-word-explained.vocab-word-clicking {
-        transform: scale(0.9) !important;
-        background-color: rgba(22, 163, 74, 0.35) !important;
+        transform: scale(0.97) !important; /* Reduced scale-down animation - less pronounced */
+        background-color: rgba(74, 222, 128, 0.8) !important; /* Lighter green on active with slight transparency */
       }
       
       /* Smooth animation for green word highlight disappearance - 0.3s duration */
@@ -3806,8 +4074,8 @@ const WordSelector = {
       
       @keyframes wordFadeOut {
         0% {
-          background-color: rgba(34, 197, 94, 0.20);
-          border-color: rgba(21, 128, 61, 0.4);
+          background-color: rgba(134, 239, 172, 0.7); /* Lighter green with slight transparency */
+          border-color: rgba(74, 222, 128, 0.8); /* Lighter green border with slight transparency */
           opacity: 1;
         }
         100% {
@@ -3817,24 +4085,26 @@ const WordSelector = {
         }
       }
       
-      /* Green cross button for explained words - no circle, just cross */
+      /* Green cross button for explained words - white circular background with thin green border */
       .vocab-word-remove-explained-btn {
         position: absolute;
-        top: -6px;
-        right: -6px;
-        width: 14px;
-        height: 14px;
-        background: transparent;
-        border: none;
+        top: -10px;
+        right: -10px;
+        width: 18px;
+        height: 18px;
+        background: white !important; /* White circular non-transparent background */
+        border: 1px solid #4ade80 !important; /* Thin green border */
+        border-radius: 50% !important; /* Circular shape */
         display: flex;
         align-items: center;
         justify-content: center;
         cursor: pointer;
-        opacity: 0.8;
-        transition: opacity 0.3s ease-in-out, transform 0.3s ease-in-out, scale 0.3s ease-in-out;
+        opacity: 0.9;
+        transition: opacity 0.3s ease-in-out, transform 0.3s ease-in-out, scale 0.3s ease-in-out, background-color 0.2s ease, border-color 0.2s ease;
         padding: 0;
         z-index: 999999;
-        filter: drop-shadow(0 1px 2px rgba(34, 197, 94, 0.4));
+        box-shadow: 0 1px 3px rgba(34, 197, 94, 0.2);
+        box-sizing: border-box;
       }
       
       /* Smooth animation for green cross button disappearance - 0.3s duration */
@@ -3858,19 +4128,21 @@ const WordSelector = {
       }
       
       .vocab-word-remove-explained-btn:hover {
-        transform: scale(1.2);
+        transform: scale(1.15);
         opacity: 1;
+        background-color: #f0fdf4 !important; /* Light green tint on hover */
+        border-color: #22c55e !important; /* Slightly darker green border on hover */
       }
       
       .vocab-word-remove-explained-btn:active {
-        transform: scale(0.9);
+        transform: scale(0.95);
       }
       
       .vocab-word-remove-explained-btn svg {
         pointer-events: none;
         display: block;
-        width: 12px;
-        height: 12px;
+        width: 10px;
+        height: 10px;
       }
       
       /* Contextual Meaning Popup Card */
@@ -4329,7 +4601,7 @@ const TextSelector = {
   askedTexts: new Map(), // Map of textKey -> {text, textKey, highlight, simplifiedText}
   
   // Container for simplified texts metadata
-  simplifiedTexts: new Map(), // Map of textKey -> {textStartIndex, textLength, text, simplifiedText, previousSimplifiedTexts, shouldAllowSimplifyMore}
+  simplifiedTexts: new Map(), // Map of textKey -> {textStartIndex, textLength, text, simplifiedText, previousSimplifiedTexts: Array, shouldAllowSimplifyMore}
   
   // Track if the feature is enabled
   isEnabled: false,
@@ -4483,6 +4755,11 @@ const TextSelector = {
   handleMouseUp(event) {
     // CRITICAL: Check if feature is enabled
     if (!this.isEnabled) {
+      return;
+    }
+    
+    // Allow button clicks to proceed - don't interfere with button interactions
+    if (event.target.closest('button') || event.target.tagName === 'BUTTON') {
       return;
     }
     
@@ -4815,17 +5092,25 @@ const TextSelector = {
     // Append icons wrapper to highlight
     highlight.appendChild(iconsWrapper);
     
-    // Position icons relative to highlight
+    // Position icons relative to highlight - on the left side, outside text content
+    // Force absolute positioning to ensure it's always outside the text
+    iconsWrapper.style.setProperty('position', 'absolute', 'important');
+    iconsWrapper.style.setProperty('display', 'flex', 'important');
+    iconsWrapper.style.setProperty('margin', '0', 'important');
+    iconsWrapper.style.setProperty('padding', '0', 'important');
+    
     const highlightRect = highlight.getBoundingClientRect();
     const isInModal = highlight.closest('.vocab-custom-content-modal');
     
     if (isInModal) {
       // In modal context: position to the left with sufficient margin
       iconsWrapper.style.setProperty('left', '-50px', 'important');
+      iconsWrapper.style.setProperty('right', 'auto', 'important');
       iconsWrapper.style.setProperty('top', '-2px', 'important');
     } else {
-      // In main webpage context: position to the left
-      iconsWrapper.style.setProperty('left', '-40px', 'important');
+      // In main webpage context: position to the left, outside text content
+      iconsWrapper.style.setProperty('left', '-45px', 'important');
+      iconsWrapper.style.setProperty('right', 'auto', 'important');
       iconsWrapper.style.setProperty('top', '0px', 'important');
     }
     
@@ -5040,17 +5325,25 @@ const TextSelector = {
     // Append wrapper to highlight
     highlight.appendChild(iconsWrapper);
     
-    // Position icons relative to highlight
+    // Position icons relative to highlight - on the left side, outside text content
+    // Force absolute positioning to ensure it's always outside the text
+    iconsWrapper.style.setProperty('position', 'absolute', 'important');
+    iconsWrapper.style.setProperty('display', 'flex', 'important');
+    iconsWrapper.style.setProperty('margin', '0', 'important');
+    iconsWrapper.style.setProperty('padding', '0', 'important');
+    
     const highlightRect = highlight.getBoundingClientRect();
     
     if (isInModal) {
       // In modal context: position to the left with sufficient margin to avoid overlap
       iconsWrapper.style.setProperty('left', '-50px', 'important'); // 50px to the left with !important
+      iconsWrapper.style.setProperty('right', 'auto', 'important');
       // Align upper border with text upper border by adjusting top position
       iconsWrapper.style.setProperty('top', '-2px', 'important'); // Slight adjustment to align upper borders
     } else {
-      // In main webpage context: position to the left as before
-      iconsWrapper.style.setProperty('left', '-40px', 'important'); // 40px to the left of the highlight
+      // In main webpage context: position to the left, outside text content
+      iconsWrapper.style.setProperty('left', '-45px', 'important'); // 45px to the left of the highlight
+      iconsWrapper.style.setProperty('right', 'auto', 'important');
       iconsWrapper.style.setProperty('top', '0px', 'important'); // Align with top edge of selected text
     }
     
@@ -5332,16 +5625,134 @@ const TextSelector = {
     btn.setAttribute('aria-label', 'View simplified text');
     btn.innerHTML = this.createBookIcon();
     
-    // Add click handler
-    btn.addEventListener('click', (e) => {
+    // Add click handler with improved toggle logic - use capture phase to ensure it fires
+    // Use a flag to prevent double-triggering from multiple event handlers
+    let isProcessing = false;
+    
+    const handleBookClick = (e) => {
+      // Prevent double-triggering
+      if (isProcessing) {
+        console.log('[TextSelector] Book click already processing, ignoring duplicate event');
+        return;
+      }
+      
       e.preventDefault();
       e.stopPropagation();
+      e.stopImmediatePropagation(); // Prevent other handlers from interfering
+      
+      isProcessing = true;
       
       console.log('[TextSelector] Book icon clicked for:', textKey);
       
-      // Get simplified text data
+      // Get simplified text data first
       const simplifiedData = this.simplifiedTexts.get(textKey);
-      if (simplifiedData) {
+      if (!simplifiedData) {
+        console.warn('[TextSelector] No simplified data found for textKey:', textKey);
+        isProcessing = false;
+        return;
+      }
+      
+      // Comprehensive check if chat dialog is already open for this text segment
+      // Handle all possible textKey format variations
+      // Also check if dialog is currently opening (expanding) to prevent race conditions
+      let isChatOpenForThisText = false;
+      let isDialogOpening = false;
+      
+      if (typeof ChatDialog !== 'undefined') {
+        // Check if dialog is currently opening (expanding animation)
+        if (ChatDialog.dialogContainer && ChatDialog.dialogContainer.classList.contains('expanding')) {
+          isDialogOpening = true;
+          console.log('[TextSelector] Dialog is currently opening (expanding), waiting...');
+        }
+        
+        // Only check if dialog is open if it's not currently opening
+        if (ChatDialog.isOpen && ChatDialog.currentTextKey && !isDialogOpening) {
+          const currentKey = ChatDialog.currentTextKey;
+          const originalTextKey = textKey;
+          
+          // Strategy 1: Exact match
+          if (currentKey === originalTextKey) {
+            isChatOpenForThisText = true;
+          }
+          // Strategy 2: Match with -selected suffix
+          else if (currentKey === `${originalTextKey}-selected`) {
+            isChatOpenForThisText = true;
+          }
+          // Strategy 3: Match when currentKey starts with textKey
+          else if (currentKey.startsWith(originalTextKey + '-')) {
+            isChatOpenForThisText = true;
+          }
+          // Strategy 4: Match when textKey is part of currentKey (for complex formats)
+          else if (currentKey.includes(originalTextKey)) {
+            isChatOpenForThisText = true;
+          }
+          // Strategy 5: Match by simplifiedData (textStartIndex and textLength)
+          else if (simplifiedData && simplifiedData.textStartIndex !== undefined && simplifiedData.textLength !== undefined) {
+            // Extract start index and length from currentKey if it's in format: contentType-tabId-startIndex-length
+            const currentKeyParts = currentKey.split('-');
+            if (currentKeyParts.length >= 4) {
+              const currentStartIndex = parseInt(currentKeyParts[currentKeyParts.length - 2]);
+              const currentLength = parseInt(currentKeyParts[currentKeyParts.length - 1]);
+              
+              if (currentStartIndex === simplifiedData.textStartIndex && 
+                  currentLength === simplifiedData.textLength) {
+                isChatOpenForThisText = true;
+              }
+            }
+            // Strategy 6: Match by checking if currentKey ends with startIndex-length pattern
+            const expectedSuffix = `${simplifiedData.textStartIndex}-${simplifiedData.textLength}`;
+            if (currentKey.endsWith(expectedSuffix)) {
+              isChatOpenForThisText = true;
+            }
+          }
+          // Strategy 7: Reverse check - check if originalTextKey contains parts of currentKey
+          if (!isChatOpenForThisText) {
+            const currentKeyPartsForBase = currentKey.split('-');
+            const originalKeyParts = originalTextKey.split('-');
+            if (currentKeyPartsForBase.length >= 2 && originalKeyParts.length >= 2) {
+              // Compare base parts (contentType-tabId)
+              const currentBase = currentKeyPartsForBase.slice(0, 2).join('-');
+              const originalBase = originalKeyParts.slice(0, 2).join('-');
+              if (currentBase === originalBase && simplifiedData) {
+                // If base matches and we have simplifiedData, check by position
+                if (currentKeyPartsForBase.length >= 4) {
+                  const currentStartIndex = parseInt(currentKeyPartsForBase[currentKeyPartsForBase.length - 2]);
+                  const currentLength = parseInt(currentKeyPartsForBase[currentKeyPartsForBase.length - 1]);
+                  if (currentStartIndex === simplifiedData.textStartIndex && 
+                      currentLength === simplifiedData.textLength) {
+                    isChatOpenForThisText = true;
+                  }
+                }
+              }
+            }
+          }
+          
+          console.log('[TextSelector] Toggle check - isOpen:', ChatDialog.isOpen, 'currentTextKey:', currentKey, 'originalTextKey:', originalTextKey, 'isChatOpenForThisText:', isChatOpenForThisText);
+        }
+      }
+      
+      // If dialog is currently opening, wait a bit and check again
+      if (isDialogOpening) {
+        console.log('[TextSelector] Dialog is opening, waiting before checking toggle state...');
+        setTimeout(() => {
+          isProcessing = false;
+          // Re-trigger the click after dialog finishes opening
+          setTimeout(() => {
+            handleBookClick(e);
+          }, 350); // Wait for expansion animation to complete (0.3s + small buffer)
+        }, 50);
+        return;
+      }
+      
+      if (isChatOpenForThisText) {
+        // Chat is already open for this text - close it (toggle off)
+        console.log('[TextSelector] Chat dialog is already open for this text, closing it');
+        ChatDialog.close();
+        isProcessing = false;
+        return;
+      }
+      
+      // Chat is not open for this text - open it (toggle on)
         // Pulsate the text
         const highlight = this.textToHighlights.get(textKey);
         if (highlight) {
@@ -5350,9 +5761,30 @@ const TextSelector = {
         
         // Open ChatDialog in simplified mode with selected context
         // Always use 'selected' context when opening from book icon to ensure expansion animation
+      // Note: ChatDialog.open() will handle the toggle if dialog is already open for same text
         ChatDialog.open(simplifiedData.text, textKey, 'simplified', simplifiedData, 'selected');
+      
+      // Reset processing flag after a delay to allow for state changes
+      // Use longer delay to ensure dialog is fully opened before allowing another click
+      setTimeout(() => {
+        isProcessing = false;
+      }, 600); // Wait for dialog to fully open (0.3s animation + buffer)
+    };
+    
+    // Add both click and mousedown handlers to ensure it works on all websites
+    // Use capture phase to ensure handlers fire before website handlers
+    btn.addEventListener('click', handleBookClick, { capture: true, passive: false });
+    btn.addEventListener('mousedown', (e) => {
+      // Only trigger on left mouse button and if click handler didn't fire
+      if (e.button === 0 && !isProcessing) {
+        // Small delay to let click handler run first if it exists
+        setTimeout(() => {
+          if (!isProcessing) {
+            handleBookClick(e);
+          }
+        }, 10);
       }
-    });
+    }, { capture: true, passive: false });
     
     // Remove breathing class after animation completes
     setTimeout(() => {
@@ -5382,7 +5814,7 @@ const TextSelector = {
    */
   createMagicMeaningButton(textKey) {
     const btn = document.createElement('button');
-    btn.className = 'vocab-text-magic-meaning-btn';
+    btn.className = 'vocab-text-magic-meaning-btn magic-meaning-breathing';
     btn.setAttribute('aria-label', 'Get magic meaning');
     btn.innerHTML = this.createMagicMeaningIcon();
     
@@ -5402,6 +5834,27 @@ const TextSelector = {
       
       // Add fast pulsating animation to the text
       highlight.classList.add('vocab-text-loading');
+      
+      // Show spinner in place of magic-meaning button
+      const iconsWrapper = highlight.querySelector('.vocab-text-icons-wrapper');
+      if (iconsWrapper) {
+        const magicBtn = iconsWrapper.querySelector('.vocab-text-magic-meaning-btn');
+        if (magicBtn) {
+          // Hide the button and show spinner
+          magicBtn.style.display = 'none';
+          
+          // Create and show spinner
+          const spinnerContainer = document.createElement('div');
+          spinnerContainer.className = 'vocab-magic-meaning-spinner-container';
+          spinnerContainer.setAttribute('data-text-key', textKey);
+          
+          const spinner = document.createElement('div');
+          spinner.className = 'vocab-magic-meaning-spinner';
+          
+          spinnerContainer.appendChild(spinner);
+          iconsWrapper.appendChild(spinnerContainer);
+        }
+      }
       
       // Call handleMagicMeaning for this specific text only
       ButtonPanel.handleMagicMeaningForText(textKey);
@@ -5467,6 +5920,12 @@ const TextSelector = {
         overflow: visible;
         transition: text-decoration-color 0.3s ease-in-out, opacity 0.3s ease-in-out;
         opacity: 1;
+        font-size: inherit !important; /* Preserve original font size */
+        font-family: inherit !important; /* Preserve original font family */
+        font-weight: inherit !important; /* Preserve original font weight */
+        line-height: inherit !important; /* Preserve original line height */
+        color: inherit !important; /* Preserve original text color */
+        letter-spacing: inherit !important; /* Preserve original letter spacing */
       }
       
       /* Smooth animation for underline appearance - 0.3s duration */
@@ -5509,6 +5968,12 @@ const TextSelector = {
       .vocab-text-highlight * {
         text-decoration: inherit;
         box-sizing: border-box;
+        font-size: inherit !important; /* Preserve original font size for child elements */
+        font-family: inherit !important; /* Preserve original font family for child elements */
+        font-weight: inherit !important; /* Preserve original font weight for child elements */
+        line-height: inherit !important; /* Preserve original line height for child elements */
+        color: inherit !important; /* Preserve original text color for child elements */
+        letter-spacing: inherit !important; /* Preserve original letter spacing for child elements */
       }
       
       /* Remove button - Solid purple circle with white cross on top-left */
@@ -5590,15 +6055,24 @@ const TextSelector = {
       
       /* Wrapper containers for icon groups */
       .vocab-text-icons-wrapper {
-        position: absolute;
-        display: flex;
+        position: absolute !important; /* Force absolute positioning */
+        display: flex !important;
         flex-direction: column;
         align-items: center;
         gap: 4px;
-        z-index: 10000003;
+        z-index: 10000003 !important;
         animation: vocab-icon-appear 0.4s ease-out;
-        pointer-events: auto;
+        pointer-events: auto !important;
         transition: opacity 0.3s ease-out, transform 0.3s ease-out;
+        left: -45px !important; /* Default: position on left side, outside text */
+        right: auto !important; /* Ensure right is not set */
+        top: 0px !important; /* Align with top of text */
+        margin: 0 !important; /* Remove any margins */
+        padding: 0 !important; /* Remove any padding */
+        width: auto !important; /* Auto width */
+        height: auto !important; /* Auto height */
+        min-width: 0 !important; /* No min-width */
+        max-width: none !important; /* No max-width */
       }
 
       /* Modal context: enhanced styling */
@@ -5608,6 +6082,8 @@ const TextSelector = {
         border-radius: 8px;
         padding: 4px;
         box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+        left: -50px !important; /* Position on left side in modal context */
+        right: auto !important; /* Ensure right is not set */
       }
       
       /* Chat button - Solid purple circle with white chat icon on top-left (bigger) */
@@ -5615,7 +6091,7 @@ const TextSelector = {
       @keyframes vocab-icon-appear {
         0% {
           opacity: 0;
-          transform: translateX(-15px) scale(0.8);
+          transform: translateX(-15px) scale(0.8); /* Slide from left */
         }
         60% {
           transform: translateX(0) scale(1.05);
@@ -5666,19 +6142,24 @@ const TextSelector = {
       /* Book button - Wireframe open book icon on top-left */
       .vocab-text-book-btn {
         position: relative;
-        width: 24px;
-        height: 24px;
-        background: transparent;
-        border: none;
-        border-radius: 4px;
-        display: flex;
+        width: 28px;
+        height: 28px;
+        background: #d1fae5 !important; /* Circular light green opaque container (no transparency) */
+        border: 1px solid rgba(34, 197, 94, 0.4) !important; /* Thin green border */
+        border-radius: 50% !important; /* Circular shape */
+        display: flex !important;
         align-items: center;
         justify-content: center;
-        cursor: pointer;
+        cursor: pointer !important;
         opacity: 0.95;
         transition: opacity 0.2s ease, transform 0.15s ease;
         padding: 0;
         flex-shrink: 0;
+        box-shadow: 0 2px 4px rgba(34, 197, 94, 0.2); /* Subtle green shadow for depth */
+        pointer-events: auto !important; /* Ensure button is clickable on all websites */
+        z-index: 10000004 !important; /* Ensure button is above other elements */
+        user-select: none !important; /* Prevent text selection */
+        -webkit-user-select: none !important;
       }
       
       .vocab-text-book-btn:hover {
@@ -5703,30 +6184,64 @@ const TextSelector = {
         animation: bookBreathing 1.6s ease-in-out;
       }
       
-      /* Magic-meaning button - Purple sparkle icon with light purple background */
+      /* Magic-meaning button - Purple sparkle icon with light purple opaque background */
       .vocab-text-magic-meaning-btn {
-        position: relative;
-        width: 32px;
-        height: 32px;
-        background: rgba(149, 39, 245, 0.15);
-        border: none;
-        border-radius: 50%;
-        display: flex;
+        position: relative !important;
+        width: 32px !important;
+        height: 32px !important;
+        min-width: 32px !important; /* Ensure minimum width */
+        min-height: 32px !important; /* Ensure minimum height */
+        max-width: 32px !important; /* Ensure maximum width */
+        max-height: 32px !important; /* Ensure maximum height */
+        aspect-ratio: 1 / 1 !important; /* Force perfect square/circle */
+        background: #e9d5ff !important; /* Circular light purple opaque container (no transparency) */
+        border: 1px solid rgba(149, 39, 245, 0.4) !important; /* Thin purple border */
+        border-radius: 50% !important; /* Circular shape */
+        display: flex !important;
         align-items: center;
         justify-content: center;
-        cursor: pointer;
+        cursor: pointer !important;
         opacity: 0.95;
         transition: opacity 0.2s ease, transform 0.15s ease, background-color 0.2s ease;
-        padding: 0;
+        padding: 0 !important;
         flex-shrink: 0;
-        box-sizing: border-box;
-        padding-top: 1px;
+        box-sizing: border-box !important; /* Include border in width/height */
+        box-shadow: 0 2px 4px rgba(149, 39, 245, 0.2); /* Subtle purple shadow for depth */
+        margin: 0 !important; /* No margin */
+      }
+      
+      /* Magic-meaning button breathing animation when first appears */
+      .vocab-text-magic-meaning-btn.magic-meaning-breathing {
+        animation: magicMeaningBreathing 0.8s ease-in-out;
+      }
+      
+      @keyframes magicMeaningBreathing {
+        0% {
+          transform: scale(1);
+          opacity: 0.7;
+        }
+        25% {
+          transform: scale(1.3);
+          opacity: 1;
+        }
+        50% {
+          transform: scale(1);
+          opacity: 0.8;
+        }
+        75% {
+          transform: scale(1.3);
+          opacity: 1;
+        }
+        100% {
+          transform: scale(1);
+          opacity: 1;
+        }
       }
       
       .vocab-text-magic-meaning-btn:hover {
         transform: scale(1.1);
         opacity: 1;
-        background-color: rgba(149, 39, 245, 0.25);
+        background-color: #ddd6fe !important; /* Slightly darker purple on hover */
       }
       
       .vocab-text-magic-meaning-btn:active {
@@ -5740,6 +6255,70 @@ const TextSelector = {
         height: 22px;
         filter: drop-shadow(0 1px 2px rgba(149, 39, 245, 0.3));
         transform: translateY(-1px);
+      }
+      
+      /* Spinner container for magic-meaning button during API call */
+      .vocab-magic-meaning-spinner-container {
+        position: relative !important;
+        width: 32px !important;
+        height: 32px !important;
+        min-width: 32px !important; /* Ensure minimum width */
+        min-height: 32px !important; /* Ensure minimum height */
+        max-width: 32px !important; /* Ensure maximum width */
+        max-height: 32px !important; /* Ensure maximum height */
+        aspect-ratio: 1 / 1 !important; /* Force perfect square/circle */
+        background: white !important; /* Circular white opaque container */
+        border: 1px solid rgba(149, 39, 245, 0.4) !important; /* Thin purple border */
+        border-radius: 50% !important; /* Circular shape */
+        display: block !important; /* Block display for absolute child positioning */
+        flex-shrink: 0 !important;
+        box-shadow: 0 2px 4px rgba(149, 39, 245, 0.2); /* Subtle purple shadow */
+        box-sizing: border-box !important; /* Include border in width/height */
+        padding: 0 !important; /* No padding */
+        margin: 0 !important; /* No margin */
+        overflow: visible !important; /* Ensure spinner is visible */
+        line-height: 0 !important; /* Remove line height */
+        vertical-align: middle !important; /* Vertical alignment */
+      }
+      
+      /* Spinner - dark purple spinning circle */
+      .vocab-magic-meaning-spinner {
+        position: absolute !important; /* Use absolute positioning for perfect centering */
+        width: 18px !important;
+        height: 18px !important;
+        min-width: 18px !important; /* Ensure minimum width */
+        min-height: 18px !important; /* Ensure minimum height */
+        max-width: 18px !important; /* Ensure maximum width */
+        max-height: 18px !important; /* Ensure maximum height */
+        aspect-ratio: 1 / 1 !important; /* Force perfect square/circle */
+        border-width: 2px 2px 2px 2px !important; /* Uniform border width on all sides */
+        border-style: solid !important; /* Solid border style */
+        border-color: rgba(149, 39, 245, 0.2) !important; /* Light purple border */
+        border-top-color: #9527F5 !important; /* Dark purple top border for spinner effect */
+        border-radius: 50% !important; /* Perfect circle */
+        animation: vocab-magic-spinner-spin 0.8s linear infinite !important; /* Ensure animation runs */
+        box-sizing: border-box !important; /* Include border in width/height */
+        padding: 0 !important; /* No padding */
+        margin: 0 !important; /* No margin */
+        flex-shrink: 0 !important; /* Prevent shrinking */
+        display: block !important; /* Block display */
+        top: 50% !important; /* Center vertically */
+        left: 50% !important; /* Center horizontally */
+        transform-origin: center center !important; /* Rotation center */
+        line-height: 0 !important; /* Remove line height */
+        vertical-align: middle !important; /* Vertical alignment */
+        overflow: visible !important; /* Allow spinner to be visible */
+        will-change: transform !important; /* Optimize animation */
+        /* Initial transform will be set by animation */
+      }
+      
+      @keyframes vocab-magic-spinner-spin {
+        0% {
+          transform: translate(-50%, -50%) rotate(0deg);
+        }
+        100% {
+          transform: translate(-50%, -50%) rotate(360deg);
+        }
       }
       
       @keyframes bookBreathing {
@@ -5860,7 +6439,7 @@ const TextSelector = {
           background-color: transparent;
         }
         50% {
-          background-color: rgba(149, 39, 245, 0.25);
+          background-color: rgba(196, 181, 253, 0.7); /* Purple with slight transparency - lighter shade */
         }
         100% {
           background-color: transparent;
@@ -5877,7 +6456,7 @@ const TextSelector = {
           background-color: transparent;
         }
         50% {
-          background-color: rgba(149, 39, 245, 0.15);
+          background-color: rgba(196, 181, 253, 0.7); /* Purple with slight transparency - lighter shade */
         }
       }
       
@@ -5994,6 +6573,106 @@ const TextSelector = {
         background: #e3f2fd;
         color: #1565c0;
         border-left: 4px solid #1565c0;
+      }
+      
+      /* Top-right ask-about-page button */
+      .vocab-ask-about-page-btn {
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        width: 48px;
+        height: 48px;
+        background: #9527F5;
+        border: none;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        opacity: 0.95;
+        transition: opacity 0.2s ease, transform 0.15s ease, box-shadow 0.2s ease;
+        padding: 0;
+        z-index: 10000000;
+        box-shadow: 0 2px 8px rgba(149, 39, 245, 0.4);
+        pointer-events: auto;
+        user-select: none;
+        -webkit-user-select: none;
+      }
+      
+      /* Hidden state - button is off-screen to the right */
+      .vocab-ask-about-page-btn-hidden {
+        transform: translateX(100px);
+        opacity: 0;
+        pointer-events: none;
+      }
+      
+      /* Visible state - button slides in from the right */
+      .vocab-ask-about-page-btn-visible {
+        transform: translateX(0);
+        opacity: 0.95;
+        pointer-events: auto;
+        transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.4s ease;
+      }
+      
+      .vocab-ask-about-page-btn-visible:hover {
+        transform: translateX(0) scale(1.1);
+        opacity: 1;
+        box-shadow: 0 4px 12px rgba(149, 39, 245, 0.6);
+      }
+      
+      .vocab-ask-about-page-btn-visible:active {
+        transform: translateX(0) scale(0.95);
+      }
+      
+      .vocab-ask-about-page-btn svg {
+        pointer-events: none;
+        display: block;
+        width: 24px;
+        height: 24px;
+      }
+      
+      /* Tooltip for ask-about-page button - Similar to import-content button tooltip */
+      .vocab-ask-about-page-tooltip {
+        position: fixed !important;
+        background: white !important;
+        color: #b29cfb !important;
+        padding: 10px 20px !important;
+        border-radius: 20px !important;
+        font-size: 13px !important;
+        font-weight: 500 !important;
+        white-space: nowrap !important;
+        text-align: center !important;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif !important;
+        box-shadow: 0 0 20px rgba(178, 156, 251, 0.3), 0 4px 12px rgba(178, 156, 251, 0.2) !important;
+        z-index: 9999999 !important;
+        pointer-events: none !important;
+        opacity: 0 !important;
+        transform: translateY(5px) scale(0.95) !important;
+        transition: opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1), 
+                   transform 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        visibility: visible !important;
+        width: auto !important;
+        height: auto !important;
+        min-height: 40px !important;
+      }
+      
+      .vocab-ask-about-page-tooltip.visible {
+        opacity: 1 !important;
+        transform: translateY(0) scale(1) !important;
+      }
+      
+      /* Tooltip arrow - pointing upward to the button (since tooltip is below, on the left side) */
+      .vocab-ask-about-page-tooltip::after {
+        content: '';
+        position: absolute;
+        bottom: 100%;
+        right: 20px;
+        border: 6px solid transparent;
+        border-bottom-color: white;
+        filter: drop-shadow(0 2px 3px rgba(167, 139, 250, 0.2));
       }
     `;
     
@@ -6206,6 +6885,7 @@ const ChatDialog = {
   isRecording: false, // Track if currently recording voice
   mediaRecorder: null, // MediaRecorder instance
   audioChunks: [], // Store audio chunks during recording
+  pageSummary: null, // Store the fetched page summary
   
   /**
    * Initialize chat dialog
@@ -6237,6 +6917,19 @@ const ChatDialog = {
     
     // Set the chat context
     this.chatContext = chatContext;
+    
+    // Clear page summary when opening a new page (if textKey starts with 'page-general')
+    // This ensures the button is enabled for a new page
+    if (textKey && textKey.startsWith('page-general')) {
+      // Only clear if it's a different page (different textKey)
+      if (this.currentTextKey !== textKey && this.currentTextKey !== null) {
+        console.log('[ChatDialog] Clearing page summary for new page');
+        this.pageSummary = null;
+      }
+    } else {
+      // Clear summary if not a page-general context
+      this.pageSummary = null;
+    }
     
     // Generate proper contextual textKey based on chat context
     let contextualTextKey;
@@ -6285,8 +6978,9 @@ const ChatDialog = {
       console.log('[ChatDialog] Dialog already open for same textKey and context:', contextualTextKey);
       // If opening in simplified mode and already open for same text
       if (mode === 'simplified') {
-        // Do nothing - popup is already open for this text
-        console.log('[ChatDialog] Already open for this text, doing nothing');
+        // Dialog is already open - this means user clicked book icon again, so close it
+        console.log('[ChatDialog] Already open for this text, closing it (toggle off)');
+        this.close();
         return;
       }
       // If opening in 'ask' mode, just switch to ask tab
@@ -6300,7 +6994,7 @@ const ChatDialog = {
     // If dialog is open for different text, close it first
     if (this.isOpen) {
       console.log('[ChatDialog] Dialog open for different text, closing first');
-      // Force immediate cleanup if minimizing (to prevent invisible dialog)
+      // Force immediate cleanup if minimizing or expanding (to prevent invisible dialog)
       const wasMinimizing = this.dialogContainer && this.dialogContainer.classList.contains('minimizing');
       const wasExpanding = this.dialogContainer && this.dialogContainer.classList.contains('expanding');
       
@@ -6308,8 +7002,19 @@ const ChatDialog = {
         // Cancel any ongoing animation and clean up immediately
         if (this.dialogContainer) {
           this.dialogContainer.classList.remove('minimizing', 'expanding');
-          this.dialogContainer.style.setProperty('transition', 'none');
-          this.dialogContainer.style.setProperty('animation', 'none');
+          this.dialogContainer.style.removeProperty('transition');
+          this.dialogContainer.style.removeProperty('animation');
+          
+          // Clean up CSS variables
+          this.dialogContainer.style.removeProperty('--minimize-target-x');
+          this.dialogContainer.style.removeProperty('--minimize-target-y');
+          this.dialogContainer.style.removeProperty('--minimize-start-transform');
+          this.dialogContainer.style.removeProperty('--minimize-end-transform');
+          this.dialogContainer.style.removeProperty('--expand-start-transform');
+          this.dialogContainer.style.removeProperty('--expand-end-transform');
+          
+          // Force a reflow to ensure cleanup is applied
+          void this.dialogContainer.offsetHeight;
         }
       }
       
@@ -6317,16 +7022,27 @@ const ChatDialog = {
       
       // Wait for close animation to complete and ensure cleanup
       setTimeout(() => {
-        // Double-check dialog is fully removed
+        // Double-check dialog is fully removed and cleaned up
         if (this.dialogContainer && this.dialogContainer.parentNode) {
           console.log('[ChatDialog] Dialog still exists, forcing removal');
+          // Clean up any remaining animation classes and CSS variables
+          this.dialogContainer.classList.remove('minimizing', 'expanding', 'visible');
+          this.dialogContainer.style.removeProperty('animation');
+          this.dialogContainer.style.removeProperty('transition');
+          this.dialogContainer.style.removeProperty('--minimize-target-x');
+          this.dialogContainer.style.removeProperty('--minimize-target-y');
+          this.dialogContainer.style.removeProperty('--minimize-start-transform');
+          this.dialogContainer.style.removeProperty('--minimize-end-transform');
+          this.dialogContainer.style.removeProperty('--expand-start-transform');
+          this.dialogContainer.style.removeProperty('--expand-end-transform');
+          
           this.dialogContainer.remove();
           this.dialogContainer = null;
           this.isOpen = false;
         }
         console.log('[ChatDialog] Opening dialog after close delay');
         this.openDialog(text, contextualTextKey, mode, simplifiedData);
-      }, 500); // Increased delay to ensure proper cleanup
+      }, 350); // Wait for animation to complete (300ms) + small buffer
     } else {
       // Dialog is not open, open it
       console.log('[ChatDialog] Dialog not open, opening directly');
@@ -6364,7 +7080,30 @@ const ChatDialog = {
     console.log('[ChatDialog] Chat history for contextualTextKey', contextualTextKey, ':', this.chatHistory);
     
     this.mode = mode;
-    this.simplifiedData = simplifiedData;
+    
+    // For simplified mode, always load the latest data from TextSelector.simplifiedTexts
+    // This ensures we get all explanations including ones generated via "Simplify more"
+    if (mode === 'simplified' && contextualTextKey) {
+      // Get original textKey (remove -selected suffix if present)
+      const originalTextKey = contextualTextKey.replace(/-selected$/, '').replace(/-generic$/, '');
+      const latestSimplifiedData = TextSelector.simplifiedTexts.get(originalTextKey);
+      
+      if (latestSimplifiedData) {
+        console.log('[ChatDialog] Loaded latest simplified data from TextSelector:', latestSimplifiedData);
+        console.log('[ChatDialog] Previous simplified texts count:', latestSimplifiedData.previousSimplifiedTexts?.length || 0);
+        console.log('[ChatDialog] Current simplified text exists:', !!latestSimplifiedData.simplifiedText);
+        this.simplifiedData = latestSimplifiedData;
+      } else if (simplifiedData) {
+        // Fallback to passed simplifiedData if not found in TextSelector
+        console.log('[ChatDialog] Using passed simplifiedData (not found in TextSelector)');
+        this.simplifiedData = simplifiedData;
+      } else {
+        console.warn('[ChatDialog] No simplified data available for simplified mode');
+        this.simplifiedData = null;
+      }
+    } else {
+      this.simplifiedData = simplifiedData;
+    }
     
     console.log('[ChatDialog] Creating dialog...');
     this.createDialog();
@@ -6384,21 +7123,44 @@ const ChatDialog = {
    */
   hideFocusButtonsForCustomContent(textKey) {
     // Hide focus buttons for general chat (chat icon), show for selected text chat (book icon)
-    const shouldHideFocus = this.chatContext === 'general';
+    // Also hide for page-general (ask-about-page button) - check for both 'page-general' and 'page-general-generic'
+    const isPageGeneral = textKey && (textKey === 'page-general' || textKey.startsWith('page-general'));
     
-    if (shouldHideFocus) {
-      console.log('[ChatDialog] Hiding Focus buttons for general chat:', textKey);
+    if (isPageGeneral) {
+      console.log('[ChatDialog] Hiding Focus buttons for page-general:', textKey, 'chatContext:', this.chatContext);
       
       // Hide the top-right Focus button
       const topRightFocusBtn = this.dialogContainer.querySelector('.vocab-chat-focus-btn-top-right');
       if (topRightFocusBtn) {
         topRightFocusBtn.style.display = 'none';
+        topRightFocusBtn.style.visibility = 'hidden';
+        console.log('[ChatDialog] Focus button hidden via hideFocusButtonsForCustomContent');
       }
       
       // Hide Focus button containers in tab contents
       const focusBtnContainers = this.dialogContainer.querySelectorAll('.vocab-chat-focus-btn-container');
       focusBtnContainers.forEach(container => {
         container.style.display = 'none';
+        container.style.visibility = 'hidden';
+      });
+      
+      console.log('[ChatDialog] Focus buttons hidden for page-general');
+    } else if (this.chatContext === 'general') {
+      // Hide for other general chats too
+      console.log('[ChatDialog] Hiding Focus buttons for general chat:', textKey);
+      
+      // Hide the top-right Focus button
+      const topRightFocusBtn = this.dialogContainer.querySelector('.vocab-chat-focus-btn-top-right');
+      if (topRightFocusBtn) {
+        topRightFocusBtn.style.display = 'none';
+        topRightFocusBtn.style.visibility = 'hidden';
+      }
+      
+      // Hide Focus button containers in tab contents
+      const focusBtnContainers = this.dialogContainer.querySelectorAll('.vocab-chat-focus-btn-container');
+      focusBtnContainers.forEach(container => {
+        container.style.display = 'none';
+        container.style.visibility = 'hidden';
       });
       
       console.log('[ChatDialog] Focus buttons hidden for general chat');
@@ -6409,12 +7171,14 @@ const ChatDialog = {
       const topRightFocusBtn = this.dialogContainer.querySelector('.vocab-chat-focus-btn-top-right');
       if (topRightFocusBtn) {
         topRightFocusBtn.style.display = 'block';
+        topRightFocusBtn.style.visibility = 'visible';
       }
       
       // Show Focus button containers in tab contents
       const focusBtnContainers = this.dialogContainer.querySelectorAll('.vocab-chat-focus-btn-container');
       focusBtnContainers.forEach(container => {
         container.style.display = 'block';
+        container.style.visibility = 'visible';
       });
       
       console.log('[ChatDialog] Focus buttons shown for selected text chat');
@@ -6426,6 +7190,19 @@ const ChatDialog = {
    */
   close() {
     console.log('[ChatDialog] ===== CLOSE FUNCTION CALLED =====');
+    
+    // Prevent closing if dialog is currently opening (expanding)
+    if (this.dialogContainer && this.dialogContainer.classList.contains('expanding')) {
+      console.log('[ChatDialog] Dialog is currently opening (expanding), cannot close yet');
+      return;
+    }
+    
+    // If already minimizing, don't close again (prevent double-close)
+    if (this.dialogContainer && this.dialogContainer.classList.contains('minimizing')) {
+      console.log('[ChatDialog] Dialog is already minimizing, ignoring close request');
+      return;
+    }
+    
     console.log('[ChatDialog] Current state - isOpen:', this.isOpen, 'currentTextKey:', this.currentTextKey);
     console.log('[ChatDialog] chatContext:', this.chatContext);
     console.log('[ChatDialog] dialogContainer exists:', !!this.dialogContainer);
@@ -6448,10 +7225,21 @@ const ChatDialog = {
     this.saveDimensions();
     
     // Check if we should minimize to book icon (only for selected text chat with textKey)
+    // OR minimize to ask-about-page button (for page-general context)
     console.log('[ChatDialog] ===== CHECKING MINIMIZATION CONDITIONS =====');
     console.log('[ChatDialog] Condition 1 - currentTextKey exists:', !!this.currentTextKey, 'value:', this.currentTextKey);
     console.log('[ChatDialog] Condition 2 - chatContext === "selected":', this.chatContext === 'selected', 'value:', this.chatContext);
-    console.log('[ChatDialog] Condition 3 - dialogContainer exists:', !!this.dialogContainer);
+    console.log('[ChatDialog] Condition 3 - currentTextKey === "page-general":', this.currentTextKey === 'page-general');
+    console.log('[ChatDialog] Condition 4 - dialogContainer exists:', !!this.dialogContainer);
+    
+    // Check for ask-about-page button if textKey is 'page-general' (check for both original and transformed key)
+    let askAboutPageButton = null;
+    if (this.currentTextKey && (this.currentTextKey === 'page-general' || this.currentTextKey.startsWith('page-general')) && this.dialogContainer) {
+      askAboutPageButton = document.getElementById('vocab-ask-about-page-btn');
+      if (askAboutPageButton) {
+        console.log('[ChatDialog] ✓✓✓ FOUND ASK-ABOUT-PAGE BUTTON! Will minimize to it...');
+      }
+    }
     
     if (this.currentTextKey && this.chatContext === 'selected' && this.dialogContainer) {
       console.log('[ChatDialog] ✓ All conditions met! Proceeding with minimization animation...');
@@ -6567,73 +7355,203 @@ const ChatDialog = {
       if (bookIcon) {
         console.log('[ChatDialog] ✓✓✓ FOUND BOOK ICON! Starting minimization animation...');
         
-        // Get current dialog position and size
-        const dialogRect = this.dialogContainer.getBoundingClientRect();
-        const dialogCenterX = dialogRect.left + dialogRect.width / 2;
-        const dialogCenterY = dialogRect.top + dialogRect.height / 2;
+        // Check if dialogContainer still exists before proceeding
+        if (!this.dialogContainer) {
+          console.error('[ChatDialog] ERROR: dialogContainer is null, cannot minimize');
+          return;
+        }
         
-        // Get book icon position
+        // Force a reflow to ensure book icon is in its final position
+        void bookIcon.offsetHeight;
+        
+        // Get dialog size (use getBoundingClientRect for accurate size)
+        const dialogRect = this.dialogContainer.getBoundingClientRect();
+        const dialogHeight = dialogRect.height;
+        const dialogWidth = dialogRect.width;
+        
+        // Get book icon position (use getBoundingClientRect for accurate viewport coordinates)
+        // Force a reflow before getting position to ensure accurate coordinates
+        void bookIcon.offsetHeight;
         const bookIconRect = bookIcon.getBoundingClientRect();
         const bookIconCenterX = bookIconRect.left + bookIconRect.width / 2;
         const bookIconCenterY = bookIconRect.top + bookIconRect.height / 2;
         
-        // Calculate the translation needed to move dialog center to book icon center
-        const targetX = bookIconCenterX - dialogCenterX;
-        const targetY = bookIconCenterY - dialogCenterY;
-        
-        console.log('[ChatDialog] Dialog center:', { x: dialogCenterX, y: dialogCenterY });
         console.log('[ChatDialog] Book icon center:', { x: bookIconCenterX, y: bookIconCenterY });
-        console.log('[ChatDialog] Target translation:', { x: targetX, y: targetY });
+        console.log('[ChatDialog] Book icon rect:', { left: bookIconRect.left, top: bookIconRect.top, width: bookIconRect.width, height: bookIconRect.height });
+        console.log('[ChatDialog] Dialog size:', { width: dialogWidth, height: dialogHeight });
         
-        // Calculate the final transform value
-        // The dialog is positioned with top: 50% and transform: translateY(-50%) translateX(0)
-        // This means the dialog center is at viewportHeight / 2
-        // We need to move it to bookIconCenterY
-        // Since we start with translateY(-50%), we need to calculate the final absolute position
-        const dialogHeight = dialogRect.height;
+        // Calculate the translation needed to move dialog center to book icon center
+        // IMPORTANT: Always calculate from the dialog's DEFAULT position, not its current position
+        // This ensures consistent minimization regardless of where the dialog was moved to
+        // The dialog's default position is:
+        // - position: fixed
+        // - right: 0
+        // - top: 50%
+        // - transform: translateY(-50%) translateX(0) when visible
+        // This means the dialog center is at:
+        // X: viewportWidth - dialogWidth/2 (from right edge)
+        // Y: viewportHeight / 2 (from top: 50% with translateY(-50%))
+        
         const viewportHeight = window.innerHeight;
-        const dialogTop = viewportHeight / 2; // Current top position (50% of viewport)
-        const currentCenterY = dialogTop; // Dialog center Y (with -50% translateY, center is at top)
+        const viewportWidth = window.innerWidth;
+        
+        // Calculate DEFAULT dialog center position (not current position)
+        // Default X: from right edge (right: 0), center is at viewportWidth - dialogWidth/2
+        const defaultDialogCenterX = viewportWidth - dialogWidth / 2;
+        // Default Y: from top: 50% with translateY(-50%), center is at viewportHeight / 2
+        const defaultDialogCenterY = viewportHeight / 2;
+        
+        // Calculate target position: book icon center (viewport coordinates)
+        // This is ALWAYS the same - the book icon's position is fixed
+        const targetCenterX = bookIconCenterX;
         const targetCenterY = bookIconCenterY;
-        const translateYOffset = targetCenterY - currentCenterY; // How much to move from current center
         
-        // Calculate final translateY in pixels (convert -50% to pixels and add offset)
-        // -50% of dialogHeight = -dialogHeight/2
-        // Final position = -dialogHeight/2 + translateYOffset
-        const finalTranslateY = -dialogHeight / 2 + translateYOffset;
+        // Calculate how much to move from DEFAULT center to target center
+        // This ensures consistent calculation regardless of dialog's current position
+        const deltaX = targetCenterX - defaultDialogCenterX;
+        const deltaY = targetCenterY - defaultDialogCenterY;
         
-        console.log('[ChatDialog] Transform calculation:');
-        console.log('[ChatDialog]   viewportHeight:', viewportHeight);
-        console.log('[ChatDialog]   dialogHeight:', dialogHeight);
-        console.log('[ChatDialog]   dialogTop (50%):', dialogTop);
-        console.log('[ChatDialog]   currentCenterY:', currentCenterY);
-        console.log('[ChatDialog]   targetCenterY (book icon):', targetCenterY);
-        console.log('[ChatDialog]   translateYOffset:', translateYOffset);
-        console.log('[ChatDialog]   finalTranslateY (pixels):', finalTranslateY);
+        // Calculate final transform values
+        // Start transform: translateY(-50%) translateX(0) (default position)
+        // To move the center to the book icon:
+        // - translateY: -50% (to center vertically) + deltaY in pixels
+        // - translateX: 0 (from right edge) + deltaX in pixels
+        
+        // Convert -50% to pixels: -dialogHeight / 2
+        const negativeHalfHeight = -dialogHeight / 2; // -50% of height in pixels
+        const finalTranslateY = negativeHalfHeight + deltaY;
+        
+        // For X: dialog is positioned from right edge, so translateX(0) means no horizontal offset
+        // To move center to book icon center, we need to move by deltaX
+        const finalTranslateX = deltaX;
+        
+        console.log('[ChatDialog] Transform calculation (using DEFAULT position for consistency):');
+        console.log('[ChatDialog]   viewportHeight:', viewportHeight, 'viewportWidth:', viewportWidth);
+        console.log('[ChatDialog]   dialogHeight:', dialogHeight, 'dialogWidth:', dialogWidth);
+        console.log('[ChatDialog]   defaultDialogCenterX:', defaultDialogCenterX, 'defaultDialogCenterY:', defaultDialogCenterY);
+        console.log('[ChatDialog]   targetCenterX (book icon):', targetCenterX, 'targetCenterY (book icon):', targetCenterY);
+        console.log('[ChatDialog]   deltaX:', deltaX, 'deltaY:', deltaY);
+        console.log('[ChatDialog]   finalTranslateX:', finalTranslateX, 'finalTranslateY:', finalTranslateY);
+        
+        // Get current transform to use as start transform
+        const currentComputedStyle = window.getComputedStyle(this.dialogContainer);
+        const currentTransform = currentComputedStyle.transform;
+        const currentTop = currentComputedStyle.top;
+        const currentRight = currentComputedStyle.right;
+        
+        // Calculate current dialog center from actual position
+        const currentDialogCenterX = dialogRect.left + dialogWidth / 2;
+        const currentDialogCenterY = dialogRect.top + dialogHeight / 2;
+        
+        // Calculate delta from CURRENT position to book icon (not default position)
+        // This ensures smooth animation from wherever the dialog currently is
+        const deltaXFromCurrent = targetCenterX - currentDialogCenterX;
+        const deltaYFromCurrent = targetCenterY - currentDialogCenterY;
+        
+        // Parse current transform to get translate values
+        // If transform is "none" or doesn't match expected format, use default
+        let startTranslateX = 0;
+        let startTranslateY = -dialogHeight / 2; // Default: -50% of height
+        
+        if (currentTransform && currentTransform !== 'none') {
+          // Try to extract translate values from matrix or translate string
+          const matrixMatch = currentTransform.match(/matrix\([^)]+\)/);
+          if (matrixMatch) {
+            // For matrix, we need to extract translateX and translateY
+            // Matrix format: matrix(a, b, c, d, tx, ty)
+            const values = currentTransform.match(/[-+]?[0-9]*\.?[0-9]+/g);
+            if (values && values.length >= 6) {
+              startTranslateX = parseFloat(values[4]) || 0;
+              startTranslateY = parseFloat(values[5]) || -dialogHeight / 2;
+            }
+          } else {
+            // Try to match translateX and translateY
+            const translateXMatch = currentTransform.match(/translateX\(([^)]+)\)/);
+            const translateYMatch = currentTransform.match(/translateY\(([^)]+)\)/);
+            if (translateXMatch) {
+              const val = translateXMatch[1].replace('px', '').trim();
+              startTranslateX = parseFloat(val) || 0;
+            }
+            if (translateYMatch) {
+              const val = translateYMatch[1].replace('px', '').replace('%', '').trim();
+              if (translateYMatch[1].includes('%')) {
+                startTranslateY = (parseFloat(val) / 100) * dialogHeight;
+              } else {
+                startTranslateY = parseFloat(val) || -dialogHeight / 2;
+              }
+            }
+          }
+        }
+        
+        // Calculate end transform from current position
+        const endTranslateX = startTranslateX + deltaXFromCurrent;
+        const endTranslateY = startTranslateY + deltaYFromCurrent;
+        
+        console.log('[ChatDialog] Animation calculation from CURRENT position:');
+        console.log('[ChatDialog]   currentTransform:', currentTransform);
+        console.log('[ChatDialog]   currentDialogCenterX:', currentDialogCenterX, 'currentDialogCenterY:', currentDialogCenterY);
+        console.log('[ChatDialog]   startTranslateX:', startTranslateX, 'startTranslateY:', startTranslateY);
+        console.log('[ChatDialog]   deltaXFromCurrent:', deltaXFromCurrent, 'deltaYFromCurrent:', deltaYFromCurrent);
+        console.log('[ChatDialog]   endTranslateX:', endTranslateX, 'endTranslateY:', endTranslateY);
+        
+        // Clean up any previous animation state FIRST before setting new properties
+        this.dialogContainer.classList.remove('minimizing', 'expanding');
+        this.dialogContainer.style.removeProperty('--minimize-target-x');
+        this.dialogContainer.style.removeProperty('--minimize-target-y');
+        this.dialogContainer.style.removeProperty('--minimize-start-transform');
+        this.dialogContainer.style.removeProperty('--minimize-end-transform');
+        this.dialogContainer.style.removeProperty('--expand-start-transform');
+        this.dialogContainer.style.removeProperty('--expand-end-transform');
+        this.dialogContainer.style.removeProperty('animation');
+        this.dialogContainer.style.removeProperty('transition');
+        
+        // Force a reflow to ensure cleanup is applied
+        void this.dialogContainer.offsetHeight;
         
         // Set CSS custom properties for the animation
-        this.dialogContainer.style.setProperty('--minimize-target-x', `${targetX}px`);
-        this.dialogContainer.style.setProperty('--minimize-target-y', `${targetY}px`);
-        this.dialogContainer.style.setProperty('--minimize-start-transform', 'translateY(-50%) translateX(0)');
-        this.dialogContainer.style.setProperty('--minimize-end-transform', `translateY(${finalTranslateY}px) translateX(${targetX}px)`);
+        // Use current transform as start, and calculate end from current position
+        this.dialogContainer.style.setProperty('--minimize-target-x', `${targetCenterX}px`);
+        this.dialogContainer.style.setProperty('--minimize-target-y', `${targetCenterY}px`);
+        this.dialogContainer.style.setProperty('--minimize-start-transform', `translateY(${startTranslateY}px) translateX(${startTranslateX}px)`);
+        this.dialogContainer.style.setProperty('--minimize-end-transform', `translateY(${endTranslateY}px) translateX(${endTranslateX}px)`);
+        
+        // Ensure dialog is visible before animation starts
+        if (!this.dialogContainer.classList.contains('visible')) {
+          this.dialogContainer.classList.add('visible');
+        }
+        
+        // Force a reflow to ensure styles are applied
+        void this.dialogContainer.offsetHeight;
         
         console.log('[ChatDialog] Set CSS properties:');
-        console.log('[ChatDialog] --minimize-target-x:', targetX);
-        console.log('[ChatDialog] --minimize-target-y:', targetY);
-        console.log('[ChatDialog] --minimize-start-transform: translateY(-50%) translateX(0)');
-        console.log('[ChatDialog] --minimize-end-transform:', `translateY(${finalTranslateY}px) translateX(${targetX}px)`);
-        console.log('[ChatDialog] Dialog height:', dialogHeight, 'finalTranslateY:', finalTranslateY);
+        console.log('[ChatDialog] --minimize-target-x:', targetCenterX);
+        console.log('[ChatDialog] --minimize-target-y:', targetCenterY);
+        console.log('[ChatDialog] --minimize-start-transform:', `translateY(${startTranslateY}px) translateX(${startTranslateX}px)`);
+        console.log('[ChatDialog] --minimize-end-transform:', `translateY(${endTranslateY}px) translateX(${endTranslateX}px)`);
+        console.log('[ChatDialog] Dialog height:', dialogHeight);
         
         // Force a reflow to ensure styles are applied
         void this.dialogContainer.offsetHeight;
         
         // Add minimizing class to trigger animation (DO NOT remove visible class)
+        // Check if dialogContainer still exists before accessing classList
+        if (!this.dialogContainer) {
+          console.error('[ChatDialog] ERROR: dialogContainer is null before adding minimizing class');
+          return;
+        }
+        
+        // Now add the minimizing class to trigger animation
+        // The CSS will handle the animation via the .minimizing class
         this.dialogContainer.classList.add('minimizing');
         
         // Force a reflow to ensure animation starts
         void this.dialogContainer.offsetHeight;
         
         // Verify animation is applied
+        if (!this.dialogContainer) {
+          console.error('[ChatDialog] ERROR: dialogContainer is null before getting computed style');
+          return;
+        }
         const computedStyle = window.getComputedStyle(this.dialogContainer);
         const animationName = computedStyle.animationName;
         const animationDuration = computedStyle.animationDuration;
@@ -6642,20 +7560,28 @@ const ChatDialog = {
         
         console.log('[ChatDialog] ===== ANIMATION VERIFICATION =====');
         console.log('[ChatDialog] Minimization animation started');
-        console.log('[ChatDialog] Dialog has minimizing class:', this.dialogContainer.classList.contains('minimizing'));
+        console.log('[ChatDialog] Dialog has minimizing class:', this.dialogContainer && this.dialogContainer.classList.contains('minimizing'));
         console.log('[ChatDialog] Animation name:', animationName);
         console.log('[ChatDialog] Animation duration:', animationDuration);
         console.log('[ChatDialog] Animation play state:', animationState);
         console.log('[ChatDialog] Current transform:', transform);
         console.log('[ChatDialog] CSS custom properties:');
+        if (this.dialogContainer) {
         console.log('[ChatDialog]   --minimize-start-transform:', this.dialogContainer.style.getPropertyValue('--minimize-start-transform'));
         console.log('[ChatDialog]   --minimize-end-transform:', this.dialogContainer.style.getPropertyValue('--minimize-end-transform'));
         console.log('[ChatDialog]   --minimize-target-x:', this.dialogContainer.style.getPropertyValue('--minimize-target-x'));
         console.log('[ChatDialog]   --minimize-target-y:', this.dialogContainer.style.getPropertyValue('--minimize-target-y'));
+        }
         
         // Wait for animation to complete, then hide dialog
         setTimeout(() => {
           console.log('[ChatDialog] Minimization animation completed, hiding dialog');
+          
+          // Check if dialogContainer still exists before accessing it
+          if (!this.dialogContainer) {
+            console.log('[ChatDialog] Dialog container already removed, skipping cleanup');
+            return;
+          }
           
           // Clean up animation class and CSS properties
           this.dialogContainer.classList.remove('minimizing');
@@ -6676,24 +7602,189 @@ const ChatDialog = {
           this.currentText = null;
           this.currentTextKey = null;
           console.log('[ChatDialog] Dialog state reset');
-        }, 500); // 0.5s animation duration (increased for visibility)
+        }, 300); // 0.3s animation duration (same as appearing animation)
         
         return; // Exit early, cleanup will continue in setTimeout
       } else {
         console.log('[ChatDialog] ✗✗✗ BOOK ICON NOT FOUND! Cannot minimize to book icon.');
         console.log('[ChatDialog] Falling back to regular close...');
       }
+    } else if (askAboutPageButton) {
+      console.log('[ChatDialog] ✓✓✓ FOUND ASK-ABOUT-PAGE BUTTON! Starting minimization animation...');
+      
+      // Check if dialogContainer still exists before proceeding
+      if (!this.dialogContainer) {
+        console.error('[ChatDialog] ERROR: dialogContainer is null, cannot minimize');
+        return;
+      }
+      
+      // IMMEDIATELY disable transition to prevent slide-out animation
+      this.dialogContainer.style.setProperty('transition', 'none', 'important');
+      
+      // Force a reflow to ensure button is in its final position
+      void askAboutPageButton.offsetHeight;
+      
+      // Get dialog size (use getBoundingClientRect for accurate size)
+      const dialogRect = this.dialogContainer.getBoundingClientRect();
+      const dialogHeight = dialogRect.height;
+      const dialogWidth = dialogRect.width;
+      
+      // Get button position (use getBoundingClientRect for accurate viewport coordinates)
+      void askAboutPageButton.offsetHeight;
+      const buttonRect = askAboutPageButton.getBoundingClientRect();
+      const buttonCenterX = buttonRect.left + buttonRect.width / 2;
+      const buttonCenterY = buttonRect.top + buttonRect.height / 2;
+      
+      console.log('[ChatDialog] Ask-about-page button center:', { x: buttonCenterX, y: buttonCenterY });
+      console.log('[ChatDialog] Button rect:', { left: buttonRect.left, top: buttonRect.top, width: buttonRect.width, height: buttonRect.height });
+      console.log('[ChatDialog] Dialog size:', { width: dialogWidth, height: dialogHeight });
+      
+      const viewportHeight = window.innerHeight;
+      const viewportWidth = window.innerWidth;
+      
+      // Calculate DEFAULT dialog center position (not current position)
+      const defaultDialogCenterX = viewportWidth - dialogWidth / 2;
+      const defaultDialogCenterY = viewportHeight / 2;
+      
+      // Calculate target position: button center (viewport coordinates)
+      const targetCenterX = buttonCenterX;
+      const targetCenterY = buttonCenterY;
+      
+      // Calculate how much to move from DEFAULT center to target center
+      const deltaX = targetCenterX - defaultDialogCenterX;
+      const deltaY = targetCenterY - defaultDialogCenterY;
+      
+      // Calculate current dialog center from actual position
+      const currentDialogCenterX = dialogRect.left + dialogWidth / 2;
+      const currentDialogCenterY = dialogRect.top + dialogHeight / 2;
+      
+      // Calculate delta from CURRENT position to button (not default position)
+      const deltaXFromCurrent = targetCenterX - currentDialogCenterX;
+      const deltaYFromCurrent = targetCenterY - currentDialogCenterY;
+      
+      // Parse current transform to get translate values
+      const currentComputedStyle = window.getComputedStyle(this.dialogContainer);
+      const currentTransform = currentComputedStyle.transform;
+      
+      let startTranslateX = 0;
+      let startTranslateY = -dialogHeight / 2; // Default: -50% of height
+      
+      if (currentTransform && currentTransform !== 'none') {
+        // Try to extract translate values from matrix or translate string
+        const matrixMatch = currentTransform.match(/matrix\([^)]+\)/);
+        if (matrixMatch) {
+          const values = currentTransform.match(/[-+]?[0-9]*\.?[0-9]+/g);
+          if (values && values.length >= 6) {
+            startTranslateX = parseFloat(values[4]) || 0;
+            startTranslateY = parseFloat(values[5]) || -dialogHeight / 2;
+          }
+        } else {
+          const translateXMatch = currentTransform.match(/translateX\(([^)]+)\)/);
+          const translateYMatch = currentTransform.match(/translateY\(([^)]+)\)/);
+          if (translateXMatch) {
+            const val = translateXMatch[1].replace('px', '').trim();
+            startTranslateX = parseFloat(val) || 0;
+          }
+          if (translateYMatch) {
+            const val = translateYMatch[1].replace('px', '').replace('%', '').trim();
+            if (translateYMatch[1].includes('%')) {
+              startTranslateY = (parseFloat(val) / 100) * dialogHeight;
+            } else {
+              startTranslateY = parseFloat(val) || -dialogHeight / 2;
+            }
+          }
+        }
+      }
+      
+      // Calculate end transform from current position
+      const endTranslateX = startTranslateX + deltaXFromCurrent;
+      const endTranslateY = startTranslateY + deltaYFromCurrent;
+      
+      console.log('[ChatDialog] Animation calculation from CURRENT position:');
+      console.log('[ChatDialog]   currentTransform:', currentTransform);
+      console.log('[ChatDialog]   currentDialogCenterX:', currentDialogCenterX, 'currentDialogCenterY:', currentDialogCenterY);
+      console.log('[ChatDialog]   startTranslateX:', startTranslateX, 'startTranslateY:', startTranslateY);
+      console.log('[ChatDialog]   deltaXFromCurrent:', deltaXFromCurrent, 'deltaYFromCurrent:', deltaYFromCurrent);
+      console.log('[ChatDialog]   endTranslateX:', endTranslateX, 'endTranslateY:', endTranslateY);
+      
+      // Clean up any previous animation state FIRST before setting new properties
+      this.dialogContainer.classList.remove('minimizing', 'expanding');
+      this.dialogContainer.style.removeProperty('--minimize-target-x');
+      this.dialogContainer.style.removeProperty('--minimize-target-y');
+      this.dialogContainer.style.removeProperty('--minimize-start-transform');
+      this.dialogContainer.style.removeProperty('--minimize-end-transform');
+      this.dialogContainer.style.removeProperty('--expand-start-transform');
+      this.dialogContainer.style.removeProperty('--expand-end-transform');
+      this.dialogContainer.style.removeProperty('animation');
+      this.dialogContainer.style.removeProperty('transition');
+      
+      // Force a reflow to ensure cleanup is applied
+      void this.dialogContainer.offsetHeight;
+      
+      // Set CSS custom properties for the animation
+      this.dialogContainer.style.setProperty('--minimize-target-x', `${targetCenterX}px`);
+      this.dialogContainer.style.setProperty('--minimize-target-y', `${targetCenterY}px`);
+      this.dialogContainer.style.setProperty('--minimize-start-transform', `translateY(${startTranslateY}px) translateX(${startTranslateX}px) scale(1)`);
+      this.dialogContainer.style.setProperty('--minimize-end-transform', `translateY(${endTranslateY}px) translateX(${endTranslateX}px) scale(0)`);
+      
+      // Ensure dialog is visible before animation starts
+      if (!this.dialogContainer.classList.contains('visible')) {
+        this.dialogContainer.classList.add('visible');
+      }
+      
+      // Force a reflow to ensure styles are applied
+      void this.dialogContainer.offsetHeight;
+      
+      // Add minimizing class to trigger animation
+      this.dialogContainer.classList.add('minimizing');
+      
+      // Force a reflow to ensure animation starts
+      void this.dialogContainer.offsetHeight;
+      
+      // Wait for animation to complete, then hide dialog
+      setTimeout(() => {
+        console.log('[ChatDialog] Minimization animation completed, hiding dialog');
+        
+        // Check if dialogContainer still exists before accessing it
+        if (!this.dialogContainer) {
+          console.log('[ChatDialog] Dialog container already removed, skipping cleanup');
+          return;
+        }
+        
+        // Clean up animation class and CSS properties
+          this.dialogContainer.classList.remove('minimizing');
+        this.dialogContainer.style.removeProperty('--minimize-target-x');
+        this.dialogContainer.style.removeProperty('--minimize-target-y');
+          this.dialogContainer.style.removeProperty('--minimize-start-transform');
+          this.dialogContainer.style.removeProperty('--minimize-end-transform');
+        
+        // Remove dialog container immediately (no need for hide() since animation is done)
+        console.log('[ChatDialog] Removing dialog container...');
+        if (this.dialogContainer) {
+          this.dialogContainer.remove();
+          this.dialogContainer = null;
+          console.log('[ChatDialog] Dialog container removed');
+        }
+        // Reset state
+          this.isOpen = false;
+          this.currentText = null;
+          this.currentTextKey = null;
+        console.log('[ChatDialog] Dialog state reset');
+      }, 300); // 0.3s animation duration (same as appearing animation)
+      
+      return; // Exit early, cleanup will continue in setTimeout
     } else {
       console.log('[ChatDialog] ✗✗✗ MINIMIZATION CONDITIONS NOT MET!');
       console.log('[ChatDialog] Reasons:');
       if (!this.currentTextKey) console.log('[ChatDialog]   - currentTextKey is missing');
-      if (this.chatContext !== 'selected') console.log('[ChatDialog]   - chatContext is not "selected" (current:', this.chatContext, ')');
+      const isPageGeneral = this.currentTextKey && (this.currentTextKey === 'page-general' || this.currentTextKey.startsWith('page-general'));
+      if (this.chatContext !== 'selected' && !isPageGeneral) console.log('[ChatDialog]   - chatContext is not "selected" and textKey is not "page-general"');
       if (!this.dialogContainer) console.log('[ChatDialog]   - dialogContainer is missing');
     }
     
     // Fallback to original behavior if no book icon found or not selected text chat
     console.log('[ChatDialog] ===== USING FALLBACK CLOSE (NO MINIMIZATION) =====');
-    console.log('[ChatDialog] No book icon found or not selected text chat, using fallback close');
+    console.log('[ChatDialog] No book icon or ask-about-page button found, using fallback close');
     
     // If dialog is visible, use slide-out animation
     if (this.dialogContainer && this.dialogContainer.classList.contains('visible')) {
@@ -6766,6 +7857,14 @@ const ChatDialog = {
       </svg>
       <span>Focus</span>
     `;
+    
+    // Hide focus button immediately if it's for page-general (ask-about-page)
+    // Check for both 'page-general' and 'page-general-generic' (the transformed key)
+    if (this.currentTextKey && (this.currentTextKey === 'page-general' || this.currentTextKey.startsWith('page-general'))) {
+      focusButton.style.display = 'none';
+      focusButton.style.visibility = 'hidden';
+      console.log('[ChatDialog] Hiding focus button for page-general, currentTextKey:', this.currentTextKey, 'chatContext:', this.chatContext);
+    }
     
     // Add click handler for focus button
     focusButton.addEventListener('click', () => {
@@ -7223,13 +8322,59 @@ const ChatDialog = {
     // Build all simplified explanations (current + previous)
     this.renderSimplifiedExplanations(explanationsContainer);
     
+    // Create summary container (above button) for ask-about-page chat
+    if (this.chatContext === 'general' && this.currentTextKey && this.currentTextKey.startsWith('page-general')) {
+      const summaryContainer = document.createElement('div');
+      summaryContainer.id = 'vocab-chat-page-summary-container';
+      summaryContainer.className = 'vocab-chat-page-summary-container';
+      
+      // Render summary if it exists
+      if (this.pageSummary) {
+        summaryContainer.innerHTML = `
+          <div class="vocab-chat-page-summary-content">
+            ${this.renderMarkdown(this.pageSummary)}
+          </div>
+        `;
+      }
+      
+      scrollableContainer.appendChild(summaryContainer);
+    }
+    
     // Create "Simplify more" button container
     const buttonContainer = document.createElement('div');
     buttonContainer.className = 'vocab-chat-simplify-more-container';
     
     // Only show "Simplify more" button for selected text chat, not for general content chat
-    console.log('[ChatDialog] Creating Simplify more button - chatContext:', this.chatContext, 'mode:', this.mode);
-    if (this.chatContext !== 'general' && this.mode === 'simplified') {
+    // For ask-about-page (page-general), show "Summarise the page" button instead
+    console.log('[ChatDialog] Creating Simplify more button - chatContext:', this.chatContext, 'mode:', this.mode, 'textKey:', this.currentTextKey);
+    // Check for both 'page-general' and 'page-general-generic' (the transformed key)
+    if (this.chatContext === 'general' && this.currentTextKey && this.currentTextKey.startsWith('page-general')) {
+      // Show "Summarise the page" button for ask-about-page chat
+      console.log('[ChatDialog] Adding Summarise the page button');
+      const summariseBtn = document.createElement('button');
+      summariseBtn.className = 'vocab-chat-simplify-more-btn';
+      summariseBtn.textContent = 'Summarise the page';
+      summariseBtn.id = 'vocab-chat-summarise-page-btn';
+      
+      // Disable button if summary already exists
+      if (this.pageSummary) {
+        summariseBtn.disabled = true;
+        summariseBtn.classList.add('disabled');
+        console.log('[ChatDialog] Summarise button disabled - summary already exists');
+      }
+      
+      // Add onclick handler to call summarise API
+      // Use capture phase to ensure it runs before TextSelector's handler
+      summariseBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
+        console.log('[ChatDialog] Summarise button clicked in simplified content!');
+        this.handleSummarisePage();
+      }, true); // Use capture phase
+      
+      buttonContainer.appendChild(summariseBtn);
+    } else if (this.chatContext !== 'general' && this.mode === 'simplified') {
       console.log('[ChatDialog] Adding Simplify more button');
       const simplifyMoreBtn = document.createElement('button');
       simplifyMoreBtn.className = 'vocab-chat-simplify-more-btn';
@@ -7273,7 +8418,7 @@ const ChatDialog = {
       // Show appropriate message based on chat context
       const promptText = this.chatContext === 'selected' 
         ? 'Anything to ask on the selected content ?' 
-        : 'Ask anything about the content';
+        : 'Ask me anything about the page';
       
       const noChatsMsg = document.createElement('div');
       noChatsMsg.className = 'vocab-chat-no-messages';
@@ -7320,13 +8465,20 @@ const ChatDialog = {
     
     container.innerHTML = '';
     
+    // Ensure previousSimplifiedTexts is an array
+    const previousSimplifiedTextsArray = Array.isArray(dataToRender.previousSimplifiedTexts)
+      ? dataToRender.previousSimplifiedTexts
+      : (dataToRender.previousSimplifiedTexts ? [dataToRender.previousSimplifiedTexts] : []);
+    
     // Get all explanations (previous + current)
     const allExplanations = [
-      ...(dataToRender.previousSimplifiedTexts || []),
-      dataToRender.simplifiedText
-    ];
+      ...previousSimplifiedTextsArray,
+      ...(dataToRender.simplifiedText ? [dataToRender.simplifiedText] : [])
+    ].filter(Boolean); // Remove any null/undefined values
     
     console.log('[ChatDialog] Rendering', allExplanations.length, 'simplified explanations');
+    console.log('[ChatDialog] Previous explanations count:', previousSimplifiedTextsArray.length);
+    console.log('[ChatDialog] Current simplified text exists:', !!dataToRender.simplifiedText);
     
     // Render each explanation with header
     allExplanations.forEach((explanation, index) => {
@@ -7388,19 +8540,31 @@ const ChatDialog = {
       (eventData) => {
         console.log('[ChatDialog] Received new simplified text:', eventData);
         
-        // Update simplified data
+        // Ensure previousSimplifiedTexts is always an array
+        const previousSimplifiedTextsArray = Array.isArray(previousSimplifiedTexts) 
+          ? previousSimplifiedTexts 
+          : (previousSimplifiedTexts ? [previousSimplifiedTexts] : []);
+        
+        // Update simplified data - store all explanations in previousSimplifiedTexts array
         this.simplifiedData = {
           textStartIndex: eventData.textStartIndex,
           textLength: eventData.textLength,
           text: eventData.text,
           simplifiedText: eventData.simplifiedText,
-          previousSimplifiedTexts: previousSimplifiedTexts, // Always use our local array
+          previousSimplifiedTexts: previousSimplifiedTextsArray, // Array of all previous simplified texts
           shouldAllowSimplifyMore: eventData.shouldAllowSimplifyMore || false
         };
         
         // Update stored data - use original text key for storage
         const originalTextKey = this.currentTextKey.replace(/-selected$/, '').replace(/-generic$/, '');
         TextSelector.simplifiedTexts.set(originalTextKey, this.simplifiedData);
+        
+        console.log('[ChatDialog] Updated simplified data in TextSelector:', {
+          textKey: originalTextKey,
+          previousSimplifiedTextsCount: previousSimplifiedTextsArray.length,
+          hasCurrentSimplifiedText: !!eventData.simplifiedText,
+          shouldAllowSimplifyMore: eventData.shouldAllowSimplifyMore || false
+        });
         
         // Update UI - re-render all explanations
         const container = this.dialogContainer.querySelector('#vocab-chat-simplified-container');
@@ -7448,6 +8612,162 @@ const ChatDialog = {
   },
   
   /**
+   * Handle "Summarise the page" button click
+   */
+  async handleSummarisePage() {
+    console.log('[ChatDialog] ===== handleSummarisePage CALLED =====');
+    
+    // Get pageTextContent from global variable
+    const pageTextContent = window.pageTextContent;
+    console.log('[ChatDialog] pageTextContent from window:', pageTextContent ? 'exists' : 'null/undefined');
+    
+    if (!pageTextContent) {
+      console.warn('[ChatDialog] pageTextContent is not available');
+      this.addMessageToChat('ai', '⚠️ Page content is not yet loaded. Please wait a moment and try again.');
+      return;
+    }
+    
+    console.log('[ChatDialog] pageTextContent is available, length:', pageTextContent.length);
+    
+    // Get the button
+    const summariseBtn = document.getElementById('vocab-chat-summarise-page-btn');
+    if (!summariseBtn) {
+      console.warn('[ChatDialog] Summarise button not found');
+      return;
+    }
+    
+    // Disable button and show loading state with white spinner
+    summariseBtn.disabled = true;
+    summariseBtn.classList.add('disabled', 'loading');
+    
+    // Store original content
+    const originalText = summariseBtn.textContent;
+    
+    // Show white spinner inside button
+    summariseBtn.innerHTML = `
+      <div class="vocab-summarise-spinner" style="width: 16px; height: 16px; border: 2px solid white; border-top-color: transparent; border-radius: 50%; animation: vocab-spin 0.8s linear infinite; margin: 0 auto;"></div>
+    `;
+    
+    try {
+      // Parse pageTextContent to get the text
+      const contentData = JSON.parse(pageTextContent);
+      let pageText = contentData.text || '';
+      
+      if (!pageText) {
+        throw new Error('No text content available');
+      }
+      
+      // Limit text length to avoid API errors (use first 50000 characters for summarisation)
+      // The API might have limits on text length
+      const MAX_TEXT_LENGTH = 50000;
+      if (pageText.length > MAX_TEXT_LENGTH) {
+        console.log('[ChatDialog] Page text is too long, truncating to', MAX_TEXT_LENGTH, 'characters');
+        pageText = pageText.substring(0, MAX_TEXT_LENGTH);
+      }
+      
+      console.log('[ChatDialog] Calling summarise API for page summarisation...');
+      console.log('[ChatDialog] Text length:', pageText.length, 'text preview:', pageText.substring(0, 100) + '...');
+      console.log('[ChatDialog] SummariseService available:', typeof SummariseService !== 'undefined');
+      
+      // Call SummariseService
+      try {
+        const response = await SummariseService.summarise(pageText);
+        
+        console.log('[ChatDialog] Received summarise response:', response);
+        
+        // Store and display the summary (NOT in chat history)
+        if (response && response.summary) {
+          // Store the summary in separate variable (NOT in chat history)
+          this.pageSummary = response.summary;
+          console.log('[ChatDialog] Page summary stored (separate from chat history):', this.pageSummary ? 'exists' : 'null');
+          
+          // Display summary above the button (NOT as a chat message)
+          this.renderPageSummary();
+        } else {
+          throw new Error('No summary received from API');
+        }
+        
+        // Keep button disabled after successful fetch
+        if (summariseBtn) {
+          summariseBtn.disabled = true;
+          summariseBtn.classList.add('disabled');
+          summariseBtn.classList.remove('loading');
+          summariseBtn.textContent = originalText;
+          console.log('[ChatDialog] Summarise button disabled after successful fetch');
+        }
+      } catch (error) {
+        console.error('[ChatDialog] Error during summarisation:', error);
+        console.error('[ChatDialog] Error details:', {
+          message: error.message,
+          name: error.name,
+          stack: error.stack
+        });
+        
+        // Show error message in chat with more details
+        const errorMessage = error.message || 'Please try again.';
+        this.addMessageToChat('ai', `⚠️ **Error:**\n\nFailed to summarise the page. ${errorMessage}`);
+        
+        // Reset button
+        if (summariseBtn) {
+          summariseBtn.disabled = false;
+          summariseBtn.classList.remove('disabled', 'loading');
+          summariseBtn.textContent = originalText;
+        }
+      }
+    } catch (error) {
+      console.error('[ChatDialog] Error parsing pageTextContent:', error);
+      
+      // Show error message in chat
+      this.addMessageToChat('ai', `⚠️ **Error:**\n\nFailed to parse page content. ${error.message || 'Please try again.'}`);
+      
+      // Reset button
+      if (summariseBtn) {
+        summariseBtn.disabled = false;
+        summariseBtn.classList.remove('disabled', 'loading');
+        summariseBtn.textContent = originalText;
+      }
+    }
+  },
+  
+  /**
+   * Render page summary above the "Summarise the page" button
+   * This is separate from chat history
+   */
+  renderPageSummary() {
+    if (!this.pageSummary) {
+      return;
+    }
+    
+    // Find or create summary container
+    let summaryContainer = document.getElementById('vocab-chat-page-summary-container');
+    if (!summaryContainer) {
+      // Find the button container to insert summary above it
+      const buttonContainer = document.querySelector('.vocab-chat-simplify-more-container');
+      if (!buttonContainer) {
+        console.warn('[ChatDialog] Button container not found, cannot render summary');
+        return;
+      }
+      
+      // Create summary container
+      summaryContainer = document.createElement('div');
+      summaryContainer.id = 'vocab-chat-page-summary-container';
+      summaryContainer.className = 'vocab-chat-page-summary-container';
+      
+      // Insert before button container
+      buttonContainer.parentNode.insertBefore(summaryContainer, buttonContainer);
+    }
+    
+    // Render summary content
+    summaryContainer.innerHTML = `
+      <div class="vocab-chat-page-summary-content">
+        ${this.renderMarkdown(this.pageSummary)}
+      </div>
+    `;
+    
+    console.log('[ChatDialog] Page summary rendered above button');
+  },
+  
+  /**
    * Create ask/chat content
    */
   createAskContent() {
@@ -7457,6 +8777,58 @@ const ChatDialog = {
     
     if (this.mode === 'simplified') {
       content.style.display = 'none';
+    }
+    
+    // Create summary container (above button) for ask-about-page chat
+    if (this.chatContext === 'general' && this.currentTextKey && this.currentTextKey.startsWith('page-general')) {
+      const summaryContainer = document.createElement('div');
+      summaryContainer.id = 'vocab-chat-page-summary-container';
+      summaryContainer.className = 'vocab-chat-page-summary-container';
+      
+      // Render summary if it exists
+      if (this.pageSummary) {
+        summaryContainer.innerHTML = `
+          <div class="vocab-chat-page-summary-content">
+            ${this.renderMarkdown(this.pageSummary)}
+          </div>
+        `;
+      }
+      
+      content.appendChild(summaryContainer);
+    }
+    
+    // Create "Summarise the page" button container for ask-about-page chat
+    const buttonContainer = document.createElement('div');
+    buttonContainer.className = 'vocab-chat-simplify-more-container';
+    
+    // Show "Summarise the page" button for ask-about-page chat (page-general)
+    // Check for both 'page-general' and 'page-general-generic' (the transformed key)
+    if (this.chatContext === 'general' && this.currentTextKey && this.currentTextKey.startsWith('page-general')) {
+      console.log('[ChatDialog] Adding Summarise the page button to ask content');
+      const summariseBtn = document.createElement('button');
+      summariseBtn.className = 'vocab-chat-simplify-more-btn';
+      summariseBtn.textContent = 'Summarise the page';
+      summariseBtn.id = 'vocab-chat-summarise-page-btn';
+      
+      // Disable button if summary already exists
+      if (this.pageSummary) {
+        summariseBtn.disabled = true;
+        summariseBtn.classList.add('disabled');
+        console.log('[ChatDialog] Summarise button disabled - summary already exists');
+      }
+      
+      // Add onclick handler to call summarise API
+      // Use capture phase to ensure it runs before TextSelector's handler
+      summariseBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
+        console.log('[ChatDialog] Summarise button clicked!');
+        this.handleSummarisePage();
+      }, true); // Use capture phase
+      
+      buttonContainer.appendChild(summariseBtn);
+      content.appendChild(buttonContainer);
     }
     
     // Create chat messages container
@@ -7479,7 +8851,7 @@ const ChatDialog = {
       // Show appropriate message based on chat context
       const promptText = this.chatContext === 'selected' 
         ? 'Anything to ask on the selected content ?' 
-        : 'Ask anything about the content';
+        : 'Ask me anything about the page';
       
       const noChatsMsg = document.createElement('div');
       noChatsMsg.className = 'vocab-chat-no-messages';
@@ -7528,7 +8900,7 @@ const ChatDialog = {
       // Show appropriate message based on chat context
       const promptText = this.chatContext === 'selected' 
         ? 'Anything to ask on the selected content ?' 
-        : 'Ask anything about the content';
+        : 'Ask me anything about the page';
       
       const noChatsMsg = document.createElement('div');
       noChatsMsg.className = 'vocab-chat-no-messages';
@@ -8109,7 +9481,7 @@ const ChatDialog = {
   addMessageToChat(type, message) {
     const chatContainer = document.getElementById('vocab-chat-messages');
     
-    // Remove "Ask anything about the content" message if exists
+    // Remove "Ask me anything about the page" message if exists
     const noChatsMsg = chatContainer.querySelector('.vocab-chat-no-messages');
     if (noChatsMsg) {
       noChatsMsg.remove();
@@ -8316,16 +9688,22 @@ const ChatDialog = {
   },
   
   /**
-   * Clear chat history
+   * Clear chat history (but preserve summary if it exists)
+   * Summary is stored separately and displayed above the button, not in chat history
    */
   clearChat() {
     const chatContainer = document.getElementById('vocab-chat-messages');
+    
+    // Summary is stored separately in pageSummary variable and displayed above button
+    // It's NOT in chat history, so we don't need to preserve it here
+    // The summary container is separate from chat messages
+    
     chatContainer.innerHTML = '';
     
     // Show appropriate message based on chat context
     const promptText = this.chatContext === 'selected' 
       ? 'Anything to ask on the selected content ?' 
-      : 'Ask anything about the content';
+      : 'Ask me anything about the page';
     
     const noChatsMsg = document.createElement('div');
     noChatsMsg.className = 'vocab-chat-no-messages';
@@ -8337,12 +9715,19 @@ const ChatDialog = {
     `;
     chatContainer.appendChild(noChatsMsg);
     
+    // Clear chat history (but keep pageSummary variable - it's separate)
     this.chatHistory = [];
     
-    // Hide global clear button
+    // Update stored chat history for this textKey (but keep pageSummary)
+    if (this.currentTextKey) {
+      this.chatHistories.set(this.currentTextKey, []);
+    }
+    
+    // Hide global clear button if no messages
+    // Note: Summary is separate, so we only check chatHistory
     this.updateGlobalClearButton();
     
-    console.log('[ChatDialog] Chat cleared');
+    console.log('[ChatDialog] Chat cleared (summary is separate and preserved)');
   },
   
   /**
@@ -8352,8 +9737,9 @@ const ChatDialog = {
     const deleteBtn = document.getElementById('vocab-chat-delete-conversation-btn');
     if (!deleteBtn) return;
     
-    // Show button only if there are messages
-    if (this.chatHistory.length > 0) {
+    // Show button if there are messages OR if there's a summary
+    // (Summary is preserved separately, so we check both)
+    if (this.chatHistory.length > 0 || this.pageSummary) {
       deleteBtn.style.display = 'flex';
     } else {
       deleteBtn.style.display = 'none';
@@ -8372,6 +9758,10 @@ const ChatDialog = {
       
       // Check if we should expand from book icon (only for selected text chat with textKey)
       const shouldExpandFromBook = this.currentTextKey && this.chatContext === 'selected';
+      
+      // Check if we should expand from ask-about-page button (for page-general context)
+      const shouldExpandFromAskAboutPage = this.currentTextKey && this.chatContext === 'general' && 
+        (this.currentTextKey === 'page-general' || this.currentTextKey.startsWith('page-general'));
       
       if (shouldExpandFromBook) {
         console.log('[ChatDialog] Opening from book icon - setting up expansion animation');
@@ -8494,6 +9884,15 @@ const ChatDialog = {
           }, 100);
         }
         
+        // Check for ask-about-page button if textKey is 'page-general' (for book icon context)
+        let askAboutPageButton = null;
+        if (this.currentTextKey === 'page-general' || this.currentTextKey.startsWith('page-general')) {
+          askAboutPageButton = document.getElementById('vocab-ask-about-page-btn');
+          if (askAboutPageButton) {
+            console.log('[ChatDialog] ✓✓✓ FOUND ASK-ABOUT-PAGE BUTTON! Starting expansion animation...');
+          }
+        }
+        
         if (bookIcon) {
           console.log('[ChatDialog] ✓✓✓ FOUND BOOK ICON! Starting expansion animation...');
           
@@ -8553,9 +9952,140 @@ const ChatDialog = {
             // Re-enable pointer events
             this.dialogContainer.style.setProperty('pointer-events', '');
             this.dialogContainer.style.setProperty('will-change', '');
-          }, 500);
+          }, 300); // 0.3s animation duration (same as appearing animation)
+        } else if (askAboutPageButton) {
+          console.log('[ChatDialog] ✓✓✓ FOUND ASK-ABOUT-PAGE BUTTON! Starting expansion animation...');
+          
+          // Get ask-about-page button position
+          const buttonRect = askAboutPageButton.getBoundingClientRect();
+          const buttonCenterX = buttonRect.left + buttonRect.width / 2;
+          const buttonCenterY = buttonRect.top + buttonRect.height / 2;
+          
+          // Get dialog dimensions
+          const dialogRect = this.dialogContainer.getBoundingClientRect();
+          const dialogHeight = dialogRect.height || 600;
+          const viewportHeight = window.innerHeight;
+          const dialogTop = viewportHeight / 2;
+          const currentCenterY = dialogTop;
+          const targetCenterY = buttonCenterY;
+          const translateYOffset = targetCenterY - currentCenterY;
+          const finalTranslateY = -dialogHeight / 2 + translateYOffset;
+          
+          // Calculate target X (button center X - dialog center X)
+          const dialogWidth = dialogRect.width || 400;
+          const dialogCenterX = window.innerWidth - dialogWidth / 2;
+          const targetX = buttonCenterX - dialogCenterX;
+          
+          // Set initial position at button (small scale)
+          const startTransform = `translateY(${finalTranslateY}px) translateX(${targetX}px) scale(0)`;
+          this.dialogContainer.style.setProperty('transform', startTransform);
+          this.dialogContainer.style.setProperty('transition', 'none');
+          
+          // Set CSS variables for expansion animation
+          this.dialogContainer.style.setProperty('--expand-target-x', `${targetX}px`);
+          this.dialogContainer.style.setProperty('--expand-target-y', `${finalTranslateY}px`);
+          this.dialogContainer.style.setProperty('--expand-start-transform', startTransform);
+          this.dialogContainer.style.setProperty('--expand-end-transform', 'translateY(-50%) translateX(0) scale(1)');
+          
+          // Force a reflow to ensure initial position is set
+          this.dialogContainer.offsetHeight;
+          
+          // Add expanding class to trigger animation
+          this.dialogContainer.classList.add('expanding');
+          
+          // Add visible class immediately (but animation will override transform)
+          this.dialogContainer.classList.add('visible');
+          
+          // Remove expanding class after animation completes and restore normal state
+          setTimeout(() => {
+            // Set final transform explicitly to ensure dialog stays in position
+            this.dialogContainer.style.setProperty('transform', 'translateY(-50%) translateX(0) scale(1)');
+            // Remove expanding class after transform is set
+            this.dialogContainer.classList.remove('expanding');
+            // Restore transition for normal interactions
+            this.dialogContainer.style.setProperty('transition', '');
+            // Clean up CSS variables
+            this.dialogContainer.style.removeProperty('--expand-target-x');
+            this.dialogContainer.style.removeProperty('--expand-target-y');
+            this.dialogContainer.style.removeProperty('--expand-start-transform');
+            this.dialogContainer.style.removeProperty('--expand-end-transform');
+            // Re-enable pointer events
+            this.dialogContainer.style.setProperty('pointer-events', '');
+            this.dialogContainer.style.setProperty('will-change', '');
+          }, 300); // 0.3s animation duration (same as appearing animation)
         } else {
-          console.log('[ChatDialog] Book icon not found, using normal slide-in animation');
+          console.log('[ChatDialog] Book icon or ask-about-page button not found, using normal slide-in animation');
+          setTimeout(() => {
+            this.dialogContainer.classList.add('visible');
+          }, 10);
+        }
+      } else if (shouldExpandFromAskAboutPage) {
+        // Expand from ask-about-page button
+        console.log('[ChatDialog] Opening from ask-about-page button - setting up expansion animation');
+        
+        const askAboutPageButton = document.getElementById('vocab-ask-about-page-btn');
+        if (askAboutPageButton) {
+          console.log('[ChatDialog] ✓✓✓ FOUND ASK-ABOUT-PAGE BUTTON! Starting expansion animation...');
+          
+          // Get ask-about-page button position
+          const buttonRect = askAboutPageButton.getBoundingClientRect();
+          const buttonCenterX = buttonRect.left + buttonRect.width / 2;
+          const buttonCenterY = buttonRect.top + buttonRect.height / 2;
+          
+          // Get dialog dimensions
+          const dialogRect = this.dialogContainer.getBoundingClientRect();
+          const dialogHeight = dialogRect.height || 600;
+          const viewportHeight = window.innerHeight;
+          const dialogTop = viewportHeight / 2;
+          const currentCenterY = dialogTop;
+          const targetCenterY = buttonCenterY;
+          const translateYOffset = targetCenterY - currentCenterY;
+          const finalTranslateY = -dialogHeight / 2 + translateYOffset;
+          
+          // Calculate target X (button center X - dialog center X)
+          const dialogWidth = dialogRect.width || 400;
+          const dialogCenterX = window.innerWidth - dialogWidth / 2;
+          const targetX = buttonCenterX - dialogCenterX;
+          
+          // Set initial position at button (small scale)
+          const startTransform = `translateY(${finalTranslateY}px) translateX(${targetX}px) scale(0)`;
+          this.dialogContainer.style.setProperty('transform', startTransform);
+          this.dialogContainer.style.setProperty('transition', 'none');
+          
+          // Set CSS variables for expansion animation
+          this.dialogContainer.style.setProperty('--expand-target-x', `${targetX}px`);
+          this.dialogContainer.style.setProperty('--expand-target-y', `${finalTranslateY}px`);
+          this.dialogContainer.style.setProperty('--expand-start-transform', startTransform);
+          this.dialogContainer.style.setProperty('--expand-end-transform', 'translateY(-50%) translateX(0) scale(1)');
+          
+          // Force a reflow to ensure initial position is set
+          this.dialogContainer.offsetHeight;
+          
+          // Add expanding class to trigger animation
+          this.dialogContainer.classList.add('expanding');
+          
+          // Add visible class immediately (but animation will override transform)
+          this.dialogContainer.classList.add('visible');
+          
+          // Remove expanding class after animation completes and restore normal state
+          setTimeout(() => {
+            // Set final transform explicitly to ensure dialog stays in position
+            this.dialogContainer.style.setProperty('transform', 'translateY(-50%) translateX(0) scale(1)');
+            // Remove expanding class after transform is set
+            this.dialogContainer.classList.remove('expanding');
+            // Restore transition for normal interactions
+            this.dialogContainer.style.setProperty('transition', '');
+            // Clean up CSS variables
+            this.dialogContainer.style.removeProperty('--expand-target-x');
+            this.dialogContainer.style.removeProperty('--expand-target-y');
+            this.dialogContainer.style.removeProperty('--expand-start-transform');
+            this.dialogContainer.style.removeProperty('--expand-end-transform');
+            // Re-enable pointer events
+            this.dialogContainer.style.setProperty('pointer-events', '');
+            this.dialogContainer.style.setProperty('will-change', '');
+          }, 300); // 0.3s animation duration (same as appearing animation)
+        } else {
+          console.log('[ChatDialog] Ask-about-page button not found, using normal slide-in animation');
           setTimeout(() => {
             this.dialogContainer.classList.add('visible');
           }, 10);
@@ -8669,9 +10199,13 @@ const ChatDialog = {
   
   /**
    * Delete the conversation history (clear chat messages)
+   * NOTE: This does NOT clear pageSummary - the summary is preserved
    */
   deleteConversation() {
     if (!this.currentTextKey) return;
+    
+    // IMPORTANT: Do NOT clear pageSummary - preserve it
+    // The summary should remain in the variable and UI
     
     // Clear the current chat history
     this.chatHistory = [];
@@ -8679,10 +10213,10 @@ const ChatDialog = {
     // Clear the stored chat history for this textKey
     this.chatHistories.set(this.currentTextKey, []);
     
-    // Clear the chat display
+    // Clear the chat display (this will preserve the summary in UI)
     this.clearChat();
     
-    console.log('[ChatDialog] Conversation history cleared for textKey:', this.currentTextKey);
+    console.log('[ChatDialog] Conversation history cleared for textKey:', this.currentTextKey, '(summary preserved:', !!this.pageSummary, ')');
   },
   
   /**
@@ -8761,7 +10295,7 @@ const ChatDialog = {
         max-width: 90vw;
         height: 600px;
         max-height: 80vh;
-        z-index: 1000000;
+        z-index: 2147483647 !important; /* Maximum z-index to ensure chat dialog is always on top of ads and other elements */
         transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
         user-select: none;  /* Disable text selection in popup */
@@ -8776,10 +10310,10 @@ const ChatDialog = {
       /* Minimize Animation - Scale down and move to book icon */
       /* IMPORTANT: When minimizing, completely override all transitions and use animation only */
       .vocab-chat-dialog.minimizing {
-        animation: minimizeChatDialogToBook 0.5s ease-out forwards !important;
+        animation: minimizeChatDialogToBook 0.3s cubic-bezier(0.4, 0, 0.2, 1) forwards !important; /* Same duration as appearing animation */
         transition: none !important; /* Completely disable transition during animation */
         pointer-events: none !important;
-        z-index: 10000010 !important; /* Ensure dialog appears above everything during animation */
+        z-index: 2147483647 !important; /* Maximum z-index to ensure dialog appears above everything during animation */
         will-change: transform !important; /* Optimize for animation */
       }
       
@@ -8802,17 +10336,17 @@ const ChatDialog = {
       
       /* Expand Animation - Scale up and move from book icon (reverse of minimize) */
       .vocab-chat-dialog.expanding {
-        animation: expandChatDialogFromBook 0.5s ease-out forwards !important;
+        animation: expandChatDialogFromBook 0.3s cubic-bezier(0.4, 0, 0.2, 1) forwards !important; /* Same duration as appearing animation */
         transition: none !important; /* Completely disable transition during animation */
         pointer-events: none !important;
-        z-index: 10000010 !important; /* Ensure dialog appears above everything during animation */
+        z-index: 2147483647 !important; /* Maximum z-index to ensure dialog appears above everything during animation */
         will-change: transform !important; /* Optimize for animation */
         opacity: 1 !important;
       }
       
       /* Ensure dialog stays visible after expansion animation */
       .vocab-chat-dialog.expanding.visible {
-        animation: expandChatDialogFromBook 0.5s ease-out forwards !important;
+        animation: expandChatDialogFromBook 0.3s cubic-bezier(0.4, 0, 0.2, 1) forwards !important; /* Same duration as appearing animation */
         transition: none !important;
       }
       
@@ -9205,6 +10739,38 @@ const ChatDialog = {
       
       .vocab-chat-simplified-item:last-child {
         margin-bottom: 0;
+      }
+      
+      /* Page Summary Container - Above "Summarise the page" button */
+      .vocab-chat-page-summary-container {
+        margin: 16px;
+        margin-bottom: 12px;
+        padding: 0;
+      }
+      
+      .vocab-chat-page-summary-content {
+        padding: 16px;
+        background: #f9fafb;
+        border: 1px solid #e5e7eb;
+        border-radius: 8px;
+        font-size: 14px;
+        line-height: 1.6;
+        color: #374151;
+        word-wrap: break-word;
+        overflow-wrap: break-word;
+      }
+      
+      .vocab-chat-page-summary-content p {
+        margin: 0 0 12px 0;
+      }
+      
+      .vocab-chat-page-summary-content p:last-child {
+        margin-bottom: 0;
+      }
+      
+      .vocab-chat-page-summary-content strong {
+        font-weight: 600;
+        color: #1f2937;
       }
       
       .vocab-chat-simplify-more-container {
@@ -15217,6 +16783,21 @@ const ButtonPanel = {
           // Remove loading animation
           highlight.classList.remove('vocab-text-loading');
           
+          // Hide spinner if it exists and restore button
+          const iconsWrapper = highlight.querySelector('.vocab-text-icons-wrapper');
+          if (iconsWrapper) {
+            const spinnerContainer = iconsWrapper.querySelector('.vocab-magic-meaning-spinner-container');
+            if (spinnerContainer) {
+              spinnerContainer.remove();
+            }
+            
+            // Restore magic-meaning button (though it won't be needed since book icon will be shown)
+            const magicBtn = iconsWrapper.querySelector('.vocab-text-magic-meaning-btn');
+            if (magicBtn) {
+              magicBtn.style.display = '';
+            }
+          }
+          
           // Change underline to light green
           highlight.classList.add('vocab-text-simplified');
           
@@ -15397,6 +16978,22 @@ const ButtonPanel = {
         
         // Remove loading animation on error
         highlight.classList.remove('vocab-text-loading');
+        
+        // Hide spinner and restore button on error
+        const iconsWrapper = highlight.querySelector('.vocab-text-icons-wrapper');
+        if (iconsWrapper) {
+          // Hide spinner
+          const spinnerContainer = iconsWrapper.querySelector('.vocab-magic-meaning-spinner-container');
+          if (spinnerContainer) {
+            spinnerContainer.remove();
+          }
+          
+          // Restore magic-meaning button
+          const magicBtn = iconsWrapper.querySelector('.vocab-text-magic-meaning-btn');
+          if (magicBtn) {
+            magicBtn.style.display = '';
+          }
+        }
         
         // Mark simplify as completed (even on error) to allow button reset
         this.apiCompletionState.simplifyCompleted = true;

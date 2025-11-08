@@ -13,8 +13,8 @@ class ApiConfig {
     
     // Default to production URL
     // TODO: Change to production URL
-    // return 'http://localhost:8000';
-    return 'https://caten-production.up.railway.app';
+    return 'http://localhost:8000';
+    // return 'https://caten-production.up.railway.app';
   }
   
   // API Endpoints
@@ -24,6 +24,7 @@ class ApiConfig {
     IMAGE_TO_TEXT: '/api/v1/image-to-text',
     GET_RANDOM_PARAGRAPH: '/api/v1/get-random-paragraph',
     SIMPLIFY: '/api/v2/simplify',
+    SUMMARISE: '/api/v2/summarise',
     WORDS_EXPLANATION: '/api/v2/words-explanation',
     VOICE_TO_TEXT: '/api/v2/voice-to-text',
     TRANSLATE: '/api/v2/translate'
