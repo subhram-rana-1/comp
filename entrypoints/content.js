@@ -3740,10 +3740,10 @@ const WordSelector = {
       /* Pulsating purple animation for words being processed */
       @keyframes vocab-word-loading-breathe {
         0%, 100% {
-          background-color: rgba(149, 39, 245, 0.15);
+          background-color: rgba(196, 181, 253, 0.7); /* Purple with slight transparency - lighter shade */
         }
         50% {
-          background-color: rgba(149, 39, 245, 0.35);
+          background-color: rgba(167, 139, 250, 0.8); /* Purple with slight transparency - darker shade */
         }
       }
       
@@ -3753,10 +3753,10 @@ const WordSelector = {
       
       /* Green background for explained words */
       .vocab-word-explained {
-        background-color: #22c55e !important; /* 100% opaque green - no transparency */
+        background-color: rgba(134, 239, 172, 0.7) !important; /* Lighter green with slight transparency */
         cursor: pointer;
         border-radius: 8px;
-        border: 1px solid #15803d !important; /* 100% opaque green border - no transparency */
+        border: 1px solid rgba(74, 222, 128, 0.8) !important; /* Lighter green border with slight transparency */
         padding: 0 2px;
         margin-top: 0 !important; /* Prevent top margin from affecting line spacing */
         margin-bottom: 0 !important; /* Prevent bottom margin from affecting line spacing */
@@ -3804,14 +3804,14 @@ const WordSelector = {
       }
       
       .vocab-word-explained:hover {
-        background-color: #16a34a !important; /* 100% opaque green on hover - no transparency */
-        border-color: #15803d !important; /* 100% opaque green border on hover - no transparency */
+        background-color: rgba(74, 222, 128, 0.8) !important; /* Lighter green on hover with slight transparency */
+        border-color: rgba(34, 197, 94, 0.9) !important; /* Lighter green border on hover with slight transparency */
       }
       
       .vocab-word-explained:active,
       .vocab-word-explained.vocab-word-clicking {
-        transform: scale(0.9) !important;
-        background-color: #16a34a !important; /* 100% opaque green on active - no transparency */
+        transform: scale(0.97) !important; /* Reduced scale-down animation - less pronounced */
+        background-color: rgba(74, 222, 128, 0.8) !important; /* Lighter green on active with slight transparency */
       }
       
       /* Smooth animation for green word highlight disappearance - 0.3s duration */
@@ -3821,8 +3821,8 @@ const WordSelector = {
       
       @keyframes wordFadeOut {
         0% {
-          background-color: #22c55e; /* 100% opaque green - no transparency */
-          border-color: #15803d; /* 100% opaque green border - no transparency */
+          background-color: rgba(134, 239, 172, 0.7); /* Lighter green with slight transparency */
+          border-color: rgba(74, 222, 128, 0.8); /* Lighter green border with slight transparency */
           opacity: 1;
         }
         100% {
@@ -3832,24 +3832,26 @@ const WordSelector = {
         }
       }
       
-      /* Green cross button for explained words - no circle, just cross */
+      /* Green cross button for explained words - white circular background with thin green border */
       .vocab-word-remove-explained-btn {
         position: absolute;
-        top: -6px;
-        right: -6px;
-        width: 14px;
-        height: 14px;
-        background: transparent;
-        border: none;
+        top: -10px;
+        right: -10px;
+        width: 18px;
+        height: 18px;
+        background: white !important; /* White circular non-transparent background */
+        border: 1px solid #4ade80 !important; /* Thin green border */
+        border-radius: 50% !important; /* Circular shape */
         display: flex;
         align-items: center;
         justify-content: center;
         cursor: pointer;
-        opacity: 0.8;
-        transition: opacity 0.3s ease-in-out, transform 0.3s ease-in-out, scale 0.3s ease-in-out;
+        opacity: 0.9;
+        transition: opacity 0.3s ease-in-out, transform 0.3s ease-in-out, scale 0.3s ease-in-out, background-color 0.2s ease, border-color 0.2s ease;
         padding: 0;
         z-index: 999999;
-        filter: drop-shadow(0 1px 2px rgba(34, 197, 94, 0.4));
+        box-shadow: 0 1px 3px rgba(34, 197, 94, 0.2);
+        box-sizing: border-box;
       }
       
       /* Smooth animation for green cross button disappearance - 0.3s duration */
@@ -3873,19 +3875,21 @@ const WordSelector = {
       }
       
       .vocab-word-remove-explained-btn:hover {
-        transform: scale(1.2);
+        transform: scale(1.15);
         opacity: 1;
+        background-color: #f0fdf4 !important; /* Light green tint on hover */
+        border-color: #22c55e !important; /* Slightly darker green border on hover */
       }
       
       .vocab-word-remove-explained-btn:active {
-        transform: scale(0.9);
+        transform: scale(0.95);
       }
       
       .vocab-word-remove-explained-btn svg {
         pointer-events: none;
         display: block;
-        width: 12px;
-        height: 12px;
+        width: 10px;
+        height: 10px;
       }
       
       /* Contextual Meaning Popup Card */
@@ -6149,7 +6153,7 @@ const TextSelector = {
           background-color: transparent;
         }
         50% {
-          background-color: rgba(149, 39, 245, 0.25);
+          background-color: rgba(196, 181, 253, 0.7); /* Purple with slight transparency - lighter shade */
         }
         100% {
           background-color: transparent;
@@ -6166,7 +6170,7 @@ const TextSelector = {
           background-color: transparent;
         }
         50% {
-          background-color: rgba(149, 39, 245, 0.15);
+          background-color: rgba(196, 181, 253, 0.7); /* Purple with slight transparency - lighter shade */
         }
       }
       
