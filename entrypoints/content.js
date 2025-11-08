@@ -366,8 +366,8 @@ export default defineContentScript({
         
         // Create main container
         this.bannerContainer = document.createElement('div');
-        this.bannerContainer.id = 'magic-comprehension-banner';
-        this.bannerContainer.className = 'magic-comprehension-banner';
+        this.bannerContainer.id = 'comprehension-ai-banner';
+        this.bannerContainer.className = 'comprehension-ai-banner';
         
         // Create header with close button (cross icon at top right)
         const header = document.createElement('div');
@@ -391,7 +391,7 @@ export default defineContentScript({
         
         const heading = document.createElement('h2');
         heading.className = 'banner-heading';
-        heading.textContent = 'Magic comprehension';
+        heading.textContent = 'Comprehension AI';
         
         headingContainer.appendChild(heading);
         
@@ -441,14 +441,14 @@ export default defineContentScript({
        * Add CSS styles for the banner
        */
       addStyles() {
-        if (document.getElementById('magic-comprehension-banner-styles')) {
+        if (document.getElementById('comprehension-ai-banner-styles')) {
           return; // Styles already added
         }
         
         const style = document.createElement('style');
-        style.id = 'magic-comprehension-banner-styles';
+        style.id = 'comprehension-ai-banner-styles';
         style.textContent = `
-          .magic-comprehension-banner {
+          .comprehension-ai-banner {
             position: fixed;
             top: 20px;
             right: 20px;
@@ -466,12 +466,12 @@ export default defineContentScript({
             transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.4s ease;
           }
           
-          .magic-comprehension-banner.show {
+          .comprehension-ai-banner.show {
             transform: translateX(0);
             opacity: 1;
           }
           
-          .magic-comprehension-banner.hide {
+          .comprehension-ai-banner.hide {
             transform: translateX(400px);
             opacity: 0;
           }

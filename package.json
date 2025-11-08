@@ -1,7 +1,7 @@
 {
-  "name": "magic-comprehension",
+  "name": "comprehension-ai",
   "version": "1.0.2",
-  "description": "Enhance your reading, vocabulary, and comprehension instantly with AI-powered insights.",
+  "description": "Enhance your reading, vocabulary, and comprehension instantly in any language with AI-powered insights.",
   "type": "module",
   "private": true,
   "scripts": {
