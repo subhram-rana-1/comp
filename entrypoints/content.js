@@ -5491,16 +5491,16 @@ const TextSelector = {
       }
       
       // Chat is not open for this text - open it (toggle on)
-      // Pulsate the text
-      const highlight = this.textToHighlights.get(textKey);
-      if (highlight) {
-        this.pulsateText(highlight, true);
-      }
-      
-      // Open ChatDialog in simplified mode with selected context
-      // Always use 'selected' context when opening from book icon to ensure expansion animation
+        // Pulsate the text
+        const highlight = this.textToHighlights.get(textKey);
+        if (highlight) {
+          this.pulsateText(highlight, true);
+        }
+        
+        // Open ChatDialog in simplified mode with selected context
+        // Always use 'selected' context when opening from book icon to ensure expansion animation
       // Note: ChatDialog.open() will handle the toggle if dialog is already open for same text
-      ChatDialog.open(simplifiedData.text, textKey, 'simplified', simplifiedData, 'selected');
+        ChatDialog.open(simplifiedData.text, textKey, 'simplified', simplifiedData, 'selected');
       
       // Reset processing flag after a delay to allow for state changes
       // Use longer delay to ensure dialog is fully opened before allowing another click
@@ -6590,7 +6590,7 @@ const ChatDialog = {
     // If dialog is open for different text, close it first
     if (this.isOpen) {
       console.log('[ChatDialog] Dialog open for different text, closing first');
-      // Force immediate cleanup if minimizing (to prevent invisible dialog)
+      // Force immediate cleanup if minimizing or expanding (to prevent invisible dialog)
       const wasMinimizing = this.dialogContainer && this.dialogContainer.classList.contains('minimizing');
       const wasExpanding = this.dialogContainer && this.dialogContainer.classList.contains('expanding');
       
@@ -6598,8 +6598,19 @@ const ChatDialog = {
         // Cancel any ongoing animation and clean up immediately
         if (this.dialogContainer) {
           this.dialogContainer.classList.remove('minimizing', 'expanding');
-          this.dialogContainer.style.setProperty('transition', 'none');
-          this.dialogContainer.style.setProperty('animation', 'none');
+          this.dialogContainer.style.removeProperty('transition');
+          this.dialogContainer.style.removeProperty('animation');
+          
+          // Clean up CSS variables
+          this.dialogContainer.style.removeProperty('--minimize-target-x');
+          this.dialogContainer.style.removeProperty('--minimize-target-y');
+          this.dialogContainer.style.removeProperty('--minimize-start-transform');
+          this.dialogContainer.style.removeProperty('--minimize-end-transform');
+          this.dialogContainer.style.removeProperty('--expand-start-transform');
+          this.dialogContainer.style.removeProperty('--expand-end-transform');
+          
+          // Force a reflow to ensure cleanup is applied
+          void this.dialogContainer.offsetHeight;
         }
       }
       
@@ -6607,16 +6618,27 @@ const ChatDialog = {
       
       // Wait for close animation to complete and ensure cleanup
       setTimeout(() => {
-        // Double-check dialog is fully removed
+        // Double-check dialog is fully removed and cleaned up
         if (this.dialogContainer && this.dialogContainer.parentNode) {
           console.log('[ChatDialog] Dialog still exists, forcing removal');
+          // Clean up any remaining animation classes and CSS variables
+          this.dialogContainer.classList.remove('minimizing', 'expanding', 'visible');
+          this.dialogContainer.style.removeProperty('animation');
+          this.dialogContainer.style.removeProperty('transition');
+          this.dialogContainer.style.removeProperty('--minimize-target-x');
+          this.dialogContainer.style.removeProperty('--minimize-target-y');
+          this.dialogContainer.style.removeProperty('--minimize-start-transform');
+          this.dialogContainer.style.removeProperty('--minimize-end-transform');
+          this.dialogContainer.style.removeProperty('--expand-start-transform');
+          this.dialogContainer.style.removeProperty('--expand-end-transform');
+          
           this.dialogContainer.remove();
           this.dialogContainer = null;
           this.isOpen = false;
         }
         console.log('[ChatDialog] Opening dialog after close delay');
         this.openDialog(text, contextualTextKey, mode, simplifiedData);
-      }, 500); // Increased delay to ensure proper cleanup
+      }, 350); // Wait for animation to complete (300ms) + small buffer
     } else {
       // Dialog is not open, open it
       console.log('[ChatDialog] Dialog not open, opening directly');
@@ -6722,6 +6744,13 @@ const ChatDialog = {
       console.log('[ChatDialog] Dialog is currently opening (expanding), cannot close yet');
       return;
     }
+    
+    // If already minimizing, don't close again (prevent double-close)
+    if (this.dialogContainer && this.dialogContainer.classList.contains('minimizing')) {
+      console.log('[ChatDialog] Dialog is already minimizing, ignoring close request');
+      return;
+    }
+    
     console.log('[ChatDialog] Current state - isOpen:', this.isOpen, 'currentTextKey:', this.currentTextKey);
     console.log('[ChatDialog] chatContext:', this.chatContext);
     console.log('[ChatDialog] dialogContainer exists:', !!this.dialogContainer);
@@ -7002,6 +7031,20 @@ const ChatDialog = {
         console.log('[ChatDialog]   deltaXFromCurrent:', deltaXFromCurrent, 'deltaYFromCurrent:', deltaYFromCurrent);
         console.log('[ChatDialog]   endTranslateX:', endTranslateX, 'endTranslateY:', endTranslateY);
         
+        // Clean up any previous animation state FIRST before setting new properties
+        this.dialogContainer.classList.remove('minimizing', 'expanding');
+        this.dialogContainer.style.removeProperty('--minimize-target-x');
+        this.dialogContainer.style.removeProperty('--minimize-target-y');
+        this.dialogContainer.style.removeProperty('--minimize-start-transform');
+        this.dialogContainer.style.removeProperty('--minimize-end-transform');
+        this.dialogContainer.style.removeProperty('--expand-start-transform');
+        this.dialogContainer.style.removeProperty('--expand-end-transform');
+        this.dialogContainer.style.removeProperty('animation');
+        this.dialogContainer.style.removeProperty('transition');
+        
+        // Force a reflow to ensure cleanup is applied
+        void this.dialogContainer.offsetHeight;
+        
         // Set CSS custom properties for the animation
         // Use current transform as start, and calculate end from current position
         this.dialogContainer.style.setProperty('--minimize-target-x', `${targetCenterX}px`);
@@ -7034,13 +7077,8 @@ const ChatDialog = {
           return;
         }
         
-        // Remove any existing minimizing class first to ensure animation restarts
-        this.dialogContainer.classList.remove('minimizing');
-        
-        // Force a reflow to ensure class removal is applied
-        void this.dialogContainer.offsetHeight;
-        
         // Now add the minimizing class to trigger animation
+        // The CSS will handle the animation via the .minimizing class
         this.dialogContainer.classList.add('minimizing');
         
         // Force a reflow to ensure animation starts
@@ -7066,10 +7104,10 @@ const ChatDialog = {
         console.log('[ChatDialog] Current transform:', transform);
         console.log('[ChatDialog] CSS custom properties:');
         if (this.dialogContainer) {
-          console.log('[ChatDialog]   --minimize-start-transform:', this.dialogContainer.style.getPropertyValue('--minimize-start-transform'));
-          console.log('[ChatDialog]   --minimize-end-transform:', this.dialogContainer.style.getPropertyValue('--minimize-end-transform'));
-          console.log('[ChatDialog]   --minimize-target-x:', this.dialogContainer.style.getPropertyValue('--minimize-target-x'));
-          console.log('[ChatDialog]   --minimize-target-y:', this.dialogContainer.style.getPropertyValue('--minimize-target-y'));
+        console.log('[ChatDialog]   --minimize-start-transform:', this.dialogContainer.style.getPropertyValue('--minimize-start-transform'));
+        console.log('[ChatDialog]   --minimize-end-transform:', this.dialogContainer.style.getPropertyValue('--minimize-end-transform'));
+        console.log('[ChatDialog]   --minimize-target-x:', this.dialogContainer.style.getPropertyValue('--minimize-target-x'));
+        console.log('[ChatDialog]   --minimize-target-y:', this.dialogContainer.style.getPropertyValue('--minimize-target-y'));
         }
         
         // Wait for animation to complete, then hide dialog
