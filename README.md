@@ -1,6 +1,6 @@
-# Vocabulary Extension
+# CompreAI - Vocabulary & Comprehension Extension
 
-A Chrome extension for sharpening vocabulary and comprehension, built with WXT.
+A Chrome extension for enhancing vocabulary, comprehension, and multilingual learning with AI-powered word meanings, text explanations, and conversational AI support. Built with WXT.
 
 ## Getting Started
 
@@ -46,7 +46,10 @@ This will create a ZIP file ready for Chrome Web Store submission.
 - 🎨 Modern UI with purple accent colors and soft glowing shadow
 - 😺 Cat mascot with glasses
 - 🔄 iOS-style toggle switch (ON/OFF)
-- 📝 Clear instructions for vocabulary learning
+- 📝 Word Meaning: Get instant AI-powered word definitions and explanations
+- 📖 Text Explanation: Receive comprehensive explanations of selected text passages
+- 🌍 Multilingual AI Chat: Communicate with AI in any language (Arabic, Spanish, French, Hindi, Chinese, Japanese, and more) regardless of the website's content language
+- 💬 Conversational AI: Ask questions and get responses in your preferred regional language
 - 💜 Highlighted key terms with purple pill styling
 
 ## Project Structure
@@ -55,6 +58,8 @@ This will create a ZIP file ready for Chrome Web Store submission.
 - `assets/popup.css` - Modular CSS styling (separate from HTML)
 - `assets/popup.js` - Toggle functionality JavaScript
 - `assets/logo_1-removebg.png` - Cat logo image
+- `core/services/` - Service files for API integration, word explanations, and text simplification
+- `core/config/` - Configuration files for API and build settings
 - `wxt.config.ts` - WXT configuration file
 - `package.json` - Project dependencies and scripts
 

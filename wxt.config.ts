@@ -12,9 +12,9 @@ const packageJson = JSON.parse(readFileSync(join(rootDir, 'package.json'), 'utf-
 export default defineConfig({
   publicDir: 'assets',
   manifest: {
-    name: 'Magic comprehension',
+    name: 'Explain AI',
     version: packageJson.version,
-    description: 'Enhance your reading, vocabulary, and comprehension instantly with AI-powered insights.',
+    description: 'Enhance your reading, vocabulary, and comprehension instantly in any language with AI-powered insights.',
     action: {
       default_title: 'Boost your vocabulary and comprehension with AI',
     },
