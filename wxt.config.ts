@@ -12,7 +12,7 @@ const packageJson = JSON.parse(readFileSync(join(rootDir, 'package.json'), 'utf-
 export default defineConfig({
   publicDir: 'assets',
   manifest: {
-    name: 'Comprehension AI',
+    name: 'Explain AI',
     version: packageJson.version,
     description: 'Enhance your reading, vocabulary, and comprehension instantly in any language with AI-powered insights.',
     action: {
