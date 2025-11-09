@@ -578,7 +578,7 @@ export default defineContentScript({
     // Banner Module - Shows welcome banner when extension is enabled
     // ===================================
     const BannerModule = {
-      STORAGE_KEY: 'magic_comprehension_banner_dismissed',
+      STORAGE_KEY: 'explain_ai_banner_dismissed',
       bannerContainer: null,
       
       /**
