@@ -2700,6 +2700,8 @@ const WordSelector = {
         await this.handlePronunciation(word, speakerBtn);
       });
       popup.appendChild(speakerBtn);
+      // Add class to popup to indicate speaker icon exists
+      popup.classList.add('has-speaker-icon');
     }
     
     // Meaning
@@ -4639,6 +4641,12 @@ const WordSelector = {
         font-size: 15px;
         line-height: 1.5;
         margin-bottom: 14px;
+        padding-top: 0; /* No padding by default */
+      }
+      
+      /* Add padding-top to meaning div when speaker icon exists */
+      .vocab-word-popup.has-speaker-icon .vocab-word-popup-meaning {
+        padding-top: 40px; /* Space for speaker icon (28px height + 12px top = 40px) */
       }
       
       .vocab-word-popup-meaning .word-bold {
