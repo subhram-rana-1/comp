@@ -214,15 +214,9 @@ input:checked + .toggle-slider:before {
   }
 }
 
-/* Title */
-.title {
-  color: #999;
-  font-size: 18px;
-  font-weight: 600;
+/* Title Container */
+.title-container {
   margin: 40px 0 0 0;
-  line-height: 1.4;
-  white-space: normal;
-  transition: color 0.3s ease, margin 0.4s cubic-bezier(0.4, 0, 0.2, 1);
   animation: fadeInUp 0.4s cubic-bezier(0.4, 0, 0.2, 1) 0.15s both;
 }
 
@@ -237,9 +231,42 @@ input:checked + .toggle-slider:before {
   }
 }
 
-body.extension-on .title {
-  margin-bottom: 12px;
+/* Brand Name */
+.brand-name {
+  margin: 0;
+  font-size: 32px;
+  font-weight: 600;
   color: #9527F5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  line-height: 1;
+}
+
+.brand-icon {
+  display: inline-flex;
+  align-items: center;
+  line-height: 1;
+}
+
+.brand-icon svg {
+  display: block;
+}
+
+/* Subtitle */
+.subtitle {
+  color: #B88AE6;
+  font-size: 16px;
+  font-weight: 400;
+  margin: 8px 0 0 0;
+  line-height: 1.4;
+  white-space: normal;
+  transition: color 0.3s ease;
+}
+
+body.extension-on .subtitle {
+  color: #666;
 }
 
 /* Instructions */
