@@ -333,8 +333,17 @@ export default defineContentScript({
         console.log('[Content Script] Page text content fetched and stored. Length:', pageText.length);
         console.log('[Content Script] pageTextContent variable:', pageTextContent);
         
-        // Show the button now that content is available
-        showAskAboutPageButton();
+        // Check if extension is enabled before showing the button
+        const GLOBAL_STORAGE_KEY = 'is_extension_globally_enabled';
+        const result = await chrome.storage.local.get([GLOBAL_STORAGE_KEY]);
+        const isEnabled = result[GLOBAL_STORAGE_KEY] ?? true; // Default to true if not set
+        
+        // Only show the button if extension is enabled
+        if (isEnabled) {
+          showAskAboutPageButton();
+        } else {
+          console.log('[Content Script] Extension is disabled, not showing ask-about-page button');
+        }
       } catch (error) {
         console.error('[Content Script] Error fetching page text content:', error);
       }
@@ -3772,22 +3781,44 @@ const WordSelector = {
    * @param {Blob} audioBlob - The audio blob to play
    */
   async playAudio(audioBlob) {
-    const audioUrl = URL.createObjectURL(audioBlob);
-    const audio = new Audio(audioUrl);
+    // Convert blob to base64 data URL to avoid CSP violations with blob URLs
+    // This works around websites that block blob: URLs in their Content Security Policy
+    const base64Url = await this.blobToDataURL(audioBlob);
+    const audio = new Audio(base64Url);
     audio.volume = 1.0; // Maximum volume
     
     return new Promise((resolve, reject) => {
       audio.onended = () => {
-        URL.revokeObjectURL(audioUrl);
         resolve();
       };
       
       audio.onerror = (error) => {
-        URL.revokeObjectURL(audioUrl);
-        reject(error);
+        console.error('[WordSelector] Audio playback error:', error);
+        reject(new Error('Failed to play audio. This may be due to website Content Security Policy restrictions.'));
       };
       
-      audio.play().catch(reject);
+      audio.play().catch((error) => {
+        console.error('[WordSelector] Audio play() error:', error);
+        reject(error);
+      });
+    });
+  },
+  
+  /**
+   * Convert blob to base64 data URL
+   * @param {Blob} blob - The blob to convert
+   * @returns {Promise<string>} Base64 data URL
+   */
+  async blobToDataURL(blob) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        resolve(reader.result);
+      };
+      reader.onerror = (error) => {
+        reject(error);
+      };
+      reader.readAsDataURL(blob);
     });
   },
 
