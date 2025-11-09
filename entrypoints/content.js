@@ -1209,6 +1209,136 @@ async function handleExtensionStateCheck(domain, sendResponse) {
 }
 
 // ===================================
+// Error Banner Module - Shows error messages for rate limiting
+// ===================================
+const ErrorBanner = {
+  bannerContainer: null,
+  
+  /**
+   * Show error banner with message
+   * @param {string} message - Error message to display
+   */
+  show(message) {
+    // Remove existing banner if any
+    this.hide();
+    
+    // Create banner container
+    this.bannerContainer = document.createElement('div');
+    this.bannerContainer.id = 'vocab-error-banner';
+    this.bannerContainer.className = 'vocab-error-banner';
+    this.bannerContainer.innerHTML = `
+      <div class="vocab-error-banner-content">
+        <span class="vocab-error-banner-message">${message}</span>
+        <button class="vocab-error-banner-close" aria-label="Close">×</button>
+      </div>
+    `;
+    
+    // Add close button handler
+    const closeBtn = this.bannerContainer.querySelector('.vocab-error-banner-close');
+    closeBtn.addEventListener('click', () => {
+      this.hide();
+    });
+    
+    // Append to body
+    document.body.appendChild(this.bannerContainer);
+    
+    // Auto-hide after 5 seconds
+    setTimeout(() => {
+      this.hide();
+    }, 5000);
+    
+    // Add styles if not already added
+    this.injectStyles();
+  },
+  
+  /**
+   * Hide error banner
+   */
+  hide() {
+    if (this.bannerContainer && this.bannerContainer.parentNode) {
+      this.bannerContainer.remove();
+      this.bannerContainer = null;
+    }
+  },
+  
+  /**
+   * Inject CSS styles for error banner
+   */
+  injectStyles() {
+    const styleId = 'vocab-error-banner-styles';
+    if (document.getElementById(styleId)) {
+      return; // Styles already injected
+    }
+    
+    const style = document.createElement('style');
+    style.id = styleId;
+    style.textContent = `
+      .vocab-error-banner {
+        position: fixed;
+        top: 20px;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 1000000;
+        background: #ef4444;
+        color: white;
+        padding: 12px 20px;
+        border-radius: 8px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        animation: vocab-error-banner-slide-in 0.3s ease-out;
+        max-width: 90%;
+        width: auto;
+      }
+      
+      @keyframes vocab-error-banner-slide-in {
+        from {
+          opacity: 0;
+          transform: translateX(-50%) translateY(-20px);
+        }
+        to {
+          opacity: 1;
+          transform: translateX(-50%) translateY(0);
+        }
+      }
+      
+      .vocab-error-banner-content {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+      }
+      
+      .vocab-error-banner-message {
+        font-size: 14px;
+        font-weight: 500;
+        line-height: 1.4;
+      }
+      
+      .vocab-error-banner-close {
+        background: none;
+        border: none;
+        color: white;
+        font-size: 24px;
+        line-height: 1;
+        cursor: pointer;
+        padding: 0;
+        width: 20px;
+        height: 20px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        opacity: 0.8;
+        transition: opacity 0.2s;
+      }
+      
+      .vocab-error-banner-close:hover {
+        opacity: 1;
+      }
+    `;
+    
+    document.head.appendChild(style);
+  }
+};
+
+// ===================================
 // Position Manager Module - Handles saving and loading panel position
 // ===================================
 const PositionManager = {
@@ -1838,8 +1968,35 @@ const WordSelector = {
         // Remove pulsating animation on error
         highlight.classList.remove('vocab-word-loading');
         
-        // Show error notification
-        TextSelector.showNotification('Error getting word meaning. Please try again.');
+        // Check if it's a 429 rate limit error
+        if (error.status === 429 || error.message.includes('429') || error.message.includes('Rate limit')) {
+          // Show error banner
+          if (typeof ErrorBanner !== 'undefined') {
+            ErrorBanner.show('You are requesting too fast, please retry after few seconds');
+          }
+          
+          // Remove purple BZG (background/cross button) - restore to normal selected state
+          // Remove any purple cross button that might have been added
+          const purpleBtn = highlight.querySelector('.vocab-word-remove-btn');
+          if (purpleBtn) {
+            purpleBtn.remove();
+          }
+          
+          // Remove any purple background classes
+          highlight.classList.remove('vocab-word-loading', 'vocab-word-explained');
+          
+          // Restore the purple cross button (normal selected state)
+          // Check if word is still in selectedWords
+          const normalizedWord = highlight.getAttribute('data-word')?.toLowerCase();
+          if (normalizedWord && this.selectedWords.has(normalizedWord)) {
+            // Re-add the purple cross button for normal selected state
+            const removeBtn = this.createRemoveButton(normalizedWord);
+            highlight.appendChild(removeBtn);
+          }
+        } else {
+          // Show error notification for other errors
+          TextSelector.showNotification('Error getting word meaning. Please try again.');
+        }
       }
     );
   },
@@ -8657,6 +8814,16 @@ const ChatDialog = {
       (error) => {
         console.error('[ChatDialog] Error during simplification:', error);
         
+        // Check if it's a 429 rate limit error
+        const isRateLimit = error.status === 429 || 
+                           error.message.includes('429') || 
+                           error.message.includes('Rate limit') ||
+                           error.message.includes('too fast');
+        
+        if (isRateLimit && typeof ErrorBanner !== 'undefined') {
+          ErrorBanner.show('You are requesting too fast, please retry after few seconds');
+        }
+        
         // Reset button
         if (simplifyMoreBtn) {
           simplifyMoreBtn.classList.remove('loading');
@@ -8762,6 +8929,16 @@ const ChatDialog = {
           name: error.name,
           stack: error.stack
         });
+        
+        // Check if it's a 429 rate limit error
+        const isRateLimit = error.status === 429 || 
+                           error.message.includes('429') || 
+                           error.message.includes('Rate limit') ||
+                           error.message.includes('too fast');
+        
+        if (isRateLimit && typeof ErrorBanner !== 'undefined') {
+          ErrorBanner.show('You are requesting too fast, please retry after few seconds');
+        }
         
         // Show error message in chat with more details
         const errorMessage = error.message || 'Please try again.';
@@ -9277,6 +9454,43 @@ const ChatDialog = {
         }
       } else {
         // Handle error case - check if we're still in the same chat
+        // Check if it's a 429 rate limit error
+        const isRateLimit = response.error && (
+          response.error.includes('429') || 
+          response.error.includes('Rate limit') ||
+          response.error.includes('too fast')
+        );
+        
+        if (isRateLimit && typeof ErrorBanner !== 'undefined') {
+          ErrorBanner.show('You are requesting too fast, please retry after few seconds');
+          
+          // If this is a text selection (not page-general), stop pulsating and return to normal state
+          if (requestTextKey && !requestTextKey.startsWith('page-general')) {
+            const highlight = TextSelector.textToHighlights.get(requestTextKey);
+            if (highlight) {
+              // Stop pulsating animation
+              highlight.classList.remove('vocab-text-loading', 'vocab-text-pulsate', 'vocab-text-pulsate-green');
+              
+              // Remove any loading states
+              const spinnerContainer = highlight.querySelector('.vocab-magic-meaning-spinner-container');
+              if (spinnerContainer) {
+                spinnerContainer.remove();
+              }
+              
+              // Restore magic-meaning button if it was hidden
+              const iconsWrapper = highlight.querySelector('.vocab-text-icons-wrapper');
+              if (iconsWrapper) {
+                const magicBtn = iconsWrapper.querySelector('.vocab-text-magic-meaning-btn');
+                if (magicBtn) {
+                  magicBtn.style.display = '';
+                }
+              }
+              
+              console.log('[ChatDialog] Stopped pulsating animation and restored normal state for text selection');
+            }
+          }
+        }
+        
         if (this.currentTextKey === requestTextKey) {
           this.addMessageToChat('ai', `⚠️ **Error:**\n\n${response.error}`);
         } else {
@@ -9297,6 +9511,42 @@ const ChatDialog = {
     } catch (error) {
       console.error('[ChatDialog] Error sending message:', error);
       this.removeLoadingAnimation();
+      
+      // Check if it's a 429 rate limit error
+      const isRateLimit = error.status === 429 || 
+                         error.message.includes('429') || 
+                         error.message.includes('Rate limit') ||
+                         error.message.includes('too fast');
+      
+      if (isRateLimit && typeof ErrorBanner !== 'undefined') {
+        ErrorBanner.show('You are requesting too fast, please retry after few seconds');
+        
+        // If this is a text selection (not page-general), stop pulsating and return to normal state
+        if (requestTextKey && !requestTextKey.startsWith('page-general')) {
+          const highlight = TextSelector.textToHighlights.get(requestTextKey);
+          if (highlight) {
+            // Stop pulsating animation
+            highlight.classList.remove('vocab-text-loading', 'vocab-text-pulsate', 'vocab-text-pulsate-green');
+            
+            // Remove any loading states
+            const spinnerContainer = highlight.querySelector('.vocab-magic-meaning-spinner-container');
+            if (spinnerContainer) {
+              spinnerContainer.remove();
+            }
+            
+            // Restore magic-meaning button if it was hidden
+            const iconsWrapper = highlight.querySelector('.vocab-text-icons-wrapper');
+            if (iconsWrapper) {
+              const magicBtn = iconsWrapper.querySelector('.vocab-text-magic-meaning-btn');
+              if (magicBtn) {
+                magicBtn.style.display = '';
+              }
+            }
+            
+            console.log('[ChatDialog] Stopped pulsating animation and restored normal state for text selection');
+          }
+        }
+      }
       
       // Handle error case - check if we're still in the same chat
       if (this.currentTextKey === requestTextKey) {
