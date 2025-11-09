@@ -655,6 +655,18 @@ export default defineContentScript({
         heading.className = 'banner-heading';
         heading.textContent = 'Explain AI';
         
+        // Add magic-meaning icon SVG to the right of the heading
+        const iconWrapper = document.createElement('span');
+        iconWrapper.className = 'banner-heading-icon';
+        iconWrapper.innerHTML = `
+          <svg width="24" height="24" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M14 0L17 8L25 11L17 14L14 22L11 14L3 11L11 8L14 0Z" fill="#9527F5"/>
+            <path d="M22 16L23.5 20L27.5 21.5L23.5 23L22 27L20.5 23L16.5 21.5L20.5 20L22 16Z" fill="#9527F5"/>
+            <path d="M8 21L9.5 24.5L13 26L9.5 27.5L8 31L6.5 27.5L3 26L6.5 24.5L8 21Z" fill="#9527F5"/>
+          </svg>
+        `;
+        
+        heading.appendChild(iconWrapper);
         headingContainer.appendChild(heading);
         
         // Create instructions container
@@ -711,21 +723,23 @@ export default defineContentScript({
         style.id = 'explain-ai-banner-styles';
         style.textContent = `
           .explain-ai-banner {
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            width: 320px;
-            max-width: calc(100vw - 40px);
-            background: white;
-            border: 2px solid #9527F5;
-            border-radius: 16px;
-            padding: 20px;
-            box-shadow: 0 4px 20px rgba(149, 39, 245, 0.15);
-            z-index: 10000;
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            position: fixed !important;
+            top: 20px !important;
+            right: 20px !important;
+            width: 400px !important;
+            max-width: calc(100vw - 40px) !important;
+            background: white !important;
+            border: none !important;
+            border-radius: 30px !important;
+            padding: 20px !important;
+            box-shadow: 0 4px 20px rgba(149, 39, 245, 0.15) !important;
+            z-index: 10000 !important;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif !important;
             transform: translateX(400px);
             opacity: 0;
             transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.4s ease;
+            visibility: visible !important;
+            display: block !important;
           }
           
           .explain-ai-banner.show {
@@ -740,42 +754,66 @@ export default defineContentScript({
           
           .banner-header {
             display: flex;
-            justify-content: flex-end;
+            justify-content: flex-start;
             align-items: flex-start;
             margin-bottom: 8px;
+            position: relative;
           }
           
           .banner-heading-container {
             display: flex;
             align-items: center;
+            justify-content: center;
             margin-bottom: 16px;
           }
           
           .banner-heading {
-            margin: 0;
-            font-size: 18px;
-            font-weight: 600;
-            color: #9527F5;
+            margin: 0 !important;
+            font-size: 28px !important;
+            font-weight: 600 !important;
+            color: #9527F5 !important;
+            display: flex !important;
+            align-items: center !important;
+            gap: 8px !important;
+            visibility: visible !important;
+            opacity: 1 !important;
+          }
+          
+          .banner-heading-icon {
+            display: inline-flex !important;
+            align-items: center !important;
+            line-height: 1 !important;
+            visibility: visible !important;
+            opacity: 1 !important;
+          }
+          
+          .banner-heading-icon svg {
+            display: block !important;
+            visibility: visible !important;
+            opacity: 1 !important;
           }
           
           .banner-close {
-            background: none;
+            position: absolute;
+            top: -4px;
+            left: -4px;
+            background: rgba(149, 39, 245, 0.3);
             border: none;
             cursor: pointer;
             padding: 4px;
             display: flex;
             align-items: center;
             justify-content: center;
-            border-radius: 4px;
+            border-radius: 50%;
             transition: background-color 0.2s ease;
           }
           
           .banner-close:hover {
-            background-color: rgba(149, 39, 245, 0.1);
+            background-color: rgba(149, 39, 245, 0.4);
           }
           
           .banner-close:active {
-            background-color: rgba(149, 39, 245, 0.2);
+            background-color: rgba(149, 39, 245, 0.5);
           }
           
           .banner-instructions {
@@ -802,7 +840,7 @@ export default defineContentScript({
           }
           
           .banner-highlight {
-            background-color: #ede6ff;
+            background-color: #f5f0ff;
             color: #7a1fd9;
             padding: 2px 8px;
             border-radius: 12px;
@@ -816,23 +854,23 @@ export default defineContentScript({
           }
           
           .banner-dont-show {
-            background: none;
+            background: rgba(149, 39, 245, 0.45);
             border: none;
             color: #9527F5;
             font-size: 13px;
             font-weight: 500;
             cursor: pointer;
             padding: 6px 12px;
-            border-radius: 6px;
+            border-radius: 10px;
             transition: background-color 0.2s ease;
           }
           
           .banner-dont-show:hover {
-            background-color: rgba(149, 39, 245, 0.1);
+            background-color: rgba(149, 39, 245, 0.55);
           }
           
           .banner-dont-show:active {
-            background-color: rgba(149, 39, 245, 0.2);
+            background-color: rgba(149, 39, 245, 0.6);
           }
         `;
         
@@ -1212,30 +1250,87 @@ async function handleExtensionStateCheck(domain, sendResponse) {
 // Error Banner Module - Shows error messages for rate limiting
 // ===================================
 const ErrorBanner = {
+  STORAGE_KEY: 'vocab_error_banner_dismissed',
   bannerContainer: null,
+  isMinimized: false,
+  
+  /**
+   * Check if banner should be shown
+   * @returns {Promise<boolean>} Whether to show the banner
+   */
+  async shouldShowBanner() {
+    try {
+      const result = await chrome.storage.local.get([this.STORAGE_KEY]);
+      const isDismissed = result[this.STORAGE_KEY] ?? false;
+      return !isDismissed;
+    } catch (error) {
+      console.error('[ErrorBanner] Error checking banner state:', error);
+      return true; // Default to showing on error
+    }
+  },
+  
+  /**
+   * Mark banner as dismissed
+   */
+  async dismissBanner() {
+    try {
+      await chrome.storage.local.set({ [this.STORAGE_KEY]: true });
+      console.log('[ErrorBanner] Banner dismissed');
+    } catch (error) {
+      console.error('[ErrorBanner] Error dismissing banner:', error);
+    }
+  },
   
   /**
    * Show error banner with message
    * @param {string} message - Error message to display
    */
-  show(message) {
+  async show(message) {
+    // Check if banner should be shown
+    const shouldShow = await this.shouldShowBanner();
+    if (!shouldShow) {
+      console.log('[ErrorBanner] Banner dismissed by user, not showing');
+      return;
+    }
+    
+    // If banner already exists and is minimized, restore it
+    if (this.bannerContainer && this.isMinimized) {
+      this.restore();
+      return;
+    }
+    
     // Remove existing banner if any
     this.hide();
+    this.isMinimized = false;
     
     // Create banner container
     this.bannerContainer = document.createElement('div');
     this.bannerContainer.id = 'vocab-error-banner';
     this.bannerContainer.className = 'vocab-error-banner';
     this.bannerContainer.innerHTML = `
+      <button class="vocab-error-banner-close" aria-label="Minimize">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M12 4L4 12M4 4L12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </button>
       <div class="vocab-error-banner-content">
         <span class="vocab-error-banner-message">${message}</span>
-        <button class="vocab-error-banner-close" aria-label="Close">×</button>
+      </div>
+      <div class="vocab-error-banner-footer">
+        <button class="vocab-error-banner-dismiss" aria-label="Don't show again">Don't show again</button>
       </div>
     `;
     
-    // Add close button handler
+    // Add close button handler (top left) - minimize instead of hide
     const closeBtn = this.bannerContainer.querySelector('.vocab-error-banner-close');
     closeBtn.addEventListener('click', () => {
+      this.minimize();
+    });
+    
+    // Add "Don't show again" button handler (bottom left)
+    const dismissBtn = this.bannerContainer.querySelector('.vocab-error-banner-dismiss');
+    dismissBtn.addEventListener('click', async () => {
+      await this.dismissBanner();
       this.hide();
     });
     
@@ -1244,11 +1339,33 @@ const ErrorBanner = {
     
     // Auto-hide after 5 seconds
     setTimeout(() => {
-      this.hide();
+      if (!this.isMinimized) {
+        this.hide();
+      }
     }, 5000);
     
     // Add styles if not already added
     this.injectStyles();
+  },
+  
+  /**
+   * Minimize error banner
+   */
+  minimize() {
+    if (this.bannerContainer) {
+      this.bannerContainer.classList.add('minimized');
+      this.isMinimized = true;
+    }
+  },
+  
+  /**
+   * Restore minimized banner
+   */
+  restore() {
+    if (this.bannerContainer) {
+      this.bannerContainer.classList.remove('minimized');
+      this.isMinimized = false;
+    }
   },
   
   /**
@@ -1258,6 +1375,7 @@ const ErrorBanner = {
     if (this.bannerContainer && this.bannerContainer.parentNode) {
       this.bannerContainer.remove();
       this.bannerContainer = null;
+      this.isMinimized = false;
     }
   },
   
@@ -1281,12 +1399,14 @@ const ErrorBanner = {
         z-index: 1000000;
         background: #ef4444;
         color: white;
-        padding: 12px 20px;
+        padding: 16px 20px;
         border-radius: 8px;
         box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
         animation: vocab-error-banner-slide-in 0.3s ease-out;
         max-width: 90%;
         width: auto;
+        min-width: 300px;
+        position: relative;
       }
       
       @keyframes vocab-error-banner-slide-in {
@@ -1300,37 +1420,105 @@ const ErrorBanner = {
         }
       }
       
+      .vocab-error-banner-close {
+        position: absolute;
+        top: 8px;
+        left: 8px !important;
+        right: auto !important;
+        background: rgba(255, 255, 255, 0.15);
+        border: 1px solid rgba(255, 255, 255, 0.3);
+        color: white;
+        font-size: 16px;
+        line-height: 1;
+        cursor: pointer;
+        padding: 6px;
+        width: 28px;
+        height: 28px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        opacity: 0.9;
+        transition: all 0.2s;
+        border-radius: 4px;
+        z-index: 10;
+        margin: 0;
+      }
+      
+      .vocab-error-banner-close svg {
+        width: 16px;
+        height: 16px;
+      }
+      
+      .vocab-error-banner-close:hover {
+        opacity: 1;
+        background: rgba(255, 255, 255, 0.25);
+        border-color: rgba(255, 255, 255, 0.5);
+      }
+      
+      .vocab-error-banner.minimized {
+        height: 44px;
+        overflow: hidden;
+      }
+      
+      .vocab-error-banner.minimized .vocab-error-banner-content,
+      .vocab-error-banner.minimized .vocab-error-banner-footer {
+        display: none;
+      }
+      
       .vocab-error-banner-content {
         display: flex;
         align-items: center;
-        gap: 16px;
+        padding: 8px 40px 8px 40px;
+        min-height: 40px;
       }
       
       .vocab-error-banner-message {
         font-size: 14px;
         font-weight: 500;
         line-height: 1.4;
+        text-align: center;
+        flex: 1;
       }
       
-      .vocab-error-banner-close {
-        background: none;
-        border: none;
-        color: white;
-        font-size: 24px;
-        line-height: 1;
+      .vocab-error-banner-footer {
+        display: flex !important;
+        justify-content: flex-start !important;
+        align-items: center !important;
+        padding-top: 8px;
+        padding-left: 0 !important;
+        padding-right: 0 !important;
+        border-top: 1px solid rgba(255, 255, 255, 0.2);
+        margin-top: 8px;
+        margin-left: 0 !important;
+        margin-right: 0 !important;
+        text-align: left !important;
+        width: 100%;
+      }
+      
+      .vocab-error-banner-dismiss {
+        background: none !important;
+        border: 1px solid rgba(255, 255, 255, 0.5) !important;
+        color: white !important;
+        font-size: 12px;
+        font-weight: 500;
         cursor: pointer;
-        padding: 0;
-        width: 20px;
-        height: 20px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        opacity: 0.8;
-        transition: opacity 0.2s;
+        padding: 6px 12px;
+        opacity: 0.9;
+        transition: all 0.2s;
+        text-decoration: none;
+        border-radius: 4px;
+        margin-left: 0 !important;
+        margin-right: auto !important;
+        float: left !important;
+        position: relative !important;
+        left: 0 !important;
+        right: auto !important;
       }
       
-      .vocab-error-banner-close:hover {
+      .vocab-error-banner-dismiss:hover {
         opacity: 1;
+        background: rgba(255, 255, 255, 0.1);
+        border-color: rgba(255, 255, 255, 0.8);
       }
     `;
     
@@ -1962,7 +2150,7 @@ const WordSelector = {
         console.log('[WordSelector] Word explanation API call completed');
       },
       // onError callback
-      (error) => {
+      async (error) => {
         console.error('[WordSelector] Error during word explanation:', error);
         
         // Remove pulsating animation on error
@@ -1972,7 +2160,7 @@ const WordSelector = {
         if (error.status === 429 || error.message.includes('429') || error.message.includes('Rate limit')) {
           // Show error banner
           if (typeof ErrorBanner !== 'undefined') {
-            ErrorBanner.show('You are requesting too fast, please retry after few seconds');
+            await ErrorBanner.show('You are requesting too fast, please retry after few seconds');
           }
           
           // Remove purple BZG (background/cross button) - restore to normal selected state
@@ -2131,7 +2319,7 @@ const WordSelector = {
   },
   
   /**
-   * Create close/cross icon SVG - Purple wireframe style
+   * Create close/cross icon SVG - Purple cross icon
    * @returns {string} SVG markup
    */
   createCloseIcon() {
@@ -2500,12 +2688,6 @@ const WordSelector = {
     popup.style.setProperty('visibility', 'visible', 'important');
     popup.style.setProperty('opacity', '0', 'important'); // Will be set to 1 when visible class is added
     popup.style.setProperty('pointer-events', 'none', 'important'); // Will be set to 'all' when visible
-    
-    // Header
-    const header = document.createElement('div');
-    header.className = 'vocab-word-popup-header';
-    header.textContent = 'Contextual Meaning';
-    popup.appendChild(header);
     
     // Speaker icon for pronunciation - only show if languageCode is "EN"
     if (languageCode === 'EN') {
@@ -4148,8 +4330,8 @@ const WordSelector = {
         background-color: rgba(149, 39, 245, 0.15);
         padding: 0 4px;
         border-radius: 8px;
-        border: 1px solid rgba(149, 39, 245, 0.4);
-        transition: background-color 0.2s ease, border-color 0.2s ease;
+        border: none;
+        transition: background-color 0.2s ease;
         cursor: pointer;
         line-height: inherit;
         box-decoration-break: clone;
@@ -4158,47 +4340,52 @@ const WordSelector = {
       
       .vocab-word-highlight:hover {
         background-color: rgba(149, 39, 245, 0.25);
-        border-color: rgba(149, 39, 245, 0.6);
       }
       
       /* Remove button - Clean cross icon without circle */
       .vocab-word-remove-btn {
         position: absolute;
-        top: -7px;
-        right: -7px;
-        width: 16px;
-        height: 16px;
-        background: none;
-        border: none;
+        top: -10px;
+        right: -10px;
+        width: 18px;
+        height: 18px;
+        background-color: #FFFFFF !important; /* Fully opaque white background */
+        background: #FFFFFF !important; /* Fully opaque white background */
+        border: 1px solid #9527F5 !important; /* Thin purple border */
+        border-radius: 50% !important; /* Circular shape */
         display: flex;
         align-items: center;
         justify-content: center;
         cursor: pointer;
-        opacity: 0.8;
-        transition: opacity 0.2s ease, transform 0.1s ease;
+        opacity: 1 !important; /* Fully opaque */
+        transition: opacity 0.3s ease-in-out, transform 0.3s ease-in-out, scale 0.3s ease-in-out, background-color 0.2s ease, border-color 0.2s ease;
         padding: 0;
         z-index: 999999;
-        filter: drop-shadow(0 1px 2px rgba(149, 39, 245, 0.4));
+        box-shadow: 0 1px 3px rgba(149, 39, 245, 0.2);
+        box-sizing: border-box;
       }
       
       .vocab-word-highlight:hover .vocab-word-remove-btn {
-        opacity: 1;
+        opacity: 1 !important;
       }
       
       .vocab-word-remove-btn:hover {
-        transform: scale(1.2);
-        opacity: 1;
+        transform: scale(1.15);
+        opacity: 1 !important; /* Fully opaque on hover */
+        background-color: #FFFFFF !important; /* Keep fully opaque white background on hover */
+        background: #FFFFFF !important; /* Keep fully opaque white background on hover */
+        border-color: #7a1fd9 !important; /* Slightly darker purple border on hover */
       }
       
       .vocab-word-remove-btn:active {
-        transform: scale(0.9);
+        transform: scale(0.95);
       }
       
       .vocab-word-remove-btn svg {
         pointer-events: none;
         display: block;
-        width: 14px;
-        height: 14px;
+        width: 10px;
+        height: 10px;
       }
       
       /* Make sure highlight doesn't interfere with text flow */
@@ -4225,7 +4412,7 @@ const WordSelector = {
         background-color: rgba(134, 239, 172, 0.7) !important; /* Lighter green with slight transparency */
         cursor: pointer;
         border-radius: 8px;
-        border: 1px solid rgba(74, 222, 128, 0.8) !important; /* Lighter green border with slight transparency */
+        border: none !important;
         padding: 0 2px;
         margin-top: 0 !important; /* Prevent top margin from affecting line spacing */
         margin-bottom: 0 !important; /* Prevent bottom margin from affecting line spacing */
@@ -4235,7 +4422,7 @@ const WordSelector = {
         min-width: auto !important; /* Prevent min-width from forcing expansion */
         user-select: none;
         -webkit-user-select: none;
-        transition: background-color 0.3s ease-in-out, border-color 0.3s ease-in-out, opacity 0.3s ease-in-out, transform 0.15s ease-out;
+        transition: background-color 0.3s ease-in-out, opacity 0.3s ease-in-out, transform 0.15s ease-out;
         box-decoration-break: clone; /* Ensure background wraps correctly on line breaks */
         -webkit-box-decoration-break: clone;
         line-height: normal !important; /* Use normal line height to prevent expansion */
@@ -4274,7 +4461,6 @@ const WordSelector = {
       
       .vocab-word-explained:hover {
         background-color: rgba(74, 222, 128, 0.8) !important; /* Lighter green on hover with slight transparency */
-        border-color: rgba(34, 197, 94, 0.9) !important; /* Lighter green border on hover with slight transparency */
       }
       
       .vocab-word-explained:active,
@@ -4291,12 +4477,10 @@ const WordSelector = {
       @keyframes wordFadeOut {
         0% {
           background-color: rgba(134, 239, 172, 0.7); /* Lighter green with slight transparency */
-          border-color: rgba(74, 222, 128, 0.8); /* Lighter green border with slight transparency */
           opacity: 1;
         }
         100% {
           background-color: transparent;
-          border-color: transparent;
           opacity: 0;
         }
       }
@@ -4365,8 +4549,8 @@ const WordSelector = {
       .vocab-word-popup {
         position: absolute;
         background: white;
-        border-radius: 14px;
-        padding: 18px 20px 45px 20px; /* Reduced bottom padding for minimal spacing */
+        border-radius: 30px;
+        padding: 24px;
         box-shadow: 0 8px 24px rgba(149, 39, 245, 0.15), 0 2px 8px rgba(0, 0, 0, 0.1);
         z-index: 10000010;
         max-width: 380px;
@@ -4380,11 +4564,11 @@ const WordSelector = {
       
       /* Reduce padding and margin when "Get more examples" button is hidden */
       .vocab-word-popup.no-more-examples-button {
-        padding: 18px 20px 18px 20px; /* Reduced bottom padding when button is hidden */
+        padding: 24px; /* Consistent padding when button is hidden */
       }
       
       .vocab-word-popup.no-more-examples-button .vocab-word-popup-examples-container {
-        margin-bottom: 50px; /* Keep margin for tab group even when button is hidden */
+        margin-bottom: 60px; /* Keep margin for tab group even when button is hidden */
       }
       
       .vocab-word-popup.visible {
@@ -4464,10 +4648,15 @@ const WordSelector = {
       
       /* Examples container with scrolling */
       .vocab-word-popup-examples-container {
-        max-height: 200px;
         overflow-y: auto;
-        margin-bottom: 60px; /* Increased margin to prevent overlap with tab group and button */
+        margin-bottom: 70px; /* Increased margin to prevent overlap with tab group and button */
+        margin-top: 16px; /* Space above separator line */
+        padding-top: 16px; /* Space below separator line */
         padding-bottom: 8px; /* Additional padding at bottom */
+        max-height: none; /* Flexible height based on content */
+        position: relative;
+        z-index: 1;
+        border-top: 0.5px solid rgba(149, 39, 245, 0.3); /* Light purple thin separator line */
       }
       
       .vocab-word-popup-examples-container::-webkit-scrollbar {
@@ -4522,14 +4711,16 @@ const WordSelector = {
       /* Bottom container for tab group and button */
       .vocab-word-popup-bottom-container {
         position: absolute;
-        bottom: 12px;
-        left: 12px;
-        right: 12px;
+        bottom: 24px;
+        left: 24px;
+        right: 24px;
         display: flex;
         justify-content: space-between;
         align-items: center;
-        z-index: 10;
+        z-index: 20;
         gap: 12px;
+        background: white;
+        padding: 4px 0;
       }
       
       /* Language tab group - left side */
@@ -4537,11 +4728,11 @@ const WordSelector = {
         display: inline-flex;
         gap: 0;
         background: #e5e7eb;
-        border-radius: 8px;
+        border-radius: 10px;
         padding: 3px;
         position: relative;
         width: auto;
-        min-width: fit-content;
+        min-width: 120px;
         flex-shrink: 0;
       }
       
@@ -4552,7 +4743,7 @@ const WordSelector = {
         left: 3px;
         height: calc(100% - 6px);
         background: #A020F0;
-        border-radius: 5px;
+        border-radius: 10px;
         transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         z-index: 0;
         width: calc(50% - 3px);
@@ -4564,13 +4755,13 @@ const WordSelector = {
       }
       
       .vocab-word-popup-tab {
-        padding: 6px 10px;
+        padding: 6px 12px;
         border: none;
         border-radius: 5px;
         background: transparent;
         color: #6b7280;
         font-weight: 600;
-        font-size: 11px;
+        font-size: 13px;
         cursor: pointer;
         transition: color 0.2s ease;
         text-align: center;
@@ -5366,26 +5557,25 @@ const TextSelector = {
   },
   
   /**
-   * Create close/cross icon SVG - White cross on purple background
+   * Create close/cross icon SVG - Purple cross icon
    * @returns {string} SVG markup
    */
   createCloseIcon() {
     return `
-      <svg width="10" height="10" viewBox="0 0 10 10" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M2 2L8 8M8 2L2 8" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+      <svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M2 2L10 10M10 2L2 10" stroke="#9527F5" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
       </svg>
     `;
   },
 
   /**
-   * Create white cross icon with green circular background for text removal
+   * Create green cross icon for text removal
    * @returns {string} SVG markup
    */
   createGreenRemoveIcon() {
     return `
-      <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <circle cx="9" cy="9" r="9" fill="#22c55e"/>
-        <path d="M6 6L12 12M12 6L6 12" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      <svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M2 2L10 10M10 2L2 10" stroke="#22c55e" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
       </svg>
     `;
   },
@@ -5415,7 +5605,19 @@ const TextSelector = {
         btn.remove();
       }
       
-      // Move all child nodes back to parent
+      // Remove icons wrapper and magic meaning button before moving child nodes
+      const iconsWrapper = highlight.querySelector('.vocab-text-icons-wrapper');
+      if (iconsWrapper) {
+        iconsWrapper.remove();
+      }
+      
+      // Also remove any magic meaning button that might be directly in highlight
+      const magicBtn = highlight.querySelector('.vocab-text-magic-meaning-btn');
+      if (magicBtn) {
+        magicBtn.remove();
+      }
+      
+      // Move all remaining child nodes back to parent (only text content, not UI elements)
       while (highlight.firstChild) {
         parent.insertBefore(highlight.firstChild, highlight);
       }
@@ -6129,7 +6331,7 @@ const TextSelector = {
         position: relative;
         text-decoration-line: underline;
         text-decoration-style: dashed;
-        text-decoration-color: #9527F5;
+        text-decoration-color: #B88AE6; /* Lighter purple - fully opaque */
         text-decoration-thickness: 0.6px;
         text-underline-offset: 2px;
         cursor: text;
@@ -6167,13 +6369,13 @@ const TextSelector = {
           text-decoration-color: transparent;
         }
         100% {
-          text-decoration-color: #9527F5;
+          text-decoration-color: #B88AE6; /* Lighter purple - fully opaque */
         }
       }
       
       @keyframes underlineFadeOut {
         0% {
-          text-decoration-color: #9527F5;
+          text-decoration-color: #B88AE6; /* Lighter purple - fully opaque */
         }
         100% {
           text-decoration-color: transparent;
@@ -6192,26 +6394,28 @@ const TextSelector = {
         letter-spacing: inherit !important; /* Preserve original letter spacing for child elements */
       }
       
-      /* Remove button - Solid purple circle with white cross on top-left */
+      /* Remove button - White circle with purple border and purple cross on top-left */
       .vocab-text-remove-btn {
         position: absolute;
-        top: -6px;
-        left: -6px;
-        width: 14px;
-        height: 14px;
-        background: #9527F5;
-        border: none;
+        top: -10px;
+        left: -10px;
+        width: 18px;
+        height: 18px;
+        background-color: #FFFFFF !important; /* Fully opaque white background */
+        background: #FFFFFF !important; /* Fully opaque white background */
+        border: 1px solid #9527F5 !important; /* Thin purple border */
         border-radius: 50%;
         display: flex;
         align-items: center;
         justify-content: center;
         cursor: pointer;
-        opacity: 0.9;
-        transition: opacity 0.3s ease-in-out, transform 0.1s ease, background-color 0.2s ease, scale 0.3s ease-in-out;
+        opacity: 1 !important; /* Fully opaque */
+        transition: opacity 0.3s ease-in-out, transform 0.1s ease, background-color 0.2s ease, scale 0.3s ease-in-out, border-color 0.2s ease;
         padding: 0;
         z-index: 10000003;
         box-shadow: 0 2px 4px rgba(149, 39, 245, 0.4);
         pointer-events: auto;
+        box-sizing: border-box;
       }
       
       /* Smooth animation for button appearance - 0.3s duration (same as underline) */
@@ -6232,14 +6436,14 @@ const TextSelector = {
           transform: scale(0.8);
         }
         100% {
-          opacity: 0.9;
+          opacity: 1;
           transform: scale(1);
         }
       }
       
       @keyframes buttonFadeOut {
         0% {
-          opacity: 0.9;
+          opacity: 1;
           transform: scale(1);
         }
         100% {
@@ -6249,13 +6453,15 @@ const TextSelector = {
       }
       
       .vocab-text-highlight:hover .vocab-text-remove-btn {
-        opacity: 1;
+        opacity: 1 !important;
       }
       
       .vocab-text-remove-btn:hover {
         transform: scale(1.15);
-        opacity: 1;
-        background: #7a1fd9;
+        opacity: 1 !important; /* Fully opaque on hover */
+        background-color: #FFFFFF !important; /* Keep fully opaque white background on hover */
+        background: #FFFFFF !important; /* Keep fully opaque white background on hover */
+        border-color: #7a1fd9 !important; /* Slightly darker purple border on hover */
       }
       
       .vocab-text-remove-btn:active {
@@ -6265,8 +6471,35 @@ const TextSelector = {
       .vocab-text-remove-btn svg {
         pointer-events: none;
         display: block;
-        width: 8px;
-        height: 8px;
+        width: 10px;
+        height: 10px;
+      }
+      
+      /* Remove purple border from cross button when text is loading (spinner active) */
+      .vocab-text-highlight.vocab-text-loading .vocab-text-remove-btn {
+        border: none !important;
+      }
+      
+      /* Make cross icon green when text has green dashed underline (simplified/explained) */
+      .vocab-text-highlight.vocab-text-simplified .vocab-text-remove-btn {
+        border-color: #22c55e !important; /* Green border */
+        box-shadow: 0 2px 4px rgba(34, 197, 94, 0.4) !important; /* Green shadow */
+      }
+      
+      .vocab-text-highlight.vocab-text-simplified .vocab-text-remove-btn:hover {
+        border-color: #16a34a !important; /* Darker green border on hover */
+      }
+      
+      /* Make cross icon green - use multiple selectors to ensure it overrides inline styles */
+      .vocab-text-highlight.vocab-text-simplified .vocab-text-remove-btn svg path,
+      .vocab-text-highlight.vocab-text-simplified .vocab-text-remove-btn svg > path {
+        stroke: #22c55e !important; /* Green cross icon */
+        fill: none !important;
+      }
+      
+      /* Also target the SVG element itself to ensure green color */
+      .vocab-text-highlight.vocab-text-simplified .vocab-text-remove-btn svg {
+        color: #22c55e !important;
       }
       
       /* Wrapper containers for icon groups */
@@ -6361,7 +6594,7 @@ const TextSelector = {
         width: 28px;
         height: 28px;
         background: #d1fae5 !important; /* Circular light green opaque container (no transparency) */
-        border: 1px solid rgba(34, 197, 94, 0.4) !important; /* Thin green border */
+        border: none !important; /* No border */
         border-radius: 50% !important; /* Circular shape */
         display: flex !important;
         align-items: center;
@@ -6411,7 +6644,7 @@ const TextSelector = {
         max-height: 32px !important; /* Ensure maximum height */
         aspect-ratio: 1 / 1 !important; /* Force perfect square/circle */
         background: #e9d5ff !important; /* Circular light purple opaque container (no transparency) */
-        border: 1px solid rgba(149, 39, 245, 0.4) !important; /* Thin purple border */
+        border: none !important; /* Remove border */
         border-radius: 50% !important; /* Circular shape */
         display: flex !important;
         align-items: center;
@@ -6426,38 +6659,24 @@ const TextSelector = {
         margin: 0 !important; /* No margin */
       }
       
-      /* Magic-meaning button breathing animation when first appears */
+      /* Magic-meaning button continuous breathing animation */
       .vocab-text-magic-meaning-btn.magic-meaning-breathing {
-        animation: magicMeaningBreathing 0.8s ease-in-out;
+        animation: magicMeaningBreathingContinuous 2s ease-in-out infinite;
       }
       
-      @keyframes magicMeaningBreathing {
-        0% {
+      @keyframes magicMeaningBreathingContinuous {
+        0%, 100% {
           transform: scale(1);
-          opacity: 0.7;
-        }
-        25% {
-          transform: scale(1.3);
-          opacity: 1;
         }
         50% {
-          transform: scale(1);
-          opacity: 0.8;
-        }
-        75% {
-          transform: scale(1.3);
-          opacity: 1;
-        }
-        100% {
-          transform: scale(1);
-          opacity: 1;
+          transform: scale(1.15);
         }
       }
       
       .vocab-text-magic-meaning-btn:hover {
-        transform: scale(1.1);
         opacity: 1;
         background-color: #ddd6fe !important; /* Slightly darker purple on hover */
+        animation: magicMeaningBreathingContinuous 2s ease-in-out infinite; /* Keep breathing on hover */
       }
       
       .vocab-text-magic-meaning-btn:active {
@@ -6484,7 +6703,7 @@ const TextSelector = {
         max-height: 32px !important; /* Ensure maximum height */
         aspect-ratio: 1 / 1 !important; /* Force perfect square/circle */
         background: white !important; /* Circular white opaque container */
-        border: 1px solid rgba(149, 39, 245, 0.4) !important; /* Thin purple border */
+        border: none !important; /* No border */
         border-radius: 50% !important; /* Circular shape */
         display: block !important; /* Block display for absolute child positioning */
         flex-shrink: 0 !important;
@@ -6588,26 +6807,33 @@ const TextSelector = {
         }
       }
       
-      /* Green remove button - white cross on green circular background */
+      /* Green remove button - green cross on white circular background with green border */
       .vocab-text-remove-green-btn {
         position: relative;
         width: 18px;
         height: 18px;
-        background: transparent;
-        border: none;
+        background-color: #FFFFFF !important; /* Fully opaque white background */
+        background: #FFFFFF !important; /* Fully opaque white background */
+        border: 1px solid #22c55e !important; /* Green border */
+        border-radius: 50% !important; /* Circular shape */
         display: flex;
         align-items: center;
         justify-content: center;
         cursor: pointer;
-        opacity: 0.95;
-        transition: opacity 0.2s ease, transform 0.15s ease;
+        opacity: 1 !important; /* Fully opaque */
+        transition: opacity 0.2s ease, transform 0.15s ease, background-color 0.2s ease, border-color 0.2s ease;
         padding: 0;
         flex-shrink: 0;
+        box-sizing: border-box;
+        box-shadow: 0 1px 3px rgba(34, 197, 94, 0.2);
       }
       
       .vocab-text-remove-green-btn:hover {
         transform: scale(1.15);
-        opacity: 1;
+        opacity: 1 !important; /* Fully opaque on hover */
+        background-color: #FFFFFF !important; /* Keep fully opaque white background on hover */
+        background: #FFFFFF !important; /* Keep fully opaque white background on hover */
+        border-color: #16a34a !important; /* Slightly darker green border on hover */
       }
       
       .vocab-text-remove-green-btn:active {
@@ -6621,9 +6847,8 @@ const TextSelector = {
       .vocab-text-remove-green-btn svg {
         pointer-events: none;
         display: block;
-        width: 18px;
-        height: 18px;
-        filter: drop-shadow(0 2px 3px rgba(34, 197, 94, 0.3));
+        width: 10px;
+        height: 10px;
       }
       
       /* Light green dashed underline for simplified texts - same green as chat icon */
@@ -6799,14 +7024,14 @@ const TextSelector = {
         width: 48px;
         height: 48px;
         background: #9527F5;
-        border: none;
+        border: 2px solid white;
         border-radius: 50%;
         display: flex;
         align-items: center;
         justify-content: center;
         cursor: pointer;
         opacity: 0.95;
-        transition: opacity 0.2s ease, transform 0.15s ease, box-shadow 0.2s ease;
+        transition: opacity 0.2s ease, transform 0.15s ease, box-shadow 0.2s ease, border-color 0.2s ease;
         padding: 0;
         z-index: 10000000;
         box-shadow: 0 2px 8px rgba(149, 39, 245, 0.4);
@@ -8811,7 +9036,7 @@ const ChatDialog = {
         this.isSimplifying = false;
       },
       // onError callback
-      (error) => {
+      async (error) => {
         console.error('[ChatDialog] Error during simplification:', error);
         
         // Check if it's a 429 rate limit error
@@ -8821,7 +9046,7 @@ const ChatDialog = {
                            error.message.includes('too fast');
         
         if (isRateLimit && typeof ErrorBanner !== 'undefined') {
-          ErrorBanner.show('You are requesting too fast, please retry after few seconds');
+          await ErrorBanner.show('You are requesting too fast, please retry after few seconds');
         }
         
         // Reset button
@@ -8937,7 +9162,7 @@ const ChatDialog = {
                            error.message.includes('too fast');
         
         if (isRateLimit && typeof ErrorBanner !== 'undefined') {
-          ErrorBanner.show('You are requesting too fast, please retry after few seconds');
+          await ErrorBanner.show('You are requesting too fast, please retry after few seconds');
         }
         
         // Show error message in chat with more details
@@ -9462,7 +9687,7 @@ const ChatDialog = {
         );
         
         if (isRateLimit && typeof ErrorBanner !== 'undefined') {
-          ErrorBanner.show('You are requesting too fast, please retry after few seconds');
+          await ErrorBanner.show('You are requesting too fast, please retry after few seconds');
           
           // If this is a text selection (not page-general), stop pulsating and return to normal state
           if (requestTextKey && !requestTextKey.startsWith('page-general')) {
@@ -9519,7 +9744,7 @@ const ChatDialog = {
                          error.message.includes('too fast');
       
       if (isRateLimit && typeof ErrorBanner !== 'undefined') {
-        ErrorBanner.show('You are requesting too fast, please retry after few seconds');
+        await ErrorBanner.show('You are requesting too fast, please retry after few seconds');
         
         // If this is a text selection (not page-general), stop pulsating and return to normal state
         if (requestTextKey && !requestTextKey.startsWith('page-general')) {
@@ -17122,11 +17347,11 @@ const ButtonPanel = {
           greenCrossBtn.className = 'vocab-text-remove-green-btn';
           greenCrossBtn.setAttribute('aria-label', 'Remove simplified text');
           greenCrossBtn.style.position = 'absolute';
-          greenCrossBtn.style.top = '-6px';
-          greenCrossBtn.style.left = '-6px';
-          greenCrossBtn.style.width = '14px';
-          greenCrossBtn.style.height = '14px';
-          greenCrossBtn.style.background = '#22c55e';
+          greenCrossBtn.style.top = '-10px';
+          greenCrossBtn.style.left = '-10px';
+          greenCrossBtn.style.width = '18px';
+          greenCrossBtn.style.height = '18px';
+          greenCrossBtn.style.background = '#FFFFFF';
           greenCrossBtn.style.borderRadius = '50%';
           greenCrossBtn.style.zIndex = '10000003';
           greenCrossBtn.style.boxShadow = '0 2px 4px rgba(34, 197, 94, 0.4)';
@@ -17134,13 +17359,14 @@ const ButtonPanel = {
           greenCrossBtn.style.alignItems = 'center';
           greenCrossBtn.style.justifyContent = 'center';
           greenCrossBtn.style.cursor = 'pointer';
-          greenCrossBtn.style.opacity = '0.9';
-          greenCrossBtn.style.border = 'none';
+          greenCrossBtn.style.opacity = '1';
+          greenCrossBtn.style.border = '1px solid #22c55e';
           greenCrossBtn.style.padding = '0';
-          // Use same cross icon as purple button (8px × 8px)
+          greenCrossBtn.style.boxSizing = 'border-box';
+          // Use green cross icon
           greenCrossBtn.innerHTML = `
-            <svg width="10" height="10" viewBox="0 0 10 10" fill="none" xmlns="http://www.w3.org/2000/svg" style="width: 8px; height: 8px;">
-              <path d="M2 2L8 8M8 2L2 8" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg" style="width: 10px; height: 10px;">
+              <path d="M2 2L10 10M10 2L2 10" stroke="#22c55e" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
             </svg>
           `;
           // Add click handler - same functionality as green remove button
@@ -17433,11 +17659,11 @@ const ButtonPanel = {
                 greenCrossBtn.className = 'vocab-text-remove-green-btn';
                 greenCrossBtn.setAttribute('aria-label', 'Remove simplified text');
                 greenCrossBtn.style.position = 'absolute';
-                greenCrossBtn.style.top = '-6px';
-                greenCrossBtn.style.left = '-6px';
-                greenCrossBtn.style.width = '14px';
-                greenCrossBtn.style.height = '14px';
-                greenCrossBtn.style.background = '#22c55e';
+                greenCrossBtn.style.top = '-10px';
+                greenCrossBtn.style.left = '-10px';
+                greenCrossBtn.style.width = '18px';
+                greenCrossBtn.style.height = '18px';
+                greenCrossBtn.style.background = '#FFFFFF';
                 greenCrossBtn.style.borderRadius = '50%';
                 greenCrossBtn.style.zIndex = '10000003';
                 greenCrossBtn.style.boxShadow = '0 2px 4px rgba(34, 197, 94, 0.4)';
@@ -17445,13 +17671,14 @@ const ButtonPanel = {
                 greenCrossBtn.style.alignItems = 'center';
                 greenCrossBtn.style.justifyContent = 'center';
                 greenCrossBtn.style.cursor = 'pointer';
-                greenCrossBtn.style.opacity = '0.9';
-                greenCrossBtn.style.border = 'none';
+                greenCrossBtn.style.opacity = '1';
+                greenCrossBtn.style.border = '1px solid #22c55e';
                 greenCrossBtn.style.padding = '0';
-                // Use same cross icon as purple button (8px × 8px)
+                greenCrossBtn.style.boxSizing = 'border-box';
+                // Use green cross icon
                 greenCrossBtn.innerHTML = `
                   <svg width="10" height="10" viewBox="0 0 10 10" fill="none" xmlns="http://www.w3.org/2000/svg" style="width: 8px; height: 8px;">
-                    <path d="M2 2L8 8M8 2L2 8" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                    <path d="M2 2L8 8M8 2L2 8" stroke="#22c55e" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
                   </svg>
                 `;
                 // Add click handler - same functionality as green remove button
