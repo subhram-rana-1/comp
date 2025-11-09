@@ -44,6 +44,13 @@ class SimplifyService {
       });
       
       if (!response.ok) {
+        // Check for 429 rate limit error
+        if (response.status === 429) {
+          const error = new Error('Rate limit exceeded');
+          error.status = 429;
+          throw error;
+        }
+        
         // Try to read error response body for more details
         let errorMessage = `API request failed: ${response.status} ${response.statusText}`;
         try {

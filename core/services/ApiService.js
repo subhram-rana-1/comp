@@ -70,6 +70,13 @@ class ApiService {
       });
       
       if (!response.ok) {
+        // Check for 429 rate limit error
+        if (response.status === 429) {
+          const error = new Error('Rate limit exceeded');
+          error.status = 429;
+          throw error;
+        }
+        
         let errorMessage = `API request failed: ${response.status} ${response.statusText}`;
         
         // Provide more specific error messages for common status codes
