@@ -2721,7 +2721,7 @@ const WordSelector = {
     // Meaning
     const meaningDiv = document.createElement('div');
     meaningDiv.className = 'vocab-word-popup-meaning';
-    meaningDiv.innerHTML = `<span class="word-bold">${word}</span> means ${meaning}`;
+    meaningDiv.innerHTML = `<span class="word-bold"></span>${meaning}`;
     popup.appendChild(meaningDiv);
     
     // Examples container
