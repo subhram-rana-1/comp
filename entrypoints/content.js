@@ -305,6 +305,937 @@ export default defineContentScript({
     // Make pageTextContent accessible globally for ChatDialog
     window.pageTextContent = pageTextContent;
     
+    // Global language variable - fetched from localStorage on every tab refresh
+    let language = localStorage.getItem('language') || 'none';
+    
+    // Make language accessible globally
+    window.language = language;
+    
+    // Top 20 languages list
+    const TOP_LANGUAGES = [
+      'English', 'Spanish', 'French', 'German', 'Italian', 'Portuguese', 'Russian',
+      'Chinese', 'Japanese', 'Korean', 'Arabic', 'Hindi', 'Dutch', 'Turkish',
+      'Polish', 'Swedish', 'Norwegian', 'Danish', 'Finnish', 'Greek'
+    ];
+    
+    /**
+     * Show language selection modal if language is 'none'
+     */
+    function showLanguageSelectionModal() {
+      // Remove existing modal if any
+      const existingModal = document.getElementById('prefered-language-modal');
+      if (existingModal) {
+        existingModal.remove();
+      }
+      
+      // Blur ask-about-page button and banner when modal is visible
+      blurAskAboutPageButton();
+      blurBanner();
+      
+      // Create overlay
+      const overlay = document.createElement('div');
+      overlay.id = 'prefered-language-overlay';
+      overlay.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(0, 0, 0, 0.5);
+        z-index: 100000;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        opacity: 0;
+        transition: opacity 0.3s ease;
+      `;
+      
+      // Function to close modal with scale-down animation
+      function closeModalWithAnimation() {
+        // Scale down and fade out modal
+        modal.style.transform = 'scale(0)';
+        modal.style.opacity = '0';
+        overlay.style.opacity = '0';
+        
+        // Notify popup to show settings button when modal is closed
+        try {
+          chrome.runtime.sendMessage({
+            type: 'LANGUAGE_MODAL_CLOSED'
+          }).catch(() => {
+            // Popup might not be open, ignore error
+          });
+        } catch (error) {
+          // Ignore if popup is not available
+        }
+        
+        // Remove overlay after animation completes
+        setTimeout(() => {
+          overlay.remove();
+          // Restore ask-about-page button and banner after modal is closed
+          restoreAskAboutPageButton();
+          restoreBanner();
+        }, 300);
+      }
+      
+      // Create modal container
+      const modal = document.createElement('div');
+      modal.id = 'prefered-language-modal';
+      modal.style.cssText = `
+        background-color: white;
+        border-radius: 30px;
+        padding: 40px;
+        max-width: 500px;
+        width: 90%;
+        display: flex;
+        flex-direction: column;
+        gap: 30px;
+        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+        user-select: none;
+        -webkit-user-select: none;
+        -moz-user-select: none;
+        -ms-user-select: none;
+        transform: scale(0);
+        transform-origin: center center;
+        opacity: 0;
+        transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.3s ease;
+      `;
+      
+      // Prevent double-click and text selection on modal
+      modal.addEventListener('dblclick', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        return false;
+      });
+      
+      modal.addEventListener('selectstart', (e) => {
+        e.preventDefault();
+        return false;
+      });
+      
+      modal.addEventListener('mousedown', (e) => {
+        // Allow input field to work normally
+        if (e.target.tagName === 'INPUT' || e.target.tagName === 'BUTTON') {
+          return true;
+        }
+        // Prevent text selection for other elements
+        if (window.getSelection) {
+          window.getSelection().removeAllRanges();
+        }
+      });
+      
+      // First container: Heading
+      const headingContainer = document.createElement('div');
+      headingContainer.style.cssText = `
+        text-align: center;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        gap: 8px;
+        user-select: none;
+        -webkit-user-select: none;
+        -moz-user-select: none;
+        -ms-user-select: none;
+      `;
+      
+      // Branding name with sparkle logo
+      const brandingHeading = document.createElement('h2');
+      brandingHeading.style.cssText = `
+        margin: 0;
+        font-size: 28px;
+        font-weight: 600;
+        color: #9527F5;
+        user-select: none;
+        -webkit-user-select: none;
+        -moz-user-select: none;
+        -ms-user-select: none;
+        pointer-events: none;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+      `;
+      brandingHeading.innerHTML = `
+        Explain AI
+        <span class="brand-icon" style="display: inline-flex; align-items: center;">
+          <svg width="24" height="24" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M14 0L17 8L25 11L17 14L14 22L11 14L3 11L11 8L14 0Z" fill="#9527F5"/>
+            <path d="M22 16L23.5 20L27.5 21.5L23.5 23L22 27L20.5 23L16.5 21.5L20.5 20L22 16Z" fill="#9527F5"/>
+            <path d="M8 21L9.5 24.5L13 26L9.5 27.5L8 31L6.5 27.5L3 26L6.5 24.5L8 21Z" fill="#9527F5"/>
+          </svg>
+        </span>
+      `;
+      
+      // Subheading
+      const subHeading = document.createElement('p');
+      subHeading.textContent = 'Choose your preferred language';
+      subHeading.style.cssText = `
+        margin: 0;
+        font-size: 16px;
+        font-weight: 400;
+        color: #000000;
+        user-select: none;
+        -webkit-user-select: none;
+        -moz-user-select: none;
+        -ms-user-select: none;
+        pointer-events: none;
+      `;
+      
+      // Prevent double-click on headings
+      brandingHeading.addEventListener('dblclick', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        return false;
+      });
+      
+      subHeading.addEventListener('dblclick', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        return false;
+      });
+      
+      headingContainer.appendChild(brandingHeading);
+      headingContainer.appendChild(subHeading);
+      
+      // Second container: Tabs with sliding indicator
+      const tabsContainer = document.createElement('div');
+      tabsContainer.style.cssText = `
+        position: relative;
+        display: flex;
+        gap: 10px;
+        border-radius: 10px;
+        background-color: #f5f5f5;
+        padding: 4px;
+        user-select: none;
+        -webkit-user-select: none;
+        -moz-user-select: none;
+        -ms-user-select: none;
+      `;
+      
+      // Sliding indicator background
+      const slidingIndicator = document.createElement('div');
+      slidingIndicator.id = 'vocab-language-sliding-indicator';
+      slidingIndicator.style.cssText = `
+        position: absolute;
+        top: 4px;
+        left: 4px;
+        height: calc(100% - 8px);
+        background-color: #9333ea;
+        border-radius: 10px;
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        z-index: 1;
+      `;
+      
+      const customTab = document.createElement('button');
+      customTab.textContent = 'Fixed';
+      customTab.id = 'vocab-language-custom-tab';
+      customTab.style.cssText = `
+        flex: 1;
+        padding: 12px 20px;
+        border: none;
+        background-color: transparent;
+        color: white;
+        border-radius: 10px;
+        cursor: pointer;
+        font-size: 16px;
+        font-weight: 500;
+        position: relative;
+        z-index: 2;
+        transition: color 0.3s;
+        user-select: none;
+        -webkit-user-select: none;
+        -moz-user-select: none;
+        -ms-user-select: none;
+      `;
+      
+      // Prevent double-click on tabs
+      customTab.addEventListener('dblclick', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        return false;
+      });
+      
+      const websiteTab = document.createElement('button');
+      websiteTab.textContent = 'Dynamic';
+      websiteTab.id = 'vocab-language-website-tab';
+      websiteTab.style.cssText = `
+        flex: 1;
+        padding: 12px 20px;
+        border: none;
+        background-color: transparent;
+        color: #666;
+        border-radius: 10px;
+        cursor: pointer;
+        font-size: 16px;
+        font-weight: 500;
+        position: relative;
+        z-index: 2;
+        transition: color 0.3s;
+        user-select: none;
+        -webkit-user-select: none;
+        -moz-user-select: none;
+        -ms-user-select: none;
+      `;
+      
+      // Prevent double-click on tabs
+      websiteTab.addEventListener('dblclick', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        return false;
+      });
+      
+      // Function to update sliding indicator position
+      function updateSlidingIndicator(targetTab) {
+        // Use offsetLeft for relative positioning within the container
+        const leftOffset = targetTab.offsetLeft;
+        const tabWidth = targetTab.offsetWidth;
+        
+        slidingIndicator.style.width = `${tabWidth}px`;
+        slidingIndicator.style.transform = `translateX(${leftOffset}px)`;
+      }
+      
+      // Initialize sliding indicator position for custom tab
+      // Use requestAnimationFrame to ensure DOM is fully rendered
+      requestAnimationFrame(() => {
+        updateSlidingIndicator(customTab);
+      });
+      
+      // Tab content container
+      const tabContentContainer = document.createElement('div');
+      tabContentContainer.id = 'vocab-language-tab-content';
+      tabContentContainer.style.cssText = `
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        height: 150px;
+        user-select: none;
+        -webkit-user-select: none;
+        -moz-user-select: none;
+        -ms-user-select: none;
+      `;
+      
+      // Custom tab content
+      const customTabContent = document.createElement('div');
+      customTabContent.id = 'vocab-language-custom-content';
+      customTabContent.style.cssText = `
+        width: 100%;
+        display: flex;
+        flex-direction: column;
+        gap: 15px;
+        align-items: center;
+        user-select: none;
+        -webkit-user-select: none;
+        -moz-user-select: none;
+        -ms-user-select: none;
+      `;
+      
+      // Preferred language text (green text above input)
+      const preferredLanguageText = document.createElement('div');
+      preferredLanguageText.id = 'vocab-preferred-language-text';
+      preferredLanguageText.style.cssText = `
+        width: 100%;
+        text-align: center;
+        color: #16a34a;
+        font-size: 14px;
+        margin-bottom: 12px;
+        user-select: none;
+        -webkit-user-select: none;
+        -moz-user-select: none;
+        -ms-user-select: none;
+      `;
+      
+      // Function to update preferred language text
+      function updatePreferredLanguageText(lang) {
+        if (lang && lang.trim() !== '') {
+          preferredLanguageText.innerHTML = `Your preferred language is: <strong>"${lang}"</strong>`;
+        } else {
+          preferredLanguageText.innerHTML = '';
+        }
+      }
+      
+      // Dropdown container
+      const dropdownContainer = document.createElement('div');
+      dropdownContainer.style.cssText = `
+        width: 100%;
+        position: relative;
+      `;
+      
+      // Searchable dropdown input
+      const dropdownInput = document.createElement('input');
+      dropdownInput.type = 'text';
+      dropdownInput.id = 'vocab-language-dropdown-input';
+      dropdownInput.placeholder = 'Search or type a language...';
+      dropdownInput.style.cssText = `
+        width: 100%;
+        padding: 12px 45px 12px 16px;
+        border: 2px solid #e5e5e5;
+        border-radius: 8px;
+        font-size: 16px;
+        box-sizing: border-box;
+        outline: none;
+        transition: border-color 0.2s;
+      `;
+      // Allow text selection in input field for typing
+      dropdownInput.style.userSelect = 'text';
+      dropdownInput.style.webkitUserSelect = 'text';
+      
+      // Dropdown icon
+      const dropdownIcon = document.createElement('div');
+      dropdownIcon.id = 'vocab-language-dropdown-icon';
+      dropdownIcon.innerHTML = `
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M5 7.5L10 12.5L15 7.5" stroke="#666" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      `;
+      dropdownIcon.style.cssText = `
+        position: absolute;
+        right: 12px;
+        top: 50%;
+        transform: translateY(-50%);
+        pointer-events: none;
+        transition: transform 0.2s;
+        z-index: 1;
+      `;
+      
+      // Track keyboard navigation
+      let selectedIndex = -1;
+      let filteredLanguages = [];
+      
+      // Dropdown list
+      const dropdownList = document.createElement('div');
+      dropdownList.id = 'vocab-language-dropdown-list';
+      dropdownList.style.cssText = `
+        position: absolute;
+        top: 100%;
+        left: 0;
+        right: 0;
+        background-color: white;
+        border: 2px solid #e5e5e5;
+        border-top: none;
+        border-radius: 0 0 8px 8px;
+        max-height: 300px;
+        overflow-y: auto;
+        display: none;
+        z-index: 1000;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        user-select: none;
+        -webkit-user-select: none;
+        -moz-user-select: none;
+        -ms-user-select: none;
+      `;
+      
+      // Prevent double-click and text selection on dropdown list
+      dropdownList.addEventListener('dblclick', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        return false;
+      });
+      
+      dropdownList.addEventListener('selectstart', (e) => {
+        e.preventDefault();
+        return false;
+      });
+      
+      // Website language tab content
+      const websiteTabContent = document.createElement('div');
+      websiteTabContent.id = 'vocab-language-website-content';
+      websiteTabContent.style.cssText = `
+        width: 100%;
+        display: none;
+        flex-direction: column;
+        gap: 15px;
+        align-items: center;
+        text-align: center;
+        color: #666;
+        user-select: none;
+        -webkit-user-select: none;
+        -moz-user-select: none;
+        -ms-user-select: none;
+        height: 100%;
+        justify-content: center;
+        font-size: 18px;
+      `;
+      websiteTabContent.textContent = 'Explanations will be in the language that is used in the webpage';
+      
+      // Prevent double-click and text selection on website tab content
+      websiteTabContent.addEventListener('dblclick', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        return false;
+      });
+      
+      websiteTabContent.addEventListener('selectstart', (e) => {
+        e.preventDefault();
+        return false;
+      });
+      
+      // Track active tab
+      let activeTab = 'fixed'; // Default to fixed tab
+      
+      // Tab click handlers with smooth sliding animation
+      customTab.addEventListener('click', () => {
+        activeTab = 'fixed';
+        updateSlidingIndicator(customTab);
+        customTab.style.color = 'white';
+        websiteTab.style.color = '#666';
+        customTabContent.style.display = 'flex';
+        websiteTabContent.style.display = 'none';
+        // Update button state when switching tabs
+        updateButtonState();
+      });
+      
+      websiteTab.addEventListener('click', () => {
+        activeTab = 'dynamic';
+        updateSlidingIndicator(websiteTab);
+        websiteTab.style.color = 'white';
+        customTab.style.color = '#666';
+        customTabContent.style.display = 'none';
+        websiteTabContent.style.display = 'flex';
+        // Update button state when switching tabs
+        updateButtonState();
+      });
+      
+      // Function to select language from dropdown
+      function selectLanguage(lang) {
+        dropdownInput.value = lang;
+        dropdownList.style.display = 'none';
+        selectedIndex = -1;
+        // Reset dropdown icon rotation
+        dropdownIcon.style.transform = 'translateY(-50%) rotate(0deg)';
+        // Update preferred language text when language is selected
+        updatePreferredLanguageText(lang);
+        // Update button state
+        updateButtonState();
+      }
+      
+      // Function to highlight selected item
+      function highlightItem(index) {
+        const items = dropdownList.querySelectorAll('div');
+        items.forEach((item, i) => {
+          if (i === index) {
+            item.style.backgroundColor = '#e9d5ff';
+            item.style.color = '#9333ea';
+            // Scroll into view
+            item.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+          } else {
+            item.style.backgroundColor = 'transparent';
+            item.style.color = '';
+          }
+        });
+      }
+      
+      // Populate dropdown list
+      function populateDropdownList(filter = '') {
+        dropdownList.innerHTML = '';
+        filteredLanguages = [];
+        selectedIndex = -1;
+        
+        // If no filter, show all languages
+        let filtered = [];
+        if (!filter || filter.trim() === '') {
+          filtered = TOP_LANGUAGES;
+        } else {
+          // Filter by prefix matching
+          filtered = TOP_LANGUAGES.filter(lang => 
+            lang.toLowerCase().startsWith(filter.toLowerCase())
+          );
+        }
+        
+        // Store filtered languages for keyboard navigation
+        filteredLanguages = [...filtered];
+        
+        // Add filtered languages
+        filtered.forEach((lang, index) => {
+          const item = document.createElement('div');
+          item.textContent = lang;
+          item.setAttribute('data-index', index);
+          item.style.cssText = `
+            padding: 12px 16px;
+            cursor: pointer;
+            transition: background-color 0.2s, color 0.2s;
+            user-select: none;
+            -webkit-user-select: none;
+            -moz-user-select: none;
+            -ms-user-select: none;
+          `;
+          item.addEventListener('mouseenter', () => {
+            // Reset all highlights
+            const items = dropdownList.querySelectorAll('div');
+            items.forEach(i => {
+              i.style.backgroundColor = 'transparent';
+              i.style.color = '';
+            });
+            item.style.backgroundColor = '#e9d5ff';
+            item.style.color = '#9333ea';
+            selectedIndex = index;
+          });
+          item.addEventListener('mouseleave', () => {
+            if (selectedIndex !== index) {
+              item.style.backgroundColor = 'transparent';
+              item.style.color = '';
+            }
+          });
+          item.addEventListener('click', () => {
+            selectLanguage(lang);
+          });
+          // Prevent double-click and text selection
+          item.addEventListener('dblclick', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            return false;
+          });
+          item.addEventListener('selectstart', (e) => {
+            e.preventDefault();
+            return false;
+          });
+          dropdownList.appendChild(item);
+        });
+        
+        // If filter doesn't match any language, show option to add new language
+        if (filter && filter.trim() !== '' && !TOP_LANGUAGES.some(lang => lang.toLowerCase() === filter.toLowerCase())) {
+          const newLangItem = document.createElement('div');
+          newLangItem.innerHTML = `<strong>Add "${filter}" as new language</strong>`;
+          newLangItem.setAttribute('data-index', filtered.length);
+          newLangItem.style.cssText = `
+            padding: 12px 16px;
+            cursor: pointer;
+            color: #9333ea;
+            border-top: 1px solid #e5e5e5;
+            transition: background-color 0.2s, color 0.2s;
+            user-select: none;
+            -webkit-user-select: none;
+            -moz-user-select: none;
+            -ms-user-select: none;
+          `;
+          filteredLanguages.push(filter);
+          newLangItem.addEventListener('mouseenter', () => {
+            // Reset all highlights
+            const items = dropdownList.querySelectorAll('div');
+            items.forEach(i => {
+              i.style.backgroundColor = 'transparent';
+              i.style.color = '';
+            });
+            newLangItem.style.backgroundColor = '#e9d5ff';
+            selectedIndex = filtered.length;
+          });
+          newLangItem.addEventListener('mouseleave', () => {
+            if (selectedIndex !== filtered.length) {
+              newLangItem.style.backgroundColor = 'transparent';
+            }
+          });
+          newLangItem.addEventListener('click', () => {
+            selectLanguage(filter);
+          });
+          // Prevent double-click and text selection
+          newLangItem.addEventListener('dblclick', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            return false;
+          });
+          newLangItem.addEventListener('selectstart', (e) => {
+            e.preventDefault();
+            return false;
+          });
+          dropdownList.appendChild(newLangItem);
+        }
+      }
+      
+      // Function to update button based on tab and language
+      function updateButtonState() {
+        const hasLanguage = dropdownInput.value.trim() !== '';
+        
+        if (activeTab === 'fixed') {
+          if (!hasLanguage) {
+            // Fixed tab + no language = Hide button
+            saveButton.style.display = 'none';
+          } else {
+            // Fixed tab + language entered = "Save and Close" with solid purple background
+            saveButton.style.display = 'block';
+            saveButton.textContent = 'Save and Close';
+            saveButton.style.backgroundColor = '#9333ea';
+            saveButton.style.color = 'white';
+            saveButton.style.border = 'none';
+          }
+        } else {
+          // Dynamic tab = "Save and Close" with solid purple background
+          saveButton.style.display = 'block';
+          saveButton.textContent = 'Save and Close';
+          saveButton.style.backgroundColor = '#9333ea';
+          saveButton.style.color = 'white';
+          saveButton.style.border = 'none';
+        }
+      }
+      
+      // Keyboard navigation handler
+      dropdownInput.addEventListener('keydown', (e) => {
+        if (!dropdownList.style.display || dropdownList.style.display === 'none') {
+          return;
+        }
+        
+        const items = dropdownList.querySelectorAll('div');
+        if (items.length === 0) return;
+        
+        if (e.key === 'ArrowDown') {
+          e.preventDefault();
+          selectedIndex = (selectedIndex + 1) % items.length;
+          highlightItem(selectedIndex);
+        } else if (e.key === 'ArrowUp') {
+          e.preventDefault();
+          selectedIndex = selectedIndex <= 0 ? items.length - 1 : selectedIndex - 1;
+          highlightItem(selectedIndex);
+        } else if (e.key === 'Enter') {
+          e.preventDefault();
+          if (selectedIndex >= 0 && selectedIndex < filteredLanguages.length) {
+            selectLanguage(filteredLanguages[selectedIndex]);
+          }
+        } else if (e.key === 'Escape') {
+          dropdownList.style.display = 'none';
+          selectedIndex = -1;
+          // Reset dropdown icon rotation
+          dropdownIcon.style.transform = 'translateY(-50%) rotate(0deg)';
+        }
+      });
+      
+      // Dropdown input handlers
+      dropdownInput.addEventListener('focus', () => {
+        dropdownInput.style.borderColor = '#9333ea';
+        const currentValue = dropdownInput.value;
+        populateDropdownList(currentValue);
+        dropdownList.style.display = 'block';
+        selectedIndex = -1;
+        // Rotate dropdown icon
+        dropdownIcon.style.transform = 'translateY(-50%) rotate(180deg)';
+      });
+      
+      dropdownInput.addEventListener('blur', () => {
+        dropdownInput.style.borderColor = '#e5e5e5';
+        // Delay hiding to allow click events
+        setTimeout(() => {
+          dropdownList.style.display = 'none';
+          selectedIndex = -1;
+          // Reset dropdown icon rotation
+          dropdownIcon.style.transform = 'translateY(-50%) rotate(0deg)';
+        }, 200);
+      });
+      
+      dropdownInput.addEventListener('input', (e) => {
+        const value = e.target.value;
+        populateDropdownList(value);
+        dropdownList.style.display = 'block';
+        selectedIndex = -1;
+        // Update preferred language text as user types
+        updatePreferredLanguageText(value);
+        // Update button state
+        updateButtonState();
+      });
+      
+      // Close dropdown when clicking outside
+      let clickHandler = (e) => {
+        if (!dropdownContainer.contains(e.target)) {
+          dropdownList.style.display = 'none';
+        }
+      };
+      document.addEventListener('click', clickHandler);
+      
+      // Initial population - show all languages
+      populateDropdownList('');
+      
+      dropdownContainer.appendChild(dropdownInput);
+      dropdownContainer.appendChild(dropdownIcon);
+      dropdownContainer.appendChild(dropdownList);
+      customTabContent.appendChild(preferredLanguageText);
+      customTabContent.appendChild(dropdownContainer);
+      
+      tabsContainer.appendChild(slidingIndicator);
+      tabsContainer.appendChild(customTab);
+      tabsContainer.appendChild(websiteTab);
+      tabContentContainer.appendChild(customTabContent);
+      tabContentContainer.appendChild(websiteTabContent);
+      
+      // Third container: Save and Close button
+      const buttonContainer = document.createElement('div');
+      buttonContainer.style.cssText = `
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        user-select: none;
+        -webkit-user-select: none;
+        -moz-user-select: none;
+        -ms-user-select: none;
+      `;
+      const saveButton = document.createElement('button');
+      saveButton.textContent = 'Save and Close';
+      saveButton.style.cssText = `
+        padding: 14px 32px;
+        background-color: #9333ea;
+        color: white;
+        border: none;
+        border-radius: 8px;
+        font-size: 16px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.2s;
+        user-select: none;
+        -webkit-user-select: none;
+        -moz-user-select: none;
+        -ms-user-select: none;
+        display: none;
+      `;
+      
+      // Prevent double-click on save button
+      saveButton.addEventListener('dblclick', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        return false;
+      });
+      saveButton.addEventListener('mouseenter', () => {
+        // Only change background on hover if it's a solid purple button
+        if (saveButton.style.backgroundColor === 'rgb(147, 51, 234)' || saveButton.style.backgroundColor === '#9333ea') {
+          saveButton.style.backgroundColor = '#7e22ce';
+        }
+      });
+      saveButton.addEventListener('mouseleave', () => {
+        // Restore original background
+        updateButtonState();
+      });
+      saveButton.addEventListener('click', () => {
+        let selectedLanguage = 'none';
+        
+        // Check which tab is active
+        if (activeTab === 'fixed') {
+          // Fixed tab is selected
+          selectedLanguage = dropdownInput.value.trim() || 'none';
+        } else {
+          // Dynamic tab is selected - save as "Page Language"
+          selectedLanguage = 'Page Language';
+        }
+        
+        // Check if 'language' exists in localStorage, if not create it, if yes update it
+        const existingLanguage = localStorage.getItem('language');
+        if (existingLanguage === null || existingLanguage === undefined) {
+          // Create new language variable in localStorage
+          localStorage.setItem('language', selectedLanguage);
+          console.log('[Language Selection] Created new language variable:', selectedLanguage);
+        } else {
+          // Update existing language variable
+          localStorage.setItem('language', selectedLanguage);
+          console.log('[Language Selection] Updated language variable:', selectedLanguage);
+        }
+        language = selectedLanguage;
+        window.language = selectedLanguage;
+        
+        // Close modal with animation
+        closeModalWithAnimation();
+        
+        // Show ask-about-page button again after modal is closed
+        // Check extension state and show button if enabled
+        chrome.storage.local.get([GLOBAL_STORAGE_KEY]).then((result) => {
+          const isEnabled = result[GLOBAL_STORAGE_KEY] ?? true; // Default to true if not set
+          if (isEnabled) {
+            showAskAboutPageButton();
+          }
+        });
+        
+        console.log('[Language Selection] Language saved:', selectedLanguage);
+      });
+      
+      // Initialize button state
+      updateButtonState();
+      buttonContainer.appendChild(saveButton);
+      
+      // Assemble modal
+      modal.appendChild(headingContainer);
+      modal.appendChild(tabsContainer);
+      modal.appendChild(tabContentContainer);
+      modal.appendChild(buttonContainer);
+      
+      overlay.appendChild(modal);
+      document.body.appendChild(overlay);
+      
+      // Load saved language from localStorage and populate the input
+      const savedLanguage = localStorage.getItem('language') || 'none';
+      if (savedLanguage && savedLanguage !== 'none' && savedLanguage !== 'Page Language') {
+        // Populate input with saved language
+        dropdownInput.value = savedLanguage;
+        // Update preferred language text
+        updatePreferredLanguageText(savedLanguage);
+        // Ensure Fixed tab is active
+        activeTab = 'fixed';
+        customTab.style.color = 'white';
+        websiteTab.style.color = '#666';
+        customTabContent.style.display = 'flex';
+        websiteTabContent.style.display = 'none';
+        // Update sliding indicator position
+        requestAnimationFrame(() => {
+          updateSlidingIndicator(customTab);
+        });
+      } else if (savedLanguage === 'Page Language') {
+        // Switch to Dynamic tab if Page Language is selected
+        activeTab = 'dynamic';
+        websiteTab.style.color = 'white';
+        customTab.style.color = '#666';
+        customTabContent.style.display = 'none';
+        websiteTabContent.style.display = 'flex';
+        // Update sliding indicator position
+        requestAnimationFrame(() => {
+          updateSlidingIndicator(websiteTab);
+        });
+      }
+      
+      // Update button state after loading saved language
+      updateButtonState();
+      
+      // Trigger scale-up animation after modal is added to DOM
+      requestAnimationFrame(() => {
+        overlay.style.opacity = '1';
+        modal.style.transform = 'scale(1)';
+        modal.style.opacity = '1';
+      });
+      
+      // Notify popup to hide settings button when modal is open
+      try {
+        chrome.runtime.sendMessage({
+          type: 'LANGUAGE_MODAL_OPENED'
+        }).catch(() => {
+          // Popup might not be open, ignore error
+        });
+      } catch (error) {
+        // Ignore if popup is not available
+      }
+      
+      // Close on overlay click (outside modal)
+      overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) {
+          // Don't close on overlay click - require save button
+        }
+      });
+    }
+    
+    // Check if language is 'none' and show modal (only if extension is enabled)
+    if (language === 'none') {
+      // Check extension state before showing modal
+      const GLOBAL_STORAGE_KEY = 'is_extension_globally_enabled';
+      chrome.storage.local.get([GLOBAL_STORAGE_KEY]).then((result) => {
+        const isEnabled = result[GLOBAL_STORAGE_KEY] ?? true; // Default to true if not set
+        
+        // Only show modal if extension is enabled
+        if (isEnabled) {
+          // Wait for DOM to be ready
+          if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', showLanguageSelectionModal);
+          } else {
+            // Use setTimeout to ensure modal appears after page load
+            setTimeout(showLanguageSelectionModal, 100);
+          }
+        } else {
+          console.log('[Content Script] Extension is disabled, not showing language modal');
+        }
+      }).catch((error) => {
+        console.error('[Content Script] Error checking extension state:', error);
+        // If there's an error checking state, don't show modal to be safe
+      });
+    }
+    
     /**
      * Fetch page text content in a separate thread
      */
@@ -377,6 +1308,90 @@ export default defineContentScript({
       
       button.classList.remove('vocab-ask-about-page-btn-visible');
       button.classList.add('vocab-ask-about-page-btn-hidden');
+    }
+    
+    /**
+     * Blur ask-about-page button (make it non-accessible while modal is visible)
+     */
+    function blurAskAboutPageButton() {
+      const button = document.getElementById('vocab-ask-about-page-btn');
+      if (!button) {
+        return;
+      }
+      
+      // Store original state if not already stored
+      if (!button.dataset.originalFilter) {
+        button.dataset.originalFilter = button.style.filter || 'none';
+        button.dataset.originalPointerEvents = button.style.pointerEvents || '';
+      }
+      
+      // Apply blur and make non-accessible
+      button.style.filter = 'blur(4px)';
+      button.style.pointerEvents = 'none';
+      button.style.opacity = '0.5';
+    }
+    
+    /**
+     * Restore ask-about-page button (remove blur when modal is closed)
+     */
+    function restoreAskAboutPageButton() {
+      const button = document.getElementById('vocab-ask-about-page-btn');
+      if (!button) {
+        return;
+      }
+      
+      // Restore original state
+      if (button.dataset.originalFilter) {
+        button.style.filter = button.dataset.originalFilter === 'none' ? '' : button.dataset.originalFilter;
+        button.style.pointerEvents = button.dataset.originalPointerEvents || '';
+        button.style.opacity = '';
+        delete button.dataset.originalFilter;
+        delete button.dataset.originalPointerEvents;
+      }
+    }
+    
+    /**
+     * Blur banner (when modal is open)
+     */
+    function blurBanner() {
+      const banner = BannerModule.bannerContainer;
+      if (!banner) {
+        return;
+      }
+      
+      // Store original state if not already stored
+      if (!banner.dataset.originalFilter) {
+        banner.dataset.originalFilter = banner.style.filter || 'none';
+        banner.dataset.originalPointerEvents = banner.style.pointerEvents || '';
+        banner.dataset.originalOpacity = banner.style.opacity || '';
+      }
+      
+      // Apply blur and make non-accessible
+      banner.style.filter = 'blur(4px)';
+      banner.style.pointerEvents = 'none';
+      banner.style.opacity = '0.5';
+    }
+    
+    /**
+     * Restore banner (remove blur when modal is closed)
+     */
+    function restoreBanner() {
+      const banner = BannerModule.bannerContainer;
+      if (!banner) {
+        return;
+      }
+      
+      // Restore original state
+      if (banner.dataset.originalFilter) {
+        banner.style.filter = banner.dataset.originalFilter === 'none' ? '' : banner.dataset.originalFilter;
+        banner.style.pointerEvents = banner.dataset.originalPointerEvents || '';
+        banner.style.opacity = banner.dataset.originalOpacity || '';
+        
+        // Remove stored original state
+        delete banner.dataset.originalFilter;
+        delete banner.dataset.originalPointerEvents;
+        delete banner.dataset.originalOpacity;
+      }
     }
     
     /**
@@ -1115,6 +2130,17 @@ export default defineContentScript({
           TextSelector.clearAll();
           // Hide ask-about-page button with slide-out animation when extension is disabled
           hideAskAboutPageButton();
+          // Close preferred language modal if it's open
+          const languageModal = document.getElementById('prefered-language-modal');
+          const languageOverlay = document.getElementById('prefered-language-overlay');
+          if (languageModal || languageOverlay) {
+            console.log('[Content Script] Closing preferred language modal when extension is disabled');
+            if (languageOverlay) {
+              languageOverlay.remove();
+            }
+            // Restore ask-about-page button
+            restoreAskAboutPageButton();
+          }
           // Close chat dialog if it's open for ask-about-page context
           if (typeof ChatDialog !== 'undefined' && ChatDialog.isOpen && ChatDialog.currentTextKey) {
             const isPageGeneral = ChatDialog.currentTextKey === 'page-general' || ChatDialog.currentTextKey.startsWith('page-general');
@@ -1134,6 +2160,17 @@ export default defineContentScript({
         handleTabStateChange(message.domain, message.eventType, sendResponse);
       } else if (message.type === 'CHECK_EXTENSION_STATE') {
         handleExtensionStateCheck(message.domain, sendResponse);
+      } else if (message.type === 'SHOW_LANGUAGE_MODAL') {
+        console.log('[Content Script] Show language modal requested');
+        // Show the language selection modal
+        showLanguageSelectionModal();
+        sendResponse({ success: true });
+      } else if (message.type === 'CHECK_MODAL_STATE') {
+        // Check if language modal is currently open
+        const languageModal = document.getElementById('prefered-language-modal');
+        const languageOverlay = document.getElementById('prefered-language-overlay');
+        const isModalOpen = !!(languageModal || languageOverlay);
+        sendResponse({ isModalOpen: isModalOpen });
       }
     });
     
