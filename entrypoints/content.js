@@ -5677,18 +5677,18 @@ const TextSelector = {
       } catch (error) {
         console.warn('[TextSelector] Error positioning button at end of text, using fallback:', error);
         // Fallback: use original positioning (right side of highlight)
-        const highlightRect = highlight.getBoundingClientRect();
-        const isInModal = highlight.closest('.vocab-custom-content-modal');
-        
-        if (isInModal) {
+    const highlightRect = highlight.getBoundingClientRect();
+    const isInModal = highlight.closest('.vocab-custom-content-modal');
+    
+    if (isInModal) {
           iconsWrapper.style.setProperty('right', '-50px', 'important');
           iconsWrapper.style.setProperty('left', 'auto', 'important');
-          iconsWrapper.style.setProperty('top', '-2px', 'important');
-        } else {
+      iconsWrapper.style.setProperty('top', '-2px', 'important');
+    } else {
           iconsWrapper.style.setProperty('right', '-45px', 'important');
           iconsWrapper.style.setProperty('left', 'auto', 'important');
-          iconsWrapper.style.setProperty('top', '0px', 'important');
-        }
+      iconsWrapper.style.setProperty('top', '0px', 'important');
+    }
       }
     };
     
@@ -9104,7 +9104,7 @@ const ChatDialog = {
       simplifyMoreBtn.id = 'vocab-chat-simplify-more-btn';
       
       // Always enable the simplify more button
-      simplifyMoreBtn.disabled = false;
+        simplifyMoreBtn.disabled = false;
       simplifyMoreBtn.classList.remove('disabled');
       
       // Add click handler
@@ -9333,47 +9333,47 @@ const ChatDialog = {
           // Update simplified data with final text
           // previousSimplifiedTextsArray already includes all previous + the old current simplified text
           // The new simplifiedText becomes the new current
-          this.simplifiedData = {
-            textStartIndex: eventData.textStartIndex,
-            textLength: eventData.textLength,
-            text: eventData.text,
-            simplifiedText: eventData.simplifiedText,
+        this.simplifiedData = {
+          textStartIndex: eventData.textStartIndex,
+          textLength: eventData.textLength,
+          text: eventData.text,
+          simplifiedText: eventData.simplifiedText,
             previousSimplifiedTexts: previousSimplifiedTexts, // Use the array we sent to API (includes all previous + old current)
-            shouldAllowSimplifyMore: eventData.shouldAllowSimplifyMore || false
-          };
+          shouldAllowSimplifyMore: eventData.shouldAllowSimplifyMore || false
+        };
           
           console.log('[ChatDialog] Updated simplifiedData after complete event:', {
             previousSimplifiedTextsCount: previousSimplifiedTexts.length,
             newSimplifiedText: eventData.simplifiedText,
             previousSimplifiedTexts: previousSimplifiedTexts
           });
-          
-          // Update stored data - use original text key for storage
-          const originalTextKey = this.currentTextKey.replace(/-selected$/, '').replace(/-generic$/, '');
-          TextSelector.simplifiedTexts.set(originalTextKey, this.simplifiedData);
-          
-          console.log('[ChatDialog] Updated simplified data in TextSelector:', {
-            textKey: originalTextKey,
-            previousSimplifiedTextsCount: previousSimplifiedTextsArray.length,
-            hasCurrentSimplifiedText: !!eventData.simplifiedText,
-            shouldAllowSimplifyMore: eventData.shouldAllowSimplifyMore || false
-          });
-          
+        
+        // Update stored data - use original text key for storage
+        const originalTextKey = this.currentTextKey.replace(/-selected$/, '').replace(/-generic$/, '');
+        TextSelector.simplifiedTexts.set(originalTextKey, this.simplifiedData);
+        
+        console.log('[ChatDialog] Updated simplified data in TextSelector:', {
+          textKey: originalTextKey,
+          previousSimplifiedTextsCount: previousSimplifiedTextsArray.length,
+          hasCurrentSimplifiedText: !!eventData.simplifiedText,
+          shouldAllowSimplifyMore: eventData.shouldAllowSimplifyMore || false
+        });
+        
           // Update UI - re-render all explanations with final text
-          const container = this.dialogContainer.querySelector('#vocab-chat-simplified-container');
-          if (container) {
-            this.renderSimplifiedExplanations(container);
-          }
-          
+        const container = this.dialogContainer.querySelector('#vocab-chat-simplified-container');
+        if (container) {
+          this.renderSimplifiedExplanations(container);
+        }
+        
           // Reset button - always enable
-          if (simplifyMoreBtn) {
-            simplifyMoreBtn.classList.remove('loading');
-            simplifyMoreBtn.textContent = 'Simplify more';
+        if (simplifyMoreBtn) {
+          simplifyMoreBtn.classList.remove('loading');
+          simplifyMoreBtn.textContent = 'Simplify more';
             simplifyMoreBtn.disabled = false;
             simplifyMoreBtn.classList.remove('disabled');
-          }
-          
-          this.isSimplifying = false;
+        }
+        
+        this.isSimplifying = false;
         }
       },
       // onComplete callback
@@ -9467,22 +9467,71 @@ const ChatDialog = {
       console.log('[ChatDialog] Text length:', pageText.length, 'text preview:', pageText.substring(0, 100) + '...');
       console.log('[ChatDialog] SummariseService available:', typeof SummariseService !== 'undefined');
       
-      // Call SummariseService
+      // Call SummariseService with SSE
       try {
-        const response = await SummariseService.summarise(pageText);
+        // Initialize streaming summary
+        this.pageSummary = '';
+        let summaryContainer = null;
+        let summaryShown = false;
         
-        console.log('[ChatDialog] Received summarise response:', response);
+        // Create or get summary container for streaming
+        const buttonContainer = document.querySelector('.vocab-chat-simplify-more-container');
+        if (buttonContainer) {
+          summaryContainer = document.getElementById('vocab-chat-page-summary-container');
+          if (!summaryContainer) {
+            summaryContainer = document.createElement('div');
+            summaryContainer.id = 'vocab-chat-page-summary-container';
+            summaryContainer.className = 'vocab-chat-page-summary-container';
+            buttonContainer.parentNode.insertBefore(summaryContainer, buttonContainer);
+          }
+        }
         
-        // Store and display the summary (NOT in chat history)
-        if (response && response.summary) {
-          // Store the summary in separate variable (NOT in chat history)
-          this.pageSummary = response.summary;
-          console.log('[ChatDialog] Page summary stored (separate from chat history):', this.pageSummary ? 'exists' : 'null');
-          
-          // Display summary above the button (NOT as a chat message)
-          this.renderPageSummary();
-        } else {
-          throw new Error('No summary received from API');
+        // Call SummariseService with SSE callbacks
+        SummariseService.summarise(
+          pageText,
+          // onEvent callback - handle chunk and complete events
+          (eventData) => {
+            console.log('[ChatDialog] Received summarise event:', eventData);
+            
+            // Handle chunk events (streaming)
+            if (eventData.chunk !== undefined) {
+              console.log('[ChatDialog] Chunk event - chunk:', eventData.chunk, 'accumulated length:', eventData.accumulated?.length || 0);
+              
+              // Update accumulated summary
+              if (eventData.accumulated) {
+                this.pageSummary = eventData.accumulated;
+                
+                // Show summary container on first chunk
+                if (summaryContainer && !summaryShown) {
+                  summaryShown = true;
+                  console.log('[ChatDialog] Showing summary container on first chunk');
+                }
+                
+                // Update summary UI in real-time
+                if (summaryContainer) {
+                  summaryContainer.innerHTML = `
+                    <div class="vocab-chat-page-summary-content">
+                      ${this.renderMarkdown(this.pageSummary)}
+                    </div>
+                  `;
+                }
+              }
+            }
+            
+            // Handle complete event (final summary)
+            else if (eventData.type === 'complete' && eventData.summary) {
+              console.log('[ChatDialog] Complete event - summary length:', eventData.summary.length);
+              
+              // Store final summary
+              this.pageSummary = eventData.summary;
+              
+              // Update summary UI with final data
+              if (summaryContainer) {
+                summaryContainer.innerHTML = `
+                  <div class="vocab-chat-page-summary-content">
+                    ${this.renderMarkdown(this.pageSummary)}
+                  </div>
+                `;
         }
         
         // Keep button disabled after successful fetch
@@ -9493,6 +9542,43 @@ const ChatDialog = {
           summariseBtn.textContent = originalText;
           console.log('[ChatDialog] Summarise button disabled after successful fetch');
         }
+            }
+          },
+          // onComplete callback
+          () => {
+            console.log('[ChatDialog] Summarise stream complete');
+          },
+          // onError callback
+          (error) => {
+            console.error('[ChatDialog] Error during summarisation:', error);
+            console.error('[ChatDialog] Error details:', {
+              message: error.message,
+              name: error.name,
+              stack: error.stack
+            });
+            
+            // Check if it's a 429 rate limit error
+            const isRateLimit = error.status === 429 || 
+                               error.message.includes('429') || 
+                               error.message.includes('Rate limit') ||
+                               error.message.includes('too fast');
+            
+            if (isRateLimit && typeof ErrorBanner !== 'undefined') {
+              ErrorBanner.show('You are requesting too fast, please retry after few seconds');
+            }
+            
+            // Show error message in chat with more details
+            const errorMessage = error.message || 'Please try again.';
+            this.addMessageToChat('ai', `⚠️ **Error:**\n\nFailed to summarise the page. ${errorMessage}`);
+            
+            // Reset button
+            if (summariseBtn) {
+              summariseBtn.disabled = false;
+              summariseBtn.classList.remove('disabled', 'loading');
+              summariseBtn.textContent = originalText;
+            }
+          }
+        );
       } catch (error) {
         console.error('[ChatDialog] Error during summarisation:', error);
         console.error('[ChatDialog] Error details:', {
@@ -10013,10 +10099,10 @@ const ChatDialog = {
         },
         onComplete: (chat_history) => {
           console.log('[ChatDialog] Stream complete, chat_history:', chat_history);
-          
-          // Remove loading animation
-          this.removeLoadingAnimation();
-          
+      
+      // Remove loading animation
+      this.removeLoadingAnimation();
+      
           // Get the final AI response
           let aiResponse = accumulatedText || 'No response received';
           
@@ -10025,15 +10111,15 @@ const ChatDialog = {
             for (let i = chat_history.length - 1; i >= 0; i--) {
               if (chat_history[i].role === 'assistant') {
                 aiResponse = chat_history[i].content;
-                break;
+            break;
               }
-            }
           }
-          
+        }
+        
           console.log('[ChatDialog] Final AI response:', aiResponse);
-          
-          // Check if we're still in the same chat tab that initiated the request
-          if (this.currentTextKey === requestTextKey) {
+        
+        // Check if we're still in the same chat tab that initiated the request
+        if (this.currentTextKey === requestTextKey) {
             // We're still in the same chat, update the streaming message or add it if it doesn't exist
             if (streamingMessageContent) {
               // Update the existing streaming message with final content
@@ -10047,32 +10133,32 @@ const ChatDialog = {
               });
             } else {
               // Message bubble was removed or doesn't exist, add it normally
-              this.addMessageToChat('ai', aiResponse);
+          this.addMessageToChat('ai', aiResponse);
             }
             
             // Update stored chat history
             if (this.currentTextKey) {
               this.chatHistories.set(this.currentTextKey, [...this.chatHistory]);
             }
-          } else {
-            // User switched to a different chat tab, add response to the correct chat history
-            console.log('[ChatDialog] User switched tabs, adding response to correct chat history for textKey:', requestTextKey);
-            
-            // Get the chat history for the original textKey
-            const originalChatHistory = this.chatHistories.get(requestTextKey) || [];
-            
+        } else {
+          // User switched to a different chat tab, add response to the correct chat history
+          console.log('[ChatDialog] User switched tabs, adding response to correct chat history for textKey:', requestTextKey);
+          
+          // Get the chat history for the original textKey
+          const originalChatHistory = this.chatHistories.get(requestTextKey) || [];
+          
             // Add the AI response (user message was already added when request was made)
-            originalChatHistory.push({
-              type: 'ai',
-              message: aiResponse,
-              timestamp: new Date().toISOString()
-            });
-            
-            // Update the stored chat history
-            this.chatHistories.set(requestTextKey, originalChatHistory);
-            
-            console.log('[ChatDialog] Added AI response to original chat history for textKey:', requestTextKey);
-          }
+          originalChatHistory.push({
+            type: 'ai',
+            message: aiResponse,
+            timestamp: new Date().toISOString()
+          });
+          
+          // Update the stored chat history
+          this.chatHistories.set(requestTextKey, originalChatHistory);
+          
+          console.log('[ChatDialog] Added AI response to original chat history for textKey:', requestTextKey);
+        }
         },
         onError: (error) => {
           console.error('[ChatDialog] Stream error:', error);
@@ -10080,41 +10166,41 @@ const ChatDialog = {
           // Remove loading animation
           this.removeLoadingAnimation();
           
-          // Check if it's a 429 rate limit error
+        // Check if it's a 429 rate limit error
           const isRateLimit = error.status === 429 || 
                              error.message.includes('429') || 
                              error.message.includes('Rate limit') ||
                              error.message.includes('too fast');
-          
-          if (isRateLimit && typeof ErrorBanner !== 'undefined') {
+        
+        if (isRateLimit && typeof ErrorBanner !== 'undefined') {
             ErrorBanner.show('You are requesting too fast, please retry after few seconds');
-            
-            // If this is a text selection (not page-general), stop pulsating and return to normal state
-            if (requestTextKey && !requestTextKey.startsWith('page-general')) {
-              const highlight = TextSelector.textToHighlights.get(requestTextKey);
-              if (highlight) {
-                // Stop pulsating animation
-                highlight.classList.remove('vocab-text-loading', 'vocab-text-pulsate', 'vocab-text-pulsate-green');
-                
-                // Remove any loading states
-                const spinnerContainer = highlight.querySelector('.vocab-magic-meaning-spinner-container');
-                if (spinnerContainer) {
-                  spinnerContainer.remove();
-                }
-                
-                // Restore magic-meaning button if it was hidden
-                const iconsWrapper = highlight.querySelector('.vocab-text-icons-wrapper');
-                if (iconsWrapper) {
-                  const magicBtn = iconsWrapper.querySelector('.vocab-text-magic-meaning-btn');
-                  if (magicBtn) {
-                    magicBtn.style.display = '';
-                  }
-                }
-                
-                console.log('[ChatDialog] Stopped pulsating animation and restored normal state for text selection');
+          
+          // If this is a text selection (not page-general), stop pulsating and return to normal state
+          if (requestTextKey && !requestTextKey.startsWith('page-general')) {
+            const highlight = TextSelector.textToHighlights.get(requestTextKey);
+            if (highlight) {
+              // Stop pulsating animation
+              highlight.classList.remove('vocab-text-loading', 'vocab-text-pulsate', 'vocab-text-pulsate-green');
+              
+              // Remove any loading states
+              const spinnerContainer = highlight.querySelector('.vocab-magic-meaning-spinner-container');
+              if (spinnerContainer) {
+                spinnerContainer.remove();
               }
+              
+              // Restore magic-meaning button if it was hidden
+              const iconsWrapper = highlight.querySelector('.vocab-text-icons-wrapper');
+              if (iconsWrapper) {
+                const magicBtn = iconsWrapper.querySelector('.vocab-text-magic-meaning-btn');
+                if (magicBtn) {
+                  magicBtn.style.display = '';
+                }
+              }
+              
+              console.log('[ChatDialog] Stopped pulsating animation and restored normal state for text selection');
             }
           }
+        }
           
           // Remove streaming message bubble if it exists
           if (streamingMessageBubble && streamingMessageBubble.parentNode) {
@@ -10123,24 +10209,24 @@ const ChatDialog = {
           
           // Handle error case - check if we're still in the same chat
           const errorMessage = `⚠️ **Error:**\n\n${error.message || 'Failed to get response from server'}`;
-          
-          if (this.currentTextKey === requestTextKey) {
+        
+        if (this.currentTextKey === requestTextKey) {
             this.addMessageToChat('ai', errorMessage);
-          } else {
-            // Add error to the original chat history
-            const originalChatHistory = this.chatHistories.get(requestTextKey) || [];
-            
-            // Only add the error response (user message was already added when request was made)
-            originalChatHistory.push({
-              type: 'ai',
+        } else {
+          // Add error to the original chat history
+          const originalChatHistory = this.chatHistories.get(requestTextKey) || [];
+          
+          // Only add the error response (user message was already added when request was made)
+          originalChatHistory.push({
+            type: 'ai',
               message: errorMessage,
-              timestamp: new Date().toISOString()
-            });
-            
-            this.chatHistories.set(requestTextKey, originalChatHistory);
-            console.log('[ChatDialog] Added error response to original chat history for textKey:', requestTextKey);
-          }
+            timestamp: new Date().toISOString()
+          });
+          
+          this.chatHistories.set(requestTextKey, originalChatHistory);
+          console.log('[ChatDialog] Added error response to original chat history for textKey:', requestTextKey);
         }
+      }
       });
       
     } catch (error) {
@@ -17794,75 +17880,75 @@ const ButtonPanel = {
             console.log('[ButtonPanel] Chunk event - chunk:', eventData.chunk, 'accumulatedSimplifiedText:', eventData.accumulatedSimplifiedText);
             
             // Remove loading animation on first chunk
-            highlight.classList.remove('vocab-text-loading');
-            
+          highlight.classList.remove('vocab-text-loading');
+          
             // Create book icon and green cross button on first chunk (only once)
             if (!bookIconCreated) {
               bookIconCreated = true;
               
               // Hide spinner if it exists
-              const iconsWrapper = highlight.querySelector('.vocab-text-icons-wrapper');
-              if (iconsWrapper) {
-                const spinnerContainer = iconsWrapper.querySelector('.vocab-magic-meaning-spinner-container');
-                if (spinnerContainer) {
-                  spinnerContainer.remove();
-                }
-              }
-              
-              // Change underline to light green
-              highlight.classList.add('vocab-text-simplified');
-              
-              // Replace purple cross button with green cross button at top-left
-              const existingPurpleCross = highlight.querySelector('.vocab-text-remove-btn');
-              if (existingPurpleCross) {
-                existingPurpleCross.remove();
-              }
-              
+          const iconsWrapper = highlight.querySelector('.vocab-text-icons-wrapper');
+          if (iconsWrapper) {
+            const spinnerContainer = iconsWrapper.querySelector('.vocab-magic-meaning-spinner-container');
+            if (spinnerContainer) {
+              spinnerContainer.remove();
+            }
+          }
+          
+          // Change underline to light green
+          highlight.classList.add('vocab-text-simplified');
+          
+          // Replace purple cross button with green cross button at top-left
+          const existingPurpleCross = highlight.querySelector('.vocab-text-remove-btn');
+          if (existingPurpleCross) {
+            existingPurpleCross.remove();
+          }
+          
               // Create green cross button at top-left
-              const greenCrossBtn = document.createElement('button');
-              greenCrossBtn.className = 'vocab-text-remove-green-btn';
-              greenCrossBtn.setAttribute('aria-label', 'Remove simplified text');
-              greenCrossBtn.style.position = 'absolute';
-              greenCrossBtn.style.top = '-10px';
-              greenCrossBtn.style.left = '-10px';
-              greenCrossBtn.style.width = '18px';
-              greenCrossBtn.style.height = '18px';
-              greenCrossBtn.style.background = '#FFFFFF';
-              greenCrossBtn.style.borderRadius = '50%';
-              greenCrossBtn.style.zIndex = '10000003';
-              greenCrossBtn.style.boxShadow = '0 2px 4px rgba(34, 197, 94, 0.4)';
-              greenCrossBtn.style.display = 'flex';
-              greenCrossBtn.style.alignItems = 'center';
-              greenCrossBtn.style.justifyContent = 'center';
-              greenCrossBtn.style.cursor = 'pointer';
-              greenCrossBtn.style.opacity = '1';
-              greenCrossBtn.style.border = '1px solid #22c55e';
-              greenCrossBtn.style.padding = '0';
-              greenCrossBtn.style.boxSizing = 'border-box';
-              greenCrossBtn.innerHTML = `
-                <svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg" style="width: 10px; height: 10px;">
-                  <path d="M2 2L10 10M10 2L2 10" stroke="#22c55e" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-                </svg>
-              `;
-              greenCrossBtn.addEventListener('click', (e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                console.log('[TextSelector] Green cross button clicked for simplified text:', textKey);
-                TextSelector.removeFromSimplifiedTexts(textKey);
-              });
-              highlight.appendChild(greenCrossBtn);
-              
+          const greenCrossBtn = document.createElement('button');
+          greenCrossBtn.className = 'vocab-text-remove-green-btn';
+          greenCrossBtn.setAttribute('aria-label', 'Remove simplified text');
+          greenCrossBtn.style.position = 'absolute';
+          greenCrossBtn.style.top = '-10px';
+          greenCrossBtn.style.left = '-10px';
+          greenCrossBtn.style.width = '18px';
+          greenCrossBtn.style.height = '18px';
+          greenCrossBtn.style.background = '#FFFFFF';
+          greenCrossBtn.style.borderRadius = '50%';
+          greenCrossBtn.style.zIndex = '10000003';
+          greenCrossBtn.style.boxShadow = '0 2px 4px rgba(34, 197, 94, 0.4)';
+          greenCrossBtn.style.display = 'flex';
+          greenCrossBtn.style.alignItems = 'center';
+          greenCrossBtn.style.justifyContent = 'center';
+          greenCrossBtn.style.cursor = 'pointer';
+          greenCrossBtn.style.opacity = '1';
+          greenCrossBtn.style.border = '1px solid #22c55e';
+          greenCrossBtn.style.padding = '0';
+          greenCrossBtn.style.boxSizing = 'border-box';
+          greenCrossBtn.innerHTML = `
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg" style="width: 10px; height: 10px;">
+              <path d="M2 2L10 10M10 2L2 10" stroke="#22c55e" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          `;
+          greenCrossBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            console.log('[TextSelector] Green cross button clicked for simplified text:', textKey);
+            TextSelector.removeFromSimplifiedTexts(textKey);
+          });
+          highlight.appendChild(greenCrossBtn);
+          
               // Create wrapper for icons (book icon positioned at top-left)
-              const newIconsWrapper = document.createElement('div');
+          const newIconsWrapper = document.createElement('div');
               newIconsWrapper.className = 'vocab-text-icons-wrapper vocab-text-icons-wrapper-book';
-              newIconsWrapper.setAttribute('data-text-key', textKey);
-              
+          newIconsWrapper.setAttribute('data-text-key', textKey);
+          
               // Add book icon
-              const bookBtn = TextSelector.createBookButton(textKey);
-              newIconsWrapper.appendChild(bookBtn);
-              
-              highlight.appendChild(newIconsWrapper);
-              
+          const bookBtn = TextSelector.createBookButton(textKey);
+          newIconsWrapper.appendChild(bookBtn);
+          
+          highlight.appendChild(newIconsWrapper);
+          
               // Position book icon wrapper
               newIconsWrapper.style.setProperty('position', 'absolute', 'important');
               newIconsWrapper.style.setProperty('display', 'flex', 'important');
@@ -17881,20 +17967,20 @@ const ButtonPanel = {
               }
               
               // Force a reflow
-              newIconsWrapper.offsetHeight;
+          newIconsWrapper.offsetHeight;
             }
-            
+          
             // Store streaming data with accumulated text
             const streamingSimplifiedData = {
-              text: eventData.text,
+            text: eventData.text,
               simplifiedText: eventData.accumulatedSimplifiedText || '', // Use accumulated text for streaming
-              textStartIndex: eventData.textStartIndex,
-              textLength: eventData.textLength,
-              previousSimplifiedTexts: eventData.previousSimplifiedTexts || [],
+            textStartIndex: eventData.textStartIndex,
+            textLength: eventData.textLength,
+            previousSimplifiedTexts: eventData.previousSimplifiedTexts || [],
               shouldAllowSimplifyMore: false, // Will be set on complete
-              highlight: highlight
-            };
-            
+            highlight: highlight
+          };
+          
             // Store in TextSelector for real-time updates
             TextSelector.simplifiedTexts.set(textKey, streamingSimplifiedData);
             
@@ -17936,7 +18022,7 @@ const ButtonPanel = {
                   }, 50); // Small delay to ensure dialog is fully rendered
                 });
               });
-            } else {
+          } else {
               // Update existing dialog with streaming text on every chunk
               if (ChatDialog.isOpen && ChatDialog.currentTextKey === textKey) {
                 updateUIWithStreamingData();
@@ -17980,40 +18066,40 @@ const ButtonPanel = {
               dialogOpened = true;
               ChatDialog.open(eventData.text, textKey, 'simplified', simplifiedData, 'selected');
             }
-            
-            // Store simplified text in analysis data for persistence
-            if (this.topicsModal && this.topicsModal.customContentModal && this.topicsModal.customContentModal.activeTabId) {
-              const activeContent = this.topicsModal.customContentModal.getContentByTabId(parseInt(this.topicsModal.customContentModal.activeTabId));
-              if (activeContent && activeContent.analysis) {
-                const simplifiedTextData = {
-                  textKey: textKey,
-                  textStartIndex: eventData.textStartIndex,
-                  textLength: eventData.textLength,
-                  originalText: eventData.text,
-                  simplifiedText: eventData.simplifiedText,
-                  previousSimplifiedTexts: eventData.previousSimplifiedTexts || [],
-                  shouldAllowSimplifyMore: eventData.shouldAllowSimplifyMore || false,
-                  timestamp: new Date().toISOString()
-                };
-                
-                const existingTextIndex = activeContent.analysis.simplifiedMeanings.findIndex(s => 
-                  s.textKey === textKey
-                );
-                
-                if (existingTextIndex !== -1) {
-                  activeContent.analysis.simplifiedMeanings[existingTextIndex] = simplifiedTextData;
-                  console.log(`[ButtonPanel] Updated existing simplified text for textKey "${textKey}" in analysis data`);
-                } else {
-                  activeContent.analysis.simplifiedMeanings.push(simplifiedTextData);
-                  console.log(`[ButtonPanel] Added new simplified text for textKey "${textKey}" to analysis data`);
-                }
+          
+          // Store simplified text in analysis data for persistence
+          if (this.topicsModal && this.topicsModal.customContentModal && this.topicsModal.customContentModal.activeTabId) {
+            const activeContent = this.topicsModal.customContentModal.getContentByTabId(parseInt(this.topicsModal.customContentModal.activeTabId));
+            if (activeContent && activeContent.analysis) {
+              const simplifiedTextData = {
+                textKey: textKey,
+                textStartIndex: eventData.textStartIndex,
+                textLength: eventData.textLength,
+                originalText: eventData.text,
+                simplifiedText: eventData.simplifiedText,
+                previousSimplifiedTexts: eventData.previousSimplifiedTexts || [],
+                shouldAllowSimplifyMore: eventData.shouldAllowSimplifyMore || false,
+                timestamp: new Date().toISOString()
+              };
+              
+              const existingTextIndex = activeContent.analysis.simplifiedMeanings.findIndex(s => 
+                s.textKey === textKey
+              );
+              
+              if (existingTextIndex !== -1) {
+                activeContent.analysis.simplifiedMeanings[existingTextIndex] = simplifiedTextData;
+                console.log(`[ButtonPanel] Updated existing simplified text for textKey "${textKey}" in analysis data`);
+              } else {
+                activeContent.analysis.simplifiedMeanings.push(simplifiedTextData);
+                console.log(`[ButtonPanel] Added new simplified text for textKey "${textKey}" to analysis data`);
               }
             }
-            
+          }
+          
             // Update button states
-            this.updateButtonStatesFromSelections();
-            
-            console.log('[ButtonPanel] Text simplified successfully for:', textKey);
+          this.updateButtonStatesFromSelections();
+          
+          console.log('[ButtonPanel] Text simplified successfully for:', textKey);
           }
         }
       },
@@ -18170,64 +18256,64 @@ const ButtonPanel = {
                   console.log('[ButtonPanel] Chunk event for', matchingTextKey, '- chunk:', eventData.chunk, 'accumulatedSimplifiedText:', eventData.accumulatedSimplifiedText);
                   
                   // Remove loading animation on first chunk
-                  highlight.classList.remove('vocab-text-loading');
+                highlight.classList.remove('vocab-text-loading');
                   
                   // Create book icon and green cross button on first chunk (only once per text)
                   if (!bookIconCreatedMap.get(matchingTextKey)) {
                     bookIconCreatedMap.set(matchingTextKey, true);
-                    
-                    // Change underline to light green
-                    highlight.classList.add('vocab-text-simplified');
-                    
-                    // Replace purple cross button with green cross button at top-left
-                    const existingPurpleCross = highlight.querySelector('.vocab-text-remove-btn');
-                    if (existingPurpleCross) {
-                      existingPurpleCross.remove();
-                    }
-                    
+                
+                // Change underline to light green
+                highlight.classList.add('vocab-text-simplified');
+                
+                // Replace purple cross button with green cross button at top-left
+                const existingPurpleCross = highlight.querySelector('.vocab-text-remove-btn');
+                if (existingPurpleCross) {
+                  existingPurpleCross.remove();
+                }
+                
                     // Create green cross button at top-left
-                    const greenCrossBtn = document.createElement('button');
-                    greenCrossBtn.className = 'vocab-text-remove-green-btn';
-                    greenCrossBtn.setAttribute('aria-label', 'Remove simplified text');
-                    greenCrossBtn.style.position = 'absolute';
-                    greenCrossBtn.style.top = '-10px';
-                    greenCrossBtn.style.left = '-10px';
-                    greenCrossBtn.style.width = '18px';
-                    greenCrossBtn.style.height = '18px';
-                    greenCrossBtn.style.background = '#FFFFFF';
-                    greenCrossBtn.style.borderRadius = '50%';
-                    greenCrossBtn.style.zIndex = '10000003';
-                    greenCrossBtn.style.boxShadow = '0 2px 4px rgba(34, 197, 94, 0.4)';
-                    greenCrossBtn.style.display = 'flex';
-                    greenCrossBtn.style.alignItems = 'center';
-                    greenCrossBtn.style.justifyContent = 'center';
-                    greenCrossBtn.style.cursor = 'pointer';
-                    greenCrossBtn.style.opacity = '1';
-                    greenCrossBtn.style.border = '1px solid #22c55e';
-                    greenCrossBtn.style.padding = '0';
-                    greenCrossBtn.style.boxSizing = 'border-box';
-                    greenCrossBtn.innerHTML = `
-                      <svg width="10" height="10" viewBox="0 0 10 10" fill="none" xmlns="http://www.w3.org/2000/svg" style="width: 8px; height: 8px;">
-                        <path d="M2 2L8 8M8 2L2 8" stroke="#22c55e" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-                      </svg>
-                    `;
-                    greenCrossBtn.addEventListener('click', (e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      console.log('[TextSelector] Green cross button clicked for simplified text:', matchingTextKey);
-                      TextSelector.removeFromSimplifiedTexts(matchingTextKey);
-                    });
-                    highlight.appendChild(greenCrossBtn);
-                    
+                const greenCrossBtn = document.createElement('button');
+                greenCrossBtn.className = 'vocab-text-remove-green-btn';
+                greenCrossBtn.setAttribute('aria-label', 'Remove simplified text');
+                greenCrossBtn.style.position = 'absolute';
+                greenCrossBtn.style.top = '-10px';
+                greenCrossBtn.style.left = '-10px';
+                greenCrossBtn.style.width = '18px';
+                greenCrossBtn.style.height = '18px';
+                greenCrossBtn.style.background = '#FFFFFF';
+                greenCrossBtn.style.borderRadius = '50%';
+                greenCrossBtn.style.zIndex = '10000003';
+                greenCrossBtn.style.boxShadow = '0 2px 4px rgba(34, 197, 94, 0.4)';
+                greenCrossBtn.style.display = 'flex';
+                greenCrossBtn.style.alignItems = 'center';
+                greenCrossBtn.style.justifyContent = 'center';
+                greenCrossBtn.style.cursor = 'pointer';
+                greenCrossBtn.style.opacity = '1';
+                greenCrossBtn.style.border = '1px solid #22c55e';
+                greenCrossBtn.style.padding = '0';
+                greenCrossBtn.style.boxSizing = 'border-box';
+                greenCrossBtn.innerHTML = `
+                  <svg width="10" height="10" viewBox="0 0 10 10" fill="none" xmlns="http://www.w3.org/2000/svg" style="width: 8px; height: 8px;">
+                    <path d="M2 2L8 8M8 2L2 8" stroke="#22c55e" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                  </svg>
+                `;
+                greenCrossBtn.addEventListener('click', (e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  console.log('[TextSelector] Green cross button clicked for simplified text:', matchingTextKey);
+                  TextSelector.removeFromSimplifiedTexts(matchingTextKey);
+                });
+                highlight.appendChild(greenCrossBtn);
+                
                     // Create wrapper for icons (book icon positioned at top-left)
-                    const iconsWrapper = document.createElement('div');
+                const iconsWrapper = document.createElement('div');
                     iconsWrapper.className = 'vocab-text-icons-wrapper vocab-text-icons-wrapper-book';
-                    iconsWrapper.setAttribute('data-text-key', matchingTextKey);
-                    
+                iconsWrapper.setAttribute('data-text-key', matchingTextKey);
+                
                     // Add book icon
-                    const bookBtn = TextSelector.createBookButton(matchingTextKey);
-                    iconsWrapper.appendChild(bookBtn);
-                    
+                const bookBtn = TextSelector.createBookButton(matchingTextKey);
+                iconsWrapper.appendChild(bookBtn);
+                
                     // Position book icon wrapper
                     iconsWrapper.style.setProperty('position', 'absolute', 'important');
                     iconsWrapper.style.setProperty('display', 'flex', 'important');
@@ -18254,11 +18340,11 @@ const ButtonPanel = {
                   
                   // Store streaming data with accumulated text
                   const streamingSimplifiedData = {
-                    text: eventData.text,
+                  text: eventData.text,
                     simplifiedText: eventData.accumulatedSimplifiedText || '', // Use accumulated text for streaming
-                    textStartIndex: eventData.textStartIndex,
-                    textLength: eventData.textLength,
-                    previousSimplifiedTexts: eventData.previousSimplifiedTexts || [],
+                  textStartIndex: eventData.textStartIndex,
+                  textLength: eventData.textLength,
+                  previousSimplifiedTexts: eventData.previousSimplifiedTexts || [],
                     shouldAllowSimplifyMore: false, // Will be set on complete
                     highlight: highlight
                   };
@@ -18283,7 +18369,7 @@ const ButtonPanel = {
                     if (container) {
                       console.log('[ButtonPanel] Updating UI with streaming data for', matchingTextKey, ', accumulated text length:', eventData.accumulatedSimplifiedText?.length || 0);
                       ChatDialog.renderSimplifiedExplanations(container);
-                    } else {
+                } else {
                       console.log('[ButtonPanel] Container not found yet for', matchingTextKey, ', will retry on next chunk');
                     }
                   };
@@ -18324,13 +18410,13 @@ const ButtonPanel = {
                   
                   // Final simplified data
                   const simplifiedData = {
-                    text: eventData.text,
-                    simplifiedText: eventData.simplifiedText,
+                  text: eventData.text,
+                  simplifiedText: eventData.simplifiedText,
                     textStartIndex: eventData.textStartIndex,
                     textLength: eventData.textLength,
-                    previousSimplifiedTexts: eventData.previousSimplifiedTexts || [],
-                    shouldAllowSimplifyMore: eventData.shouldAllowSimplifyMore || false,
-                    highlight: highlight
+                  previousSimplifiedTexts: eventData.previousSimplifiedTexts || [],
+                  shouldAllowSimplifyMore: eventData.shouldAllowSimplifyMore || false,
+                  highlight: highlight
                   };
                   
                   // Store final simplified text data
@@ -18348,43 +18434,43 @@ const ButtonPanel = {
                     dialogOpenedMap.set(matchingTextKey, true);
                     ChatDialog.open(eventData.text, matchingTextKey, 'simplified', simplifiedData, 'selected');
                   }
-                  
-                  // Store simplified text in analysis data for persistence
+                
+                // Store simplified text in analysis data for persistence
                   if (this.topicsModal && this.topicsModal.customContentModal && this.topicsModal.customContentModal.activeTabId) {
-                    const activeContent = this.topicsModal.customContentModal.getContentByTabId(parseInt(this.topicsModal.customContentModal.activeTabId));
-                    if (activeContent && activeContent.analysis) {
-                      const simplifiedTextData = {
-                        textKey: matchingTextKey,
-                        textStartIndex: eventData.textStartIndex,
-                        textLength: eventData.textLength,
-                        originalText: eventData.text,
-                        simplifiedText: eventData.simplifiedText,
-                        previousSimplifiedTexts: eventData.previousSimplifiedTexts || [],
-                        shouldAllowSimplifyMore: eventData.shouldAllowSimplifyMore || false,
-                        timestamp: new Date().toISOString()
-                      };
-                      
-                      // Check if this text already exists in simplifiedMeanings
-                      const existingTextIndex = activeContent.analysis.simplifiedMeanings.findIndex(s => 
-                        s.textKey === matchingTextKey
-                      );
-                      
-                      if (existingTextIndex !== -1) {
-                        // Update existing simplified text
-                        activeContent.analysis.simplifiedMeanings[existingTextIndex] = simplifiedTextData;
-                        console.log(`[ButtonPanel] Updated existing simplified text for textKey "${matchingTextKey}" in analysis data`);
-                      } else {
-                        // Add new simplified text
-                        activeContent.analysis.simplifiedMeanings.push(simplifiedTextData);
-                        console.log(`[ButtonPanel] Added new simplified text for textKey "${matchingTextKey}" to analysis data`);
-                      }
+                  const activeContent = this.topicsModal.customContentModal.getContentByTabId(parseInt(this.topicsModal.customContentModal.activeTabId));
+                  if (activeContent && activeContent.analysis) {
+                    const simplifiedTextData = {
+                      textKey: matchingTextKey,
+                      textStartIndex: eventData.textStartIndex,
+                      textLength: eventData.textLength,
+                      originalText: eventData.text,
+                      simplifiedText: eventData.simplifiedText,
+                      previousSimplifiedTexts: eventData.previousSimplifiedTexts || [],
+                      shouldAllowSimplifyMore: eventData.shouldAllowSimplifyMore || false,
+                      timestamp: new Date().toISOString()
+                    };
+                    
+                    // Check if this text already exists in simplifiedMeanings
+                    const existingTextIndex = activeContent.analysis.simplifiedMeanings.findIndex(s => 
+                      s.textKey === matchingTextKey
+                    );
+                    
+                    if (existingTextIndex !== -1) {
+                      // Update existing simplified text
+                      activeContent.analysis.simplifiedMeanings[existingTextIndex] = simplifiedTextData;
+                      console.log(`[ButtonPanel] Updated existing simplified text for textKey "${matchingTextKey}" in analysis data`);
+                    } else {
+                      // Add new simplified text
+                      activeContent.analysis.simplifiedMeanings.push(simplifiedTextData);
+                      console.log(`[ButtonPanel] Added new simplified text for textKey "${matchingTextKey}" to analysis data`);
                     }
                   }
-                  
-                  // Update button states after adding to simplifiedTexts
+                }
+                
+                // Update button states after adding to simplifiedTexts
                   this.updateButtonStatesFromSelections();
-                  
-                  console.log('[ButtonPanel] Updated UI for text segment:', matchingTextKey);
+                
+                console.log('[ButtonPanel] Updated UI for text segment:', matchingTextKey);
                 }
               }
             }
