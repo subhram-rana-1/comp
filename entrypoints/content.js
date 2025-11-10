@@ -6315,8 +6315,12 @@ const TextSelector = {
       // Add text to selected set with range for position tracking (O(1) operation)
       this.addText(selectedText, range);
       
-      // Highlight the text
-      this.highlightRange(range, selectedText);
+      // Capture mouse release coordinates for button positioning
+      const mouseReleaseX = event.clientX;
+      const mouseReleaseY = event.clientY;
+      
+      // Highlight the text and pass mouse coordinates for button positioning
+      this.highlightRange(range, selectedText, { x: mouseReleaseX, y: mouseReleaseY });
       
       // Clear the selection
       selection.removeAllRanges();
@@ -6536,8 +6540,9 @@ const TextSelector = {
    * Highlight a range with a styled span
    * @param {Range} range - The range to highlight
    * @param {string} text - The text being highlighted
+   * @param {Object} mouseReleaseCoords - Mouse release coordinates {x, y} in viewport coordinates
    */
-  highlightRange(range, text) {
+  highlightRange(range, text, mouseReleaseCoords = null) {
     const textKey = this.getContextualTextKey(text);
     
     // Create highlight wrapper
@@ -6617,20 +6622,20 @@ const TextSelector = {
     // Append icons wrapper to highlight
     highlight.appendChild(iconsWrapper);
     
-    // Position icons relative to highlight - at the END (right side), outside text content
+    // Position icons relative to highlight - centered at mouse release point
     // Force absolute positioning to ensure it's always outside the text
     iconsWrapper.style.setProperty('position', 'absolute', 'important');
     iconsWrapper.style.setProperty('display', 'flex', 'important');
     iconsWrapper.style.setProperty('margin', '0', 'important');
     iconsWrapper.style.setProperty('padding', '0', 'important');
     
-    // Function to position button at the end of the selected text
-    const positionAtEndOfText = () => {
+    // Function to position button at mouse release coordinates
+    const positionAtMouseRelease = () => {
       try {
         // Wait for DOM to be ready
         if (!highlight.offsetParent && highlight.offsetWidth === 0 && highlight.offsetHeight === 0) {
           // Element not yet in DOM or not visible, retry later
-          setTimeout(positionAtEndOfText, 100);
+          setTimeout(positionAtMouseRelease, 100);
           return;
         }
         
@@ -6641,98 +6646,171 @@ const TextSelector = {
           throw new Error('Highlight not visible or has no dimensions');
         }
         
-        // Find the last text node in the highlight
-        const walker = document.createTreeWalker(
-          highlight,
-          NodeFilter.SHOW_TEXT,
-          null
-        );
-        
-        let lastTextNode = null;
-        let node;
-        while (node = walker.nextNode()) {
-          if (node.textContent.trim().length > 0) {
-            lastTextNode = node;
-          }
-        }
-        
-        if (!lastTextNode) {
-          throw new Error('No text node found in highlight');
-        }
-        
-        // Create a range at the end of the last text node
-        const range = document.createRange();
-        const textLength = lastTextNode.textContent.length;
-        range.setStart(lastTextNode, textLength);
-        range.setEnd(lastTextNode, textLength);
-        
-        // Get the bounding rectangle of the end position (relative to viewport)
-        const endRect = range.getBoundingClientRect();
-        
-        // Validate that we have valid rectangles
-        if (!endRect || (endRect.width === 0 && endRect.height === 0)) {
-          // If collapsed range has no dimensions, use the highlight's bottom-right corner
-          const relativeLeft = highlightRect.width;
-          const relativeTop = highlightRect.height;
+        // Use mouse release coordinates if available, otherwise fall back to DOM-based positioning
+        if (mouseReleaseCoords && mouseReleaseCoords.x !== undefined && mouseReleaseCoords.y !== undefined) {
+          // Mouse release coordinates are in viewport coordinates (clientX, clientY)
+          const mouseX = mouseReleaseCoords.x;
+          const mouseY = mouseReleaseCoords.y;
           
-          iconsWrapper.style.setProperty('left', `${relativeLeft + 8}px`, 'important');
+          // For multi-line selections, we need to find the left edge of the line where the mouse was released
+          // This prevents the button from being offset by the indentation of the first line
+          let lineLeftEdge = highlightRect.left;
+          
+          try {
+            // Get a range at the mouse release point to find which line the mouse is on
+            let rangeAtPoint = null;
+            
+            // Modern browsers support caretRangeFromPoint
+            if (document.caretRangeFromPoint) {
+              rangeAtPoint = document.caretRangeFromPoint(mouseX, mouseY);
+            } else if (document.caretPositionFromPoint) {
+              // Firefox fallback
+              const caretPos = document.caretPositionFromPoint(mouseX, mouseY);
+              if (caretPos) {
+                rangeAtPoint = document.createRange();
+                rangeAtPoint.setStart(caretPos.offsetNode, caretPos.offset);
+                rangeAtPoint.setEnd(caretPos.offsetNode, caretPos.offset);
+              }
+            }
+            
+            if (rangeAtPoint) {
+              // Get the bounding rect of the range at the mouse point
+              const rangeRect = rangeAtPoint.getBoundingClientRect();
+              
+              // Now we need to find the left edge of the line where this range is
+              // We'll create a range from the start of the text node to the mouse point
+              // and find the leftmost rect at the same Y level
+              const container = rangeAtPoint.commonAncestorContainer;
+              
+              if (container && container.nodeType === Node.TEXT_NODE) {
+                // Create a range from the start of the text node to the mouse point
+                const lineRange = document.createRange();
+                lineRange.setStart(container, 0);
+                lineRange.setEnd(container, rangeAtPoint.startOffset);
+                
+                // Get all client rects for this range
+                const rects = lineRange.getClientRects();
+                
+                if (rects && rects.length > 0) {
+                  // Find the leftmost rect that's on the same line as the mouse point
+                  let minLeft = Infinity;
+                  const tolerance = 10; // 10px tolerance for line detection
+                  
+                  for (let i = 0; i < rects.length; i++) {
+                    const rect = rects[i];
+                    // Check if this rect is on the same line (similar Y coordinate)
+                    const isOnSameLine = (
+                      Math.abs(rect.top - mouseY) < tolerance || 
+                      Math.abs(rect.bottom - mouseY) < tolerance ||
+                      (rect.top <= mouseY && rect.bottom >= mouseY)
+                    );
+                    
+                    if (isOnSameLine && rect.left < minLeft) {
+                      minLeft = rect.left;
+                    }
+                  }
+                  
+                  if (minLeft !== Infinity) {
+                    lineLeftEdge = minLeft;
+                  } else {
+                    // Fallback: use the left edge of the range rect
+                    lineLeftEdge = rangeRect.left;
+                  }
+                } else {
+                  // Fallback: use the left edge of the range rect
+                  lineLeftEdge = rangeRect.left;
+                }
+              } else {
+                // Fallback: use the left edge of the range rect
+                lineLeftEdge = rangeRect.left;
+              }
+            } else {
+              // Fallback: try to find element at point
+              const elementAtPoint = document.elementFromPoint(mouseX, mouseY);
+              if (elementAtPoint) {
+                const elementRect = elementAtPoint.getBoundingClientRect();
+                lineLeftEdge = elementRect.left;
+              }
+            }
+          } catch (error) {
+            console.warn('[TextSelector] Error finding line left edge, using highlight left:', error);
+            // Fallback to using highlight left edge
+            lineLeftEdge = highlightRect.left;
+          }
+          
+          // Convert viewport coordinates to relative coordinates within the highlight
+          // Use the line's left edge for horizontal calculation to handle indentation correctly
+          // The relativeLeft is calculated from the line's left edge, not the highlight's left edge
+          const relativeLeftFromLine = mouseX - lineLeftEdge;
+          const relativeTop = mouseY - highlightRect.top;
+          
+          // Now convert to position relative to the highlight element
+          // We need to add the offset between the line's left edge and the highlight's left edge
+          const lineOffsetFromHighlight = lineLeftEdge - highlightRect.left;
+          const relativeLeft = relativeLeftFromLine + lineOffsetFromHighlight;
+          
+          // Validate coordinates - ensure they're reasonable
+          if (isNaN(relativeLeft) || isNaN(relativeTop)) {
+            throw new Error(`NaN coordinates: left=${relativeLeft}, top=${relativeTop}`);
+          }
+          
+          // Ensure coordinates are within reasonable bounds
+          if (relativeLeft < -1000 || relativeLeft > 10000 || relativeTop < -1000 || relativeTop > 10000) {
+            throw new Error(`Coordinates out of bounds: left=${relativeLeft}, top=${relativeTop}`);
+          }
+          
+          // Center the button container at the mouse release point
+          // Button size is 32px, so center offset is -16px (half of 32px)
+          const buttonSize = 32;
+          const centerOffset = buttonSize / 2;
+          
+          // Final position relative to highlight element
+          const finalRelativeLeft = relativeLeft;
+          
+          iconsWrapper.style.setProperty('left', `${finalRelativeLeft - centerOffset}px`, 'important');
           iconsWrapper.style.setProperty('right', 'auto', 'important');
-          iconsWrapper.style.setProperty('top', `${relativeTop + 2}px`, 'important');
+          iconsWrapper.style.setProperty('top', `${relativeTop - centerOffset}px`, 'important');
           iconsWrapper.style.setProperty('bottom', 'auto', 'important');
           
-          console.log('[TextSelector] Positioned magic button at bottom-right of highlight (fallback):', { relativeLeft, relativeTop });
-          return;
+          console.log('[TextSelector] Positioned magic button at mouse release point:', { 
+            mouseX, 
+            mouseY,
+            lineLeftEdge,
+            highlightRectLeft: highlightRect.left,
+            lineOffsetFromHighlight,
+            relativeLeftFromLine,
+            relativeLeft, 
+            relativeTop,
+            finalRelativeLeft,
+            centerOffset,
+            highlightRect: { left: highlightRect.left, top: highlightRect.top, width: highlightRect.width, height: highlightRect.height }
+          });
+        } else {
+          // Fallback to DOM-based positioning if mouse coordinates not available
+          throw new Error('Mouse release coordinates not available, using fallback');
         }
-        
-        // Calculate position relative to highlight container
-        // Both rects are relative to viewport, so subtract to get relative position
-        const relativeLeft = endRect.right - highlightRect.left;
-        const relativeTop = endRect.bottom - highlightRect.top;
-        
-        // Validate coordinates - ensure they're reasonable
-        if (isNaN(relativeLeft) || isNaN(relativeTop)) {
-          throw new Error(`NaN coordinates: left=${relativeLeft}, top=${relativeTop}`);
-        }
-        
-        // Ensure coordinates are within reasonable bounds
-        if (relativeLeft < -1000 || relativeLeft > 10000 || relativeTop < -1000 || relativeTop > 10000) {
-          throw new Error(`Coordinates out of bounds: left=${relativeLeft}, top=${relativeTop}`);
-        }
-        
-        // Position button to the right (8px from end) and slightly below (2px) the last word
-        iconsWrapper.style.setProperty('left', `${relativeLeft + 8}px`, 'important');
-        iconsWrapper.style.setProperty('right', 'auto', 'important');
-        iconsWrapper.style.setProperty('top', `${relativeTop + 2}px`, 'important'); // Slightly below
-        iconsWrapper.style.setProperty('bottom', 'auto', 'important');
-        
-        console.log('[TextSelector] Positioned magic button at end of text:', { 
-          relativeLeft, 
-          relativeTop, 
-          endRect: { right: endRect.right, bottom: endRect.bottom, width: endRect.width, height: endRect.height },
-          highlightRect: { left: highlightRect.left, top: highlightRect.top, width: highlightRect.width, height: highlightRect.height }
-        });
       } catch (error) {
-        console.warn('[TextSelector] Error positioning button at end of text, using fallback:', error);
+        console.warn('[TextSelector] Error positioning button at mouse release point, using fallback:', error);
         // Fallback: use original positioning (right side of highlight)
-    const highlightRect = highlight.getBoundingClientRect();
-    const isInModal = highlight.closest('.vocab-custom-content-modal');
-    
-    if (isInModal) {
+        const highlightRect = highlight.getBoundingClientRect();
+        const isInModal = highlight.closest('.vocab-custom-content-modal');
+        
+        if (isInModal) {
           iconsWrapper.style.setProperty('right', '-50px', 'important');
           iconsWrapper.style.setProperty('left', 'auto', 'important');
-      iconsWrapper.style.setProperty('top', '-2px', 'important');
-    } else {
+          iconsWrapper.style.setProperty('top', '-2px', 'important');
+        } else {
           iconsWrapper.style.setProperty('right', '-45px', 'important');
           iconsWrapper.style.setProperty('left', 'auto', 'important');
-      iconsWrapper.style.setProperty('top', '0px', 'important');
-    }
+          iconsWrapper.style.setProperty('top', '0px', 'important');
+        }
       }
     };
     
     // Position immediately and also after a short delay to ensure DOM is ready
-    positionAtEndOfText();
+    positionAtMouseRelease();
     setTimeout(() => {
-      positionAtEndOfText();
+      positionAtMouseRelease();
     }, 50);
     
     // Remove the appearing class after animation completes
