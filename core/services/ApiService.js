@@ -53,10 +53,27 @@ class ApiService {
       console.warn('[ApiService] question is very large (' + question.length + ' chars), this might cause API errors');
     }
     
+    // Get language code from localStorage
+    const getLanguageCode = () => {
+      try {
+        const language = localStorage.getItem('language') || 'none';
+        // If language is "none" or "Page Language", return "none"
+        if (language === 'none' || language === 'Page Language') {
+          return 'none';
+        }
+        // Otherwise, convert to uppercase (e.g., "Spanish" -> "SPANISH")
+        return language.toUpperCase();
+      } catch (error) {
+        console.warn('[ApiService] Error getting language from localStorage:', error);
+        return 'none';
+      }
+    };
+    
     const requestBody = {
       initial_context,
       chat_history,
-      question
+      question,
+      languageCode: getLanguageCode()
     };
     
     try {

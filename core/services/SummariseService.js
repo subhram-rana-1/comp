@@ -32,9 +32,26 @@ class SummariseService {
       // Create abort controller for cancellation
       const abortController = new AbortController();
       
+      // Get language code from localStorage
+      const getLanguageCode = () => {
+        try {
+          const language = localStorage.getItem('language') || 'none';
+          // If language is "none" or "Page Language", return "none"
+          if (language === 'none' || language === 'Page Language') {
+            return 'none';
+          }
+          // Otherwise, convert to uppercase (e.g., "Spanish" -> "SPANISH")
+          return language.toUpperCase();
+        } catch (error) {
+          console.warn('[SummariseService] Error getting language from localStorage:', error);
+          return 'none';
+        }
+      };
+      
       // Prepare request payload
       const requestBody = {
-        text: text
+        text: text,
+        languageCode: getLanguageCode()
       };
       
       // Make the SSE request
