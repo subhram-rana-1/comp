@@ -63,6 +63,43 @@ body.extension-on {
   animation: fadeInUp 0.4s cubic-bezier(0.4, 0, 0.2, 1) 0.05s both;
 }
 
+/* Settings Container */
+.settings-container {
+  display: none; /* Hidden by default, shown when extension is enabled */
+  justify-content: flex-end;
+  align-items: center;
+  margin-bottom: 8px;
+  padding-right: 12px;
+  animation: fadeInUp 0.4s cubic-bezier(0.4, 0, 0.2, 1) 0.1s both;
+}
+
+.settings-button {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 8px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  width: 36px;
+  height: 36px;
+}
+
+.settings-button:hover {
+  background-color: rgba(149, 39, 245, 0.1);
+  transform: rotate(90deg);
+}
+
+.settings-button:active {
+  transform: rotate(90deg) scale(0.95);
+}
+
+.settings-button svg {
+  display: block;
+}
+
 .finger-point {
   width: 20px;
   height: 20px;

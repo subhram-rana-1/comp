@@ -31,6 +31,29 @@ class WordExplanationService {
       console.log('[WordExplanationService] Starting SSE request to:', url);
       console.log('[WordExplanationService] Text segments:', textSegments);
       
+      // Get language code from localStorage
+      const getLanguageCode = () => {
+        try {
+          const language = localStorage.getItem('language') || 'none';
+          // If language is "none" or "Page Language", return "none"
+          if (language === 'none' || language === 'Page Language') {
+            return 'none';
+          }
+          // Otherwise, convert to uppercase (e.g., "Spanish" -> "SPANISH")
+          return language.toUpperCase();
+        } catch (error) {
+          console.warn('[WordExplanationService] Error getting language from localStorage:', error);
+          return 'none';
+        }
+      };
+      
+      // Add languageCode to each text segment
+      const languageCode = getLanguageCode();
+      const textSegmentsWithLanguage = textSegments.map(segment => ({
+        ...segment,
+        languageCode: languageCode
+      }));
+      
       // Create abort controller for cancellation
       const abortController = new AbortController();
       
@@ -40,7 +63,7 @@ class WordExplanationService {
         headers: {
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify(textSegments),
+        body: JSON.stringify(textSegmentsWithLanguage),
         signal: abortController.signal
       });
       
