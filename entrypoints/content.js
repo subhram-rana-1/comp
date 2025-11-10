@@ -9053,6 +9053,7 @@ const ChatDialog = {
       // Render summary if it exists
       if (this.pageSummary) {
         summaryContainer.innerHTML = `
+          <h3 class="vocab-chat-page-summary-header">Summary</h3>
           <div class="vocab-chat-page-summary-content">
             ${this.renderMarkdown(this.pageSummary)}
           </div>
@@ -9501,15 +9502,22 @@ const ChatDialog = {
               if (eventData.accumulated) {
                 this.pageSummary = eventData.accumulated;
                 
-                // Show summary container on first chunk
+                // Show summary container on first chunk and hide button
                 if (summaryContainer && !summaryShown) {
                   summaryShown = true;
                   console.log('[ChatDialog] Showing summary container on first chunk');
+                  
+                  // Hide the button completely instead of disabling it
+                  if (summariseBtn) {
+                    summariseBtn.style.display = 'none';
+                    console.log('[ChatDialog] Summarise button hidden on first chunk');
+                  }
                 }
                 
                 // Update summary UI in real-time
                 if (summaryContainer) {
                   summaryContainer.innerHTML = `
+                    <h3 class="vocab-chat-page-summary-header">Summary</h3>
                     <div class="vocab-chat-page-summary-content">
                       ${this.renderMarkdown(this.pageSummary)}
                     </div>
@@ -9528,20 +9536,18 @@ const ChatDialog = {
               // Update summary UI with final data
               if (summaryContainer) {
                 summaryContainer.innerHTML = `
+                  <h3 class="vocab-chat-page-summary-header">Summary</h3>
                   <div class="vocab-chat-page-summary-content">
                     ${this.renderMarkdown(this.pageSummary)}
                   </div>
                 `;
-        }
-        
-        // Keep button disabled after successful fetch
+              }
+              
+              // Button is already hidden from first chunk, just remove loading state if needed
         if (summariseBtn) {
-          summariseBtn.disabled = true;
-          summariseBtn.classList.add('disabled');
           summariseBtn.classList.remove('loading');
-          summariseBtn.textContent = originalText;
-          console.log('[ChatDialog] Summarise button disabled after successful fetch');
-        }
+                console.log('[ChatDialog] Summarise button remains hidden after completion');
+              }
             }
           },
           // onComplete callback
@@ -9575,8 +9581,8 @@ const ChatDialog = {
             if (summariseBtn) {
               summariseBtn.disabled = false;
               summariseBtn.classList.remove('disabled', 'loading');
-              summariseBtn.textContent = originalText;
-            }
+          summariseBtn.textContent = originalText;
+        }
           }
         );
       } catch (error) {
@@ -9653,6 +9659,7 @@ const ChatDialog = {
     
     // Render summary content
     summaryContainer.innerHTML = `
+      <h3 class="vocab-chat-page-summary-header">Summary</h3>
       <div class="vocab-chat-page-summary-content">
         ${this.renderMarkdown(this.pageSummary)}
       </div>
@@ -9682,6 +9689,8 @@ const ChatDialog = {
       // Render summary if it exists
       if (this.pageSummary) {
         summaryContainer.innerHTML = `
+          <h3 class="vocab-chat-page-summary-header">Summary</h3>
+          <h3 class="vocab-chat-page-summary-header">Summary</h3>
           <div class="vocab-chat-page-summary-content">
             ${this.renderMarkdown(this.pageSummary)}
           </div>
@@ -11837,6 +11846,17 @@ const ChatDialog = {
         margin: 16px;
         margin-bottom: 12px;
         padding: 0;
+      }
+      
+      .vocab-chat-page-summary-header {
+        text-align: center;
+        color: #9527F5;
+        font-weight: 300;
+        font-size: 18px;
+        margin: 0 0 12px 0;
+        padding: 0;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+        letter-spacing: 0.5px;
       }
       
       .vocab-chat-page-summary-content {
