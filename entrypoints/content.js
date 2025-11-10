@@ -9904,118 +9904,187 @@ const ChatDialog = {
       content: item.message
     }));
     
+    // Create empty AI message bubble for streaming
+    let streamingMessageContent = null;
+    let streamingMessageBubble = null;
+    let accumulatedText = '';
+    let abortRequest = null;
+    
+    // Check if we're still in the same chat tab that initiated the request
+    const isSameChat = this.currentTextKey === requestTextKey;
+    
+    if (isSameChat) {
+      // Create streaming message bubble
+      const streamingBubble = this.createStreamingMessageBubble();
+      streamingMessageBubble = streamingBubble.messageBubble;
+      streamingMessageContent = streamingBubble.messageContent;
+    }
+    
     try {
-      // Call API
-      const response = await ApiService.ask({
-        initial_context: requestText,
-        chat_history: chat_history,
-        question: message
-      });
-      
       // Remove loading animation
       this.removeLoadingAnimation();
       
-      if (response.success) {
-        console.log('[ChatDialog] API response data:', response.data);
-        
-        // Extract the latest assistant response from chat_history
-        const chatHistory = response.data.chat_history || [];
-        
-        console.log('[ChatDialog] Chat history from API:', chatHistory);
-        
-        // Find the last assistant message (the latest AI response)
-        let aiResponse = 'No response received';
-        for (let i = chatHistory.length - 1; i >= 0; i--) {
-          if (chatHistory[i].role === 'assistant') {
-            aiResponse = chatHistory[i].content;
-            break;
+      // Call streaming API
+      abortRequest = await ApiService.ask({
+        initial_context: requestText,
+        chat_history: chat_history,
+        question: message,
+        onChunk: (chunk, accumulated) => {
+          console.log('[ChatDialog] Received chunk:', chunk, 'accumulated:', accumulated);
+          
+          // Update accumulated text
+          accumulatedText = accumulated || '';
+          
+          // Check if we're still in the same chat tab
+          if (this.currentTextKey === requestTextKey && streamingMessageContent) {
+            // Update the message bubble in real-time
+            this.updateStreamingMessage(streamingMessageContent, accumulatedText);
+          } else if (!isSameChat) {
+            // User switched tabs, but we still want to update if they switch back
+            // We'll handle this in the complete callback
+            console.log('[ChatDialog] User switched tabs during streaming, will update on complete');
           }
-        }
-        
-        console.log('[ChatDialog] Extracted AI response:', aiResponse);
-        
-        // Check if we're still in the same chat tab that initiated the request
-        if (this.currentTextKey === requestTextKey) {
-          // We're still in the same chat, add the response normally
-          this.addMessageToChat('ai', aiResponse);
-        } else {
-          // User switched to a different chat tab, add response to the correct chat history
-          console.log('[ChatDialog] User switched tabs, adding response to correct chat history for textKey:', requestTextKey);
+        },
+        onComplete: (chat_history) => {
+          console.log('[ChatDialog] Stream complete, chat_history:', chat_history);
           
-          // Get the chat history for the original textKey
-          const originalChatHistory = this.chatHistories.get(requestTextKey) || [];
+          // Remove loading animation
+          this.removeLoadingAnimation();
           
-          // Only add the AI response (user message was already added when request was made)
-          originalChatHistory.push({
-            type: 'ai',
-            message: aiResponse,
-            timestamp: new Date().toISOString()
-          });
+          // Get the final AI response
+          let aiResponse = accumulatedText || 'No response received';
           
-          // Update the stored chat history
-          this.chatHistories.set(requestTextKey, originalChatHistory);
-          
-          console.log('[ChatDialog] Added AI response to original chat history for textKey:', requestTextKey);
-        }
-      } else {
-        // Handle error case - check if we're still in the same chat
-        // Check if it's a 429 rate limit error
-        const isRateLimit = response.error && (
-          response.error.includes('429') || 
-          response.error.includes('Rate limit') ||
-          response.error.includes('too fast')
-        );
-        
-        if (isRateLimit && typeof ErrorBanner !== 'undefined') {
-          await ErrorBanner.show('You are requesting too fast, please retry after few seconds');
-          
-          // If this is a text selection (not page-general), stop pulsating and return to normal state
-          if (requestTextKey && !requestTextKey.startsWith('page-general')) {
-            const highlight = TextSelector.textToHighlights.get(requestTextKey);
-            if (highlight) {
-              // Stop pulsating animation
-              highlight.classList.remove('vocab-text-loading', 'vocab-text-pulsate', 'vocab-text-pulsate-green');
-              
-              // Remove any loading states
-              const spinnerContainer = highlight.querySelector('.vocab-magic-meaning-spinner-container');
-              if (spinnerContainer) {
-                spinnerContainer.remove();
+          // If we have chat_history from the complete event, extract the latest assistant message
+          if (chat_history && Array.isArray(chat_history)) {
+            for (let i = chat_history.length - 1; i >= 0; i--) {
+              if (chat_history[i].role === 'assistant') {
+                aiResponse = chat_history[i].content;
+                break;
               }
-              
-              // Restore magic-meaning button if it was hidden
-              const iconsWrapper = highlight.querySelector('.vocab-text-icons-wrapper');
-              if (iconsWrapper) {
-                const magicBtn = iconsWrapper.querySelector('.vocab-text-magic-meaning-btn');
-                if (magicBtn) {
-                  magicBtn.style.display = '';
-                }
-              }
-              
-              console.log('[ChatDialog] Stopped pulsating animation and restored normal state for text selection');
             }
           }
-        }
-        
-        if (this.currentTextKey === requestTextKey) {
-          this.addMessageToChat('ai', `⚠️ **Error:**\n\n${response.error}`);
-        } else {
-          // Add error to the original chat history
-          const originalChatHistory = this.chatHistories.get(requestTextKey) || [];
           
-          // Only add the error response (user message was already added when request was made)
-          originalChatHistory.push({
-            type: 'ai',
-            message: `⚠️ **Error:**\n\n${response.error}`,
-            timestamp: new Date().toISOString()
-          });
+          console.log('[ChatDialog] Final AI response:', aiResponse);
           
-          this.chatHistories.set(requestTextKey, originalChatHistory);
-          console.log('[ChatDialog] Added error response to original chat history for textKey:', requestTextKey);
+          // Check if we're still in the same chat tab that initiated the request
+          if (this.currentTextKey === requestTextKey) {
+            // We're still in the same chat, update the streaming message or add it if it doesn't exist
+            if (streamingMessageContent) {
+              // Update the existing streaming message with final content
+              this.updateStreamingMessage(streamingMessageContent, aiResponse);
+              
+              // Add the AI response to history (user message was already added before API call)
+              this.chatHistory.push({
+                type: 'ai',
+                message: aiResponse,
+                timestamp: new Date().toISOString()
+              });
+            } else {
+              // Message bubble was removed or doesn't exist, add it normally
+              this.addMessageToChat('ai', aiResponse);
+            }
+            
+            // Update stored chat history
+            if (this.currentTextKey) {
+              this.chatHistories.set(this.currentTextKey, [...this.chatHistory]);
+            }
+          } else {
+            // User switched to a different chat tab, add response to the correct chat history
+            console.log('[ChatDialog] User switched tabs, adding response to correct chat history for textKey:', requestTextKey);
+            
+            // Get the chat history for the original textKey
+            const originalChatHistory = this.chatHistories.get(requestTextKey) || [];
+            
+            // Add the AI response (user message was already added when request was made)
+            originalChatHistory.push({
+              type: 'ai',
+              message: aiResponse,
+              timestamp: new Date().toISOString()
+            });
+            
+            // Update the stored chat history
+            this.chatHistories.set(requestTextKey, originalChatHistory);
+            
+            console.log('[ChatDialog] Added AI response to original chat history for textKey:', requestTextKey);
+          }
+        },
+        onError: (error) => {
+          console.error('[ChatDialog] Stream error:', error);
+          
+          // Remove loading animation
+          this.removeLoadingAnimation();
+          
+          // Check if it's a 429 rate limit error
+          const isRateLimit = error.status === 429 || 
+                             error.message.includes('429') || 
+                             error.message.includes('Rate limit') ||
+                             error.message.includes('too fast');
+          
+          if (isRateLimit && typeof ErrorBanner !== 'undefined') {
+            ErrorBanner.show('You are requesting too fast, please retry after few seconds');
+            
+            // If this is a text selection (not page-general), stop pulsating and return to normal state
+            if (requestTextKey && !requestTextKey.startsWith('page-general')) {
+              const highlight = TextSelector.textToHighlights.get(requestTextKey);
+              if (highlight) {
+                // Stop pulsating animation
+                highlight.classList.remove('vocab-text-loading', 'vocab-text-pulsate', 'vocab-text-pulsate-green');
+                
+                // Remove any loading states
+                const spinnerContainer = highlight.querySelector('.vocab-magic-meaning-spinner-container');
+                if (spinnerContainer) {
+                  spinnerContainer.remove();
+                }
+                
+                // Restore magic-meaning button if it was hidden
+                const iconsWrapper = highlight.querySelector('.vocab-text-icons-wrapper');
+                if (iconsWrapper) {
+                  const magicBtn = iconsWrapper.querySelector('.vocab-text-magic-meaning-btn');
+                  if (magicBtn) {
+                    magicBtn.style.display = '';
+                  }
+                }
+                
+                console.log('[ChatDialog] Stopped pulsating animation and restored normal state for text selection');
+              }
+            }
+          }
+          
+          // Remove streaming message bubble if it exists
+          if (streamingMessageBubble && streamingMessageBubble.parentNode) {
+            streamingMessageBubble.remove();
+          }
+          
+          // Handle error case - check if we're still in the same chat
+          const errorMessage = `⚠️ **Error:**\n\n${error.message || 'Failed to get response from server'}`;
+          
+          if (this.currentTextKey === requestTextKey) {
+            this.addMessageToChat('ai', errorMessage);
+          } else {
+            // Add error to the original chat history
+            const originalChatHistory = this.chatHistories.get(requestTextKey) || [];
+            
+            // Only add the error response (user message was already added when request was made)
+            originalChatHistory.push({
+              type: 'ai',
+              message: errorMessage,
+              timestamp: new Date().toISOString()
+            });
+            
+            this.chatHistories.set(requestTextKey, originalChatHistory);
+            console.log('[ChatDialog] Added error response to original chat history for textKey:', requestTextKey);
+          }
         }
-      }
+      });
+      
     } catch (error) {
-      console.error('[ChatDialog] Error sending message:', error);
+      console.error('[ChatDialog] Error initiating streaming request:', error);
       this.removeLoadingAnimation();
+      
+      // Remove streaming message bubble if it exists
+      if (streamingMessageBubble && streamingMessageBubble.parentNode) {
+        streamingMessageBubble.remove();
+      }
       
       // Check if it's a 429 rate limit error
       const isRateLimit = error.status === 429 || 
@@ -10055,7 +10124,7 @@ const ChatDialog = {
       
       // Handle error case - check if we're still in the same chat
       if (this.currentTextKey === requestTextKey) {
-        this.addMessageToChat('ai', `Error: Failed to get response from server`);
+        this.addMessageToChat('ai', `Error: Failed to initiate request to server`);
       } else {
         // Add error to the original chat history
         const originalChatHistory = this.chatHistories.get(requestTextKey) || [];
@@ -10063,7 +10132,7 @@ const ChatDialog = {
         // Only add the error response (user message was already added when request was made)
         originalChatHistory.push({
           type: 'ai',
-          message: `Error: Failed to get response from server`,
+          message: `Error: Failed to initiate request to server`,
           timestamp: new Date().toISOString()
         });
         
@@ -10292,6 +10361,7 @@ const ChatDialog = {
    * Add message to chat
    * @param {string} type - 'user' or 'ai'
    * @param {string} message - Message content
+   * @returns {HTMLElement|null} The message bubble element (for streaming updates)
    */
   addMessageToChat(type, message) {
     const chatContainer = document.getElementById('vocab-chat-messages');
@@ -10384,6 +10454,60 @@ const ChatDialog = {
     
     console.log('[ChatDialog] ===== MESSAGE SAVED IMMEDIATELY =====');
     console.log('[ChatDialog] Message type:', type, 'Total messages:', this.chatHistory.length);
+    
+    // Return the message bubble for streaming updates
+    return messageBubble;
+  },
+  
+  /**
+   * Create an empty AI message bubble for streaming updates
+   * @returns {HTMLElement} The message bubble element
+   */
+  createStreamingMessageBubble() {
+    const chatContainer = document.getElementById('vocab-chat-messages');
+    
+    // Remove "Ask me anything about the page" message if exists
+    const noChatsMsg = chatContainer.querySelector('.vocab-chat-no-messages');
+    if (noChatsMsg) {
+      noChatsMsg.remove();
+    }
+    
+    // Create message bubble
+    const messageBubble = document.createElement('div');
+    messageBubble.className = 'vocab-chat-message vocab-chat-message-ai';
+    
+    const messageContent = document.createElement('div');
+    messageContent.className = 'vocab-chat-message-content';
+    messageContent.innerHTML = ''; // Start empty
+    
+    messageBubble.appendChild(messageContent);
+    chatContainer.appendChild(messageBubble);
+    
+    // Show global clear button
+    this.updateGlobalClearButton();
+    
+    // Auto-scroll to bottom
+    this.scrollToBottom(chatContainer);
+    
+    return { messageBubble, messageContent };
+  },
+  
+  /**
+   * Update streaming message bubble with new content
+   * @param {HTMLElement} messageContent - The message content element
+   * @param {string} accumulatedText - The accumulated text to display
+   */
+  updateStreamingMessage(messageContent, accumulatedText) {
+    if (!messageContent) return;
+    
+    // Update the content with markdown rendering
+    messageContent.innerHTML = this.renderMarkdown(accumulatedText);
+    
+    // Auto-scroll to bottom
+    const chatContainer = document.getElementById('vocab-chat-messages');
+    if (chatContainer) {
+      this.scrollToBottom(chatContainer);
+    }
   },
   
   /**

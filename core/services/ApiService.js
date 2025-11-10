@@ -15,25 +15,34 @@ class ApiService {
   static ENDPOINTS = ApiConfig.ENDPOINTS;
   
   /**
-   * Ask a question with context and chat history
+   * Ask a question with context and chat history (SSE streaming)
    * @param {Object} params - Request parameters
    * @param {string} params.initial_context - The original selected text
    * @param {Array} params.chat_history - Previous chat messages [{role, content}]
    * @param {string} params.question - The user's question
-   * @returns {Promise<Object>} - API response
+   * @param {Function} params.onChunk - Callback for each chunk event: (chunk, accumulated) => void
+   * @param {Function} params.onComplete - Callback when stream completes: (chat_history) => void
+   * @param {Function} params.onError - Callback for errors: (error) => void
+   * @returns {Function} Abort function to cancel the request
    */
-  static async ask({ initial_context, chat_history = [], question }) {
+  static async ask({ initial_context, chat_history = [], question, onChunk, onComplete, onError }) {
     const url = `${this.BASE_URL}${this.ENDPOINTS.ASK}`;
     
     // Validate input parameters
     if (!initial_context || typeof initial_context !== 'string') {
-      throw new Error('initial_context is required and must be a string');
+      const error = new Error('initial_context is required and must be a string');
+      if (onError) onError(error);
+      return () => {};
     }
     if (!question || typeof question !== 'string') {
-      throw new Error('question is required and must be a string');
+      const error = new Error('question is required and must be a string');
+      if (onError) onError(error);
+      return () => {};
     }
     if (!Array.isArray(chat_history)) {
-      throw new Error('chat_history must be an array');
+      const error = new Error('chat_history must be an array');
+      if (onError) onError(error);
+      return () => {};
     }
     
     // Check for reasonable size limits
@@ -51,22 +60,25 @@ class ApiService {
     };
     
     try {
-      console.log('[ApiService] Sending request to:', url);
+      console.log('[ApiService] Sending SSE request to:', url);
       console.log('[ApiService] Request body size:', {
         initial_context_length: initial_context.length,
         chat_history_length: chat_history.length,
         question_length: question.length
       });
       
+      // Create abort controller for cancellation
+      const abortController = new AbortController();
+      
       const response = await fetch(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Accept': 'application/json'
+          'Accept': 'text/event-stream'
         },
         mode: 'cors',
-        // No credentials needed since we're not using cookies/sessions
-        body: JSON.stringify(requestBody)
+        body: JSON.stringify(requestBody),
+        signal: abortController.signal
       });
       
       if (!response.ok) {
@@ -74,7 +86,8 @@ class ApiService {
         if (response.status === 429) {
           const error = new Error('Rate limit exceeded');
           error.status = 429;
-          throw error;
+          if (onError) onError(error);
+          return () => {};
         }
         
         let errorMessage = `API request failed: ${response.status} ${response.statusText}`;
@@ -88,19 +101,116 @@ class ApiService {
           errorMessage = `API request failed: 400 Bad Request. The request format might be invalid.`;
         }
         
-        throw new Error(errorMessage);
+        const error = new Error(errorMessage);
+        if (onError) onError(error);
+        return () => {};
       }
       
-      const data = await response.json();
-      console.log('[ApiService] Response received:', data);
+      // Process the SSE stream
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
       
-      return {
-        success: true,
-        data: data
+      // Read the stream
+      const processStream = async () => {
+        try {
+          while (true) {
+            const { done, value } = await reader.read();
+            
+            if (done) {
+              console.log('[ApiService] Stream complete');
+              break;
+            }
+            
+            // Decode the chunk
+            buffer += decoder.decode(value, { stream: true });
+            
+            // Process complete lines
+            const lines = buffer.split('\n');
+            buffer = lines.pop() || ''; // Keep incomplete line in buffer
+            
+            for (const line of lines) {
+              if (line.trim() === '') continue;
+              
+              // SSE format: "data: {json}" or "data: [DONE]"
+              if (line.startsWith('data: ')) {
+                const dataStr = line.slice(6).trim();
+                
+                // Check for completion signal
+                if (dataStr === '[DONE]') {
+                  console.log('[ApiService] Received [DONE] signal');
+                  if (onComplete) onComplete(null);
+                  break;
+                }
+                
+                // Parse JSON data
+                try {
+                  const data = JSON.parse(dataStr);
+                  console.log('[ApiService] Received event:', data);
+                  
+                  // Handle chunk events
+                  if (data.chunk !== undefined) {
+                    console.log('[ApiService] Chunk event - chunk:', data.chunk, 'accumulated:', data.accumulated);
+                    if (onChunk) {
+                      onChunk(data.chunk, data.accumulated);
+                    }
+                  }
+                  
+                  // Handle complete event
+                  if (data.type === 'complete' && data.chat_history) {
+                    console.log('[ApiService] Complete event - chat_history:', data.chat_history);
+                    if (onComplete) {
+                      onComplete(data.chat_history);
+                    }
+                  }
+                  
+                  // Handle error events
+                  if (data.type === 'error' || data.error) {
+                    const error = new Error(data.error || data.message || 'Stream error occurred');
+                    console.error('[ApiService] Error event:', error);
+                    if (onError) {
+                      onError(error);
+                    }
+                  }
+                } catch (parseError) {
+                  console.error('[ApiService] Error parsing event data:', parseError);
+                  console.error('[ApiService] Raw data that failed to parse:', dataStr);
+                }
+              }
+            }
+          }
+        } catch (streamError) {
+          if (streamError.name === 'AbortError') {
+            console.log('[ApiService] Request aborted');
+          } else {
+            console.error('[ApiService] Stream processing error:', streamError);
+            if (onError) {
+              // Provide more helpful error messages
+              let errorMessage = streamError.message;
+              
+              if (streamError.message.includes('Failed to fetch') || streamError.name === 'TypeError') {
+                errorMessage = 'Cannot connect to API server. Please check:\n' +
+                              '1. Backend server is running at ' + this.BASE_URL + '\n' +
+                              '2. CORS is properly configured to allow requests from this origin';
+              }
+              
+              onError(new Error(errorMessage));
+            }
+          }
+        }
+      };
+      
+      // Start processing the stream
+      processStream();
+      
+      // Return abort function
+      return () => {
+        console.log('[ApiService] Aborting request');
+        abortController.abort();
       };
       
     } catch (error) {
-      console.error('[ApiService] Error calling ask API:', error);
+      console.error('[ApiService] Error initiating ask API request:', error);
       
       // Provide more helpful error messages
       let errorMessage = error.message;
@@ -111,10 +221,12 @@ class ApiService {
                       '2. CORS is properly configured to allow requests from this origin';
       }
       
-      return {
-        success: false,
-        error: errorMessage
-      };
+      if (onError) {
+        onError(new Error(errorMessage));
+      }
+      
+      // Return a no-op abort function
+      return () => {};
     }
   }
   
