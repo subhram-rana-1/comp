@@ -305,6 +305,937 @@ export default defineContentScript({
     // Make pageTextContent accessible globally for ChatDialog
     window.pageTextContent = pageTextContent;
     
+    // Global language variable - fetched from localStorage on every tab refresh
+    let language = localStorage.getItem('language') || 'none';
+    
+    // Make language accessible globally
+    window.language = language;
+    
+    // Top 20 languages list
+    const TOP_LANGUAGES = [
+      'English', 'Spanish', 'French', 'German', 'Italian', 'Portuguese', 'Russian',
+      'Chinese', 'Japanese', 'Korean', 'Arabic', 'Hindi', 'Dutch', 'Turkish',
+      'Polish', 'Swedish', 'Norwegian', 'Danish', 'Finnish', 'Greek'
+    ];
+    
+    /**
+     * Show language selection modal if language is 'none'
+     */
+    function showLanguageSelectionModal() {
+      // Remove existing modal if any
+      const existingModal = document.getElementById('prefered-language-modal');
+      if (existingModal) {
+        existingModal.remove();
+      }
+      
+      // Blur ask-about-page button and banner when modal is visible
+      blurAskAboutPageButton();
+      blurBanner();
+      
+      // Create overlay
+      const overlay = document.createElement('div');
+      overlay.id = 'prefered-language-overlay';
+      overlay.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(0, 0, 0, 0.5);
+        z-index: 100000;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        opacity: 0;
+        transition: opacity 0.3s ease;
+      `;
+      
+      // Function to close modal with scale-down animation
+      function closeModalWithAnimation() {
+        // Scale down and fade out modal
+        modal.style.transform = 'scale(0)';
+        modal.style.opacity = '0';
+        overlay.style.opacity = '0';
+        
+        // Notify popup to show settings button when modal is closed
+        try {
+          chrome.runtime.sendMessage({
+            type: 'LANGUAGE_MODAL_CLOSED'
+          }).catch(() => {
+            // Popup might not be open, ignore error
+          });
+        } catch (error) {
+          // Ignore if popup is not available
+        }
+        
+        // Remove overlay after animation completes
+        setTimeout(() => {
+          overlay.remove();
+          // Restore ask-about-page button and banner after modal is closed
+          restoreAskAboutPageButton();
+          restoreBanner();
+        }, 300);
+      }
+      
+      // Create modal container
+      const modal = document.createElement('div');
+      modal.id = 'prefered-language-modal';
+      modal.style.cssText = `
+        background-color: white;
+        border-radius: 30px;
+        padding: 40px;
+        max-width: 500px;
+        width: 90%;
+        display: flex;
+        flex-direction: column;
+        gap: 30px;
+        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+        user-select: none;
+        -webkit-user-select: none;
+        -moz-user-select: none;
+        -ms-user-select: none;
+        transform: scale(0);
+        transform-origin: center center;
+        opacity: 0;
+        transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.3s ease;
+      `;
+      
+      // Prevent double-click and text selection on modal
+      modal.addEventListener('dblclick', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        return false;
+      });
+      
+      modal.addEventListener('selectstart', (e) => {
+        e.preventDefault();
+        return false;
+      });
+      
+      modal.addEventListener('mousedown', (e) => {
+        // Allow input field to work normally
+        if (e.target.tagName === 'INPUT' || e.target.tagName === 'BUTTON') {
+          return true;
+        }
+        // Prevent text selection for other elements
+        if (window.getSelection) {
+          window.getSelection().removeAllRanges();
+        }
+      });
+      
+      // First container: Heading
+      const headingContainer = document.createElement('div');
+      headingContainer.style.cssText = `
+        text-align: center;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        gap: 8px;
+        user-select: none;
+        -webkit-user-select: none;
+        -moz-user-select: none;
+        -ms-user-select: none;
+      `;
+      
+      // Branding name with sparkle logo
+      const brandingHeading = document.createElement('h2');
+      brandingHeading.style.cssText = `
+        margin: 0;
+        font-size: 28px;
+        font-weight: 600;
+        color: #9527F5;
+        user-select: none;
+        -webkit-user-select: none;
+        -moz-user-select: none;
+        -ms-user-select: none;
+        pointer-events: none;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+      `;
+      brandingHeading.innerHTML = `
+        Explain AI
+        <span class="brand-icon" style="display: inline-flex; align-items: center;">
+          <svg width="24" height="24" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M14 0L17 8L25 11L17 14L14 22L11 14L3 11L11 8L14 0Z" fill="#9527F5"/>
+            <path d="M22 16L23.5 20L27.5 21.5L23.5 23L22 27L20.5 23L16.5 21.5L20.5 20L22 16Z" fill="#9527F5"/>
+            <path d="M8 21L9.5 24.5L13 26L9.5 27.5L8 31L6.5 27.5L3 26L6.5 24.5L8 21Z" fill="#9527F5"/>
+          </svg>
+        </span>
+      `;
+      
+      // Subheading
+      const subHeading = document.createElement('p');
+      subHeading.textContent = 'Choose your preferred language';
+      subHeading.style.cssText = `
+        margin: 0;
+        font-size: 16px;
+        font-weight: 400;
+        color: #000000;
+        user-select: none;
+        -webkit-user-select: none;
+        -moz-user-select: none;
+        -ms-user-select: none;
+        pointer-events: none;
+      `;
+      
+      // Prevent double-click on headings
+      brandingHeading.addEventListener('dblclick', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        return false;
+      });
+      
+      subHeading.addEventListener('dblclick', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        return false;
+      });
+      
+      headingContainer.appendChild(brandingHeading);
+      headingContainer.appendChild(subHeading);
+      
+      // Second container: Tabs with sliding indicator
+      const tabsContainer = document.createElement('div');
+      tabsContainer.style.cssText = `
+        position: relative;
+        display: flex;
+        gap: 10px;
+        border-radius: 10px;
+        background-color: #f5f5f5;
+        padding: 4px;
+        user-select: none;
+        -webkit-user-select: none;
+        -moz-user-select: none;
+        -ms-user-select: none;
+      `;
+      
+      // Sliding indicator background
+      const slidingIndicator = document.createElement('div');
+      slidingIndicator.id = 'vocab-language-sliding-indicator';
+      slidingIndicator.style.cssText = `
+        position: absolute;
+        top: 4px;
+        left: 4px;
+        height: calc(100% - 8px);
+        background-color: #9333ea;
+        border-radius: 10px;
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        z-index: 1;
+      `;
+      
+      const customTab = document.createElement('button');
+      customTab.textContent = 'Fixed';
+      customTab.id = 'vocab-language-custom-tab';
+      customTab.style.cssText = `
+        flex: 1;
+        padding: 12px 20px;
+        border: none;
+        background-color: transparent;
+        color: white;
+        border-radius: 10px;
+        cursor: pointer;
+        font-size: 16px;
+        font-weight: 500;
+        position: relative;
+        z-index: 2;
+        transition: color 0.3s;
+        user-select: none;
+        -webkit-user-select: none;
+        -moz-user-select: none;
+        -ms-user-select: none;
+      `;
+      
+      // Prevent double-click on tabs
+      customTab.addEventListener('dblclick', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        return false;
+      });
+      
+      const websiteTab = document.createElement('button');
+      websiteTab.textContent = 'Dynamic';
+      websiteTab.id = 'vocab-language-website-tab';
+      websiteTab.style.cssText = `
+        flex: 1;
+        padding: 12px 20px;
+        border: none;
+        background-color: transparent;
+        color: #666;
+        border-radius: 10px;
+        cursor: pointer;
+        font-size: 16px;
+        font-weight: 500;
+        position: relative;
+        z-index: 2;
+        transition: color 0.3s;
+        user-select: none;
+        -webkit-user-select: none;
+        -moz-user-select: none;
+        -ms-user-select: none;
+      `;
+      
+      // Prevent double-click on tabs
+      websiteTab.addEventListener('dblclick', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        return false;
+      });
+      
+      // Function to update sliding indicator position
+      function updateSlidingIndicator(targetTab) {
+        // Use offsetLeft for relative positioning within the container
+        const leftOffset = targetTab.offsetLeft;
+        const tabWidth = targetTab.offsetWidth;
+        
+        slidingIndicator.style.width = `${tabWidth}px`;
+        slidingIndicator.style.transform = `translateX(${leftOffset}px)`;
+      }
+      
+      // Initialize sliding indicator position for custom tab
+      // Use requestAnimationFrame to ensure DOM is fully rendered
+      requestAnimationFrame(() => {
+        updateSlidingIndicator(customTab);
+      });
+      
+      // Tab content container
+      const tabContentContainer = document.createElement('div');
+      tabContentContainer.id = 'vocab-language-tab-content';
+      tabContentContainer.style.cssText = `
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        height: 150px;
+        user-select: none;
+        -webkit-user-select: none;
+        -moz-user-select: none;
+        -ms-user-select: none;
+      `;
+      
+      // Custom tab content
+      const customTabContent = document.createElement('div');
+      customTabContent.id = 'vocab-language-custom-content';
+      customTabContent.style.cssText = `
+        width: 100%;
+        display: flex;
+        flex-direction: column;
+        gap: 15px;
+        align-items: center;
+        user-select: none;
+        -webkit-user-select: none;
+        -moz-user-select: none;
+        -ms-user-select: none;
+      `;
+      
+      // Preferred language text (green text above input)
+      const preferredLanguageText = document.createElement('div');
+      preferredLanguageText.id = 'vocab-preferred-language-text';
+      preferredLanguageText.style.cssText = `
+        width: 100%;
+        text-align: center;
+        color: #16a34a;
+        font-size: 14px;
+        margin-bottom: 12px;
+        user-select: none;
+        -webkit-user-select: none;
+        -moz-user-select: none;
+        -ms-user-select: none;
+      `;
+      
+      // Function to update preferred language text
+      function updatePreferredLanguageText(lang) {
+        if (lang && lang.trim() !== '') {
+          preferredLanguageText.innerHTML = `Your preferred language is: <strong>"${lang}"</strong>`;
+        } else {
+          preferredLanguageText.innerHTML = '';
+        }
+      }
+      
+      // Dropdown container
+      const dropdownContainer = document.createElement('div');
+      dropdownContainer.style.cssText = `
+        width: 100%;
+        position: relative;
+      `;
+      
+      // Searchable dropdown input
+      const dropdownInput = document.createElement('input');
+      dropdownInput.type = 'text';
+      dropdownInput.id = 'vocab-language-dropdown-input';
+      dropdownInput.placeholder = 'Search or type a language...';
+      dropdownInput.style.cssText = `
+        width: 100%;
+        padding: 12px 45px 12px 16px;
+        border: 2px solid #e5e5e5;
+        border-radius: 8px;
+        font-size: 16px;
+        box-sizing: border-box;
+        outline: none;
+        transition: border-color 0.2s;
+      `;
+      // Allow text selection in input field for typing
+      dropdownInput.style.userSelect = 'text';
+      dropdownInput.style.webkitUserSelect = 'text';
+      
+      // Dropdown icon
+      const dropdownIcon = document.createElement('div');
+      dropdownIcon.id = 'vocab-language-dropdown-icon';
+      dropdownIcon.innerHTML = `
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M5 7.5L10 12.5L15 7.5" stroke="#666" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      `;
+      dropdownIcon.style.cssText = `
+        position: absolute;
+        right: 12px;
+        top: 50%;
+        transform: translateY(-50%);
+        pointer-events: none;
+        transition: transform 0.2s;
+        z-index: 1;
+      `;
+      
+      // Track keyboard navigation
+      let selectedIndex = -1;
+      let filteredLanguages = [];
+      
+      // Dropdown list
+      const dropdownList = document.createElement('div');
+      dropdownList.id = 'vocab-language-dropdown-list';
+      dropdownList.style.cssText = `
+        position: absolute;
+        top: 100%;
+        left: 0;
+        right: 0;
+        background-color: white;
+        border: 2px solid #e5e5e5;
+        border-top: none;
+        border-radius: 0 0 8px 8px;
+        max-height: 300px;
+        overflow-y: auto;
+        display: none;
+        z-index: 1000;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        user-select: none;
+        -webkit-user-select: none;
+        -moz-user-select: none;
+        -ms-user-select: none;
+      `;
+      
+      // Prevent double-click and text selection on dropdown list
+      dropdownList.addEventListener('dblclick', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        return false;
+      });
+      
+      dropdownList.addEventListener('selectstart', (e) => {
+        e.preventDefault();
+        return false;
+      });
+      
+      // Website language tab content
+      const websiteTabContent = document.createElement('div');
+      websiteTabContent.id = 'vocab-language-website-content';
+      websiteTabContent.style.cssText = `
+        width: 100%;
+        display: none;
+        flex-direction: column;
+        gap: 15px;
+        align-items: center;
+        text-align: center;
+        color: #666;
+        user-select: none;
+        -webkit-user-select: none;
+        -moz-user-select: none;
+        -ms-user-select: none;
+        height: 100%;
+        justify-content: center;
+        font-size: 18px;
+      `;
+      websiteTabContent.textContent = 'Explanations will be in the language that is used in the webpage';
+      
+      // Prevent double-click and text selection on website tab content
+      websiteTabContent.addEventListener('dblclick', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        return false;
+      });
+      
+      websiteTabContent.addEventListener('selectstart', (e) => {
+        e.preventDefault();
+        return false;
+      });
+      
+      // Track active tab
+      let activeTab = 'fixed'; // Default to fixed tab
+      
+      // Tab click handlers with smooth sliding animation
+      customTab.addEventListener('click', () => {
+        activeTab = 'fixed';
+        updateSlidingIndicator(customTab);
+        customTab.style.color = 'white';
+        websiteTab.style.color = '#666';
+        customTabContent.style.display = 'flex';
+        websiteTabContent.style.display = 'none';
+        // Update button state when switching tabs
+        updateButtonState();
+      });
+      
+      websiteTab.addEventListener('click', () => {
+        activeTab = 'dynamic';
+        updateSlidingIndicator(websiteTab);
+        websiteTab.style.color = 'white';
+        customTab.style.color = '#666';
+        customTabContent.style.display = 'none';
+        websiteTabContent.style.display = 'flex';
+        // Update button state when switching tabs
+        updateButtonState();
+      });
+      
+      // Function to select language from dropdown
+      function selectLanguage(lang) {
+        dropdownInput.value = lang;
+        dropdownList.style.display = 'none';
+        selectedIndex = -1;
+        // Reset dropdown icon rotation
+        dropdownIcon.style.transform = 'translateY(-50%) rotate(0deg)';
+        // Update preferred language text when language is selected
+        updatePreferredLanguageText(lang);
+        // Update button state
+        updateButtonState();
+      }
+      
+      // Function to highlight selected item
+      function highlightItem(index) {
+        const items = dropdownList.querySelectorAll('div');
+        items.forEach((item, i) => {
+          if (i === index) {
+            item.style.backgroundColor = '#e9d5ff';
+            item.style.color = '#9333ea';
+            // Scroll into view
+            item.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+          } else {
+            item.style.backgroundColor = 'transparent';
+            item.style.color = '';
+          }
+        });
+      }
+      
+      // Populate dropdown list
+      function populateDropdownList(filter = '') {
+        dropdownList.innerHTML = '';
+        filteredLanguages = [];
+        selectedIndex = -1;
+        
+        // If no filter, show all languages
+        let filtered = [];
+        if (!filter || filter.trim() === '') {
+          filtered = TOP_LANGUAGES;
+        } else {
+          // Filter by prefix matching
+          filtered = TOP_LANGUAGES.filter(lang => 
+            lang.toLowerCase().startsWith(filter.toLowerCase())
+          );
+        }
+        
+        // Store filtered languages for keyboard navigation
+        filteredLanguages = [...filtered];
+        
+        // Add filtered languages
+        filtered.forEach((lang, index) => {
+          const item = document.createElement('div');
+          item.textContent = lang;
+          item.setAttribute('data-index', index);
+          item.style.cssText = `
+            padding: 12px 16px;
+            cursor: pointer;
+            transition: background-color 0.2s, color 0.2s;
+            user-select: none;
+            -webkit-user-select: none;
+            -moz-user-select: none;
+            -ms-user-select: none;
+          `;
+          item.addEventListener('mouseenter', () => {
+            // Reset all highlights
+            const items = dropdownList.querySelectorAll('div');
+            items.forEach(i => {
+              i.style.backgroundColor = 'transparent';
+              i.style.color = '';
+            });
+            item.style.backgroundColor = '#e9d5ff';
+            item.style.color = '#9333ea';
+            selectedIndex = index;
+          });
+          item.addEventListener('mouseleave', () => {
+            if (selectedIndex !== index) {
+              item.style.backgroundColor = 'transparent';
+              item.style.color = '';
+            }
+          });
+          item.addEventListener('click', () => {
+            selectLanguage(lang);
+          });
+          // Prevent double-click and text selection
+          item.addEventListener('dblclick', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            return false;
+          });
+          item.addEventListener('selectstart', (e) => {
+            e.preventDefault();
+            return false;
+          });
+          dropdownList.appendChild(item);
+        });
+        
+        // If filter doesn't match any language, show option to add new language
+        if (filter && filter.trim() !== '' && !TOP_LANGUAGES.some(lang => lang.toLowerCase() === filter.toLowerCase())) {
+          const newLangItem = document.createElement('div');
+          newLangItem.innerHTML = `<strong>Add "${filter}" as new language</strong>`;
+          newLangItem.setAttribute('data-index', filtered.length);
+          newLangItem.style.cssText = `
+            padding: 12px 16px;
+            cursor: pointer;
+            color: #9333ea;
+            border-top: 1px solid #e5e5e5;
+            transition: background-color 0.2s, color 0.2s;
+            user-select: none;
+            -webkit-user-select: none;
+            -moz-user-select: none;
+            -ms-user-select: none;
+          `;
+          filteredLanguages.push(filter);
+          newLangItem.addEventListener('mouseenter', () => {
+            // Reset all highlights
+            const items = dropdownList.querySelectorAll('div');
+            items.forEach(i => {
+              i.style.backgroundColor = 'transparent';
+              i.style.color = '';
+            });
+            newLangItem.style.backgroundColor = '#e9d5ff';
+            selectedIndex = filtered.length;
+          });
+          newLangItem.addEventListener('mouseleave', () => {
+            if (selectedIndex !== filtered.length) {
+              newLangItem.style.backgroundColor = 'transparent';
+            }
+          });
+          newLangItem.addEventListener('click', () => {
+            selectLanguage(filter);
+          });
+          // Prevent double-click and text selection
+          newLangItem.addEventListener('dblclick', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            return false;
+          });
+          newLangItem.addEventListener('selectstart', (e) => {
+            e.preventDefault();
+            return false;
+          });
+          dropdownList.appendChild(newLangItem);
+        }
+      }
+      
+      // Function to update button based on tab and language
+      function updateButtonState() {
+        const hasLanguage = dropdownInput.value.trim() !== '';
+        
+        if (activeTab === 'fixed') {
+          if (!hasLanguage) {
+            // Fixed tab + no language = Hide button
+            saveButton.style.display = 'none';
+          } else {
+            // Fixed tab + language entered = "Save and Close" with solid purple background
+            saveButton.style.display = 'block';
+            saveButton.textContent = 'Save and Close';
+            saveButton.style.backgroundColor = '#9333ea';
+            saveButton.style.color = 'white';
+            saveButton.style.border = 'none';
+          }
+        } else {
+          // Dynamic tab = "Save and Close" with solid purple background
+          saveButton.style.display = 'block';
+          saveButton.textContent = 'Save and Close';
+          saveButton.style.backgroundColor = '#9333ea';
+          saveButton.style.color = 'white';
+          saveButton.style.border = 'none';
+        }
+      }
+      
+      // Keyboard navigation handler
+      dropdownInput.addEventListener('keydown', (e) => {
+        if (!dropdownList.style.display || dropdownList.style.display === 'none') {
+          return;
+        }
+        
+        const items = dropdownList.querySelectorAll('div');
+        if (items.length === 0) return;
+        
+        if (e.key === 'ArrowDown') {
+          e.preventDefault();
+          selectedIndex = (selectedIndex + 1) % items.length;
+          highlightItem(selectedIndex);
+        } else if (e.key === 'ArrowUp') {
+          e.preventDefault();
+          selectedIndex = selectedIndex <= 0 ? items.length - 1 : selectedIndex - 1;
+          highlightItem(selectedIndex);
+        } else if (e.key === 'Enter') {
+          e.preventDefault();
+          if (selectedIndex >= 0 && selectedIndex < filteredLanguages.length) {
+            selectLanguage(filteredLanguages[selectedIndex]);
+          }
+        } else if (e.key === 'Escape') {
+          dropdownList.style.display = 'none';
+          selectedIndex = -1;
+          // Reset dropdown icon rotation
+          dropdownIcon.style.transform = 'translateY(-50%) rotate(0deg)';
+        }
+      });
+      
+      // Dropdown input handlers
+      dropdownInput.addEventListener('focus', () => {
+        dropdownInput.style.borderColor = '#9333ea';
+        const currentValue = dropdownInput.value;
+        populateDropdownList(currentValue);
+        dropdownList.style.display = 'block';
+        selectedIndex = -1;
+        // Rotate dropdown icon
+        dropdownIcon.style.transform = 'translateY(-50%) rotate(180deg)';
+      });
+      
+      dropdownInput.addEventListener('blur', () => {
+        dropdownInput.style.borderColor = '#e5e5e5';
+        // Delay hiding to allow click events
+        setTimeout(() => {
+          dropdownList.style.display = 'none';
+          selectedIndex = -1;
+          // Reset dropdown icon rotation
+          dropdownIcon.style.transform = 'translateY(-50%) rotate(0deg)';
+        }, 200);
+      });
+      
+      dropdownInput.addEventListener('input', (e) => {
+        const value = e.target.value;
+        populateDropdownList(value);
+        dropdownList.style.display = 'block';
+        selectedIndex = -1;
+        // Update preferred language text as user types
+        updatePreferredLanguageText(value);
+        // Update button state
+        updateButtonState();
+      });
+      
+      // Close dropdown when clicking outside
+      let clickHandler = (e) => {
+        if (!dropdownContainer.contains(e.target)) {
+          dropdownList.style.display = 'none';
+        }
+      };
+      document.addEventListener('click', clickHandler);
+      
+      // Initial population - show all languages
+      populateDropdownList('');
+      
+      dropdownContainer.appendChild(dropdownInput);
+      dropdownContainer.appendChild(dropdownIcon);
+      dropdownContainer.appendChild(dropdownList);
+      customTabContent.appendChild(preferredLanguageText);
+      customTabContent.appendChild(dropdownContainer);
+      
+      tabsContainer.appendChild(slidingIndicator);
+      tabsContainer.appendChild(customTab);
+      tabsContainer.appendChild(websiteTab);
+      tabContentContainer.appendChild(customTabContent);
+      tabContentContainer.appendChild(websiteTabContent);
+      
+      // Third container: Save and Close button
+      const buttonContainer = document.createElement('div');
+      buttonContainer.style.cssText = `
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        user-select: none;
+        -webkit-user-select: none;
+        -moz-user-select: none;
+        -ms-user-select: none;
+      `;
+      const saveButton = document.createElement('button');
+      saveButton.textContent = 'Save and Close';
+      saveButton.style.cssText = `
+        padding: 14px 32px;
+        background-color: #9333ea;
+        color: white;
+        border: none;
+        border-radius: 8px;
+        font-size: 16px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.2s;
+        user-select: none;
+        -webkit-user-select: none;
+        -moz-user-select: none;
+        -ms-user-select: none;
+        display: none;
+      `;
+      
+      // Prevent double-click on save button
+      saveButton.addEventListener('dblclick', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        return false;
+      });
+      saveButton.addEventListener('mouseenter', () => {
+        // Only change background on hover if it's a solid purple button
+        if (saveButton.style.backgroundColor === 'rgb(147, 51, 234)' || saveButton.style.backgroundColor === '#9333ea') {
+          saveButton.style.backgroundColor = '#7e22ce';
+        }
+      });
+      saveButton.addEventListener('mouseleave', () => {
+        // Restore original background
+        updateButtonState();
+      });
+      saveButton.addEventListener('click', () => {
+        let selectedLanguage = 'none';
+        
+        // Check which tab is active
+        if (activeTab === 'fixed') {
+          // Fixed tab is selected
+          selectedLanguage = dropdownInput.value.trim() || 'none';
+        } else {
+          // Dynamic tab is selected - save as "Page Language"
+          selectedLanguage = 'Page Language';
+        }
+        
+        // Check if 'language' exists in localStorage, if not create it, if yes update it
+        const existingLanguage = localStorage.getItem('language');
+        if (existingLanguage === null || existingLanguage === undefined) {
+          // Create new language variable in localStorage
+          localStorage.setItem('language', selectedLanguage);
+          console.log('[Language Selection] Created new language variable:', selectedLanguage);
+        } else {
+          // Update existing language variable
+          localStorage.setItem('language', selectedLanguage);
+          console.log('[Language Selection] Updated language variable:', selectedLanguage);
+        }
+        language = selectedLanguage;
+        window.language = selectedLanguage;
+        
+        // Close modal with animation
+        closeModalWithAnimation();
+        
+        // Show ask-about-page button again after modal is closed
+        // Check extension state and show button if enabled
+        chrome.storage.local.get([GLOBAL_STORAGE_KEY]).then((result) => {
+          const isEnabled = result[GLOBAL_STORAGE_KEY] ?? true; // Default to true if not set
+          if (isEnabled) {
+            showAskAboutPageButton();
+          }
+        });
+        
+        console.log('[Language Selection] Language saved:', selectedLanguage);
+      });
+      
+      // Initialize button state
+      updateButtonState();
+      buttonContainer.appendChild(saveButton);
+      
+      // Assemble modal
+      modal.appendChild(headingContainer);
+      modal.appendChild(tabsContainer);
+      modal.appendChild(tabContentContainer);
+      modal.appendChild(buttonContainer);
+      
+      overlay.appendChild(modal);
+      document.body.appendChild(overlay);
+      
+      // Load saved language from localStorage and populate the input
+      const savedLanguage = localStorage.getItem('language') || 'none';
+      if (savedLanguage && savedLanguage !== 'none' && savedLanguage !== 'Page Language') {
+        // Populate input with saved language
+        dropdownInput.value = savedLanguage;
+        // Update preferred language text
+        updatePreferredLanguageText(savedLanguage);
+        // Ensure Fixed tab is active
+        activeTab = 'fixed';
+        customTab.style.color = 'white';
+        websiteTab.style.color = '#666';
+        customTabContent.style.display = 'flex';
+        websiteTabContent.style.display = 'none';
+        // Update sliding indicator position
+        requestAnimationFrame(() => {
+          updateSlidingIndicator(customTab);
+        });
+      } else if (savedLanguage === 'Page Language') {
+        // Switch to Dynamic tab if Page Language is selected
+        activeTab = 'dynamic';
+        websiteTab.style.color = 'white';
+        customTab.style.color = '#666';
+        customTabContent.style.display = 'none';
+        websiteTabContent.style.display = 'flex';
+        // Update sliding indicator position
+        requestAnimationFrame(() => {
+          updateSlidingIndicator(websiteTab);
+        });
+      }
+      
+      // Update button state after loading saved language
+      updateButtonState();
+      
+      // Trigger scale-up animation after modal is added to DOM
+      requestAnimationFrame(() => {
+        overlay.style.opacity = '1';
+        modal.style.transform = 'scale(1)';
+        modal.style.opacity = '1';
+      });
+      
+      // Notify popup to hide settings button when modal is open
+      try {
+        chrome.runtime.sendMessage({
+          type: 'LANGUAGE_MODAL_OPENED'
+        }).catch(() => {
+          // Popup might not be open, ignore error
+        });
+      } catch (error) {
+        // Ignore if popup is not available
+      }
+      
+      // Close on overlay click (outside modal)
+      overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) {
+          // Don't close on overlay click - require save button
+        }
+      });
+    }
+    
+    // Check if language is 'none' and show modal (only if extension is enabled)
+    if (language === 'none') {
+      // Check extension state before showing modal
+      const GLOBAL_STORAGE_KEY = 'is_extension_globally_enabled';
+      chrome.storage.local.get([GLOBAL_STORAGE_KEY]).then((result) => {
+        const isEnabled = result[GLOBAL_STORAGE_KEY] ?? true; // Default to true if not set
+        
+        // Only show modal if extension is enabled
+        if (isEnabled) {
+          // Wait for DOM to be ready
+          if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', showLanguageSelectionModal);
+          } else {
+            // Use setTimeout to ensure modal appears after page load
+            setTimeout(showLanguageSelectionModal, 100);
+          }
+        } else {
+          console.log('[Content Script] Extension is disabled, not showing language modal');
+        }
+      }).catch((error) => {
+        console.error('[Content Script] Error checking extension state:', error);
+        // If there's an error checking state, don't show modal to be safe
+      });
+    }
+    
     /**
      * Fetch page text content in a separate thread
      */
@@ -377,6 +1308,90 @@ export default defineContentScript({
       
       button.classList.remove('vocab-ask-about-page-btn-visible');
       button.classList.add('vocab-ask-about-page-btn-hidden');
+    }
+    
+    /**
+     * Blur ask-about-page button (make it non-accessible while modal is visible)
+     */
+    function blurAskAboutPageButton() {
+      const button = document.getElementById('vocab-ask-about-page-btn');
+      if (!button) {
+        return;
+      }
+      
+      // Store original state if not already stored
+      if (!button.dataset.originalFilter) {
+        button.dataset.originalFilter = button.style.filter || 'none';
+        button.dataset.originalPointerEvents = button.style.pointerEvents || '';
+      }
+      
+      // Apply blur and make non-accessible
+      button.style.filter = 'blur(4px)';
+      button.style.pointerEvents = 'none';
+      button.style.opacity = '0.5';
+    }
+    
+    /**
+     * Restore ask-about-page button (remove blur when modal is closed)
+     */
+    function restoreAskAboutPageButton() {
+      const button = document.getElementById('vocab-ask-about-page-btn');
+      if (!button) {
+        return;
+      }
+      
+      // Restore original state
+      if (button.dataset.originalFilter) {
+        button.style.filter = button.dataset.originalFilter === 'none' ? '' : button.dataset.originalFilter;
+        button.style.pointerEvents = button.dataset.originalPointerEvents || '';
+        button.style.opacity = '';
+        delete button.dataset.originalFilter;
+        delete button.dataset.originalPointerEvents;
+      }
+    }
+    
+    /**
+     * Blur banner (when modal is open)
+     */
+    function blurBanner() {
+      const banner = BannerModule.bannerContainer;
+      if (!banner) {
+        return;
+      }
+      
+      // Store original state if not already stored
+      if (!banner.dataset.originalFilter) {
+        banner.dataset.originalFilter = banner.style.filter || 'none';
+        banner.dataset.originalPointerEvents = banner.style.pointerEvents || '';
+        banner.dataset.originalOpacity = banner.style.opacity || '';
+      }
+      
+      // Apply blur and make non-accessible
+      banner.style.filter = 'blur(4px)';
+      banner.style.pointerEvents = 'none';
+      banner.style.opacity = '0.5';
+    }
+    
+    /**
+     * Restore banner (remove blur when modal is closed)
+     */
+    function restoreBanner() {
+      const banner = BannerModule.bannerContainer;
+      if (!banner) {
+        return;
+      }
+      
+      // Restore original state
+      if (banner.dataset.originalFilter) {
+        banner.style.filter = banner.dataset.originalFilter === 'none' ? '' : banner.dataset.originalFilter;
+        banner.style.pointerEvents = banner.dataset.originalPointerEvents || '';
+        banner.style.opacity = banner.dataset.originalOpacity || '';
+        
+        // Remove stored original state
+        delete banner.dataset.originalFilter;
+        delete banner.dataset.originalPointerEvents;
+        delete banner.dataset.originalOpacity;
+      }
     }
     
     /**
@@ -1115,6 +2130,17 @@ export default defineContentScript({
           TextSelector.clearAll();
           // Hide ask-about-page button with slide-out animation when extension is disabled
           hideAskAboutPageButton();
+          // Close preferred language modal if it's open
+          const languageModal = document.getElementById('prefered-language-modal');
+          const languageOverlay = document.getElementById('prefered-language-overlay');
+          if (languageModal || languageOverlay) {
+            console.log('[Content Script] Closing preferred language modal when extension is disabled');
+            if (languageOverlay) {
+              languageOverlay.remove();
+            }
+            // Restore ask-about-page button
+            restoreAskAboutPageButton();
+          }
           // Close chat dialog if it's open for ask-about-page context
           if (typeof ChatDialog !== 'undefined' && ChatDialog.isOpen && ChatDialog.currentTextKey) {
             const isPageGeneral = ChatDialog.currentTextKey === 'page-general' || ChatDialog.currentTextKey.startsWith('page-general');
@@ -1134,6 +2160,17 @@ export default defineContentScript({
         handleTabStateChange(message.domain, message.eventType, sendResponse);
       } else if (message.type === 'CHECK_EXTENSION_STATE') {
         handleExtensionStateCheck(message.domain, sendResponse);
+      } else if (message.type === 'SHOW_LANGUAGE_MODAL') {
+        console.log('[Content Script] Show language modal requested');
+        // Show the language selection modal
+        showLanguageSelectionModal();
+        sendResponse({ success: true });
+      } else if (message.type === 'CHECK_MODAL_STATE') {
+        // Check if language modal is currently open
+        const languageModal = document.getElementById('prefered-language-modal');
+        const languageOverlay = document.getElementById('prefered-language-overlay');
+        const isModalOpen = !!(languageModal || languageOverlay);
+        sendResponse({ isModalOpen: isModalOpen });
       }
     });
     
@@ -2265,22 +3302,51 @@ const WordSelector = {
     console.log('[WordSelector] Normalized word for data-word:', normalizedWord);
     
     // Create highlight wrapper
+    // DO NOT apply font properties to the highlight span - let child elements preserve their formatting
+    // The highlight span should only provide the background color, not override text formatting
     const highlight = document.createElement('span');
     highlight.className = 'vocab-word-highlight';
     highlight.setAttribute('data-word', normalizedWord);
     highlight.setAttribute('data-highlight-id', `highlight-${this.highlightIdCounter++}`);
     
+    // Ensure the highlight span doesn't interfere with child formatting
+    // Set display to inline to preserve text flow
+    highlight.style.setProperty('display', 'inline', 'important');
+    highlight.style.setProperty('position', 'relative', 'important');
+    // DO NOT set font properties - let children inherit or use their own styles
+    
     console.log('[WordSelector] Highlight element created with data-word:', normalizedWord);
+    console.log('[WordSelector] Preserving all formatting from selected range - no font overrides applied');
     
     // Wrap the selected range FIRST
+    // This preserves all formatting (bold, italic, font sizes, etc.) from the original content
+    
+    // Try surroundContents first - this works when the range doesn't cross element boundaries
+    // If it fails or might break formatting, use extractContents which preserves DOM structure
     try {
-      range.surroundContents(highlight);
+      // Check if range might contain formatting elements by checking the HTML
+      const rangeClone = range.cloneContents();
+      const hasFormattingElements = rangeClone.querySelector('b, strong, em, i, u, span, font, h1, h2, h3, h4, h5, h6');
+      
+      if (hasFormattingElements) {
+        // Range contains formatting elements - use extractContents to preserve structure
+        console.log('[WordSelector] Range contains formatting elements - using extractContents to preserve formatting');
+        const extractedContents = range.extractContents();
+        highlight.appendChild(extractedContents);
+        range.insertNode(highlight);
+        console.log('[WordSelector] Used extractContents - formatting preserved');
+      } else {
+        // No formatting elements - try surroundContents
+        range.surroundContents(highlight);
+        console.log('[WordSelector] Used surroundContents - formatting preserved');
+      }
     } catch (error) {
-      // If surroundContents fails (e.g., partial selection), use extractContents
-      console.warn('[WordSelector] Could not highlight range:', error);
-      const contents = range.extractContents();
-      highlight.appendChild(contents);
+      // surroundContents failed - use extractContents which preserves DOM structure
+      console.warn('[WordSelector] surroundContents failed, using extractContents:', error);
+      const extractedContents = range.extractContents();
+      highlight.appendChild(extractedContents);
       range.insertNode(highlight);
+      console.log('[WordSelector] Used extractContents (fallback) - formatting preserved');
     }
     
     // Create and append remove button AFTER wrapping the content
@@ -2689,25 +3755,10 @@ const WordSelector = {
     popup.style.setProperty('opacity', '0', 'important'); // Will be set to 1 when visible class is added
     popup.style.setProperty('pointer-events', 'none', 'important'); // Will be set to 'all' when visible
     
-    // Speaker icon for pronunciation - only show if languageCode is "EN"
-    if (languageCode === 'EN') {
-      const speakerBtn = document.createElement('button');
-      speakerBtn.className = 'vocab-word-popup-speaker';
-      speakerBtn.setAttribute('aria-label', `Pronounce "${word}"`);
-      speakerBtn.innerHTML = this.createSpeakerIcon();
-      speakerBtn.addEventListener('click', async (e) => {
-        e.stopPropagation();
-        await this.handlePronunciation(word, speakerBtn);
-      });
-      popup.appendChild(speakerBtn);
-      // Add class to popup to indicate speaker icon exists
-      popup.classList.add('has-speaker-icon');
-    }
-    
     // Meaning
     const meaningDiv = document.createElement('div');
     meaningDiv.className = 'vocab-word-popup-meaning';
-    meaningDiv.innerHTML = `<span class="word-bold">${word}</span> means ${meaning}`;
+    meaningDiv.innerHTML = `<span class="word-bold"></span>${meaning}`;
     popup.appendChild(meaningDiv);
     
     // Examples container
@@ -2739,9 +3790,25 @@ const WordSelector = {
     popup.setAttribute('data-language-code', languageCode || '');
     popup.setAttribute('data-current-tab', languageCode || 'EN'); // Track current active tab
     
-    // Create bottom container for tab group and button
+    // Create bottom container for speaker icon, tab group, and button
     const bottomContainer = document.createElement('div');
     bottomContainer.className = 'vocab-word-popup-bottom-container';
+    
+    // Speaker icon for pronunciation - only show if languageCode is "EN"
+    // Add it to bottom container at the leftmost position
+    if (languageCode === 'EN') {
+      const speakerBtn = document.createElement('button');
+      speakerBtn.className = 'vocab-word-popup-speaker';
+      speakerBtn.setAttribute('aria-label', `Pronounce "${word}"`);
+      speakerBtn.innerHTML = this.createSpeakerIcon();
+      speakerBtn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        await this.handlePronunciation(word, speakerBtn);
+      });
+      bottomContainer.appendChild(speakerBtn);
+      // Add class to popup to indicate speaker icon exists
+      popup.classList.add('has-speaker-icon');
+    }
     
     // Language tab group - show if languageCode is not "EN"
     if (languageCode && languageCode !== 'EN') {
@@ -4338,6 +5405,9 @@ const WordSelector = {
         line-height: inherit;
         box-decoration-break: clone;
         -webkit-box-decoration-break: clone;
+        /* DO NOT set font properties - preserve all formatting from child elements */
+        /* Child elements (bold, italic, spans with different font sizes) will maintain their formatting */
+        /* Text nodes will inherit naturally from their original parent context */
       }
       
       .vocab-word-highlight:hover {
@@ -4644,10 +5714,7 @@ const WordSelector = {
         padding-top: 0; /* No padding by default */
       }
       
-      /* Add padding-top to meaning div when speaker icon exists */
-      .vocab-word-popup.has-speaker-icon .vocab-word-popup-meaning {
-        padding-top: 40px; /* Space for speaker icon (28px height + 12px top = 40px) */
-      }
+      /* No padding-top needed since speaker icon is now in bottom container */
       
       .vocab-word-popup-meaning .word-bold {
         font-weight: 600;
@@ -4716,14 +5783,14 @@ const WordSelector = {
         color: #A020F0;
       }
       
-      /* Bottom container for tab group and button */
+      /* Bottom container for speaker icon, tab group, and button */
       .vocab-word-popup-bottom-container {
         position: absolute;
         bottom: 24px;
         left: 24px;
         right: 24px;
         display: flex;
-        justify-content: space-between;
+        justify-content: flex-start;
         align-items: center;
         z-index: 20;
         gap: 12px;
@@ -4825,6 +5892,7 @@ const WordSelector = {
         text-align: center;
         min-width: 140px; /* Ensure button has minimum width */
         flex-shrink: 0;
+        margin-left: auto; /* Push button to the rightmost position */
       }
       
       .vocab-word-popup-button:hover:not(.loading) {
@@ -4879,11 +5947,9 @@ const WordSelector = {
         height: 16px;
       }
       
-      /* Speaker icon for pronunciation */
+      /* Speaker icon for pronunciation - now in bottom container */
       .vocab-word-popup-speaker {
-        position: absolute;
-        top: 12px;
-        left: 12px;
+        position: relative;
         width: 28px;
         height: 28px;
         background: #9527F5;
@@ -4895,7 +5961,7 @@ const WordSelector = {
         display: flex;
         align-items: center;
         justify-content: center;
-        z-index: 10;
+        flex-shrink: 0;
         box-shadow: 0 2px 8px rgba(149, 39, 245, 0.3);
       }
       
@@ -5249,8 +6315,12 @@ const TextSelector = {
       // Add text to selected set with range for position tracking (O(1) operation)
       this.addText(selectedText, range);
       
-      // Highlight the text
-      this.highlightRange(range, selectedText);
+      // Capture mouse release coordinates for button positioning
+      const mouseReleaseX = event.clientX;
+      const mouseReleaseY = event.clientY;
+      
+      // Highlight the text and pass mouse coordinates for button positioning
+      this.highlightRange(range, selectedText, { x: mouseReleaseX, y: mouseReleaseY });
       
       // Clear the selection
       selection.removeAllRanges();
@@ -5470,34 +6540,79 @@ const TextSelector = {
    * Highlight a range with a styled span
    * @param {Range} range - The range to highlight
    * @param {string} text - The text being highlighted
+   * @param {Object} mouseReleaseCoords - Mouse release coordinates {x, y} in viewport coordinates
    */
-  highlightRange(range, text) {
+  highlightRange(range, text, mouseReleaseCoords = null) {
     const textKey = this.getContextualTextKey(text);
     
     // Create highlight wrapper
+    // DO NOT apply font properties to the highlight span - let child elements preserve their formatting
+    // The highlight span should only provide the underline decoration, not override text formatting
     const highlight = document.createElement('span');
     highlight.className = 'vocab-text-highlight underline-appearing';
     highlight.setAttribute('data-text-key', textKey);
     highlight.setAttribute('data-highlight-id', `text-highlight-${this.highlightIdCounter++}`);
     
+    // Ensure the highlight span doesn't interfere with child formatting
+    // Set display to inline to preserve text flow
+    highlight.style.setProperty('display', 'inline', 'important');
+    highlight.style.setProperty('position', 'relative', 'important');
+    // DO NOT set font properties - let children inherit or use their own styles
+    
+    console.log('[TextSelector] Highlight element created with data-text-key:', textKey);
+    console.log('[TextSelector] Preserving all formatting from selected range - no font overrides applied');
+    
     // Wrap the selected range FIRST
+    // This preserves all formatting (bold, italic, font sizes, colors, etc.) from the original content
     try {
-      range.surroundContents(highlight);
+      // Check if range might contain formatting elements by checking the HTML
+      const rangeClone = range.cloneContents();
+      const hasFormattingElements = rangeClone.querySelector('b, strong, em, i, u, span, font, a, h1, h2, h3, h4, h5, h6');
+      
+      if (hasFormattingElements) {
+        // Range contains formatting elements - use extractContents to preserve structure
+        console.log('[TextSelector] Range contains formatting elements - using extractContents to preserve formatting');
+        const extractedContents = range.extractContents();
+        highlight.appendChild(extractedContents);
+        range.insertNode(highlight);
+        console.log('[TextSelector] Used extractContents - formatting preserved');
+      } else {
+        // No formatting elements - try surroundContents
+        range.surroundContents(highlight);
+        console.log('[TextSelector] Used surroundContents - formatting preserved');
+      }
     } catch (error) {
-      // If surroundContents fails (e.g., partial selection), use extractContents
-      console.warn('[TextSelector] Could not highlight range:', error);
-      const contents = range.extractContents();
-      highlight.appendChild(contents);
+      // surroundContents failed - use extractContents which preserves DOM structure
+      console.warn('[TextSelector] surroundContents failed, using extractContents:', error);
+      const extractedContents = range.extractContents();
+      highlight.appendChild(extractedContents);
       range.insertNode(highlight);
+      console.log('[TextSelector] Used extractContents (fallback) - formatting preserved');
     }
+    
+    // After wrapping, ensure all child elements with color classes or inline styles maintain their colors
+    // This is a safety measure in case CSS doesn't work as expected
+    setTimeout(() => {
+      const colorElements = highlight.querySelectorAll('[class*="user-"], [class*="rated-"], [style*="color"], [style*="Color"]');
+      colorElements.forEach(element => {
+        const computedStyle = window.getComputedStyle(element);
+        const originalColor = computedStyle.color;
+        // If the element has a color class or inline style, ensure it's preserved
+        if (element.classList.contains('user-orange') || element.classList.contains('rated-user') || 
+            element.hasAttribute('style') && element.getAttribute('style').includes('color')) {
+          // The color should already be preserved, but log for debugging
+          console.log('[TextSelector] Color element found:', element.className, 'computed color:', originalColor);
+        }
+      });
+    }, 0);
     
     // Create and append remove button FIRST (at top-left of highlight)
     const removeBtn = this.createRemoveButton(text);
     highlight.appendChild(removeBtn);
     
-    // Create icons wrapper for magic-meaning button (positioned to the left)
+    // Create icons wrapper for magic-meaning button (positioned at the END of selected text)
     const iconsWrapper = document.createElement('div');
-    iconsWrapper.className = 'vocab-text-icons-wrapper';
+    iconsWrapper.className = 'vocab-text-icons-wrapper vocab-text-icons-wrapper-magic';
     iconsWrapper.setAttribute('data-text-key', textKey);
     
     // Add magic-meaning button
@@ -5507,27 +6622,196 @@ const TextSelector = {
     // Append icons wrapper to highlight
     highlight.appendChild(iconsWrapper);
     
-    // Position icons relative to highlight - on the left side, outside text content
+    // Position icons relative to highlight - centered at mouse release point
     // Force absolute positioning to ensure it's always outside the text
     iconsWrapper.style.setProperty('position', 'absolute', 'important');
     iconsWrapper.style.setProperty('display', 'flex', 'important');
     iconsWrapper.style.setProperty('margin', '0', 'important');
     iconsWrapper.style.setProperty('padding', '0', 'important');
     
-    const highlightRect = highlight.getBoundingClientRect();
-    const isInModal = highlight.closest('.vocab-custom-content-modal');
+    // Function to position button at mouse release coordinates
+    const positionAtMouseRelease = () => {
+      try {
+        // Wait for DOM to be ready
+        if (!highlight.offsetParent && highlight.offsetWidth === 0 && highlight.offsetHeight === 0) {
+          // Element not yet in DOM or not visible, retry later
+          setTimeout(positionAtMouseRelease, 100);
+          return;
+        }
+        
+        // Get the highlight's bounding rectangle (relative to viewport)
+        const highlightRect = highlight.getBoundingClientRect();
+        
+        if (!highlightRect || highlightRect.width === 0 && highlightRect.height === 0) {
+          throw new Error('Highlight not visible or has no dimensions');
+        }
+        
+        // Use mouse release coordinates if available, otherwise fall back to DOM-based positioning
+        if (mouseReleaseCoords && mouseReleaseCoords.x !== undefined && mouseReleaseCoords.y !== undefined) {
+          // Mouse release coordinates are in viewport coordinates (clientX, clientY)
+          const mouseX = mouseReleaseCoords.x;
+          const mouseY = mouseReleaseCoords.y;
+          
+          // For multi-line selections, we need to find the left edge of the line where the mouse was released
+          // This prevents the button from being offset by the indentation of the first line
+          let lineLeftEdge = highlightRect.left;
+          
+          try {
+            // Get a range at the mouse release point to find which line the mouse is on
+            let rangeAtPoint = null;
+            
+            // Modern browsers support caretRangeFromPoint
+            if (document.caretRangeFromPoint) {
+              rangeAtPoint = document.caretRangeFromPoint(mouseX, mouseY);
+            } else if (document.caretPositionFromPoint) {
+              // Firefox fallback
+              const caretPos = document.caretPositionFromPoint(mouseX, mouseY);
+              if (caretPos) {
+                rangeAtPoint = document.createRange();
+                rangeAtPoint.setStart(caretPos.offsetNode, caretPos.offset);
+                rangeAtPoint.setEnd(caretPos.offsetNode, caretPos.offset);
+              }
+            }
+            
+            if (rangeAtPoint) {
+              // Get the bounding rect of the range at the mouse point
+              const rangeRect = rangeAtPoint.getBoundingClientRect();
+              
+              // Now we need to find the left edge of the line where this range is
+              // We'll create a range from the start of the text node to the mouse point
+              // and find the leftmost rect at the same Y level
+              const container = rangeAtPoint.commonAncestorContainer;
+              
+              if (container && container.nodeType === Node.TEXT_NODE) {
+                // Create a range from the start of the text node to the mouse point
+                const lineRange = document.createRange();
+                lineRange.setStart(container, 0);
+                lineRange.setEnd(container, rangeAtPoint.startOffset);
+                
+                // Get all client rects for this range
+                const rects = lineRange.getClientRects();
+                
+                if (rects && rects.length > 0) {
+                  // Find the leftmost rect that's on the same line as the mouse point
+                  let minLeft = Infinity;
+                  const tolerance = 10; // 10px tolerance for line detection
+                  
+                  for (let i = 0; i < rects.length; i++) {
+                    const rect = rects[i];
+                    // Check if this rect is on the same line (similar Y coordinate)
+                    const isOnSameLine = (
+                      Math.abs(rect.top - mouseY) < tolerance || 
+                      Math.abs(rect.bottom - mouseY) < tolerance ||
+                      (rect.top <= mouseY && rect.bottom >= mouseY)
+                    );
+                    
+                    if (isOnSameLine && rect.left < minLeft) {
+                      minLeft = rect.left;
+                    }
+                  }
+                  
+                  if (minLeft !== Infinity) {
+                    lineLeftEdge = minLeft;
+                  } else {
+                    // Fallback: use the left edge of the range rect
+                    lineLeftEdge = rangeRect.left;
+                  }
+                } else {
+                  // Fallback: use the left edge of the range rect
+                  lineLeftEdge = rangeRect.left;
+                }
+              } else {
+                // Fallback: use the left edge of the range rect
+                lineLeftEdge = rangeRect.left;
+              }
+            } else {
+              // Fallback: try to find element at point
+              const elementAtPoint = document.elementFromPoint(mouseX, mouseY);
+              if (elementAtPoint) {
+                const elementRect = elementAtPoint.getBoundingClientRect();
+                lineLeftEdge = elementRect.left;
+              }
+            }
+          } catch (error) {
+            console.warn('[TextSelector] Error finding line left edge, using highlight left:', error);
+            // Fallback to using highlight left edge
+            lineLeftEdge = highlightRect.left;
+          }
+          
+          // Convert viewport coordinates to relative coordinates within the highlight
+          // Use the line's left edge for horizontal calculation to handle indentation correctly
+          // The relativeLeft is calculated from the line's left edge, not the highlight's left edge
+          const relativeLeftFromLine = mouseX - lineLeftEdge;
+          const relativeTop = mouseY - highlightRect.top;
+          
+          // Now convert to position relative to the highlight element
+          // We need to add the offset between the line's left edge and the highlight's left edge
+          const lineOffsetFromHighlight = lineLeftEdge - highlightRect.left;
+          const relativeLeft = relativeLeftFromLine + lineOffsetFromHighlight;
+          
+          // Validate coordinates - ensure they're reasonable
+          if (isNaN(relativeLeft) || isNaN(relativeTop)) {
+            throw new Error(`NaN coordinates: left=${relativeLeft}, top=${relativeTop}`);
+          }
+          
+          // Ensure coordinates are within reasonable bounds
+          if (relativeLeft < -1000 || relativeLeft > 10000 || relativeTop < -1000 || relativeTop > 10000) {
+            throw new Error(`Coordinates out of bounds: left=${relativeLeft}, top=${relativeTop}`);
+          }
+          
+          // Center the button container at the mouse release point
+          // Button size is 32px, so center offset is -16px (half of 32px)
+          const buttonSize = 32;
+          const centerOffset = buttonSize / 2;
+          
+          // Final position relative to highlight element
+          const finalRelativeLeft = relativeLeft;
+          
+          iconsWrapper.style.setProperty('left', `${finalRelativeLeft - centerOffset}px`, 'important');
+          iconsWrapper.style.setProperty('right', 'auto', 'important');
+          iconsWrapper.style.setProperty('top', `${relativeTop - centerOffset}px`, 'important');
+          iconsWrapper.style.setProperty('bottom', 'auto', 'important');
+          
+          console.log('[TextSelector] Positioned magic button at mouse release point:', { 
+            mouseX, 
+            mouseY,
+            lineLeftEdge,
+            highlightRectLeft: highlightRect.left,
+            lineOffsetFromHighlight,
+            relativeLeftFromLine,
+            relativeLeft, 
+            relativeTop,
+            finalRelativeLeft,
+            centerOffset,
+            highlightRect: { left: highlightRect.left, top: highlightRect.top, width: highlightRect.width, height: highlightRect.height }
+          });
+        } else {
+          // Fallback to DOM-based positioning if mouse coordinates not available
+          throw new Error('Mouse release coordinates not available, using fallback');
+        }
+      } catch (error) {
+        console.warn('[TextSelector] Error positioning button at mouse release point, using fallback:', error);
+        // Fallback: use original positioning (right side of highlight)
+        const highlightRect = highlight.getBoundingClientRect();
+        const isInModal = highlight.closest('.vocab-custom-content-modal');
+        
+        if (isInModal) {
+          iconsWrapper.style.setProperty('right', '-50px', 'important');
+          iconsWrapper.style.setProperty('left', 'auto', 'important');
+          iconsWrapper.style.setProperty('top', '-2px', 'important');
+        } else {
+          iconsWrapper.style.setProperty('right', '-45px', 'important');
+          iconsWrapper.style.setProperty('left', 'auto', 'important');
+          iconsWrapper.style.setProperty('top', '0px', 'important');
+        }
+      }
+    };
     
-    if (isInModal) {
-      // In modal context: position to the left with sufficient margin
-      iconsWrapper.style.setProperty('left', '-50px', 'important');
-      iconsWrapper.style.setProperty('right', 'auto', 'important');
-      iconsWrapper.style.setProperty('top', '-2px', 'important');
-    } else {
-      // In main webpage context: position to the left, outside text content
-      iconsWrapper.style.setProperty('left', '-45px', 'important');
-      iconsWrapper.style.setProperty('right', 'auto', 'important');
-      iconsWrapper.style.setProperty('top', '0px', 'important');
-    }
+    // Position immediately and also after a short delay to ensure DOM is ready
+    positionAtMouseRelease();
+    setTimeout(() => {
+      positionAtMouseRelease();
+    }, 50);
     
     // Remove the appearing class after animation completes
     setTimeout(() => {
@@ -6350,7 +7634,9 @@ const TextSelector = {
         font-family: inherit !important; /* Preserve original font family */
         font-weight: inherit !important; /* Preserve original font weight */
         line-height: inherit !important; /* Preserve original line height */
-        color: inherit !important; /* Preserve original text color */
+        /* DO NOT set color: inherit on the highlight span - it can interfere with child element colors */
+        /* Text nodes will inherit naturally from the highlight span's parent context */
+        /* Child elements with inline styles or color classes will maintain their colors */
         letter-spacing: inherit !important; /* Preserve original letter spacing */
       }
       
@@ -6391,16 +7677,94 @@ const TextSelector = {
       }
       
       /* For block-level elements inside highlight, maintain underline */
-      .vocab-text-highlight * {
+      /* DO NOT override font-weight or color for formatting elements - let them use their own styles */
+      /* Exclude elements with color classes or inline styles from the universal selector */
+      .vocab-text-highlight *:not([class*="user-"]):not([class*="rated-"]):not([style*="color"]):not([style*="Color"]) {
         text-decoration: inherit;
         box-sizing: border-box;
         font-size: inherit !important; /* Preserve original font size for child elements */
         font-family: inherit !important; /* Preserve original font family for child elements */
-        font-weight: inherit !important; /* Preserve original font weight for child elements */
+        /* DO NOT set font-weight: inherit - let formatting elements (b, strong) use their default bold */
+        /* DO NOT set color: inherit - let child elements use their own colors (inline styles, classes, etc.) */
         line-height: inherit !important; /* Preserve original line height for child elements */
-        color: inherit !important; /* Preserve original text color for child elements */
         letter-spacing: inherit !important; /* Preserve original letter spacing for child elements */
       }
+      
+      /* Apply base styles to all elements, but exclude color-related elements */
+      .vocab-text-highlight * {
+        text-decoration: inherit;
+        box-sizing: border-box;
+      }
+      
+      /* Ensure formatting elements maintain their bold/italic styling */
+      .vocab-text-highlight b,
+      .vocab-text-highlight strong {
+        font-weight: bold !important; /* Force bold for b and strong tags */
+      }
+      
+      .vocab-text-highlight em,
+      .vocab-text-highlight i {
+        font-style: italic !important; /* Force italic for em and i tags */
+      }
+      
+      /* Preserve colors on child elements - don't force inherit */
+      /* Child elements with inline styles, classes, or default colors will maintain them */
+      /* Text nodes will naturally inherit from the highlight span, which inherits from the original parent */
+      
+      /* Ensure elements with inline color styles maintain their colors */
+      /* Inline styles have highest specificity - they will work automatically */
+      /* No CSS rule needed - inline styles cannot be overridden by CSS */
+      
+      /* Ensure elements with color classes maintain their colors AND the underline */
+      /* DO NOT override color for these elements - let website's CSS apply */
+      /* BUT ensure the purple underline is preserved */
+      .vocab-text-highlight a.user-orange,
+      .vocab-text-highlight a.rated-user,
+      .vocab-text-highlight a[class*="user-orange"],
+      .vocab-text-highlight a[class*="user-red"],
+      .vocab-text-highlight a[class*="user-blue"],
+      .vocab-text-highlight a[class*="user-green"],
+      .vocab-text-highlight a[class*="user-purple"],
+      .vocab-text-highlight a[class*="user-yellow"],
+      .vocab-text-highlight a[class*="user-cyan"],
+      .vocab-text-highlight a[class*="user-gray"],
+      .vocab-text-highlight a[class*="user-black"],
+      .vocab-text-highlight .user-orange,
+      .vocab-text-highlight .user-red,
+      .vocab-text-highlight .user-blue,
+      .vocab-text-highlight .user-green,
+      .vocab-text-highlight .user-purple,
+      .vocab-text-highlight .user-yellow,
+      .vocab-text-highlight .user-cyan,
+      .vocab-text-highlight .user-gray,
+      .vocab-text-highlight .user-black,
+      .vocab-text-highlight .rated-user {
+        /* Don't set color at all - let the website's CSS for these classes apply */
+        /* The website's CSS should have the same or higher specificity */
+        /* By not setting color here, the website's CSS will apply */
+        /* BUT preserve the purple underline from the parent highlight */
+        text-decoration: inherit !important; /* Inherit the purple underline from parent */
+        text-decoration-line: underline !important; /* Ensure underline is visible */
+        text-decoration-style: dashed !important; /* Ensure dashed style */
+        text-decoration-color: #B88AE6 !important; /* Ensure purple color */
+        text-decoration-thickness: 0.6px !important; /* Ensure thickness */
+        text-underline-offset: 2px !important; /* Ensure offset */
+      }
+      
+      /* Also ensure elements with inline color styles preserve the underline */
+      .vocab-text-highlight [style*="color"],
+      .vocab-text-highlight [style*="Color"] {
+        /* Preserve the purple underline even for elements with inline color styles */
+        text-decoration: inherit !important; /* Inherit the purple underline from parent */
+        text-decoration-line: underline !important; /* Ensure underline is visible */
+        text-decoration-style: dashed !important; /* Ensure dashed style */
+        text-decoration-color: #B88AE6 !important; /* Ensure purple color */
+        text-decoration-thickness: 0.6px !important; /* Ensure thickness */
+        text-underline-offset: 2px !important; /* Ensure offset */
+      }
+      
+      /* Ensure elements with inline color styles work - inline styles have highest specificity */
+      /* No CSS rule needed - inline styles cannot be overridden by CSS */
       
       /* Remove button - White circle with purple border and purple cross on top-left */
       .vocab-text-remove-btn {
@@ -6521,15 +7885,26 @@ const TextSelector = {
         animation: vocab-icon-appear 0.4s ease-out;
         pointer-events: auto !important;
         transition: opacity 0.3s ease-out, transform 0.3s ease-out;
-        left: -45px !important; /* Default: position on left side, outside text */
-        right: auto !important; /* Ensure right is not set */
-        top: 0px !important; /* Align with top of text */
         margin: 0 !important; /* Remove any margins */
         padding: 0 !important; /* Remove any padding */
         width: auto !important; /* Auto width */
         height: auto !important; /* Auto height */
         min-width: 0 !important; /* No min-width */
         max-width: none !important; /* No max-width */
+      }
+      
+      /* Magic meaning button wrapper - positioned at END (right side) of selected text */
+      .vocab-text-icons-wrapper-magic {
+        right: -45px !important; /* Position on right side (end of text), outside text */
+        left: auto !important; /* Ensure left is not set */
+        top: 0px !important; /* Align with top of text */
+      }
+      
+      /* Book icon wrapper - positioned at TOP-LEFT of selected text */
+      .vocab-text-icons-wrapper-book {
+        left: -45px !important; /* Position on left side, outside text */
+        right: auto !important; /* Ensure right is not set */
+        top: 0px !important; /* Align with top of text */
       }
 
       /* Modal context: enhanced styling */
@@ -6539,8 +7914,20 @@ const TextSelector = {
         border-radius: 8px;
         padding: 4px;
         box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+      }
+      
+      /* Modal context: magic meaning button wrapper - positioned at END (right side) */
+      .vocab-custom-content-modal .vocab-text-icons-wrapper-magic {
+        right: -50px !important; /* Position on right side (end of text) in modal context */
+        left: auto !important; /* Ensure left is not set */
+        top: -2px !important; /* Slight offset for modal */
+      }
+      
+      /* Modal context: book icon wrapper - positioned at TOP-LEFT */
+      .vocab-custom-content-modal .vocab-text-icons-wrapper-book {
         left: -50px !important; /* Position on left side in modal context */
         right: auto !important; /* Ensure right is not set */
+        top: -2px !important; /* Slight offset for modal */
       }
       
       /* Chat button - Solid purple circle with white chat icon on top-left (bigger) */
@@ -8781,6 +10168,7 @@ const ChatDialog = {
       // Render summary if it exists
       if (this.pageSummary) {
         summaryContainer.innerHTML = `
+          <h3 class="vocab-chat-page-summary-header">Summary</h3>
           <div class="vocab-chat-page-summary-content">
             ${this.renderMarkdown(this.pageSummary)}
           </div>
@@ -8831,13 +10219,9 @@ const ChatDialog = {
       simplifyMoreBtn.textContent = 'Simplify more';
       simplifyMoreBtn.id = 'vocab-chat-simplify-more-btn';
       
-      // Set initial disabled state based on shouldAllowSimplifyMore
-      if (this.simplifiedData && this.simplifiedData.shouldAllowSimplifyMore) {
+      // Always enable the simplify more button
         simplifyMoreBtn.disabled = false;
-      } else {
-        simplifyMoreBtn.disabled = true;
-        simplifyMoreBtn.classList.add('disabled');
-      }
+      simplifyMoreBtn.classList.remove('disabled');
       
       // Add click handler
       simplifyMoreBtn.addEventListener('click', () => this.handleSimplifyMore());
@@ -8898,14 +10282,28 @@ const ChatDialog = {
    * @param {HTMLElement} container - Container element to render into
    */
   renderSimplifiedExplanations(container) {
-    // Use simplifiedData if available, otherwise try to get it from TextSelector
-    let dataToRender = this.simplifiedData;
+    if (!container) {
+      console.warn('[ChatDialog] Container is null, cannot render simplified explanations');
+      return;
+    }
     
-    if (!dataToRender && this.currentTextKey) {
+    // Always try to get the latest data from TextSelector first (for streaming updates)
+    let dataToRender = null;
+    if (this.currentTextKey) {
       // Try to get data from TextSelector using the original textKey
       const originalTextKey = this.currentTextKey.replace(/-selected$/, '').replace(/-generic$/, '');
       dataToRender = TextSelector.simplifiedTexts.get(originalTextKey);
-      console.log('[ChatDialog] Retrieved simplified data from TextSelector for key:', originalTextKey, dataToRender);
+      if (dataToRender) {
+        console.log('[ChatDialog] Retrieved simplified data from TextSelector for key:', originalTextKey);
+      }
+    }
+    
+    // Fallback to this.simplifiedData if not found in TextSelector
+    if (!dataToRender) {
+      dataToRender = this.simplifiedData;
+      if (dataToRender) {
+        console.log('[ChatDialog] Using simplifiedData from ChatDialog');
+      }
     }
     
     if (!dataToRender) {
@@ -8970,11 +10368,24 @@ const ChatDialog = {
       simplifyMoreBtn.textContent = 'Simplifying...';
     }
     
-    // Build API request with previous simplified text
+    // Build API request with ALL previous simplified explanations
+    // Ensure previousSimplifiedTexts is an array
+    const previousSimplifiedTextsArray = Array.isArray(this.simplifiedData.previousSimplifiedTexts)
+      ? this.simplifiedData.previousSimplifiedTexts
+      : (this.simplifiedData.previousSimplifiedTexts ? [this.simplifiedData.previousSimplifiedTexts] : []);
+    
+    // Include ALL previous explanations + current simplified text
     const previousSimplifiedTexts = [
-      ...this.simplifiedData.previousSimplifiedTexts,
-      this.simplifiedData.simplifiedText
-    ];
+      ...previousSimplifiedTextsArray,
+      ...(this.simplifiedData.simplifiedText ? [this.simplifiedData.simplifiedText] : [])
+    ].filter(Boolean); // Remove any null/undefined values
+    
+    console.log('[ChatDialog] Sending API request with previousSimplifiedTexts:', {
+      previousSimplifiedTextsCount: previousSimplifiedTextsArray.length,
+      currentSimplifiedText: this.simplifiedData.simplifiedText,
+      totalPreviousSimplifiedTexts: previousSimplifiedTexts.length,
+      previousSimplifiedTexts: previousSimplifiedTexts
+    });
     
     const textSegments = [{
       textStartIndex: this.simplifiedData.textStartIndex,
@@ -8988,22 +10399,70 @@ const ChatDialog = {
       textSegments,
       // onEvent callback
       (eventData) => {
-        console.log('[ChatDialog] Received new simplified text:', eventData);
+        console.log('[ChatDialog] Received simplified text event:', eventData);
         
         // Ensure previousSimplifiedTexts is always an array
         const previousSimplifiedTextsArray = Array.isArray(previousSimplifiedTexts) 
           ? previousSimplifiedTexts 
           : (previousSimplifiedTexts ? [previousSimplifiedTexts] : []);
         
-        // Update simplified data - store all explanations in previousSimplifiedTexts array
+        // Handle chunk events (streaming)
+        if (eventData.chunk !== undefined) {
+          console.log('[ChatDialog] Chunk event - chunk:', eventData.chunk, 'accumulatedSimplifiedText:', eventData.accumulatedSimplifiedText);
+          
+          // Update simplified data with streaming text
+          this.simplifiedData = {
+            textStartIndex: eventData.textStartIndex,
+            textLength: eventData.textLength,
+            text: eventData.text,
+            simplifiedText: eventData.accumulatedSimplifiedText || '', // Use accumulated text for streaming
+            previousSimplifiedTexts: previousSimplifiedTextsArray,
+            shouldAllowSimplifyMore: false // Will be set on complete
+          };
+          
+          // Update stored data - use original text key for storage
+          const originalTextKey = this.currentTextKey.replace(/-selected$/, '').replace(/-generic$/, '');
+          TextSelector.simplifiedTexts.set(originalTextKey, this.simplifiedData);
+          
+          // Update UI in real-time - re-render all explanations with streaming text
+          // Try multiple ways to find the container
+          let container = null;
+          if (this.dialogContainer) {
+            container = this.dialogContainer.querySelector('#vocab-chat-simplified-container');
+          }
+          if (!container) {
+            container = document.getElementById('vocab-chat-simplified-container');
+          }
+          
+          if (container) {
+            console.log('[ChatDialog] Updating UI with streaming data (Simplify more), accumulated text length:', eventData.accumulatedSimplifiedText?.length || 0);
+            this.renderSimplifiedExplanations(container);
+          } else {
+            console.log('[ChatDialog] Container not found yet (Simplify more), will retry on next chunk');
+          }
+        }
+        
+        // Handle complete event (final data)
+        else if (eventData.type === 'complete' || eventData.simplifiedText) {
+          console.log('[ChatDialog] Complete event - simplifiedText:', eventData.simplifiedText, 'shouldAllowSimplifyMore:', eventData.shouldAllowSimplifyMore);
+          
+          // Update simplified data with final text
+          // previousSimplifiedTextsArray already includes all previous + the old current simplified text
+          // The new simplifiedText becomes the new current
         this.simplifiedData = {
           textStartIndex: eventData.textStartIndex,
           textLength: eventData.textLength,
           text: eventData.text,
           simplifiedText: eventData.simplifiedText,
-          previousSimplifiedTexts: previousSimplifiedTextsArray, // Array of all previous simplified texts
+            previousSimplifiedTexts: previousSimplifiedTexts, // Use the array we sent to API (includes all previous + old current)
           shouldAllowSimplifyMore: eventData.shouldAllowSimplifyMore || false
         };
+          
+          console.log('[ChatDialog] Updated simplifiedData after complete event:', {
+            previousSimplifiedTextsCount: previousSimplifiedTexts.length,
+            newSimplifiedText: eventData.simplifiedText,
+            previousSimplifiedTexts: previousSimplifiedTexts
+          });
         
         // Update stored data - use original text key for storage
         const originalTextKey = this.currentTextKey.replace(/-selected$/, '').replace(/-generic$/, '');
@@ -9016,27 +10475,22 @@ const ChatDialog = {
           shouldAllowSimplifyMore: eventData.shouldAllowSimplifyMore || false
         });
         
-        // Update UI - re-render all explanations
+          // Update UI - re-render all explanations with final text
         const container = this.dialogContainer.querySelector('#vocab-chat-simplified-container');
         if (container) {
           this.renderSimplifiedExplanations(container);
         }
         
-        // Reset button
+          // Reset button - always enable
         if (simplifyMoreBtn) {
           simplifyMoreBtn.classList.remove('loading');
           simplifyMoreBtn.textContent = 'Simplify more';
-          
-          if (this.simplifiedData.shouldAllowSimplifyMore) {
             simplifyMoreBtn.disabled = false;
             simplifyMoreBtn.classList.remove('disabled');
-          } else {
-            simplifyMoreBtn.disabled = true;
-            simplifyMoreBtn.classList.add('disabled');
-          }
         }
         
         this.isSimplifying = false;
+        }
       },
       // onComplete callback
       () => {
@@ -9129,32 +10583,123 @@ const ChatDialog = {
       console.log('[ChatDialog] Text length:', pageText.length, 'text preview:', pageText.substring(0, 100) + '...');
       console.log('[ChatDialog] SummariseService available:', typeof SummariseService !== 'undefined');
       
-      // Call SummariseService
+      // Call SummariseService with SSE
       try {
-        const response = await SummariseService.summarise(pageText);
+        // Initialize streaming summary
+        this.pageSummary = '';
+        let summaryContainer = null;
+        let summaryShown = false;
         
-        console.log('[ChatDialog] Received summarise response:', response);
-        
-        // Store and display the summary (NOT in chat history)
-        if (response && response.summary) {
-          // Store the summary in separate variable (NOT in chat history)
-          this.pageSummary = response.summary;
-          console.log('[ChatDialog] Page summary stored (separate from chat history):', this.pageSummary ? 'exists' : 'null');
-          
-          // Display summary above the button (NOT as a chat message)
-          this.renderPageSummary();
-        } else {
-          throw new Error('No summary received from API');
+        // Create or get summary container for streaming
+        const buttonContainer = document.querySelector('.vocab-chat-simplify-more-container');
+        if (buttonContainer) {
+          summaryContainer = document.getElementById('vocab-chat-page-summary-container');
+          if (!summaryContainer) {
+            summaryContainer = document.createElement('div');
+            summaryContainer.id = 'vocab-chat-page-summary-container';
+            summaryContainer.className = 'vocab-chat-page-summary-container';
+            buttonContainer.parentNode.insertBefore(summaryContainer, buttonContainer);
+          }
         }
         
-        // Keep button disabled after successful fetch
+        // Call SummariseService with SSE callbacks
+        SummariseService.summarise(
+          pageText,
+          // onEvent callback - handle chunk and complete events
+          (eventData) => {
+            console.log('[ChatDialog] Received summarise event:', eventData);
+            
+            // Handle chunk events (streaming)
+            if (eventData.chunk !== undefined) {
+              console.log('[ChatDialog] Chunk event - chunk:', eventData.chunk, 'accumulated length:', eventData.accumulated?.length || 0);
+              
+              // Update accumulated summary
+              if (eventData.accumulated) {
+                this.pageSummary = eventData.accumulated;
+                
+                // Show summary container on first chunk and hide button
+                if (summaryContainer && !summaryShown) {
+                  summaryShown = true;
+                  console.log('[ChatDialog] Showing summary container on first chunk');
+                  
+                  // Hide the button completely instead of disabling it
+                  if (summariseBtn) {
+                    summariseBtn.style.display = 'none';
+                    console.log('[ChatDialog] Summarise button hidden on first chunk');
+                  }
+                }
+                
+                // Update summary UI in real-time
+                if (summaryContainer) {
+                  summaryContainer.innerHTML = `
+                    <h3 class="vocab-chat-page-summary-header">Summary</h3>
+                    <div class="vocab-chat-page-summary-content">
+                      ${this.renderMarkdown(this.pageSummary)}
+                    </div>
+                  `;
+                }
+              }
+            }
+            
+            // Handle complete event (final summary)
+            else if (eventData.type === 'complete' && eventData.summary) {
+              console.log('[ChatDialog] Complete event - summary length:', eventData.summary.length);
+              
+              // Store final summary
+              this.pageSummary = eventData.summary;
+              
+              // Update summary UI with final data
+              if (summaryContainer) {
+                summaryContainer.innerHTML = `
+                  <h3 class="vocab-chat-page-summary-header">Summary</h3>
+                  <div class="vocab-chat-page-summary-content">
+                    ${this.renderMarkdown(this.pageSummary)}
+                  </div>
+                `;
+              }
+              
+              // Button is already hidden from first chunk, just remove loading state if needed
         if (summariseBtn) {
-          summariseBtn.disabled = true;
-          summariseBtn.classList.add('disabled');
           summariseBtn.classList.remove('loading');
+                console.log('[ChatDialog] Summarise button remains hidden after completion');
+              }
+            }
+          },
+          // onComplete callback
+          () => {
+            console.log('[ChatDialog] Summarise stream complete');
+          },
+          // onError callback
+          (error) => {
+            console.error('[ChatDialog] Error during summarisation:', error);
+            console.error('[ChatDialog] Error details:', {
+              message: error.message,
+              name: error.name,
+              stack: error.stack
+            });
+            
+            // Check if it's a 429 rate limit error
+            const isRateLimit = error.status === 429 || 
+                               error.message.includes('429') || 
+                               error.message.includes('Rate limit') ||
+                               error.message.includes('too fast');
+            
+            if (isRateLimit && typeof ErrorBanner !== 'undefined') {
+              ErrorBanner.show('You are requesting too fast, please retry after few seconds');
+            }
+            
+            // Show error message in chat with more details
+            const errorMessage = error.message || 'Please try again.';
+            this.addMessageToChat('ai', `⚠️ **Error:**\n\nFailed to summarise the page. ${errorMessage}`);
+            
+            // Reset button
+            if (summariseBtn) {
+              summariseBtn.disabled = false;
+              summariseBtn.classList.remove('disabled', 'loading');
           summariseBtn.textContent = originalText;
-          console.log('[ChatDialog] Summarise button disabled after successful fetch');
         }
+          }
+        );
       } catch (error) {
         console.error('[ChatDialog] Error during summarisation:', error);
         console.error('[ChatDialog] Error details:', {
@@ -9229,6 +10774,7 @@ const ChatDialog = {
     
     // Render summary content
     summaryContainer.innerHTML = `
+      <h3 class="vocab-chat-page-summary-header">Summary</h3>
       <div class="vocab-chat-page-summary-content">
         ${this.renderMarkdown(this.pageSummary)}
       </div>
@@ -9258,6 +10804,8 @@ const ChatDialog = {
       // Render summary if it exists
       if (this.pageSummary) {
         summaryContainer.innerHTML = `
+          <h3 class="vocab-chat-page-summary-header">Summary</h3>
+          <h3 class="vocab-chat-page-summary-header">Summary</h3>
           <div class="vocab-chat-page-summary-content">
             ${this.renderMarkdown(this.pageSummary)}
           </div>
@@ -9632,40 +11180,90 @@ const ChatDialog = {
       content: item.message
     }));
     
+    // Create empty AI message bubble for streaming
+    let streamingMessageContent = null;
+    let streamingMessageBubble = null;
+    let accumulatedText = '';
+    let abortRequest = null;
+    
+    // Check if we're still in the same chat tab that initiated the request
+    const isSameChat = this.currentTextKey === requestTextKey;
+    
+    if (isSameChat) {
+      // Create streaming message bubble
+      const streamingBubble = this.createStreamingMessageBubble();
+      streamingMessageBubble = streamingBubble.messageBubble;
+      streamingMessageContent = streamingBubble.messageContent;
+    }
+    
     try {
-      // Call API
-      const response = await ApiService.ask({
+      // Remove loading animation
+      this.removeLoadingAnimation();
+      
+      // Call streaming API
+      abortRequest = await ApiService.ask({
         initial_context: requestText,
         chat_history: chat_history,
-        question: message
-      });
+        question: message,
+        onChunk: (chunk, accumulated) => {
+          console.log('[ChatDialog] Received chunk:', chunk, 'accumulated:', accumulated);
+          
+          // Update accumulated text
+          accumulatedText = accumulated || '';
+          
+          // Check if we're still in the same chat tab
+          if (this.currentTextKey === requestTextKey && streamingMessageContent) {
+            // Update the message bubble in real-time
+            this.updateStreamingMessage(streamingMessageContent, accumulatedText);
+          } else if (!isSameChat) {
+            // User switched tabs, but we still want to update if they switch back
+            // We'll handle this in the complete callback
+            console.log('[ChatDialog] User switched tabs during streaming, will update on complete');
+          }
+        },
+        onComplete: (chat_history) => {
+          console.log('[ChatDialog] Stream complete, chat_history:', chat_history);
       
       // Remove loading animation
       this.removeLoadingAnimation();
       
-      if (response.success) {
-        console.log('[ChatDialog] API response data:', response.data);
-        
-        // Extract the latest assistant response from chat_history
-        const chatHistory = response.data.chat_history || [];
-        
-        console.log('[ChatDialog] Chat history from API:', chatHistory);
-        
-        // Find the last assistant message (the latest AI response)
-        let aiResponse = 'No response received';
-        for (let i = chatHistory.length - 1; i >= 0; i--) {
-          if (chatHistory[i].role === 'assistant') {
-            aiResponse = chatHistory[i].content;
+          // Get the final AI response
+          let aiResponse = accumulatedText || 'No response received';
+          
+          // If we have chat_history from the complete event, extract the latest assistant message
+          if (chat_history && Array.isArray(chat_history)) {
+            for (let i = chat_history.length - 1; i >= 0; i--) {
+              if (chat_history[i].role === 'assistant') {
+                aiResponse = chat_history[i].content;
             break;
+              }
           }
         }
         
-        console.log('[ChatDialog] Extracted AI response:', aiResponse);
+          console.log('[ChatDialog] Final AI response:', aiResponse);
         
         // Check if we're still in the same chat tab that initiated the request
         if (this.currentTextKey === requestTextKey) {
-          // We're still in the same chat, add the response normally
+            // We're still in the same chat, update the streaming message or add it if it doesn't exist
+            if (streamingMessageContent) {
+              // Update the existing streaming message with final content
+              this.updateStreamingMessage(streamingMessageContent, aiResponse);
+              
+              // Add the AI response to history (user message was already added before API call)
+              this.chatHistory.push({
+                type: 'ai',
+                message: aiResponse,
+                timestamp: new Date().toISOString()
+              });
+            } else {
+              // Message bubble was removed or doesn't exist, add it normally
           this.addMessageToChat('ai', aiResponse);
+            }
+            
+            // Update stored chat history
+            if (this.currentTextKey) {
+              this.chatHistories.set(this.currentTextKey, [...this.chatHistory]);
+            }
         } else {
           // User switched to a different chat tab, add response to the correct chat history
           console.log('[ChatDialog] User switched tabs, adding response to correct chat history for textKey:', requestTextKey);
@@ -9673,7 +11271,7 @@ const ChatDialog = {
           // Get the chat history for the original textKey
           const originalChatHistory = this.chatHistories.get(requestTextKey) || [];
           
-          // Only add the AI response (user message was already added when request was made)
+            // Add the AI response (user message was already added when request was made)
           originalChatHistory.push({
             type: 'ai',
             message: aiResponse,
@@ -9685,17 +11283,21 @@ const ChatDialog = {
           
           console.log('[ChatDialog] Added AI response to original chat history for textKey:', requestTextKey);
         }
-      } else {
-        // Handle error case - check if we're still in the same chat
+        },
+        onError: (error) => {
+          console.error('[ChatDialog] Stream error:', error);
+          
+          // Remove loading animation
+          this.removeLoadingAnimation();
+          
         // Check if it's a 429 rate limit error
-        const isRateLimit = response.error && (
-          response.error.includes('429') || 
-          response.error.includes('Rate limit') ||
-          response.error.includes('too fast')
-        );
+          const isRateLimit = error.status === 429 || 
+                             error.message.includes('429') || 
+                             error.message.includes('Rate limit') ||
+                             error.message.includes('too fast');
         
         if (isRateLimit && typeof ErrorBanner !== 'undefined') {
-          await ErrorBanner.show('You are requesting too fast, please retry after few seconds');
+            ErrorBanner.show('You are requesting too fast, please retry after few seconds');
           
           // If this is a text selection (not page-general), stop pulsating and return to normal state
           if (requestTextKey && !requestTextKey.startsWith('page-general')) {
@@ -9723,9 +11325,17 @@ const ChatDialog = {
             }
           }
         }
+          
+          // Remove streaming message bubble if it exists
+          if (streamingMessageBubble && streamingMessageBubble.parentNode) {
+            streamingMessageBubble.remove();
+          }
+          
+          // Handle error case - check if we're still in the same chat
+          const errorMessage = `⚠️ **Error:**\n\n${error.message || 'Failed to get response from server'}`;
         
         if (this.currentTextKey === requestTextKey) {
-          this.addMessageToChat('ai', `⚠️ **Error:**\n\n${response.error}`);
+            this.addMessageToChat('ai', errorMessage);
         } else {
           // Add error to the original chat history
           const originalChatHistory = this.chatHistories.get(requestTextKey) || [];
@@ -9733,7 +11343,7 @@ const ChatDialog = {
           // Only add the error response (user message was already added when request was made)
           originalChatHistory.push({
             type: 'ai',
-            message: `⚠️ **Error:**\n\n${response.error}`,
+              message: errorMessage,
             timestamp: new Date().toISOString()
           });
           
@@ -9741,9 +11351,16 @@ const ChatDialog = {
           console.log('[ChatDialog] Added error response to original chat history for textKey:', requestTextKey);
         }
       }
+      });
+      
     } catch (error) {
-      console.error('[ChatDialog] Error sending message:', error);
+      console.error('[ChatDialog] Error initiating streaming request:', error);
       this.removeLoadingAnimation();
+      
+      // Remove streaming message bubble if it exists
+      if (streamingMessageBubble && streamingMessageBubble.parentNode) {
+        streamingMessageBubble.remove();
+      }
       
       // Check if it's a 429 rate limit error
       const isRateLimit = error.status === 429 || 
@@ -9783,7 +11400,7 @@ const ChatDialog = {
       
       // Handle error case - check if we're still in the same chat
       if (this.currentTextKey === requestTextKey) {
-        this.addMessageToChat('ai', `Error: Failed to get response from server`);
+        this.addMessageToChat('ai', `Error: Failed to initiate request to server`);
       } else {
         // Add error to the original chat history
         const originalChatHistory = this.chatHistories.get(requestTextKey) || [];
@@ -9791,7 +11408,7 @@ const ChatDialog = {
         // Only add the error response (user message was already added when request was made)
         originalChatHistory.push({
           type: 'ai',
-          message: `Error: Failed to get response from server`,
+          message: `Error: Failed to initiate request to server`,
           timestamp: new Date().toISOString()
         });
         
@@ -10020,6 +11637,7 @@ const ChatDialog = {
    * Add message to chat
    * @param {string} type - 'user' or 'ai'
    * @param {string} message - Message content
+   * @returns {HTMLElement|null} The message bubble element (for streaming updates)
    */
   addMessageToChat(type, message) {
     const chatContainer = document.getElementById('vocab-chat-messages');
@@ -10112,6 +11730,60 @@ const ChatDialog = {
     
     console.log('[ChatDialog] ===== MESSAGE SAVED IMMEDIATELY =====');
     console.log('[ChatDialog] Message type:', type, 'Total messages:', this.chatHistory.length);
+    
+    // Return the message bubble for streaming updates
+    return messageBubble;
+  },
+  
+  /**
+   * Create an empty AI message bubble for streaming updates
+   * @returns {HTMLElement} The message bubble element
+   */
+  createStreamingMessageBubble() {
+    const chatContainer = document.getElementById('vocab-chat-messages');
+    
+    // Remove "Ask me anything about the page" message if exists
+    const noChatsMsg = chatContainer.querySelector('.vocab-chat-no-messages');
+    if (noChatsMsg) {
+      noChatsMsg.remove();
+    }
+    
+    // Create message bubble
+    const messageBubble = document.createElement('div');
+    messageBubble.className = 'vocab-chat-message vocab-chat-message-ai';
+    
+    const messageContent = document.createElement('div');
+    messageContent.className = 'vocab-chat-message-content';
+    messageContent.innerHTML = ''; // Start empty
+    
+    messageBubble.appendChild(messageContent);
+    chatContainer.appendChild(messageBubble);
+    
+    // Show global clear button
+    this.updateGlobalClearButton();
+    
+    // Auto-scroll to bottom
+    this.scrollToBottom(chatContainer);
+    
+    return { messageBubble, messageContent };
+  },
+  
+  /**
+   * Update streaming message bubble with new content
+   * @param {HTMLElement} messageContent - The message content element
+   * @param {string} accumulatedText - The accumulated text to display
+   */
+  updateStreamingMessage(messageContent, accumulatedText) {
+    if (!messageContent) return;
+    
+    // Update the content with markdown rendering
+    messageContent.innerHTML = this.renderMarkdown(accumulatedText);
+    
+    // Auto-scroll to bottom
+    const chatContainer = document.getElementById('vocab-chat-messages');
+    if (chatContainer) {
+      this.scrollToBottom(chatContainer);
+    }
   },
   
   /**
@@ -11289,6 +12961,17 @@ const ChatDialog = {
         margin: 16px;
         margin-bottom: 12px;
         padding: 0;
+      }
+      
+      .vocab-chat-page-summary-header {
+        text-align: center;
+        color: #9527F5;
+        font-weight: 300;
+        font-size: 18px;
+        margin: 0 0 12px 0;
+        padding: 0;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+        letter-spacing: 0.5px;
       }
       
       .vocab-chat-page-summary-content {
@@ -17312,32 +18995,38 @@ const ButtonPanel = {
     // Add loading animation class (already added in click handler, but ensure it's there)
     highlight.classList.add('vocab-text-loading');
     
+    // Track if dialog has been opened for this text
+    let dialogOpened = false;
+    let bookIconCreated = false;
+    
     // Call SimplifyService with SSE for this single text
     SimplifyService.simplify(
       textSegments,
       // onEvent callback - called for each SSE event
       (eventData) => {
-        console.log('[ButtonPanel] Received simplified text:', eventData);
+        console.log('[ButtonPanel] Received simplified text event:', eventData);
         
         // Verify this event matches our textKey
         if (positionData.textStartIndex === eventData.textStartIndex &&
             positionData.textLength === eventData.textLength) {
           
-          // Remove loading animation
+          // Handle chunk events (streaming)
+          if (eventData.chunk !== undefined) {
+            console.log('[ButtonPanel] Chunk event - chunk:', eventData.chunk, 'accumulatedSimplifiedText:', eventData.accumulatedSimplifiedText);
+            
+            // Remove loading animation on first chunk
           highlight.classList.remove('vocab-text-loading');
           
-          // Hide spinner if it exists and restore button
+            // Create book icon and green cross button on first chunk (only once)
+            if (!bookIconCreated) {
+              bookIconCreated = true;
+              
+              // Hide spinner if it exists
           const iconsWrapper = highlight.querySelector('.vocab-text-icons-wrapper');
           if (iconsWrapper) {
             const spinnerContainer = iconsWrapper.querySelector('.vocab-magic-meaning-spinner-container');
             if (spinnerContainer) {
               spinnerContainer.remove();
-            }
-            
-            // Restore magic-meaning button (though it won't be needed since book icon will be shown)
-            const magicBtn = iconsWrapper.querySelector('.vocab-text-magic-meaning-btn');
-            if (magicBtn) {
-              magicBtn.style.display = '';
             }
           }
           
@@ -17350,7 +19039,7 @@ const ButtonPanel = {
             existingPurpleCross.remove();
           }
           
-          // Create green cross button at top-left (same position as purple cross)
+              // Create green cross button at top-left
           const greenCrossBtn = document.createElement('button');
           greenCrossBtn.className = 'vocab-text-remove-green-btn';
           greenCrossBtn.setAttribute('aria-label', 'Remove simplified text');
@@ -17371,13 +19060,11 @@ const ButtonPanel = {
           greenCrossBtn.style.border = '1px solid #22c55e';
           greenCrossBtn.style.padding = '0';
           greenCrossBtn.style.boxSizing = 'border-box';
-          // Use green cross icon
           greenCrossBtn.innerHTML = `
             <svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg" style="width: 10px; height: 10px;">
               <path d="M2 2L10 10M10 2L2 10" stroke="#22c55e" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
             </svg>
           `;
-          // Add click handler - same functionality as green remove button
           greenCrossBtn.addEventListener('click', (e) => {
             e.preventDefault();
             e.stopPropagation();
@@ -17386,87 +19073,134 @@ const ButtonPanel = {
           });
           highlight.appendChild(greenCrossBtn);
           
-          // Create wrapper for icons
+              // Create wrapper for icons (book icon positioned at top-left)
           const newIconsWrapper = document.createElement('div');
-          newIconsWrapper.className = 'vocab-text-icons-wrapper';
+              newIconsWrapper.className = 'vocab-text-icons-wrapper vocab-text-icons-wrapper-book';
           newIconsWrapper.setAttribute('data-text-key', textKey);
           
-          // Add book icon first (top position)
+              // Add book icon
           const bookBtn = TextSelector.createBookButton(textKey);
           newIconsWrapper.appendChild(bookBtn);
           
-          // Don't add green remove button - green cross button at top-left has same functionality
-          
-          // Append icons wrapper directly to highlight for absolute positioning
           highlight.appendChild(newIconsWrapper);
           
-          // Force a reflow to ensure book icon is in DOM
+              // Position book icon wrapper
+              newIconsWrapper.style.setProperty('position', 'absolute', 'important');
+              newIconsWrapper.style.setProperty('display', 'flex', 'important');
+              newIconsWrapper.style.setProperty('margin', '0', 'important');
+              newIconsWrapper.style.setProperty('padding', '0', 'important');
+              
+              const isInModal = highlight.closest('.vocab-custom-content-modal');
+              if (isInModal) {
+                newIconsWrapper.style.setProperty('left', '-50px', 'important');
+                newIconsWrapper.style.setProperty('right', 'auto', 'important');
+                newIconsWrapper.style.setProperty('top', '-2px', 'important');
+              } else {
+                newIconsWrapper.style.setProperty('left', '-45px', 'important');
+                newIconsWrapper.style.setProperty('right', 'auto', 'important');
+                newIconsWrapper.style.setProperty('top', '0px', 'important');
+              }
+              
+              // Force a reflow
           newIconsWrapper.offsetHeight;
+            }
           
-          // Automatically open chat dialog for simplified text
-          const simplifiedData = {
+            // Store streaming data with accumulated text
+            const streamingSimplifiedData = {
             text: eventData.text,
-            simplifiedText: eventData.simplifiedText,
+              simplifiedText: eventData.accumulatedSimplifiedText || '', // Use accumulated text for streaming
             textStartIndex: eventData.textStartIndex,
             textLength: eventData.textLength,
             previousSimplifiedTexts: eventData.previousSimplifiedTexts || [],
-            shouldAllowSimplifyMore: eventData.shouldAllowSimplifyMore || false,
+              shouldAllowSimplifyMore: false, // Will be set on complete
             highlight: highlight
           };
           
-          // Store simplified text data first so it's available when dialog opens
-          TextSelector.simplifiedTexts.set(textKey, {
-            textStartIndex: eventData.textStartIndex,
-            textLength: eventData.textLength,
-            text: eventData.text,
-            simplifiedText: eventData.simplifiedText,
-            previousSimplifiedTexts: eventData.previousSimplifiedTexts || [],
-            shouldAllowSimplifyMore: eventData.shouldAllowSimplifyMore || false,
-            highlight: highlight
-          });
-          
-          // Wait for book icon to be in DOM and visible before opening dialog
-          // Use requestAnimationFrame to ensure DOM is fully updated
-          requestAnimationFrame(() => {
-            requestAnimationFrame(() => {
-              // Verify book icon is in DOM before opening (use safe method to avoid CSS selector issues)
-              let verifyBookIcon = null;
-              const allIconsWrappers = document.querySelectorAll('.vocab-text-icons-wrapper');
-              for (const wrapper of allIconsWrappers) {
-                const wrapperTextKey = wrapper.getAttribute('data-text-key');
-                if (wrapperTextKey === textKey) {
-                  verifyBookIcon = wrapper.querySelector('.vocab-text-book-btn');
-                  if (verifyBookIcon) break;
-                }
+            // Store in TextSelector for real-time updates
+            TextSelector.simplifiedTexts.set(textKey, streamingSimplifiedData);
+            
+            // Helper function to update UI with streaming data
+            const updateUIWithStreamingData = () => {
+              // Update the simplified data in the dialog
+              ChatDialog.simplifiedData = streamingSimplifiedData;
+              
+              // Try to find the container - check multiple ways
+              let container = null;
+              if (ChatDialog.dialogContainer) {
+                container = ChatDialog.dialogContainer.querySelector('#vocab-chat-simplified-container');
+              }
+              if (!container) {
+                container = document.getElementById('vocab-chat-simplified-container');
               }
               
-              if (verifyBookIcon) {
-                console.log('[ButtonPanel] Book icon verified in DOM, opening dialog');
-                ChatDialog.open(eventData.text, textKey, 'simplified', simplifiedData, 'selected');
+              if (container) {
+                console.log('[ButtonPanel] Updating UI with streaming data, accumulated text length:', eventData.accumulatedSimplifiedText?.length || 0);
+                ChatDialog.renderSimplifiedExplanations(container);
               } else {
-                console.log('[ButtonPanel] Book icon not found, retrying after delay...');
-                setTimeout(() => {
-                  ChatDialog.open(eventData.text, textKey, 'simplified', simplifiedData, 'selected');
-                }, 200);
+                console.log('[ButtonPanel] Container not found yet, will retry on next chunk');
               }
-            });
-          });
-          
-          // Position icons relative to highlight
-          const highlightRect = highlight.getBoundingClientRect();
-          const isInModal = highlight.closest('.vocab-custom-content-modal');
-          
-          if (isInModal) {
-            // In modal context: position to the left with sufficient margin
-            newIconsWrapper.style.setProperty('left', '-50px', 'important');
-            newIconsWrapper.style.setProperty('top', '-2px', 'important');
+            };
+            
+            // Open dialog on first chunk (only once)
+            if (!dialogOpened) {
+              dialogOpened = true;
+              console.log('[ButtonPanel] Opening dialog on first chunk for streaming');
+              
+              // Wait for book icon to be in DOM
+              requestAnimationFrame(() => {
+                requestAnimationFrame(() => {
+                  ChatDialog.open(eventData.text, textKey, 'simplified', streamingSimplifiedData, 'selected');
+                  
+                  // Update UI immediately after opening
+                  setTimeout(() => {
+                    updateUIWithStreamingData();
+                  }, 50); // Small delay to ensure dialog is fully rendered
+                });
+              });
           } else {
-            // In main webpage context: position to the left
-            newIconsWrapper.style.setProperty('left', '-40px', 'important');
-            newIconsWrapper.style.setProperty('top', '0px', 'important');
+              // Update existing dialog with streaming text on every chunk
+              if (ChatDialog.isOpen && ChatDialog.currentTextKey === textKey) {
+                updateUIWithStreamingData();
+              } else {
+                // Dialog might still be opening, try to update anyway
+                updateUIWithStreamingData();
+              }
+            }
           }
           
-          // Simplified text data already stored above before opening dialog
+          // Handle complete event (final data)
+          else if (eventData.type === 'complete' || eventData.simplifiedText) {
+            console.log('[ButtonPanel] Complete event - simplifiedText:', eventData.simplifiedText, 'shouldAllowSimplifyMore:', eventData.shouldAllowSimplifyMore);
+            
+            // Remove loading animation
+            highlight.classList.remove('vocab-text-loading');
+            
+            // Final simplified data
+            const simplifiedData = {
+              text: eventData.text,
+              simplifiedText: eventData.simplifiedText,
+              textStartIndex: eventData.textStartIndex,
+              textLength: eventData.textLength,
+              previousSimplifiedTexts: eventData.previousSimplifiedTexts || [],
+              shouldAllowSimplifyMore: eventData.shouldAllowSimplifyMore || false,
+              highlight: highlight
+            };
+            
+            // Store final simplified text data
+            TextSelector.simplifiedTexts.set(textKey, simplifiedData);
+            
+            // Update dialog if it's open
+            if (ChatDialog.isOpen && ChatDialog.currentTextKey === textKey) {
+              ChatDialog.simplifiedData = simplifiedData;
+              const container = ChatDialog.dialogContainer?.querySelector('#vocab-chat-simplified-container');
+              if (container) {
+                ChatDialog.renderSimplifiedExplanations(container);
+              }
+            } else if (!dialogOpened) {
+              // If dialog wasn't opened during streaming, open it now
+              dialogOpened = true;
+              ChatDialog.open(eventData.text, textKey, 'simplified', simplifiedData, 'selected');
+            }
           
           // Store simplified text in analysis data for persistence
           if (this.topicsModal && this.topicsModal.customContentModal && this.topicsModal.customContentModal.activeTabId) {
@@ -17483,27 +19217,25 @@ const ButtonPanel = {
                 timestamp: new Date().toISOString()
               };
               
-              // Check if this text already exists in simplifiedMeanings
               const existingTextIndex = activeContent.analysis.simplifiedMeanings.findIndex(s => 
                 s.textKey === textKey
               );
               
               if (existingTextIndex !== -1) {
-                // Update existing simplified text
                 activeContent.analysis.simplifiedMeanings[existingTextIndex] = simplifiedTextData;
                 console.log(`[ButtonPanel] Updated existing simplified text for textKey "${textKey}" in analysis data`);
               } else {
-                // Add new simplified text
                 activeContent.analysis.simplifiedMeanings.push(simplifiedTextData);
                 console.log(`[ButtonPanel] Added new simplified text for textKey "${textKey}" to analysis data`);
               }
             }
           }
           
-          // Update button states after adding to simplifiedTexts
+            // Update button states
           this.updateButtonStatesFromSelections();
           
           console.log('[ButtonPanel] Text simplified successfully for:', textKey);
+          }
         }
       },
       // onComplete callback
@@ -17630,12 +19362,16 @@ const ButtonPanel = {
           }
         }
         
+        // Track which text objects have had their dialog opened
+        const dialogOpenedMap = new Map(); // textKey -> boolean
+        const bookIconCreatedMap = new Map(); // textKey -> boolean
+        
         // Call SimplifyService with SSE
         SimplifyService.simplify(
           textSegments,
           // onEvent callback - called for each SSE event
           (eventData) => {
-            console.log('[ButtonPanel] Received simplified text:', eventData);
+            console.log('[ButtonPanel] Received simplified text event:', eventData);
             
             // Find the corresponding textKey for this event
             // Match by textStartIndex and textLength
@@ -17650,8 +19386,16 @@ const ButtonPanel = {
               const highlight = TextSelector.textToHighlights.get(matchingTextKey);
               
               if (highlight) {
-                // Remove loading animation
+                // Handle chunk events (streaming)
+                if (eventData.chunk !== undefined) {
+                  console.log('[ButtonPanel] Chunk event for', matchingTextKey, '- chunk:', eventData.chunk, 'accumulatedSimplifiedText:', eventData.accumulatedSimplifiedText);
+                  
+                  // Remove loading animation on first chunk
                 highlight.classList.remove('vocab-text-loading');
+                  
+                  // Create book icon and green cross button on first chunk (only once per text)
+                  if (!bookIconCreatedMap.get(matchingTextKey)) {
+                    bookIconCreatedMap.set(matchingTextKey, true);
                 
                 // Change underline to light green
                 highlight.classList.add('vocab-text-simplified');
@@ -17662,7 +19406,7 @@ const ButtonPanel = {
                   existingPurpleCross.remove();
                 }
                 
-                // Create green cross button at top-left (same position as purple cross)
+                    // Create green cross button at top-left
                 const greenCrossBtn = document.createElement('button');
                 greenCrossBtn.className = 'vocab-text-remove-green-btn';
                 greenCrossBtn.setAttribute('aria-label', 'Remove simplified text');
@@ -17683,13 +19427,11 @@ const ButtonPanel = {
                 greenCrossBtn.style.border = '1px solid #22c55e';
                 greenCrossBtn.style.padding = '0';
                 greenCrossBtn.style.boxSizing = 'border-box';
-                // Use green cross icon
                 greenCrossBtn.innerHTML = `
                   <svg width="10" height="10" viewBox="0 0 10 10" fill="none" xmlns="http://www.w3.org/2000/svg" style="width: 8px; height: 8px;">
                     <path d="M2 2L8 8M8 2L2 8" stroke="#22c55e" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
                   </svg>
                 `;
-                // Add click handler - same functionality as green remove button
                 greenCrossBtn.addEventListener('click', (e) => {
                   e.preventDefault();
                   e.stopPropagation();
@@ -17698,72 +19440,138 @@ const ButtonPanel = {
                 });
                 highlight.appendChild(greenCrossBtn);
                 
-                // Create wrapper for icons
+                    // Create wrapper for icons (book icon positioned at top-left)
                 const iconsWrapper = document.createElement('div');
-                iconsWrapper.className = 'vocab-text-icons-wrapper';
+                    iconsWrapper.className = 'vocab-text-icons-wrapper vocab-text-icons-wrapper-book';
                 iconsWrapper.setAttribute('data-text-key', matchingTextKey);
                 
-                // Add book icon first (top position)
+                    // Add book icon
                 const bookBtn = TextSelector.createBookButton(matchingTextKey);
                 iconsWrapper.appendChild(bookBtn);
                 
-                // Don't add green remove button - green cross button at top-left has same functionality
-                
-                // Automatically open chat dialog for simplified text
-                const simplifiedData = {
+                    // Position book icon wrapper
+                    iconsWrapper.style.setProperty('position', 'absolute', 'important');
+                    iconsWrapper.style.setProperty('display', 'flex', 'important');
+                    iconsWrapper.style.setProperty('margin', '0', 'important');
+                    iconsWrapper.style.setProperty('padding', '0', 'important');
+                    
+                    const isInModal = highlight.closest('.vocab-custom-content-modal');
+                    if (isInModal) {
+                      iconsWrapper.style.setProperty('left', '-50px', 'important');
+                      iconsWrapper.style.setProperty('right', 'auto', 'important');
+                      iconsWrapper.style.setProperty('top', '-2px', 'important');
+                    } else {
+                      iconsWrapper.style.setProperty('left', '-45px', 'important');
+                      iconsWrapper.style.setProperty('right', 'auto', 'important');
+                      iconsWrapper.style.setProperty('top', '0px', 'important');
+                    }
+                    
+                    // Append icons wrapper to highlight
+                    highlight.appendChild(iconsWrapper);
+                    
+                    // Force a reflow
+                    iconsWrapper.offsetHeight;
+                  }
+                  
+                  // Store streaming data with accumulated text
+                  const streamingSimplifiedData = {
                   text: eventData.text,
-                  simplifiedText: eventData.simplifiedText,
+                    simplifiedText: eventData.accumulatedSimplifiedText || '', // Use accumulated text for streaming
                   textStartIndex: eventData.textStartIndex,
                   textLength: eventData.textLength,
                   previousSimplifiedTexts: eventData.previousSimplifiedTexts || [],
-                  shouldAllowSimplifyMore: eventData.shouldAllowSimplifyMore || false
-                };
-                
-                // Use a small delay to ensure DOM is updated
-                setTimeout(() => {
-                  ChatDialog.open(eventData.text, matchingTextKey, 'simplified', simplifiedData, 'selected');
-                }, 100);
-                
-                // Append icons wrapper directly to highlight for absolute positioning
-                highlight.appendChild(iconsWrapper);
-                
-                // Position icons relative to highlight
-                const highlightRect = highlight.getBoundingClientRect();
-                const isInModal = highlight.closest('.vocab-custom-content-modal');
-                
-                if (isInModal) {
-                  // In modal context: position to the left with sufficient margin to avoid overlap
-                  iconsWrapper.style.setProperty('left', '-50px', 'important'); // 50px to the left with !important
-                  // Align upper border with text upper border by adjusting top position
-                  iconsWrapper.style.setProperty('top', '-2px', 'important'); // Slight adjustment to align upper borders
+                    shouldAllowSimplifyMore: false, // Will be set on complete
+                    highlight: highlight
+                  };
+                  
+                  // Store in TextSelector for real-time updates
+                  TextSelector.simplifiedTexts.set(matchingTextKey, streamingSimplifiedData);
+                  
+                  // Helper function to update UI with streaming data
+                  const updateUIWithStreamingData = () => {
+                    // Update the simplified data in the dialog
+                    ChatDialog.simplifiedData = streamingSimplifiedData;
+                    
+                    // Try to find the container - check multiple ways
+                    let container = null;
+                    if (ChatDialog.dialogContainer) {
+                      container = ChatDialog.dialogContainer.querySelector('#vocab-chat-simplified-container');
+                    }
+                    if (!container) {
+                      container = document.getElementById('vocab-chat-simplified-container');
+                    }
+                    
+                    if (container) {
+                      console.log('[ButtonPanel] Updating UI with streaming data for', matchingTextKey, ', accumulated text length:', eventData.accumulatedSimplifiedText?.length || 0);
+                      ChatDialog.renderSimplifiedExplanations(container);
                 } else {
-                  // In main webpage context: position to the left as before
-                  iconsWrapper.style.setProperty('left', '-40px', 'important'); // 40px to the left of the highlight
-                  iconsWrapper.style.setProperty('top', '0px', 'important'); // Align with top edge of selected text
+                      console.log('[ButtonPanel] Container not found yet for', matchingTextKey, ', will retry on next chunk');
+                    }
+                  };
+                  
+                  // Open dialog on first chunk (only once per text)
+                  if (!dialogOpenedMap.get(matchingTextKey)) {
+                    dialogOpenedMap.set(matchingTextKey, true);
+                    console.log('[ButtonPanel] Opening dialog on first chunk for streaming:', matchingTextKey);
+                    
+                    // Wait for book icon to be in DOM
+                    requestAnimationFrame(() => {
+                      requestAnimationFrame(() => {
+                        ChatDialog.open(eventData.text, matchingTextKey, 'simplified', streamingSimplifiedData, 'selected');
+                        
+                        // Update UI immediately after opening
+                        setTimeout(() => {
+                          updateUIWithStreamingData();
+                        }, 50); // Small delay to ensure dialog is fully rendered
+                      });
+                    });
+                  } else {
+                    // Update existing dialog with streaming text on every chunk
+                    if (ChatDialog.isOpen && ChatDialog.currentTextKey === matchingTextKey) {
+                      updateUIWithStreamingData();
+                    } else {
+                      // Dialog might still be opening, try to update anyway
+                      updateUIWithStreamingData();
+                    }
+                  }
                 }
                 
-                // Store simplified text data
-                TextSelector.simplifiedTexts.set(matchingTextKey, {
-                  textStartIndex: eventData.textStartIndex,
-                  textLength: eventData.textLength,
+                // Handle complete event (final data)
+                else if (eventData.type === 'complete' || eventData.simplifiedText) {
+                  console.log('[ButtonPanel] Complete event for', matchingTextKey, '- simplifiedText:', eventData.simplifiedText, 'shouldAllowSimplifyMore:', eventData.shouldAllowSimplifyMore);
+                  
+                  // Remove loading animation
+                  highlight.classList.remove('vocab-text-loading');
+                  
+                  // Final simplified data
+                  const simplifiedData = {
                   text: eventData.text,
                   simplifiedText: eventData.simplifiedText,
+                    textStartIndex: eventData.textStartIndex,
+                    textLength: eventData.textLength,
                   previousSimplifiedTexts: eventData.previousSimplifiedTexts || [],
                   shouldAllowSimplifyMore: eventData.shouldAllowSimplifyMore || false,
                   highlight: highlight
-                });
-                
-                // Force repositioning after a short delay to ensure DOM is updated
-                setTimeout(() => {
-                  const isInModalAfterDelay = highlight.closest('.vocab-custom-content-modal');
-                  if (isInModalAfterDelay) {
-                    iconsWrapper.style.setProperty('left', '-50px', 'important');
-                    iconsWrapper.style.setProperty('top', '-2px', 'important');
+                  };
+                  
+                  // Store final simplified text data
+                  TextSelector.simplifiedTexts.set(matchingTextKey, simplifiedData);
+                  
+                  // Update dialog if it's open
+                  if (ChatDialog.isOpen && ChatDialog.currentTextKey === matchingTextKey) {
+                    ChatDialog.simplifiedData = simplifiedData;
+                    const container = ChatDialog.dialogContainer?.querySelector('#vocab-chat-simplified-container');
+                    if (container) {
+                      ChatDialog.renderSimplifiedExplanations(container);
+                    }
+                  } else if (!dialogOpenedMap.get(matchingTextKey)) {
+                    // If dialog wasn't opened during streaming, open it now
+                    dialogOpenedMap.set(matchingTextKey, true);
+                    ChatDialog.open(eventData.text, matchingTextKey, 'simplified', simplifiedData, 'selected');
                   }
-                }, 100);
                 
                 // Store simplified text in analysis data for persistence
-                if (this.topicsModal.customContentModal.activeTabId) {
+                  if (this.topicsModal && this.topicsModal.customContentModal && this.topicsModal.customContentModal.activeTabId) {
                   const activeContent = this.topicsModal.customContentModal.getContentByTabId(parseInt(this.topicsModal.customContentModal.activeTabId));
                   if (activeContent && activeContent.analysis) {
                     const simplifiedTextData = {
@@ -17795,9 +19603,10 @@ const ButtonPanel = {
                 }
                 
                 // Update button states after adding to simplifiedTexts
-                ButtonPanel.updateButtonStatesFromSelections();
+                  this.updateButtonStatesFromSelections();
                 
                 console.log('[ButtonPanel] Updated UI for text segment:', matchingTextKey);
+                }
               }
             }
           },

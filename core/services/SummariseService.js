@@ -15,30 +15,51 @@ class SummariseService {
   static ENDPOINT = ApiConfig.ENDPOINTS.SUMMARISE;
   
   /**
-   * Summarise text content
+   * Summarise text content using SSE
    * @param {string} text - The text content to summarise
-   * @returns {Promise<Object>} Promise that resolves to { summary: string }
+   * @param {Function} onEvent - Callback for each SSE event (data)
+   * @param {Function} onComplete - Callback when stream completes
+   * @param {Function} onError - Callback for errors
+   * @returns {Function} Abort function to cancel the request
    */
-  static async summarise(text) {
+  static async summarise(text, onEvent, onComplete, onError) {
     const url = `${this.BASE_URL}${this.ENDPOINT}`;
     
     try {
-      console.log('[SummariseService] Starting summarise request to:', url);
+      console.log('[SummariseService] Starting SSE request to:', url);
       console.log('[SummariseService] Text length:', text.length);
       
       // Create abort controller for cancellation
       const abortController = new AbortController();
       
-      // Prepare request payload
-      const requestBody = {
-        text: text
+      // Get language code from localStorage
+      const getLanguageCode = () => {
+        try {
+          const language = localStorage.getItem('language') || 'none';
+          // If language is "none" or "Page Language", return "none"
+          if (language === 'none' || language === 'Page Language') {
+            return 'none';
+          }
+          // Otherwise, convert to uppercase (e.g., "Spanish" -> "SPANISH")
+          return language.toUpperCase();
+        } catch (error) {
+          console.warn('[SummariseService] Error getting language from localStorage:', error);
+          return 'none';
+        }
       };
       
-      // Make the API request
+      // Prepare request payload
+      const requestBody = {
+        text: text,
+        languageCode: getLanguageCode()
+      };
+      
+      // Make the SSE request
       const response = await fetch(url, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          'Accept': 'text/event-stream'
         },
         body: JSON.stringify(requestBody),
         signal: abortController.signal
@@ -66,11 +87,125 @@ class SummariseService {
         throw new Error(errorMessage);
       }
       
-      // Parse JSON response
-      const data = await response.json();
-      console.log('[SummariseService] Response received:', data);
+      // Process the SSE stream
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
       
-      return data;
+      // Read the stream
+      const processStream = async () => {
+        try {
+          while (true) {
+            const { done, value } = await reader.read();
+            
+            if (done) {
+              console.log('[SummariseService] Stream complete');
+              if (onComplete) onComplete();
+              break;
+            }
+            
+            // Decode the chunk
+            buffer += decoder.decode(value, { stream: true });
+            
+            // Process complete lines
+            const lines = buffer.split('\n');
+            buffer = lines.pop() || ''; // Keep incomplete line in buffer
+            
+            for (const line of lines) {
+              if (line.trim() === '') continue;
+              
+              // SSE format: "data: {json}" or "data: [DONE]"
+              if (line.startsWith('data: ')) {
+                const dataStr = line.slice(6).trim();
+                
+                // Check for completion signal
+                if (dataStr === '[DONE]') {
+                  console.log('[SummariseService] Received [DONE] signal');
+                  if (onComplete) onComplete();
+                  break;
+                }
+                
+                // Parse JSON data
+                try {
+                  const data = JSON.parse(dataStr);
+                  console.log('[SummariseService] Received event:', data);
+                  
+                  // Handle chunk events (word-by-word streaming)
+                  if (data.chunk !== undefined) {
+                    console.log('[SummariseService] Chunk event - chunk:', data.chunk, 'accumulated length:', data.accumulated?.length || 0);
+                    if (onEvent) {
+                      // Pass chunk event with accumulated text for real-time display
+                      onEvent({
+                        chunk: data.chunk,
+                        accumulated: data.accumulated
+                      });
+                    }
+                  }
+                  
+                  // Handle complete event (final summary)
+                  else if (data.type === 'complete') {
+                    console.log('[SummariseService] Complete event - summary length:', data.summary?.length || 0);
+                    if (onEvent) {
+                      // Pass complete event with final data
+                      onEvent({
+                        type: 'complete',
+                        summary: data.summary
+                      });
+                    }
+                  }
+                  
+                  // Handle error events
+                  else if (data.type === 'error') {
+                    const error = new Error(data.error_message || data.error || 'Stream error occurred');
+                    error.error_code = data.error_code;
+                    console.error('[SummariseService] Error event:', error);
+                    if (onError) {
+                      onError(error);
+                    }
+                  }
+                  
+                  // Handle regular events (backward compatibility)
+                  else {
+                    if (onEvent) {
+                      onEvent(data);
+                    }
+                  }
+                } catch (parseError) {
+                  console.error('[SummariseService] Error parsing event data:', parseError);
+                  console.error('[SummariseService] Raw data that failed to parse:', dataStr);
+                }
+              }
+            }
+          }
+        } catch (streamError) {
+          if (streamError.name === 'AbortError') {
+            console.log('[SummariseService] Request aborted');
+          } else {
+            console.error('[SummariseService] Stream processing error:', streamError);
+            if (onError) {
+              // Provide more helpful error messages
+              let errorMessage = streamError.message;
+              
+              if (streamError.message.includes('Failed to fetch') || streamError.name === 'TypeError') {
+                errorMessage = 'Cannot connect to API server. Please check:\n' +
+                              '1. Backend server is running at ' + this.BASE_URL + '\n' +
+                              '2. CORS is properly configured to allow requests from this origin';
+              }
+              
+              onError(new Error(errorMessage));
+            }
+          }
+        }
+      };
+      
+      // Start processing the stream
+      processStream();
+      
+      // Return abort function
+      return () => {
+        console.log('[SummariseService] Aborting request');
+        abortController.abort();
+      };
       
     } catch (error) {
       console.error('[SummariseService] Error initiating summarise request:', error);
@@ -84,7 +219,12 @@ class SummariseService {
                       '2. CORS is properly configured to allow requests from this origin';
       }
       
-      throw new Error(errorMessage);
+      if (onError) {
+        onError(new Error(errorMessage));
+      }
+      
+      // Return a no-op abort function
+      return () => {};
     }
   }
   
