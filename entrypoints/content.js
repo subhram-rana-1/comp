@@ -5568,9 +5568,9 @@ const TextSelector = {
     const removeBtn = this.createRemoveButton(text);
     highlight.appendChild(removeBtn);
     
-    // Create icons wrapper for magic-meaning button (positioned to the left)
+    // Create icons wrapper for magic-meaning button (positioned at the END of selected text)
     const iconsWrapper = document.createElement('div');
-    iconsWrapper.className = 'vocab-text-icons-wrapper';
+    iconsWrapper.className = 'vocab-text-icons-wrapper vocab-text-icons-wrapper-magic';
     iconsWrapper.setAttribute('data-text-key', textKey);
     
     // Add magic-meaning button
@@ -5580,27 +5580,123 @@ const TextSelector = {
     // Append icons wrapper to highlight
     highlight.appendChild(iconsWrapper);
     
-    // Position icons relative to highlight - on the left side, outside text content
+    // Position icons relative to highlight - at the END (right side), outside text content
     // Force absolute positioning to ensure it's always outside the text
     iconsWrapper.style.setProperty('position', 'absolute', 'important');
     iconsWrapper.style.setProperty('display', 'flex', 'important');
     iconsWrapper.style.setProperty('margin', '0', 'important');
     iconsWrapper.style.setProperty('padding', '0', 'important');
     
-    const highlightRect = highlight.getBoundingClientRect();
-    const isInModal = highlight.closest('.vocab-custom-content-modal');
+    // Function to position button at the end of the selected text
+    const positionAtEndOfText = () => {
+      try {
+        // Wait for DOM to be ready
+        if (!highlight.offsetParent && highlight.offsetWidth === 0 && highlight.offsetHeight === 0) {
+          // Element not yet in DOM or not visible, retry later
+          setTimeout(positionAtEndOfText, 100);
+          return;
+        }
+        
+        // Get the highlight's bounding rectangle (relative to viewport)
+        const highlightRect = highlight.getBoundingClientRect();
+        
+        if (!highlightRect || highlightRect.width === 0 && highlightRect.height === 0) {
+          throw new Error('Highlight not visible or has no dimensions');
+        }
+        
+        // Find the last text node in the highlight
+        const walker = document.createTreeWalker(
+          highlight,
+          NodeFilter.SHOW_TEXT,
+          null
+        );
+        
+        let lastTextNode = null;
+        let node;
+        while (node = walker.nextNode()) {
+          if (node.textContent.trim().length > 0) {
+            lastTextNode = node;
+          }
+        }
+        
+        if (!lastTextNode) {
+          throw new Error('No text node found in highlight');
+        }
+        
+        // Create a range at the end of the last text node
+        const range = document.createRange();
+        const textLength = lastTextNode.textContent.length;
+        range.setStart(lastTextNode, textLength);
+        range.setEnd(lastTextNode, textLength);
+        
+        // Get the bounding rectangle of the end position (relative to viewport)
+        const endRect = range.getBoundingClientRect();
+        
+        // Validate that we have valid rectangles
+        if (!endRect || (endRect.width === 0 && endRect.height === 0)) {
+          // If collapsed range has no dimensions, use the highlight's bottom-right corner
+          const relativeLeft = highlightRect.width;
+          const relativeTop = highlightRect.height;
+          
+          iconsWrapper.style.setProperty('left', `${relativeLeft + 8}px`, 'important');
+          iconsWrapper.style.setProperty('right', 'auto', 'important');
+          iconsWrapper.style.setProperty('top', `${relativeTop + 2}px`, 'important');
+          iconsWrapper.style.setProperty('bottom', 'auto', 'important');
+          
+          console.log('[TextSelector] Positioned magic button at bottom-right of highlight (fallback):', { relativeLeft, relativeTop });
+          return;
+        }
+        
+        // Calculate position relative to highlight container
+        // Both rects are relative to viewport, so subtract to get relative position
+        const relativeLeft = endRect.right - highlightRect.left;
+        const relativeTop = endRect.bottom - highlightRect.top;
+        
+        // Validate coordinates - ensure they're reasonable
+        if (isNaN(relativeLeft) || isNaN(relativeTop)) {
+          throw new Error(`NaN coordinates: left=${relativeLeft}, top=${relativeTop}`);
+        }
+        
+        // Ensure coordinates are within reasonable bounds
+        if (relativeLeft < -1000 || relativeLeft > 10000 || relativeTop < -1000 || relativeTop > 10000) {
+          throw new Error(`Coordinates out of bounds: left=${relativeLeft}, top=${relativeTop}`);
+        }
+        
+        // Position button to the right (8px from end) and slightly below (2px) the last word
+        iconsWrapper.style.setProperty('left', `${relativeLeft + 8}px`, 'important');
+        iconsWrapper.style.setProperty('right', 'auto', 'important');
+        iconsWrapper.style.setProperty('top', `${relativeTop + 2}px`, 'important'); // Slightly below
+        iconsWrapper.style.setProperty('bottom', 'auto', 'important');
+        
+        console.log('[TextSelector] Positioned magic button at end of text:', { 
+          relativeLeft, 
+          relativeTop, 
+          endRect: { right: endRect.right, bottom: endRect.bottom, width: endRect.width, height: endRect.height },
+          highlightRect: { left: highlightRect.left, top: highlightRect.top, width: highlightRect.width, height: highlightRect.height }
+        });
+      } catch (error) {
+        console.warn('[TextSelector] Error positioning button at end of text, using fallback:', error);
+        // Fallback: use original positioning (right side of highlight)
+        const highlightRect = highlight.getBoundingClientRect();
+        const isInModal = highlight.closest('.vocab-custom-content-modal');
+        
+        if (isInModal) {
+          iconsWrapper.style.setProperty('right', '-50px', 'important');
+          iconsWrapper.style.setProperty('left', 'auto', 'important');
+          iconsWrapper.style.setProperty('top', '-2px', 'important');
+        } else {
+          iconsWrapper.style.setProperty('right', '-45px', 'important');
+          iconsWrapper.style.setProperty('left', 'auto', 'important');
+          iconsWrapper.style.setProperty('top', '0px', 'important');
+        }
+      }
+    };
     
-    if (isInModal) {
-      // In modal context: position to the left with sufficient margin
-      iconsWrapper.style.setProperty('left', '-50px', 'important');
-      iconsWrapper.style.setProperty('right', 'auto', 'important');
-      iconsWrapper.style.setProperty('top', '-2px', 'important');
-    } else {
-      // In main webpage context: position to the left, outside text content
-      iconsWrapper.style.setProperty('left', '-45px', 'important');
-      iconsWrapper.style.setProperty('right', 'auto', 'important');
-      iconsWrapper.style.setProperty('top', '0px', 'important');
-    }
+    // Position immediately and also after a short delay to ensure DOM is ready
+    positionAtEndOfText();
+    setTimeout(() => {
+      positionAtEndOfText();
+    }, 50);
     
     // Remove the appearing class after animation completes
     setTimeout(() => {
@@ -6674,15 +6770,26 @@ const TextSelector = {
         animation: vocab-icon-appear 0.4s ease-out;
         pointer-events: auto !important;
         transition: opacity 0.3s ease-out, transform 0.3s ease-out;
-        left: -45px !important; /* Default: position on left side, outside text */
-        right: auto !important; /* Ensure right is not set */
-        top: 0px !important; /* Align with top of text */
         margin: 0 !important; /* Remove any margins */
         padding: 0 !important; /* Remove any padding */
         width: auto !important; /* Auto width */
         height: auto !important; /* Auto height */
         min-width: 0 !important; /* No min-width */
         max-width: none !important; /* No max-width */
+      }
+      
+      /* Magic meaning button wrapper - positioned at END (right side) of selected text */
+      .vocab-text-icons-wrapper-magic {
+        right: -45px !important; /* Position on right side (end of text), outside text */
+        left: auto !important; /* Ensure left is not set */
+        top: 0px !important; /* Align with top of text */
+      }
+      
+      /* Book icon wrapper - positioned at TOP-LEFT of selected text */
+      .vocab-text-icons-wrapper-book {
+        left: -45px !important; /* Position on left side, outside text */
+        right: auto !important; /* Ensure right is not set */
+        top: 0px !important; /* Align with top of text */
       }
 
       /* Modal context: enhanced styling */
@@ -6692,8 +6799,20 @@ const TextSelector = {
         border-radius: 8px;
         padding: 4px;
         box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+      }
+      
+      /* Modal context: magic meaning button wrapper - positioned at END (right side) */
+      .vocab-custom-content-modal .vocab-text-icons-wrapper-magic {
+        right: -50px !important; /* Position on right side (end of text) in modal context */
+        left: auto !important; /* Ensure left is not set */
+        top: -2px !important; /* Slight offset for modal */
+      }
+      
+      /* Modal context: book icon wrapper - positioned at TOP-LEFT */
+      .vocab-custom-content-modal .vocab-text-icons-wrapper-book {
         left: -50px !important; /* Position on left side in modal context */
         right: auto !important; /* Ensure right is not set */
+        top: -2px !important; /* Slight offset for modal */
       }
       
       /* Chat button - Solid purple circle with white chat icon on top-left (bigger) */
@@ -17539,9 +17658,9 @@ const ButtonPanel = {
           });
           highlight.appendChild(greenCrossBtn);
           
-          // Create wrapper for icons
+          // Create wrapper for icons (book icon positioned at top-left)
           const newIconsWrapper = document.createElement('div');
-          newIconsWrapper.className = 'vocab-text-icons-wrapper';
+          newIconsWrapper.className = 'vocab-text-icons-wrapper vocab-text-icons-wrapper-book';
           newIconsWrapper.setAttribute('data-text-key', textKey);
           
           // Add book icon first (top position)
@@ -17552,6 +17671,25 @@ const ButtonPanel = {
           
           // Append icons wrapper directly to highlight for absolute positioning
           highlight.appendChild(newIconsWrapper);
+          
+          // Position book icon wrapper at top-left (keep current position)
+          newIconsWrapper.style.setProperty('position', 'absolute', 'important');
+          newIconsWrapper.style.setProperty('display', 'flex', 'important');
+          newIconsWrapper.style.setProperty('margin', '0', 'important');
+          newIconsWrapper.style.setProperty('padding', '0', 'important');
+          
+          const isInModal = highlight.closest('.vocab-custom-content-modal');
+          if (isInModal) {
+            // In modal context: position to the left with sufficient margin
+            newIconsWrapper.style.setProperty('left', '-50px', 'important');
+            newIconsWrapper.style.setProperty('right', 'auto', 'important');
+            newIconsWrapper.style.setProperty('top', '-2px', 'important');
+          } else {
+            // In main webpage context: position to the left, outside text content
+            newIconsWrapper.style.setProperty('left', '-45px', 'important');
+            newIconsWrapper.style.setProperty('right', 'auto', 'important');
+            newIconsWrapper.style.setProperty('top', '0px', 'important');
+          }
           
           // Force a reflow to ensure book icon is in DOM
           newIconsWrapper.offsetHeight;
@@ -17604,20 +17742,6 @@ const ButtonPanel = {
               }
             });
           });
-          
-          // Position icons relative to highlight
-          const highlightRect = highlight.getBoundingClientRect();
-          const isInModal = highlight.closest('.vocab-custom-content-modal');
-          
-          if (isInModal) {
-            // In modal context: position to the left with sufficient margin
-            newIconsWrapper.style.setProperty('left', '-50px', 'important');
-            newIconsWrapper.style.setProperty('top', '-2px', 'important');
-          } else {
-            // In main webpage context: position to the left
-            newIconsWrapper.style.setProperty('left', '-40px', 'important');
-            newIconsWrapper.style.setProperty('top', '0px', 'important');
-          }
           
           // Simplified text data already stored above before opening dialog
           
@@ -17851,9 +17975,9 @@ const ButtonPanel = {
                 });
                 highlight.appendChild(greenCrossBtn);
                 
-                // Create wrapper for icons
+                // Create wrapper for icons (book icon positioned at top-left)
                 const iconsWrapper = document.createElement('div');
-                iconsWrapper.className = 'vocab-text-icons-wrapper';
+                iconsWrapper.className = 'vocab-text-icons-wrapper vocab-text-icons-wrapper-book';
                 iconsWrapper.setAttribute('data-text-key', matchingTextKey);
                 
                 // Add book icon first (top position)
@@ -17861,6 +17985,25 @@ const ButtonPanel = {
                 iconsWrapper.appendChild(bookBtn);
                 
                 // Don't add green remove button - green cross button at top-left has same functionality
+                
+                // Position book icon wrapper at top-left (keep current position)
+                iconsWrapper.style.setProperty('position', 'absolute', 'important');
+                iconsWrapper.style.setProperty('display', 'flex', 'important');
+                iconsWrapper.style.setProperty('margin', '0', 'important');
+                iconsWrapper.style.setProperty('padding', '0', 'important');
+                
+                const isInModal = highlight.closest('.vocab-custom-content-modal');
+                if (isInModal) {
+                  // In modal context: position to the left with sufficient margin
+                  iconsWrapper.style.setProperty('left', '-50px', 'important');
+                  iconsWrapper.style.setProperty('right', 'auto', 'important');
+                  iconsWrapper.style.setProperty('top', '-2px', 'important');
+                } else {
+                  // In main webpage context: position to the left, outside text content
+                  iconsWrapper.style.setProperty('left', '-45px', 'important');
+                  iconsWrapper.style.setProperty('right', 'auto', 'important');
+                  iconsWrapper.style.setProperty('top', '0px', 'important');
+                }
                 
                 // Automatically open chat dialog for simplified text
                 const simplifiedData = {
@@ -17872,28 +18015,13 @@ const ButtonPanel = {
                   shouldAllowSimplifyMore: eventData.shouldAllowSimplifyMore || false
                 };
                 
+                // Append icons wrapper directly to highlight for absolute positioning
+                highlight.appendChild(iconsWrapper);
+                
                 // Use a small delay to ensure DOM is updated
                 setTimeout(() => {
                   ChatDialog.open(eventData.text, matchingTextKey, 'simplified', simplifiedData, 'selected');
                 }, 100);
-                
-                // Append icons wrapper directly to highlight for absolute positioning
-                highlight.appendChild(iconsWrapper);
-                
-                // Position icons relative to highlight
-                const highlightRect = highlight.getBoundingClientRect();
-                const isInModal = highlight.closest('.vocab-custom-content-modal');
-                
-                if (isInModal) {
-                  // In modal context: position to the left with sufficient margin to avoid overlap
-                  iconsWrapper.style.setProperty('left', '-50px', 'important'); // 50px to the left with !important
-                  // Align upper border with text upper border by adjusting top position
-                  iconsWrapper.style.setProperty('top', '-2px', 'important'); // Slight adjustment to align upper borders
-                } else {
-                  // In main webpage context: position to the left as before
-                  iconsWrapper.style.setProperty('left', '-40px', 'important'); // 40px to the left of the highlight
-                  iconsWrapper.style.setProperty('top', '0px', 'important'); // Align with top edge of selected text
-                }
                 
                 // Store simplified text data
                 TextSelector.simplifiedTexts.set(matchingTextKey, {
