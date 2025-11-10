@@ -2264,11 +2264,62 @@ const WordSelector = {
     console.log('[WordSelector] Original word:', word);
     console.log('[WordSelector] Normalized word for data-word:', normalizedWord);
     
+    // Get the computed styles from the element containing the selected text
+    // This preserves font-size, font-weight, color, and other font properties
+    const containerElement = range.commonAncestorContainer;
+    const elementToGetStyles = containerElement.nodeType === Node.TEXT_NODE 
+      ? containerElement.parentElement 
+      : containerElement;
+    
+    let computedStyles = {};
+    if (elementToGetStyles && elementToGetStyles.nodeType === Node.ELEMENT_NODE) {
+      const styles = window.getComputedStyle(elementToGetStyles);
+      // Preserve all font-related properties
+      computedStyles = {
+        fontSize: styles.fontSize,
+        fontWeight: styles.fontWeight,
+        fontFamily: styles.fontFamily,
+        fontStyle: styles.fontStyle,
+        color: styles.color,
+        lineHeight: styles.lineHeight,
+        letterSpacing: styles.letterSpacing,
+        textTransform: styles.textTransform,
+        textDecoration: styles.textDecoration,
+        fontVariant: styles.fontVariant,
+        fontStretch: styles.fontStretch
+      };
+      console.log('[WordSelector] Preserving font properties:', computedStyles);
+    }
+    
     // Create highlight wrapper
     const highlight = document.createElement('span');
     highlight.className = 'vocab-word-highlight';
     highlight.setAttribute('data-word', normalizedWord);
     highlight.setAttribute('data-highlight-id', `highlight-${this.highlightIdCounter++}`);
+    
+    // Apply preserved font properties to the highlight span
+    // Use setProperty with kebab-case names for better compatibility
+    if (Object.keys(computedStyles).length > 0) {
+      const propertyMap = {
+        fontSize: 'font-size',
+        fontWeight: 'font-weight',
+        fontFamily: 'font-family',
+        fontStyle: 'font-style',
+        color: 'color',
+        lineHeight: 'line-height',
+        letterSpacing: 'letter-spacing',
+        textTransform: 'text-transform',
+        textDecoration: 'text-decoration',
+        fontVariant: 'font-variant',
+        fontStretch: 'font-stretch'
+      };
+      
+      Object.entries(computedStyles).forEach(([property, value]) => {
+        const cssProperty = propertyMap[property] || property;
+        highlight.style.setProperty(cssProperty, value, 'important');
+      });
+      console.log('[WordSelector] Applied font properties to highlight span');
+    }
     
     console.log('[WordSelector] Highlight element created with data-word:', normalizedWord);
     
@@ -2689,21 +2740,6 @@ const WordSelector = {
     popup.style.setProperty('opacity', '0', 'important'); // Will be set to 1 when visible class is added
     popup.style.setProperty('pointer-events', 'none', 'important'); // Will be set to 'all' when visible
     
-    // Speaker icon for pronunciation - only show if languageCode is "EN"
-    if (languageCode === 'EN') {
-      const speakerBtn = document.createElement('button');
-      speakerBtn.className = 'vocab-word-popup-speaker';
-      speakerBtn.setAttribute('aria-label', `Pronounce "${word}"`);
-      speakerBtn.innerHTML = this.createSpeakerIcon();
-      speakerBtn.addEventListener('click', async (e) => {
-        e.stopPropagation();
-        await this.handlePronunciation(word, speakerBtn);
-      });
-      popup.appendChild(speakerBtn);
-      // Add class to popup to indicate speaker icon exists
-      popup.classList.add('has-speaker-icon');
-    }
-    
     // Meaning
     const meaningDiv = document.createElement('div');
     meaningDiv.className = 'vocab-word-popup-meaning';
@@ -2739,9 +2775,25 @@ const WordSelector = {
     popup.setAttribute('data-language-code', languageCode || '');
     popup.setAttribute('data-current-tab', languageCode || 'EN'); // Track current active tab
     
-    // Create bottom container for tab group and button
+    // Create bottom container for speaker icon, tab group, and button
     const bottomContainer = document.createElement('div');
     bottomContainer.className = 'vocab-word-popup-bottom-container';
+    
+    // Speaker icon for pronunciation - only show if languageCode is "EN"
+    // Add it to bottom container at the leftmost position
+    if (languageCode === 'EN') {
+      const speakerBtn = document.createElement('button');
+      speakerBtn.className = 'vocab-word-popup-speaker';
+      speakerBtn.setAttribute('aria-label', `Pronounce "${word}"`);
+      speakerBtn.innerHTML = this.createSpeakerIcon();
+      speakerBtn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        await this.handlePronunciation(word, speakerBtn);
+      });
+      bottomContainer.appendChild(speakerBtn);
+      // Add class to popup to indicate speaker icon exists
+      popup.classList.add('has-speaker-icon');
+    }
     
     // Language tab group - show if languageCode is not "EN"
     if (languageCode && languageCode !== 'EN') {
@@ -4644,10 +4696,7 @@ const WordSelector = {
         padding-top: 0; /* No padding by default */
       }
       
-      /* Add padding-top to meaning div when speaker icon exists */
-      .vocab-word-popup.has-speaker-icon .vocab-word-popup-meaning {
-        padding-top: 40px; /* Space for speaker icon (28px height + 12px top = 40px) */
-      }
+      /* No padding-top needed since speaker icon is now in bottom container */
       
       .vocab-word-popup-meaning .word-bold {
         font-weight: 600;
@@ -4716,14 +4765,14 @@ const WordSelector = {
         color: #A020F0;
       }
       
-      /* Bottom container for tab group and button */
+      /* Bottom container for speaker icon, tab group, and button */
       .vocab-word-popup-bottom-container {
         position: absolute;
         bottom: 24px;
         left: 24px;
         right: 24px;
         display: flex;
-        justify-content: space-between;
+        justify-content: flex-start;
         align-items: center;
         z-index: 20;
         gap: 12px;
@@ -4825,6 +4874,7 @@ const WordSelector = {
         text-align: center;
         min-width: 140px; /* Ensure button has minimum width */
         flex-shrink: 0;
+        margin-left: auto; /* Push button to the rightmost position */
       }
       
       .vocab-word-popup-button:hover:not(.loading) {
@@ -4879,11 +4929,9 @@ const WordSelector = {
         height: 16px;
       }
       
-      /* Speaker icon for pronunciation */
+      /* Speaker icon for pronunciation - now in bottom container */
       .vocab-word-popup-speaker {
-        position: absolute;
-        top: 12px;
-        left: 12px;
+        position: relative;
         width: 28px;
         height: 28px;
         background: #9527F5;
@@ -4895,7 +4943,7 @@ const WordSelector = {
         display: flex;
         align-items: center;
         justify-content: center;
-        z-index: 10;
+        flex-shrink: 0;
         box-shadow: 0 2px 8px rgba(149, 39, 245, 0.3);
       }
       
