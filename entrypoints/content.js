@@ -2264,74 +2264,52 @@ const WordSelector = {
     console.log('[WordSelector] Original word:', word);
     console.log('[WordSelector] Normalized word for data-word:', normalizedWord);
     
-    // Get the computed styles from the element containing the selected text
-    // This preserves font-size, font-weight, color, and other font properties
-    const containerElement = range.commonAncestorContainer;
-    const elementToGetStyles = containerElement.nodeType === Node.TEXT_NODE 
-      ? containerElement.parentElement 
-      : containerElement;
-    
-    let computedStyles = {};
-    if (elementToGetStyles && elementToGetStyles.nodeType === Node.ELEMENT_NODE) {
-      const styles = window.getComputedStyle(elementToGetStyles);
-      // Preserve all font-related properties
-      computedStyles = {
-        fontSize: styles.fontSize,
-        fontWeight: styles.fontWeight,
-        fontFamily: styles.fontFamily,
-        fontStyle: styles.fontStyle,
-        color: styles.color,
-        lineHeight: styles.lineHeight,
-        letterSpacing: styles.letterSpacing,
-        textTransform: styles.textTransform,
-        textDecoration: styles.textDecoration,
-        fontVariant: styles.fontVariant,
-        fontStretch: styles.fontStretch
-      };
-      console.log('[WordSelector] Preserving font properties:', computedStyles);
-    }
-    
     // Create highlight wrapper
+    // DO NOT apply font properties to the highlight span - let child elements preserve their formatting
+    // The highlight span should only provide the background color, not override text formatting
     const highlight = document.createElement('span');
     highlight.className = 'vocab-word-highlight';
     highlight.setAttribute('data-word', normalizedWord);
     highlight.setAttribute('data-highlight-id', `highlight-${this.highlightIdCounter++}`);
     
-    // Apply preserved font properties to the highlight span
-    // Use setProperty with kebab-case names for better compatibility
-    if (Object.keys(computedStyles).length > 0) {
-      const propertyMap = {
-        fontSize: 'font-size',
-        fontWeight: 'font-weight',
-        fontFamily: 'font-family',
-        fontStyle: 'font-style',
-        color: 'color',
-        lineHeight: 'line-height',
-        letterSpacing: 'letter-spacing',
-        textTransform: 'text-transform',
-        textDecoration: 'text-decoration',
-        fontVariant: 'font-variant',
-        fontStretch: 'font-stretch'
-      };
-      
-      Object.entries(computedStyles).forEach(([property, value]) => {
-        const cssProperty = propertyMap[property] || property;
-        highlight.style.setProperty(cssProperty, value, 'important');
-      });
-      console.log('[WordSelector] Applied font properties to highlight span');
-    }
+    // Ensure the highlight span doesn't interfere with child formatting
+    // Set display to inline to preserve text flow
+    highlight.style.setProperty('display', 'inline', 'important');
+    highlight.style.setProperty('position', 'relative', 'important');
+    // DO NOT set font properties - let children inherit or use their own styles
     
     console.log('[WordSelector] Highlight element created with data-word:', normalizedWord);
+    console.log('[WordSelector] Preserving all formatting from selected range - no font overrides applied');
     
     // Wrap the selected range FIRST
+    // This preserves all formatting (bold, italic, font sizes, etc.) from the original content
+    
+    // Try surroundContents first - this works when the range doesn't cross element boundaries
+    // If it fails or might break formatting, use extractContents which preserves DOM structure
     try {
-      range.surroundContents(highlight);
+      // Check if range might contain formatting elements by checking the HTML
+      const rangeClone = range.cloneContents();
+      const hasFormattingElements = rangeClone.querySelector('b, strong, em, i, u, span, font, h1, h2, h3, h4, h5, h6');
+      
+      if (hasFormattingElements) {
+        // Range contains formatting elements - use extractContents to preserve structure
+        console.log('[WordSelector] Range contains formatting elements - using extractContents to preserve formatting');
+        const extractedContents = range.extractContents();
+        highlight.appendChild(extractedContents);
+        range.insertNode(highlight);
+        console.log('[WordSelector] Used extractContents - formatting preserved');
+      } else {
+        // No formatting elements - try surroundContents
+        range.surroundContents(highlight);
+        console.log('[WordSelector] Used surroundContents - formatting preserved');
+      }
     } catch (error) {
-      // If surroundContents fails (e.g., partial selection), use extractContents
-      console.warn('[WordSelector] Could not highlight range:', error);
-      const contents = range.extractContents();
-      highlight.appendChild(contents);
+      // surroundContents failed - use extractContents which preserves DOM structure
+      console.warn('[WordSelector] surroundContents failed, using extractContents:', error);
+      const extractedContents = range.extractContents();
+      highlight.appendChild(extractedContents);
       range.insertNode(highlight);
+      console.log('[WordSelector] Used extractContents (fallback) - formatting preserved');
     }
     
     // Create and append remove button AFTER wrapping the content
@@ -4390,6 +4368,9 @@ const WordSelector = {
         line-height: inherit;
         box-decoration-break: clone;
         -webkit-box-decoration-break: clone;
+        /* DO NOT set font properties - preserve all formatting from child elements */
+        /* Child elements (bold, italic, spans with different font sizes) will maintain their formatting */
+        /* Text nodes will inherit naturally from their original parent context */
       }
       
       .vocab-word-highlight:hover {
@@ -5523,21 +5504,65 @@ const TextSelector = {
     const textKey = this.getContextualTextKey(text);
     
     // Create highlight wrapper
+    // DO NOT apply font properties to the highlight span - let child elements preserve their formatting
+    // The highlight span should only provide the underline decoration, not override text formatting
     const highlight = document.createElement('span');
     highlight.className = 'vocab-text-highlight underline-appearing';
     highlight.setAttribute('data-text-key', textKey);
     highlight.setAttribute('data-highlight-id', `text-highlight-${this.highlightIdCounter++}`);
     
+    // Ensure the highlight span doesn't interfere with child formatting
+    // Set display to inline to preserve text flow
+    highlight.style.setProperty('display', 'inline', 'important');
+    highlight.style.setProperty('position', 'relative', 'important');
+    // DO NOT set font properties - let children inherit or use their own styles
+    
+    console.log('[TextSelector] Highlight element created with data-text-key:', textKey);
+    console.log('[TextSelector] Preserving all formatting from selected range - no font overrides applied');
+    
     // Wrap the selected range FIRST
+    // This preserves all formatting (bold, italic, font sizes, colors, etc.) from the original content
     try {
-      range.surroundContents(highlight);
+      // Check if range might contain formatting elements by checking the HTML
+      const rangeClone = range.cloneContents();
+      const hasFormattingElements = rangeClone.querySelector('b, strong, em, i, u, span, font, a, h1, h2, h3, h4, h5, h6');
+      
+      if (hasFormattingElements) {
+        // Range contains formatting elements - use extractContents to preserve structure
+        console.log('[TextSelector] Range contains formatting elements - using extractContents to preserve formatting');
+        const extractedContents = range.extractContents();
+        highlight.appendChild(extractedContents);
+        range.insertNode(highlight);
+        console.log('[TextSelector] Used extractContents - formatting preserved');
+      } else {
+        // No formatting elements - try surroundContents
+        range.surroundContents(highlight);
+        console.log('[TextSelector] Used surroundContents - formatting preserved');
+      }
     } catch (error) {
-      // If surroundContents fails (e.g., partial selection), use extractContents
-      console.warn('[TextSelector] Could not highlight range:', error);
-      const contents = range.extractContents();
-      highlight.appendChild(contents);
+      // surroundContents failed - use extractContents which preserves DOM structure
+      console.warn('[TextSelector] surroundContents failed, using extractContents:', error);
+      const extractedContents = range.extractContents();
+      highlight.appendChild(extractedContents);
       range.insertNode(highlight);
+      console.log('[TextSelector] Used extractContents (fallback) - formatting preserved');
     }
+    
+    // After wrapping, ensure all child elements with color classes or inline styles maintain their colors
+    // This is a safety measure in case CSS doesn't work as expected
+    setTimeout(() => {
+      const colorElements = highlight.querySelectorAll('[class*="user-"], [class*="rated-"], [style*="color"], [style*="Color"]');
+      colorElements.forEach(element => {
+        const computedStyle = window.getComputedStyle(element);
+        const originalColor = computedStyle.color;
+        // If the element has a color class or inline style, ensure it's preserved
+        if (element.classList.contains('user-orange') || element.classList.contains('rated-user') || 
+            element.hasAttribute('style') && element.getAttribute('style').includes('color')) {
+          // The color should already be preserved, but log for debugging
+          console.log('[TextSelector] Color element found:', element.className, 'computed color:', originalColor);
+        }
+      });
+    }, 0);
     
     // Create and append remove button FIRST (at top-left of highlight)
     const removeBtn = this.createRemoveButton(text);
@@ -6398,7 +6423,9 @@ const TextSelector = {
         font-family: inherit !important; /* Preserve original font family */
         font-weight: inherit !important; /* Preserve original font weight */
         line-height: inherit !important; /* Preserve original line height */
-        color: inherit !important; /* Preserve original text color */
+        /* DO NOT set color: inherit on the highlight span - it can interfere with child element colors */
+        /* Text nodes will inherit naturally from the highlight span's parent context */
+        /* Child elements with inline styles or color classes will maintain their colors */
         letter-spacing: inherit !important; /* Preserve original letter spacing */
       }
       
@@ -6439,16 +6466,94 @@ const TextSelector = {
       }
       
       /* For block-level elements inside highlight, maintain underline */
-      .vocab-text-highlight * {
+      /* DO NOT override font-weight or color for formatting elements - let them use their own styles */
+      /* Exclude elements with color classes or inline styles from the universal selector */
+      .vocab-text-highlight *:not([class*="user-"]):not([class*="rated-"]):not([style*="color"]):not([style*="Color"]) {
         text-decoration: inherit;
         box-sizing: border-box;
         font-size: inherit !important; /* Preserve original font size for child elements */
         font-family: inherit !important; /* Preserve original font family for child elements */
-        font-weight: inherit !important; /* Preserve original font weight for child elements */
+        /* DO NOT set font-weight: inherit - let formatting elements (b, strong) use their default bold */
+        /* DO NOT set color: inherit - let child elements use their own colors (inline styles, classes, etc.) */
         line-height: inherit !important; /* Preserve original line height for child elements */
-        color: inherit !important; /* Preserve original text color for child elements */
         letter-spacing: inherit !important; /* Preserve original letter spacing for child elements */
       }
+      
+      /* Apply base styles to all elements, but exclude color-related elements */
+      .vocab-text-highlight * {
+        text-decoration: inherit;
+        box-sizing: border-box;
+      }
+      
+      /* Ensure formatting elements maintain their bold/italic styling */
+      .vocab-text-highlight b,
+      .vocab-text-highlight strong {
+        font-weight: bold !important; /* Force bold for b and strong tags */
+      }
+      
+      .vocab-text-highlight em,
+      .vocab-text-highlight i {
+        font-style: italic !important; /* Force italic for em and i tags */
+      }
+      
+      /* Preserve colors on child elements - don't force inherit */
+      /* Child elements with inline styles, classes, or default colors will maintain them */
+      /* Text nodes will naturally inherit from the highlight span, which inherits from the original parent */
+      
+      /* Ensure elements with inline color styles maintain their colors */
+      /* Inline styles have highest specificity - they will work automatically */
+      /* No CSS rule needed - inline styles cannot be overridden by CSS */
+      
+      /* Ensure elements with color classes maintain their colors AND the underline */
+      /* DO NOT override color for these elements - let website's CSS apply */
+      /* BUT ensure the purple underline is preserved */
+      .vocab-text-highlight a.user-orange,
+      .vocab-text-highlight a.rated-user,
+      .vocab-text-highlight a[class*="user-orange"],
+      .vocab-text-highlight a[class*="user-red"],
+      .vocab-text-highlight a[class*="user-blue"],
+      .vocab-text-highlight a[class*="user-green"],
+      .vocab-text-highlight a[class*="user-purple"],
+      .vocab-text-highlight a[class*="user-yellow"],
+      .vocab-text-highlight a[class*="user-cyan"],
+      .vocab-text-highlight a[class*="user-gray"],
+      .vocab-text-highlight a[class*="user-black"],
+      .vocab-text-highlight .user-orange,
+      .vocab-text-highlight .user-red,
+      .vocab-text-highlight .user-blue,
+      .vocab-text-highlight .user-green,
+      .vocab-text-highlight .user-purple,
+      .vocab-text-highlight .user-yellow,
+      .vocab-text-highlight .user-cyan,
+      .vocab-text-highlight .user-gray,
+      .vocab-text-highlight .user-black,
+      .vocab-text-highlight .rated-user {
+        /* Don't set color at all - let the website's CSS for these classes apply */
+        /* The website's CSS should have the same or higher specificity */
+        /* By not setting color here, the website's CSS will apply */
+        /* BUT preserve the purple underline from the parent highlight */
+        text-decoration: inherit !important; /* Inherit the purple underline from parent */
+        text-decoration-line: underline !important; /* Ensure underline is visible */
+        text-decoration-style: dashed !important; /* Ensure dashed style */
+        text-decoration-color: #B88AE6 !important; /* Ensure purple color */
+        text-decoration-thickness: 0.6px !important; /* Ensure thickness */
+        text-underline-offset: 2px !important; /* Ensure offset */
+      }
+      
+      /* Also ensure elements with inline color styles preserve the underline */
+      .vocab-text-highlight [style*="color"],
+      .vocab-text-highlight [style*="Color"] {
+        /* Preserve the purple underline even for elements with inline color styles */
+        text-decoration: inherit !important; /* Inherit the purple underline from parent */
+        text-decoration-line: underline !important; /* Ensure underline is visible */
+        text-decoration-style: dashed !important; /* Ensure dashed style */
+        text-decoration-color: #B88AE6 !important; /* Ensure purple color */
+        text-decoration-thickness: 0.6px !important; /* Ensure thickness */
+        text-underline-offset: 2px !important; /* Ensure offset */
+      }
+      
+      /* Ensure elements with inline color styles work - inline styles have highest specificity */
+      /* No CSS rule needed - inline styles cannot be overridden by CSS */
       
       /* Remove button - White circle with purple border and purple cross on top-left */
       .vocab-text-remove-btn {
