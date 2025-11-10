@@ -37,7 +37,8 @@ class SimplifyService {
       const response = await fetch(url, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          'Accept': 'text/event-stream'
         },
         body: JSON.stringify(textSegments),
         signal: abortController.signal
@@ -94,10 +95,10 @@ class SimplifyService {
               
               // SSE format: "data: {json}" or "data: [DONE]"
               if (line.startsWith('data: ')) {
-                const data = line.substring(6).trim();
+                const dataStr = line.slice(6).trim();
                 
                 // Check for completion signal
-                if (data === '[DONE]') {
+                if (dataStr === '[DONE]') {
                   console.log('[SimplifyService] Received [DONE] signal');
                   if (onComplete) onComplete();
                   break;
@@ -105,14 +106,60 @@ class SimplifyService {
                 
                 // Parse JSON data
                 try {
-                  const eventData = JSON.parse(data);
-                  console.log('[SimplifyService] Received event:', eventData);
+                  const data = JSON.parse(dataStr);
+                  console.log('[SimplifyService] Received event:', data);
                   
-                  if (onEvent) {
-                    onEvent(eventData);
+                  // Handle chunk events (word-by-word streaming)
+                  if (data.chunk !== undefined) {
+                    console.log('[SimplifyService] Chunk event - textStartIndex:', data.textStartIndex, 'chunk:', data.chunk, 'accumulatedSimplifiedText:', data.accumulatedSimplifiedText);
+                    if (onEvent) {
+                      // Pass chunk event with accumulated text for real-time display
+                      onEvent({
+                        textStartIndex: data.textStartIndex,
+                        textLength: data.textLength,
+                        text: data.text,
+                        previousSimplifiedTexts: data.previousSimplifiedTexts || [],
+                        chunk: data.chunk,
+                        accumulatedSimplifiedText: data.accumulatedSimplifiedText
+                      });
+                    }
+                  }
+                  
+                  // Handle complete event (final simplified text for a text object)
+                  else if (data.type === 'complete') {
+                    console.log('[SimplifyService] Complete event - textStartIndex:', data.textStartIndex, 'simplifiedText:', data.simplifiedText, 'shouldAllowSimplifyMore:', data.shouldAllowSimplifyMore);
+                    if (onEvent) {
+                      // Pass complete event with final data
+                      onEvent({
+                        textStartIndex: data.textStartIndex,
+                        textLength: data.textLength,
+                        text: data.text,
+                        previousSimplifiedTexts: data.previousSimplifiedTexts || [],
+                        simplifiedText: data.simplifiedText,
+                        shouldAllowSimplifyMore: data.shouldAllowSimplifyMore
+                      });
+                    }
+                  }
+                  
+                  // Handle error events
+                  else if (data.type === 'error') {
+                    const error = new Error(data.error_message || data.error || 'Stream error occurred');
+                    error.error_code = data.error_code;
+                    console.error('[SimplifyService] Error event:', error);
+                    if (onError) {
+                      onError(error);
+                    }
+                  }
+                  
+                  // Handle regular events (backward compatibility)
+                  else {
+                    if (onEvent) {
+                      onEvent(data);
+                    }
                   }
                 } catch (parseError) {
                   console.error('[SimplifyService] Error parsing event data:', parseError);
+                  console.error('[SimplifyService] Raw data that failed to parse:', dataStr);
                 }
               }
             }
@@ -122,7 +169,18 @@ class SimplifyService {
             console.log('[SimplifyService] Request aborted');
           } else {
             console.error('[SimplifyService] Stream processing error:', streamError);
-            if (onError) onError(streamError);
+            if (onError) {
+              // Provide more helpful error messages
+              let errorMessage = streamError.message;
+              
+              if (streamError.message.includes('Failed to fetch') || streamError.name === 'TypeError') {
+                errorMessage = 'Cannot connect to API server. Please check:\n' +
+                              '1. Backend server is running at ' + this.BASE_URL + '\n' +
+                              '2. CORS is properly configured to allow requests from this origin';
+              }
+              
+              onError(new Error(errorMessage));
+            }
           }
         }
       };
