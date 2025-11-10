@@ -32,26 +32,31 @@ class SummariseService {
       // Create abort controller for cancellation
       const abortController = new AbortController();
       
-      // Get language code from localStorage
-      const getLanguageCode = () => {
+      // Get language code from global storage (shared across all tabs and domains)
+      const getLanguageCode = async () => {
         try {
-          const language = localStorage.getItem('language') || 'none';
-          // If language is "none" or "Page Language", return "none"
-          if (language === 'none' || language === 'Page Language') {
+          // Get language from chrome.storage.local (global)
+          const storageKey = 'language';
+          const result = await chrome.storage.local.get([storageKey]);
+          const language = result[storageKey] || 'none';
+          
+          // If language is "none" or "dynamic", return "none" (use page language)
+          if (language === 'none' || language === 'dynamic') {
             return 'none';
           }
           // Otherwise, convert to uppercase (e.g., "Spanish" -> "SPANISH")
           return language.toUpperCase();
         } catch (error) {
-          console.warn('[SummariseService] Error getting language from localStorage:', error);
+          console.warn('[SummariseService] Error getting language from storage:', error);
           return 'none';
         }
       };
       
       // Prepare request payload
+      const languageCode = await getLanguageCode();
       const requestBody = {
         text: text,
-        languageCode: getLanguageCode()
+        languageCode: languageCode
       };
       
       // Make the SSE request

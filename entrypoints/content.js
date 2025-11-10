@@ -305,11 +305,19 @@ export default defineContentScript({
     // Make pageTextContent accessible globally for ChatDialog
     window.pageTextContent = pageTextContent;
     
-    // Global language variable - fetched from localStorage on every tab refresh
-    let language = localStorage.getItem('language') || 'none';
+    // Global language variable - fetched from chrome.storage.local (shared across all tabs and domains)
+    // Initialize language variable - will be loaded from global storage
+    let language = 'none';
     
-    // Make language accessible globally
-    window.language = language;
+    // Load saved language from global storage on initialization
+    getSavedLanguage().then((savedLanguage) => {
+      language = savedLanguage;
+      window.language = savedLanguage;
+    }).catch((error) => {
+      console.warn('[Content Script] Error loading saved language on init:', error);
+      // Set default value on error
+      window.language = 'none';
+    });
     
     // Top 20 languages list
     const TOP_LANGUAGES = [
@@ -321,6 +329,44 @@ export default defineContentScript({
     /**
      * Show language selection modal if language is 'none'
      */
+    /**
+     * Get the global language storage key (shared across all tabs and domains)
+     * @returns {string} The storage key
+     */
+    function getLanguageStorageKey() {
+      return 'language';
+    }
+    
+    /**
+     * Get the saved language preference (global, shared across all tabs and domains)
+     * @returns {Promise<string>} The saved language or 'none' if not found
+     */
+    async function getSavedLanguage() {
+      try {
+        const storageKey = getLanguageStorageKey();
+        const result = await chrome.storage.local.get([storageKey]);
+        return result[storageKey] || 'none';
+      } catch (error) {
+        console.warn('[Language Selection] Error getting saved language:', error);
+        return 'none';
+      }
+    }
+    
+    /**
+     * Save the language preference (global, shared across all tabs and domains)
+     * @param {string} language - The language to save
+     * @returns {Promise<void>}
+     */
+    async function saveLanguage(language) {
+      try {
+        const storageKey = getLanguageStorageKey();
+        await chrome.storage.local.set({ [storageKey]: language });
+        console.log('[Language Selection] Language saved globally:', language);
+      } catch (error) {
+        console.error('[Language Selection] Error saving language:', error);
+      }
+    }
+    
     function showLanguageSelectionModal() {
       // Remove existing modal if any
       const existingModal = document.getElementById('prefered-language-modal');
@@ -674,10 +720,17 @@ export default defineContentScript({
         box-sizing: border-box;
         outline: none;
         transition: border-color 0.2s;
+        background-color: white !important;
+        color: black !important;
       `;
       // Allow text selection in input field for typing
       dropdownInput.style.userSelect = 'text';
       dropdownInput.style.webkitUserSelect = 'text';
+      
+      // Force white background and black text using setProperty for stronger enforcement
+      dropdownInput.style.setProperty('background-color', 'white', 'important');
+      dropdownInput.style.setProperty('color', 'black', 'important');
+      dropdownInput.style.setProperty('background', 'white', 'important');
       
       // Dropdown icon
       const dropdownIcon = document.createElement('div');
@@ -818,8 +871,8 @@ export default defineContentScript({
             // Scroll into view
             item.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
           } else {
-            item.style.backgroundColor = 'transparent';
-            item.style.color = '';
+            item.style.setProperty('background-color', 'white', 'important');
+            item.style.setProperty('color', 'black', 'important');
           }
         });
       }
@@ -857,13 +910,18 @@ export default defineContentScript({
             -webkit-user-select: none;
             -moz-user-select: none;
             -ms-user-select: none;
+            background-color: white !important;
+            color: black !important;
           `;
+          // Force white background and black text using setProperty for stronger enforcement
+          item.style.setProperty('background-color', 'white', 'important');
+          item.style.setProperty('color', 'black', 'important');
           item.addEventListener('mouseenter', () => {
             // Reset all highlights
             const items = dropdownList.querySelectorAll('div');
             items.forEach(i => {
-              i.style.backgroundColor = 'transparent';
-              i.style.color = '';
+              i.style.setProperty('background-color', 'white', 'important');
+              i.style.setProperty('color', 'black', 'important');
             });
             item.style.backgroundColor = '#e9d5ff';
             item.style.color = '#9333ea';
@@ -871,8 +929,8 @@ export default defineContentScript({
           });
           item.addEventListener('mouseleave', () => {
             if (selectedIndex !== index) {
-              item.style.backgroundColor = 'transparent';
-              item.style.color = '';
+              item.style.setProperty('background-color', 'white', 'important');
+              item.style.setProperty('color', 'black', 'important');
             }
           });
           item.addEventListener('click', () => {
@@ -912,15 +970,16 @@ export default defineContentScript({
             // Reset all highlights
             const items = dropdownList.querySelectorAll('div');
             items.forEach(i => {
-              i.style.backgroundColor = 'transparent';
-              i.style.color = '';
+              i.style.setProperty('background-color', 'white', 'important');
+              i.style.setProperty('color', 'black', 'important');
             });
             newLangItem.style.backgroundColor = '#e9d5ff';
             selectedIndex = filtered.length;
           });
           newLangItem.addEventListener('mouseleave', () => {
             if (selectedIndex !== filtered.length) {
-              newLangItem.style.backgroundColor = 'transparent';
+              newLangItem.style.setProperty('background-color', 'white', 'important');
+              newLangItem.style.setProperty('color', '#9333ea', 'important');
             }
           });
           newLangItem.addEventListener('click', () => {
@@ -1098,7 +1157,7 @@ export default defineContentScript({
         // Restore original background
         updateButtonState();
       });
-      saveButton.addEventListener('click', () => {
+      saveButton.addEventListener('click', async () => {
         let selectedLanguage = 'none';
         
         // Check which tab is active
@@ -1106,21 +1165,13 @@ export default defineContentScript({
           // Fixed tab is selected
           selectedLanguage = dropdownInput.value.trim() || 'none';
         } else {
-          // Dynamic tab is selected - save as "Page Language"
-          selectedLanguage = 'Page Language';
+          // Dynamic tab is selected - save as "dynamic" to global storage
+          selectedLanguage = 'dynamic';
         }
         
-        // Check if 'language' exists in localStorage, if not create it, if yes update it
-        const existingLanguage = localStorage.getItem('language');
-        if (existingLanguage === null || existingLanguage === undefined) {
-          // Create new language variable in localStorage
-          localStorage.setItem('language', selectedLanguage);
-          console.log('[Language Selection] Created new language variable:', selectedLanguage);
-        } else {
-          // Update existing language variable
-          localStorage.setItem('language', selectedLanguage);
-          console.log('[Language Selection] Updated language variable:', selectedLanguage);
-        }
+        // Save language preference to global storage (shared across all tabs and domains)
+        await saveLanguage(selectedLanguage);
+        
         language = selectedLanguage;
         window.language = selectedLanguage;
         
@@ -1152,35 +1203,38 @@ export default defineContentScript({
       overlay.appendChild(modal);
       document.body.appendChild(overlay);
       
-      // Load saved language from localStorage and populate the input
-      const savedLanguage = localStorage.getItem('language') || 'none';
-      if (savedLanguage && savedLanguage !== 'none' && savedLanguage !== 'Page Language') {
-        // Populate input with saved language
-        dropdownInput.value = savedLanguage;
-        // Update preferred language text
-        updatePreferredLanguageText(savedLanguage);
-        // Ensure Fixed tab is active
-        activeTab = 'fixed';
-        customTab.style.color = 'white';
-        websiteTab.style.color = '#666';
-        customTabContent.style.display = 'flex';
-        websiteTabContent.style.display = 'none';
-        // Update sliding indicator position
-        requestAnimationFrame(() => {
-          updateSlidingIndicator(customTab);
-        });
-      } else if (savedLanguage === 'Page Language') {
-        // Switch to Dynamic tab if Page Language is selected
-        activeTab = 'dynamic';
-        websiteTab.style.color = 'white';
-        customTab.style.color = '#666';
-        customTabContent.style.display = 'none';
-        websiteTabContent.style.display = 'flex';
-        // Update sliding indicator position
-        requestAnimationFrame(() => {
-          updateSlidingIndicator(websiteTab);
-        });
-      }
+      // Load saved language for current domain and populate the input
+      getSavedLanguage().then((savedLanguage) => {
+        if (savedLanguage && savedLanguage !== 'none' && savedLanguage !== 'dynamic') {
+          // Populate input with saved language
+          dropdownInput.value = savedLanguage;
+          // Update preferred language text
+          updatePreferredLanguageText(savedLanguage);
+          // Ensure Fixed tab is active
+          activeTab = 'fixed';
+          customTab.style.color = 'white';
+          websiteTab.style.color = '#666';
+          customTabContent.style.display = 'flex';
+          websiteTabContent.style.display = 'none';
+          // Update sliding indicator position
+          requestAnimationFrame(() => {
+            updateSlidingIndicator(customTab);
+          });
+        } else if (savedLanguage === 'dynamic') {
+          // Switch to Dynamic tab if dynamic is selected
+          activeTab = 'dynamic';
+          websiteTab.style.color = 'white';
+          customTab.style.color = '#666';
+          customTabContent.style.display = 'none';
+          websiteTabContent.style.display = 'flex';
+          // Update sliding indicator position
+          requestAnimationFrame(() => {
+            updateSlidingIndicator(websiteTab);
+          });
+        }
+      }).catch((error) => {
+        console.warn('[Language Selection] Error loading saved language:', error);
+      });
       
       // Update button state after loading saved language
       updateButtonState();
@@ -1211,15 +1265,25 @@ export default defineContentScript({
       });
     }
     
-    // Check if language is 'none' and show modal (only if extension is enabled)
-    if (language === 'none') {
-      // Check extension state before showing modal
-      const GLOBAL_STORAGE_KEY = 'is_extension_globally_enabled';
-      chrome.storage.local.get([GLOBAL_STORAGE_KEY]).then((result) => {
-        const isEnabled = result[GLOBAL_STORAGE_KEY] ?? true; // Default to true if not set
-        
-        // Only show modal if extension is enabled
-        if (isEnabled) {
+    // Step 1: First check if Chrome extension is enabled
+    // Step 2: If enabled, check preferred language from global storage
+    // Step 3: Only show modal if extension is enabled AND language is not defined (none or dynamic)
+    chrome.storage.local.get([GLOBAL_STORAGE_KEY]).then((result) => {
+      const isEnabled = result[GLOBAL_STORAGE_KEY] ?? true; // Default to true if not set
+      
+      // If extension is disabled, don't show modal
+      if (!isEnabled) {
+        console.log('[Content Script] Extension is disabled, not showing language modal');
+        return;
+      }
+      
+      // Extension is enabled, now check preferred language
+      getSavedLanguage().then((savedLanguage) => {
+        // Only show modal if language is 'none' (not defined/set)
+        // Note: 'dynamic' is treated as a set value (like "English", "Spanish"), so modal won't show if language is 'dynamic'
+        if (savedLanguage === 'none') {
+          // Language is not defined, show modal
+          console.log('[Content Script] Language is not set, showing language modal');
           // Wait for DOM to be ready
           if (document.readyState === 'loading') {
             document.addEventListener('DOMContentLoaded', showLanguageSelectionModal);
@@ -1228,13 +1292,18 @@ export default defineContentScript({
             setTimeout(showLanguageSelectionModal, 100);
           }
         } else {
-          console.log('[Content Script] Extension is disabled, not showing language modal');
+          // Language is already defined/set, don't show modal
+          console.log('[Content Script] Language is already set:', savedLanguage, '- not showing modal');
+          language = savedLanguage;
+          window.language = savedLanguage;
         }
       }).catch((error) => {
-        console.error('[Content Script] Error checking extension state:', error);
-        // If there's an error checking state, don't show modal to be safe
+        console.error('[Content Script] Error checking saved language:', error);
       });
-    }
+    }).catch((error) => {
+      console.error('[Content Script] Error checking extension state:', error);
+      // If there's an error checking state, don't show modal to be safe
+    });
     
     /**
      * Fetch page text content in a separate thread

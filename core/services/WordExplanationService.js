@@ -31,24 +31,28 @@ class WordExplanationService {
       console.log('[WordExplanationService] Starting SSE request to:', url);
       console.log('[WordExplanationService] Text segments:', textSegments);
       
-      // Get language code from localStorage
-      const getLanguageCode = () => {
+      // Get language code from global storage (shared across all tabs and domains)
+      const getLanguageCode = async () => {
         try {
-          const language = localStorage.getItem('language') || 'none';
-          // If language is "none" or "Page Language", return "none"
-          if (language === 'none' || language === 'Page Language') {
+          // Get language from chrome.storage.local (global)
+          const storageKey = 'language';
+          const result = await chrome.storage.local.get([storageKey]);
+          const language = result[storageKey] || 'none';
+          
+          // If language is "none" or "dynamic", return "none" (use page language)
+          if (language === 'none' || language === 'dynamic') {
             return 'none';
           }
           // Otherwise, convert to uppercase (e.g., "Spanish" -> "SPANISH")
           return language.toUpperCase();
         } catch (error) {
-          console.warn('[WordExplanationService] Error getting language from localStorage:', error);
+          console.warn('[WordExplanationService] Error getting language from storage:', error);
           return 'none';
         }
       };
       
       // Add languageCode to each text segment
-      const languageCode = getLanguageCode();
+      const languageCode = await getLanguageCode();
       const textSegmentsWithLanguage = textSegments.map(segment => ({
         ...segment,
         languageCode: languageCode
