@@ -3125,13 +3125,22 @@ const WordSelector = {
             oldBtn.remove();
           }
           
-          // Change background to green with breathing animation
-          wordHighlight.classList.add('vocab-word-explained', 'word-breathing');
+          // Force a reflow to ensure the element is ready for animation
+          void wordHighlight.offsetWidth;
           
-          // Remove breathing animation after it completes (0.8s)
+          // Change background to green with popup animation
+          wordHighlight.classList.add('vocab-word-explained', 'word-popup');
+          
+          // Force another reflow to trigger the animation
+          void wordHighlight.offsetWidth;
+          
+          // Remove popup animation after it completes (0.6s)
           setTimeout(() => {
-            wordHighlight.classList.remove('word-breathing');
-          }, 800);
+            wordHighlight.classList.remove('word-popup');
+            // Re-enable transition after animation completes
+            wordHighlight.style.transition = '';
+            wordHighlight.style.willChange = '';
+          }, 600);
           
           // Store explanation data on the element
           wordHighlight.setAttribute('data-meaning', wordInfo.meaning);
@@ -3830,9 +3839,23 @@ const WordSelector = {
     meaningDiv.innerHTML = `<span class="word-bold"></span>${meaning}`;
     popup.appendChild(meaningDiv);
     
-    // Examples container
+    // Examples container (has separator line on top)
     const examplesContainer = document.createElement('div');
     examplesContainer.className = 'vocab-word-popup-examples-container';
+    
+    // Examples heading - light purple, horizontally centered, below separator
+    if (examples && examples.length > 0) {
+      const examplesHeading = document.createElement('div');
+      examplesHeading.className = 'vocab-word-popup-examples-heading';
+      examplesHeading.textContent = 'Examples';
+      examplesHeading.style.setProperty('color', 'rgba(147, 51, 234, 0.7)', 'important'); // Light purple
+      examplesHeading.style.setProperty('text-align', 'center', 'important');
+      examplesHeading.style.setProperty('font-size', '14px', 'important'); // Bigger font size
+      examplesHeading.style.setProperty('font-weight', '600', 'important'); // Thicker/bolder
+      examplesHeading.style.setProperty('margin-bottom', '10px', 'important');
+      examplesHeading.style.setProperty('margin-top', '8px', 'important'); // Space below separator
+      examplesContainer.appendChild(examplesHeading);
+    }
     
     if (examples && examples.length > 0) {
       const examplesList = document.createElement('ul');
@@ -4381,6 +4404,40 @@ const WordSelector = {
     const meaningDiv = popup.querySelector('.vocab-word-popup-meaning');
     if (meaningDiv) {
       meaningDiv.innerHTML = `<span class="word-bold">${word}</span> means ${meaning}`;
+    }
+    
+    // Update examples section - ensure heading exists below separator
+    const examplesContainer = popup.querySelector('.vocab-word-popup-examples-container');
+    if (examples && examples.length > 0) {
+      let examplesHeading = popup.querySelector('.vocab-word-popup-examples-heading');
+      if (!examplesHeading && examplesContainer) {
+        examplesHeading = document.createElement('div');
+        examplesHeading.className = 'vocab-word-popup-examples-heading';
+        examplesHeading.textContent = 'Examples';
+        examplesHeading.style.setProperty('color', 'rgba(147, 51, 234, 0.7)', 'important'); // Light purple
+        examplesHeading.style.setProperty('text-align', 'center', 'important');
+        examplesHeading.style.setProperty('font-size', '14px', 'important'); // Bigger font size
+        examplesHeading.style.setProperty('font-weight', '600', 'important'); // Thicker/bolder
+        examplesHeading.style.setProperty('margin-bottom', '10px', 'important');
+        examplesHeading.style.setProperty('margin-top', '8px', 'important'); // Space below separator
+        // Insert heading as first child of examples container (after separator)
+        const examplesList = examplesContainer.querySelector('.vocab-word-popup-examples');
+        if (examplesList) {
+          examplesContainer.insertBefore(examplesHeading, examplesList);
+        } else {
+          examplesContainer.appendChild(examplesHeading);
+        }
+      } else if (examplesHeading) {
+        // Update existing heading styles
+        examplesHeading.style.setProperty('font-size', '14px', 'important');
+        examplesHeading.style.setProperty('font-weight', '600', 'important');
+      }
+    } else {
+      // Remove heading if no examples
+      const examplesHeading = popup.querySelector('.vocab-word-popup-examples-heading');
+      if (examplesHeading) {
+        examplesHeading.remove();
+      }
     }
     
     // Update examples
@@ -5491,10 +5548,10 @@ const WordSelector = {
       
       /* Green background for explained words */
       .vocab-word-explained {
-        background-color: rgba(134, 239, 172, 0.7) !important; /* Lighter green with slight transparency */
+        background-color: rgba(240, 253, 244, 0.5) !important; /* Very light green, semi-transparent */
         cursor: pointer;
         border-radius: 8px;
-        border: none !important;
+        border: 0.5px solid #22c55e !important; /* Green border (not light green) */
         padding: 0 2px;
         margin-top: 0 !important; /* Prevent top margin from affecting line spacing */
         margin-bottom: 0 !important; /* Prevent bottom margin from affecting line spacing */
@@ -5504,7 +5561,7 @@ const WordSelector = {
         min-width: auto !important; /* Prevent min-width from forcing expansion */
         user-select: none;
         -webkit-user-select: none;
-        transition: background-color 0.3s ease-in-out, opacity 0.3s ease-in-out, transform 0.15s ease-out;
+        transition: background-color 0.3s ease-in-out, opacity 0.3s ease-in-out;
         box-decoration-break: clone; /* Ensure background wraps correctly on line breaks */
         -webkit-box-decoration-break: clone;
         line-height: normal !important; /* Use normal line height to prevent expansion */
@@ -5541,14 +5598,45 @@ const WordSelector = {
         }
       }
       
+      /* Popup animation for green word when it first appears - pops twice to show clickable entity */
+      .vocab-word-explained.word-popup {
+        display: inline-block !important; /* Need inline-block for transform animation */
+        width: auto !important; /* Prevent width from expanding */
+        max-width: fit-content !important; /* Ensure it only wraps the text content */
+        will-change: transform !important; /* Optimize for animation */
+        transition: none !important; /* Disable transition during animation */
+        animation: wordPopup 0.6s cubic-bezier(0.68, -0.55, 0.265, 1.55) !important;
+      }
+      
+      @keyframes wordPopup {
+        0% {
+          transform: scale(1);
+        }
+        20% {
+          transform: scale(1.3);
+        }
+        40% {
+          transform: scale(1);
+        }
+        60% {
+          transform: scale(1.3);
+        }
+        80% {
+          transform: scale(1);
+        }
+        100% {
+          transform: scale(1);
+        }
+      }
+      
       .vocab-word-explained:hover {
-        background-color: rgba(74, 222, 128, 0.8) !important; /* Lighter green on hover with slight transparency */
+        background-color: rgba(187, 247, 208, 0.75) !important; /* Darker green on hover to show clickable */
       }
       
       .vocab-word-explained:active,
       .vocab-word-explained.vocab-word-clicking {
         transform: scale(0.97) !important; /* Reduced scale-down animation - less pronounced */
-        background-color: rgba(74, 222, 128, 0.8) !important; /* Lighter green on active with slight transparency */
+        background-color: rgba(167, 243, 208, 0.8) !important; /* Darker green on active/click to show interaction */
       }
       
       /* Smooth animation for green word highlight disappearance - 0.3s duration */
@@ -5558,7 +5646,7 @@ const WordSelector = {
       
       @keyframes wordFadeOut {
         0% {
-          background-color: rgba(134, 239, 172, 0.7); /* Lighter green with slight transparency */
+          background-color: rgba(240, 253, 244, 0.5); /* Very light green, semi-transparent */
           opacity: 1;
         }
         100% {
@@ -19848,14 +19936,23 @@ const ButtonPanel = {
                 oldBtn.remove();
               }
               
-              // Change background to green with breathing animation
-              console.log(`[ButtonPanel] Adding vocab-word-explained class for green background`);
-              wordHighlight.classList.add('vocab-word-explained', 'word-breathing');
+              // Force a reflow to ensure the element is ready for animation
+              void wordHighlight.offsetWidth;
               
-              // Remove breathing animation after it completes (0.8s)
+              // Change background to green with popup animation
+              console.log(`[ButtonPanel] Adding vocab-word-explained class for green background`);
+              wordHighlight.classList.add('vocab-word-explained', 'word-popup');
+              
+              // Force another reflow to trigger the animation
+              void wordHighlight.offsetWidth;
+              
+              // Remove popup animation after it completes (0.6s)
               setTimeout(() => {
-                wordHighlight.classList.remove('word-breathing');
-              }, 800);
+                wordHighlight.classList.remove('word-popup');
+                // Re-enable transition after animation completes
+                wordHighlight.style.transition = '';
+                wordHighlight.style.willChange = '';
+              }, 600);
               
               // Store explanation data on the element
               console.log(`[ButtonPanel] Storing explanation data on element`);
