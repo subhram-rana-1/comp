@@ -374,11 +374,14 @@ export default defineContentScript({
         existingModal.remove();
       }
       
+      // Hide close button when modal opens
+      hideCloseButton();
+      
       // Blur ask-about-page button and banner when modal is visible
       blurAskAboutPageButton();
       blurBanner();
       
-      // Create overlay
+      // Create overlay (transparent, non-blocking - similar to chat dialog)
       const overlay = document.createElement('div');
       overlay.id = 'prefered-language-overlay';
       overlay.style.cssText = `
@@ -387,21 +390,29 @@ export default defineContentScript({
         left: 0;
         width: 100%;
         height: 100%;
-        background-color: rgba(0, 0, 0, 0.5);
-        z-index: 100000;
+        background-color: transparent;
+        z-index: 2147483647;
         display: flex;
-        justify-content: center;
-        align-items: center;
-        opacity: 0;
-        transition: opacity 0.3s ease;
+        justify-content: flex-end;
+        align-items: flex-start;
+        pointer-events: auto;
+        opacity: 1;
+        isolation: isolate;
       `;
       
-      // Function to close modal with scale-down animation
+      // Blur chat dialog when preferred-language modal is open
+      const chatDialog = document.getElementById('vocab-chat-dialog');
+      if (chatDialog) {
+        chatDialog.style.filter = 'blur(4px)';
+        chatDialog.style.opacity = '0.6';
+        chatDialog.style.transition = 'filter 0.3s ease, opacity 0.3s ease';
+      }
+      
+      // Function to close modal with slide-out animation (going outside the page to the right)
       function closeModalWithAnimation() {
-        // Scale down and fade out modal
-        modal.style.transform = 'scale(0)';
+        // Slide out to the right and fade out modal
+        modal.style.transform = 'translateX(100%)';
         modal.style.opacity = '0';
-        overlay.style.opacity = '0';
         
         // Notify popup to show settings button when modal is closed
         try {
@@ -414,36 +425,62 @@ export default defineContentScript({
           // Ignore if popup is not available
         }
         
-        // Remove overlay after animation completes
+        // Remove overlay after animation completes (match 0.4s animation duration)
         setTimeout(() => {
           overlay.remove();
+          // Remove dropdown list from body when modal closes
+          if (dropdownList && dropdownList.parentNode) {
+            dropdownList.remove();
+          }
           // Restore ask-about-page button and banner after modal is closed
           restoreAskAboutPageButton();
           restoreBanner();
-        }, 300);
+          // Show close button when modal is closed
+          showCloseButton();
+          // Restore chat dialog (remove blur)
+          const chatDialog = document.getElementById('vocab-chat-dialog');
+          if (chatDialog) {
+            chatDialog.style.filter = '';
+            chatDialog.style.opacity = '';
+          }
+        }, 400);
       }
       
-      // Create modal container
+      // Create modal container (small dimensions, aligned with close button top)
       const modal = document.createElement('div');
       modal.id = 'prefered-language-modal';
       modal.style.cssText = `
-        background-color: white;
-        border-radius: 30px;
-        padding: 40px;
-        max-width: 500px;
-        width: 90%;
+        background-color: white !important;
+        border-radius: 30px 0 0 30px;
+        padding: 20px;
+        max-width: 400px;
+        width: auto;
+        min-width: 300px;
+        height: auto;
+        max-height: calc(100vh - 100px);
         display: flex;
         flex-direction: column;
-        gap: 30px;
-        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+        gap: 0;
+        box-shadow: -10px 0 40px rgba(149, 39, 245, 0.3), -5px 0 20px rgba(149, 39, 245, 0.2);
         user-select: none;
         -webkit-user-select: none;
         -moz-user-select: none;
         -ms-user-select: none;
-        transform: scale(0);
-        transform-origin: center center;
+        position: fixed;
+        top: 78px;
+        right: 0;
+        transform: translateX(100%);
         opacity: 0;
-        transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.3s ease;
+        transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.4s ease;
+        will-change: transform, opacity;
+        overflow-y: visible;
+        overflow-x: visible;
+        pointer-events: auto;
+        z-index: 2147483648;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif !important;
+        font-size: 16px !important;
+        line-height: 1.5 !important;
+        color: #000 !important;
       `;
       
       // Prevent double-click and text selection on modal
@@ -469,7 +506,7 @@ export default defineContentScript({
         }
       });
       
-      // First container: Heading
+      // First container: Heading (positioned lower than minimize button)
       const headingContainer = document.createElement('div');
       headingContainer.style.cssText = `
         text-align: center;
@@ -482,29 +519,37 @@ export default defineContentScript({
         -webkit-user-select: none;
         -moz-user-select: none;
         -ms-user-select: none;
+        margin-top: 20px;
+        margin-bottom: 30px;
+        padding-bottom: 20px;
       `;
       
       // Branding name with sparkle logo
       const brandingHeading = document.createElement('h2');
       brandingHeading.style.cssText = `
-        margin: 0;
-        font-size: 28px;
-        font-weight: 600;
-        color: #9527F5;
+        margin: 0 !important;
+        font-size: 28px !important;
+        font-weight: 600 !important;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif !important;
+        color: #9527F5 !important;
         user-select: none;
         -webkit-user-select: none;
         -moz-user-select: none;
         -ms-user-select: none;
         pointer-events: none;
-        display: flex;
+        display: flex !important;
         align-items: center;
         justify-content: center;
         gap: 8px;
+        text-shadow: none !important;
+        background: transparent !important;
+        opacity: 1 !important;
+        visibility: visible !important;
       `;
       brandingHeading.innerHTML = `
-        Explain AI
-        <span class="brand-icon" style="display: inline-flex; align-items: center;">
-          <svg width="24" height="24" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <span style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif !important; color: #9527F5 !important; font-size: 28px !important; font-weight: 600 !important; text-shadow: none !important; background: transparent !important; opacity: 1 !important; visibility: visible !important;">Explain AI</span>
+        <span class="brand-icon" style="display: inline-flex; align-items: center; opacity: 1 !important; visibility: visible !important;">
+          <svg width="24" height="24" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg" style="opacity: 1 !important; visibility: visible !important;">
             <path d="M14 0L17 8L25 11L17 14L14 22L11 14L3 11L11 8L14 0Z" fill="#9527F5"/>
             <path d="M22 16L23.5 20L27.5 21.5L23.5 23L22 27L20.5 23L16.5 21.5L20.5 20L22 16Z" fill="#9527F5"/>
             <path d="M8 21L9.5 24.5L13 26L9.5 27.5L8 31L6.5 27.5L3 26L6.5 24.5L8 21Z" fill="#9527F5"/>
@@ -514,17 +559,23 @@ export default defineContentScript({
       
       // Subheading
       const subHeading = document.createElement('p');
-      subHeading.textContent = 'Choose your preferred language';
+      subHeading.textContent = 'Choose your native language';
       subHeading.style.cssText = `
-        margin: 0;
-        font-size: 16px;
-        font-weight: 400;
-        color: #000000;
+        margin: 0 !important;
+        margin-bottom: 8px !important;
+        font-size: 16px !important;
+        font-weight: 400 !important;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif !important;
+        color: #000000 !important;
         user-select: none;
         -webkit-user-select: none;
         -moz-user-select: none;
         -ms-user-select: none;
         pointer-events: none;
+        text-shadow: none !important;
+        background: transparent !important;
+        opacity: 1 !important;
+        visibility: visible !important;
       `;
       
       // Prevent double-click on headings
@@ -541,7 +592,6 @@ export default defineContentScript({
       });
       
       headingContainer.appendChild(brandingHeading);
-      headingContainer.appendChild(subHeading);
       
       // Second container: Tabs with sliding indicator
       const tabsContainer = document.createElement('div');
@@ -702,8 +752,9 @@ export default defineContentScript({
       // Dropdown container
       const dropdownContainer = document.createElement('div');
       dropdownContainer.style.cssText = `
-        width: 100%;
+        width: 80%;
         position: relative;
+        z-index: 1;
       `;
       
       // Searchable dropdown input
@@ -716,12 +767,15 @@ export default defineContentScript({
         padding: 12px 45px 12px 16px;
         border: 2px solid #e5e5e5;
         border-radius: 8px;
-        font-size: 16px;
+        font-size: 16px !important;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif !important;
+        font-weight: 400 !important;
         box-sizing: border-box;
         outline: none;
         transition: border-color 0.2s;
         background-color: white !important;
         color: black !important;
+        text-shadow: none !important;
       `;
       // Allow text selection in input field for typing
       dropdownInput.style.userSelect = 'text';
@@ -732,7 +786,7 @@ export default defineContentScript({
       dropdownInput.style.setProperty('color', 'black', 'important');
       dropdownInput.style.setProperty('background', 'white', 'important');
       
-      // Dropdown icon
+      // Dropdown icon (inside input box)
       const dropdownIcon = document.createElement('div');
       dropdownIcon.id = 'vocab-language-dropdown-icon';
       dropdownIcon.innerHTML = `
@@ -747,34 +801,38 @@ export default defineContentScript({
         transform: translateY(-50%);
         pointer-events: none;
         transition: transform 0.2s;
-        z-index: 1;
+        z-index: 2;
       `;
       
       // Track keyboard navigation
       let selectedIndex = -1;
       let filteredLanguages = [];
       
-      // Dropdown list
+      // Dropdown list (positioned with highest z-index to appear above modal)
       const dropdownList = document.createElement('div');
       dropdownList.id = 'vocab-language-dropdown-list';
       dropdownList.style.cssText = `
-        position: absolute;
-        top: 100%;
-        left: 0;
-        right: 0;
-        background-color: white;
-        border: 2px solid #e5e5e5;
+        position: fixed !important;
+        background-color: white !important;
+        border-left: 2px solid #e5e5e5;
+        border-right: 2px solid #e5e5e5;
         border-top: none;
+        border-bottom: 2px solid #e5e5e5;
         border-radius: 0 0 8px 8px;
         max-height: 300px;
         overflow-y: auto;
         display: none;
-        z-index: 1000;
+        z-index: 2147483649 !important;
         box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
         user-select: none;
         -webkit-user-select: none;
         -moz-user-select: none;
         -ms-user-select: none;
+        isolation: isolate;
+        font-size: 16px !important;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif !important;
+        font-weight: 400 !important;
+        line-height: 1.5 !important;
       `;
       
       // Prevent double-click and text selection on dropdown list
@@ -848,17 +906,24 @@ export default defineContentScript({
         updateButtonState();
       });
       
-      // Function to select language from dropdown
-      function selectLanguage(lang) {
+      // Function to select language from dropdown (auto-saves)
+      async function selectLanguage(lang) {
+        // If "As per website" is selected, save as 'none' for API
+        const languageToSave = lang === 'As per website' ? 'none' : lang;
         dropdownInput.value = lang;
         dropdownList.style.display = 'none';
         selectedIndex = -1;
         // Reset dropdown icon rotation
         dropdownIcon.style.transform = 'translateY(-50%) rotate(0deg)';
-        // Update preferred language text when language is selected
-        updatePreferredLanguageText(lang);
-        // Update button state
-        updateButtonState();
+        
+        // Auto-save language preference
+        await saveLanguage(languageToSave);
+        language = languageToSave;
+        window.language = languageToSave;
+        console.log('[Language Selection] Language auto-saved:', languageToSave);
+        
+        // Close modal after saving
+        closeModalWithAnimation();
       }
       
       // Function to highlight selected item
@@ -883,15 +948,26 @@ export default defineContentScript({
         filteredLanguages = [];
         selectedIndex = -1;
         
-        // If no filter, show all languages
+        // Always add "As per website" as first option
+        const AS_PER_WEBSITE = 'As per website';
+        
+        // If no filter, show "As per website" + all languages
         let filtered = [];
         if (!filter || filter.trim() === '') {
-          filtered = TOP_LANGUAGES;
+          filtered = [AS_PER_WEBSITE, ...TOP_LANGUAGES];
         } else {
-          // Filter by prefix matching
-          filtered = TOP_LANGUAGES.filter(lang => 
+          // Check if filter matches "As per website"
+          const matchesAsPerWebsite = AS_PER_WEBSITE.toLowerCase().includes(filter.toLowerCase());
+          // Filter languages by prefix matching
+          const filteredLangs = TOP_LANGUAGES.filter(lang => 
             lang.toLowerCase().startsWith(filter.toLowerCase())
           );
+          // Add "As per website" first if it matches, otherwise add filtered languages
+          if (matchesAsPerWebsite) {
+            filtered = [AS_PER_WEBSITE, ...filteredLangs];
+          } else {
+            filtered = filteredLangs;
+          }
         }
         
         // Store filtered languages for keyboard navigation
@@ -912,10 +988,18 @@ export default defineContentScript({
             -ms-user-select: none;
             background-color: white !important;
             color: black !important;
+            font-size: 16px !important;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif !important;
+            font-weight: 400 !important;
+            line-height: 1.5 !important;
           `;
           // Force white background and black text using setProperty for stronger enforcement
           item.style.setProperty('background-color', 'white', 'important');
           item.style.setProperty('color', 'black', 'important');
+          item.style.setProperty('font-size', '16px', 'important');
+          item.style.setProperty('font-family', '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif', 'important');
+          item.style.setProperty('font-weight', '400', 'important');
+          item.style.setProperty('line-height', '1.5', 'important');
           item.addEventListener('mouseenter', () => {
             // Reset all highlights
             const items = dropdownList.querySelectorAll('div');
@@ -964,7 +1048,24 @@ export default defineContentScript({
             -webkit-user-select: none;
             -moz-user-select: none;
             -ms-user-select: none;
+            font-size: 16px !important;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif !important;
+            font-weight: 400 !important;
+            line-height: 1.5 !important;
           `;
+          // Force font properties using setProperty for stronger enforcement
+          newLangItem.style.setProperty('font-size', '16px', 'important');
+          newLangItem.style.setProperty('font-family', '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif', 'important');
+          newLangItem.style.setProperty('font-weight', '400', 'important');
+          newLangItem.style.setProperty('line-height', '1.5', 'important');
+          // Ensure strong tag inside also has correct font-size
+          const strongTag = newLangItem.querySelector('strong');
+          if (strongTag) {
+            strongTag.style.setProperty('font-size', '16px', 'important');
+            strongTag.style.setProperty('font-family', '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif', 'important');
+            strongTag.style.setProperty('font-weight', '600', 'important');
+            strongTag.style.setProperty('line-height', '1.5', 'important');
+          }
           filteredLanguages.push(filter);
           newLangItem.addEventListener('mouseenter', () => {
             // Reset all highlights
@@ -1046,6 +1147,12 @@ export default defineContentScript({
           e.preventDefault();
           if (selectedIndex >= 0 && selectedIndex < filteredLanguages.length) {
             selectLanguage(filteredLanguages[selectedIndex]);
+          } else {
+            // If no item selected but input has value, save it as new language
+            const inputValue = dropdownInput.value.trim();
+            if (inputValue) {
+              selectLanguage(inputValue);
+            }
           }
         } else if (e.key === 'Escape') {
           dropdownList.style.display = 'none';
@@ -1055,11 +1162,39 @@ export default defineContentScript({
         }
       });
       
+      // Function to update dropdown position (for fixed positioning)
+      function updateDropdownPosition() {
+        const inputRect = dropdownInput.getBoundingClientRect();
+        const viewportHeight = window.innerHeight;
+        const dropdownHeight = 300; // max-height of dropdown
+        const spaceBelow = viewportHeight - inputRect.bottom;
+        const spaceAbove = inputRect.top;
+        
+        dropdownList.style.left = `${inputRect.left}px`;
+        dropdownList.style.width = `${inputRect.width}px`;
+        
+        // If there's not enough space below, show dropdown above the input
+        if (spaceBelow < dropdownHeight && spaceAbove > spaceBelow) {
+          dropdownList.style.top = `${inputRect.top - Math.min(dropdownHeight, spaceAbove)}px`;
+          dropdownList.style.maxHeight = `${Math.min(dropdownHeight, spaceAbove - 10)}px`;
+          dropdownList.style.borderRadius = '8px 8px 0 0';
+          dropdownList.style.borderTop = '2px solid #e5e5e5';
+          dropdownList.style.borderBottom = 'none';
+        } else {
+          dropdownList.style.top = `${inputRect.bottom}px`;
+          dropdownList.style.maxHeight = `${Math.min(dropdownHeight, spaceBelow - 10)}px`;
+          dropdownList.style.borderRadius = '0 0 8px 8px';
+          dropdownList.style.borderTop = 'none';
+          dropdownList.style.borderBottom = '2px solid #e5e5e5';
+        }
+      }
+      
       // Dropdown input handlers
       dropdownInput.addEventListener('focus', () => {
         dropdownInput.style.borderColor = '#9333ea';
         const currentValue = dropdownInput.value;
         populateDropdownList(currentValue);
+        updateDropdownPosition();
         dropdownList.style.display = 'block';
         selectedIndex = -1;
         // Rotate dropdown icon
@@ -1080,28 +1215,46 @@ export default defineContentScript({
       dropdownInput.addEventListener('input', (e) => {
         const value = e.target.value;
         populateDropdownList(value);
+        updateDropdownPosition();
         dropdownList.style.display = 'block';
         selectedIndex = -1;
-        // Update preferred language text as user types
-        updatePreferredLanguageText(value);
-        // Update button state
-        updateButtonState();
+      });
+      
+      // Handle Enter key on input (when dropdown might be closed)
+      dropdownInput.addEventListener('keydown', async (e) => {
+        if (e.key === 'Enter' && (dropdownList.style.display === 'none' || !dropdownList.style.display)) {
+          e.preventDefault();
+          const inputValue = dropdownInput.value.trim();
+          if (inputValue) {
+            // If "As per website" is typed, save as 'none'
+            if (inputValue === 'As per website') {
+              await selectLanguage('As per website');
+            } else {
+              await selectLanguage(inputValue);
+            }
+          }
+        }
       });
       
       // Close dropdown when clicking outside
       let clickHandler = (e) => {
-        if (!dropdownContainer.contains(e.target)) {
+        if (!dropdownContainer.contains(e.target) && !dropdownList.contains(e.target)) {
           dropdownList.style.display = 'none';
         }
       };
       document.addEventListener('click', clickHandler);
+      
+      // Update dropdown position on scroll/resize
+      window.addEventListener('scroll', updateDropdownPosition, true);
+      window.addEventListener('resize', updateDropdownPosition);
       
       // Initial population - show all languages
       populateDropdownList('');
       
       dropdownContainer.appendChild(dropdownInput);
       dropdownContainer.appendChild(dropdownIcon);
-      dropdownContainer.appendChild(dropdownList);
+      // Append dropdown list to overlay (as sibling of modal) for proper z-index stacking
+      // This ensures it appears above the modal despite the overlay's isolation context
       customTabContent.appendChild(preferredLanguageText);
       customTabContent.appendChild(dropdownContainer);
       
@@ -1194,32 +1347,65 @@ export default defineContentScript({
       updateButtonState();
       buttonContainer.appendChild(saveButton);
       
-      // Assemble modal
+      // Assemble modal (only heading and dropdown, no tabs or buttons)
       modal.appendChild(headingContainer);
-      modal.appendChild(tabsContainer);
-      modal.appendChild(tabContentContainer);
-      modal.appendChild(buttonContainer);
+      // Add dropdown directly to modal (from customTabContent)
+      const dropdownWrapper = document.createElement('div');
+      dropdownWrapper.style.cssText = `
+        width: calc(100% - 40px);
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        align-items: center;
+        justify-content: center;
+        margin-top: 0;
+        margin-left: 20px;
+        margin-right: 20px;
+        margin-bottom: 20px;
+      `;
+      dropdownWrapper.appendChild(subHeading);
+      dropdownWrapper.appendChild(dropdownContainer);
+      modal.appendChild(dropdownWrapper);
       
       overlay.appendChild(modal);
+      // Append dropdown list to overlay as sibling of modal for proper z-index stacking
+      // This ensures it appears above the modal within the same stacking context
+      overlay.appendChild(dropdownList);
       document.body.appendChild(overlay);
+      
+      // Force a reflow to ensure the modal is positioned before animation starts
+      void overlay.offsetWidth;
+      
+      // Close modal when clicking outside (on overlay)
+      overlay.addEventListener('click', (e) => {
+        // Only close if clicking directly on overlay, not on modal
+        if (e.target === overlay) {
+          closeModalWithAnimation();
+        }
+      });
+      
+      // Prevent modal clicks from closing
+      modal.addEventListener('click', (e) => {
+        e.stopPropagation();
+      });
+      
+      // Trigger slide-in animation from right
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          overlay.style.opacity = '1';
+          modal.style.transform = 'translateX(0)';
+          modal.style.opacity = '1';
+        });
+      });
       
       // Load saved language for current domain and populate the input
       getSavedLanguage().then((savedLanguage) => {
         if (savedLanguage && savedLanguage !== 'none' && savedLanguage !== 'dynamic') {
           // Populate input with saved language
           dropdownInput.value = savedLanguage;
-          // Update preferred language text
-          updatePreferredLanguageText(savedLanguage);
-          // Ensure Fixed tab is active
-          activeTab = 'fixed';
-          customTab.style.color = 'white';
-          websiteTab.style.color = '#666';
-          customTabContent.style.display = 'flex';
-          websiteTabContent.style.display = 'none';
-          // Update sliding indicator position
-          requestAnimationFrame(() => {
-            updateSlidingIndicator(customTab);
-          });
+        } else if (savedLanguage === 'none') {
+          // Show "As per website" when saved language is 'none'
+          dropdownInput.value = 'As per website';
         } else if (savedLanguage === 'dynamic') {
           // Switch to Dynamic tab if dynamic is selected
           activeTab = 'dynamic';
@@ -1238,13 +1424,6 @@ export default defineContentScript({
       
       // Update button state after loading saved language
       updateButtonState();
-      
-      // Trigger scale-up animation after modal is added to DOM
-      requestAnimationFrame(() => {
-        overlay.style.opacity = '1';
-        modal.style.transform = 'scale(1)';
-        modal.style.opacity = '1';
-      });
       
       // Notify popup to hide settings button when modal is open
       try {
@@ -1364,6 +1543,9 @@ export default defineContentScript({
       button.classList.add('vocab-ask-about-page-btn-visible');
       
       console.log('[Content Script] Ask-about-page button shown with animation');
+      
+      // Show close button when ask-about-page button is shown
+      showCloseButton();
     }
     
     /**
@@ -1377,6 +1559,38 @@ export default defineContentScript({
       
       button.classList.remove('vocab-ask-about-page-btn-visible');
       button.classList.add('vocab-ask-about-page-btn-hidden');
+      
+      // Hide close button when ask-about-page button is hidden
+      hideCloseButton();
+    }
+    
+    /**
+     * Show close button
+     */
+    function showCloseButton() {
+      const button = document.getElementById('vocab-close-btn');
+      if (!button) {
+        return;
+      }
+      
+      button.style.display = 'flex';
+      button.style.opacity = '0.95';
+      
+      console.log('[Content Script] Close button shown');
+    }
+    
+    /**
+     * Hide close button
+     */
+    function hideCloseButton() {
+      const button = document.getElementById('vocab-close-btn');
+      if (!button) {
+        return;
+      }
+      
+      button.style.display = 'none';
+      
+      console.log('[Content Script] Close button hidden');
     }
     
     /**
@@ -1496,6 +1710,79 @@ export default defineContentScript({
       attachAskAboutPageClickHandler(button);
       
       console.log('[Content Script] Ask-about-page button created (hidden initially)');
+      
+      // Note: X button is already created earlier in initialization
+      // Just ensure it's shown/hidden based on extension state
+    }
+    
+    /**
+     * Create circular X button below ask-about-page button
+     */
+    function createCloseButton() {
+      // Check if button already exists
+      if (document.getElementById('vocab-close-btn')) {
+        return;
+      }
+      
+      // Function to actually create and append the button
+      const createButton = () => {
+        // Check if button already exists (might have been created by another call)
+        if (document.getElementById('vocab-close-btn')) {
+          return;
+        }
+        
+        // Create button element
+        const button = document.createElement('button');
+        button.id = 'vocab-close-btn';
+        button.className = 'vocab-close-btn';
+        button.setAttribute('aria-label', 'Close');
+        
+        // Initially hide the button (will be shown when extension is enabled)
+        button.style.display = 'none';
+        
+        // Use white thick bold X icon with faceted/geometric design (SVG)
+        button.innerHTML = `
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" class="vocab-close-x-icon">
+            <path d="M18 6L6 18M6 6L18 18" stroke="white" stroke-width="4" stroke-linecap="square" stroke-linejoin="miter" stroke-miterlimit="10"/>
+          </svg>
+        `;
+        
+        // Append to body
+        document.body.appendChild(button);
+        
+        // Add click handler to show language modal
+        button.addEventListener('click', () => {
+          console.log('[Content Script] Close button clicked - showing language modal');
+          showLanguageSelectionModal();
+        });
+        
+        console.log('[Content Script] Close X button created (initially hidden)');
+      };
+      
+      // Try to create immediately if body exists
+      if (document.body) {
+        createButton();
+      } else {
+        // If body doesn't exist yet, wait for it using MutationObserver
+        const observer = new MutationObserver((mutations, obs) => {
+          if (document.body) {
+            createButton();
+            obs.disconnect(); // Stop observing once body is found
+          }
+        });
+        
+        // Start observing the document
+        observer.observe(document.documentElement, {
+          childList: true,
+          subtree: true
+        });
+        
+        // Fallback: also check immediately in case body already exists
+        if (document.body) {
+          observer.disconnect();
+          createButton();
+        }
+      }
     }
     
     /**
@@ -1628,6 +1915,9 @@ export default defineContentScript({
     }
     
     console.log('[Content Script] Initializing with global storage key:', GLOBAL_STORAGE_KEY);
+    
+    // Create preferred language button immediately (before other initializations)
+    createCloseButton();
     
     // Initialize the button panel when content script loads
     await ButtonPanel.init();
@@ -1788,6 +2078,18 @@ export default defineContentScript({
         this.bannerContainer.appendChild(instructions);
         this.bannerContainer.appendChild(footer);
         
+        // Prevent double-click and text selection on banner
+        this.bannerContainer.addEventListener('dblclick', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          return false;
+        });
+        
+        this.bannerContainer.addEventListener('selectstart', (e) => {
+          e.preventDefault();
+          return false;
+        });
+        
         // Add styles
         this.addStyles();
         
@@ -1817,13 +2119,24 @@ export default defineContentScript({
             border-radius: 30px !important;
             padding: 20px !important;
             box-shadow: 0 4px 20px rgba(149, 39, 245, 0.15) !important;
-            z-index: 10000 !important;
+            z-index: 10000001 !important;
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif !important;
             transform: translateX(400px);
             opacity: 0;
             transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.4s ease;
             visibility: visible !important;
             display: block !important;
+            user-select: none !important;
+            -webkit-user-select: none !important;
+            -moz-user-select: none !important;
+            -ms-user-select: none !important;
+          }
+          
+          .explain-ai-banner * {
+            user-select: none !important;
+            -webkit-user-select: none !important;
+            -moz-user-select: none !important;
+            -ms-user-select: none !important;
           }
           
           .explain-ai-banner.show {
@@ -3125,13 +3438,22 @@ const WordSelector = {
             oldBtn.remove();
           }
           
-          // Change background to green with breathing animation
-          wordHighlight.classList.add('vocab-word-explained', 'word-breathing');
+          // Force a reflow to ensure the element is ready for animation
+          void wordHighlight.offsetWidth;
           
-          // Remove breathing animation after it completes (0.8s)
+          // Change background to green with popup animation
+          wordHighlight.classList.add('vocab-word-explained', 'word-popup');
+          
+          // Force another reflow to trigger the animation
+          void wordHighlight.offsetWidth;
+          
+          // Remove popup animation after it completes (0.6s)
           setTimeout(() => {
-            wordHighlight.classList.remove('word-breathing');
-          }, 800);
+            wordHighlight.classList.remove('word-popup');
+            // Re-enable transition after animation completes
+            wordHighlight.style.transition = '';
+            wordHighlight.style.willChange = '';
+          }, 600);
           
           // Store explanation data on the element
           wordHighlight.setAttribute('data-meaning', wordInfo.meaning);
@@ -3808,7 +4130,7 @@ const WordSelector = {
    * @param {string} meaning - The meaning
    * @param {Array<string>} examples - Example sentences
    * @param {boolean} shouldAllowFetchMoreExamples - Whether to show the "View more examples" button
-   * @param {string|null} languageCode - Language code from API response (e.g., "EN"). If "EN", shows speaker icon for pronunciation
+   * @param {string|null} languageCode - Language code from API response (e.g., "ENGLISH"). If "ENGLISH", shows speaker icon for pronunciation
    * @returns {HTMLElement} Popup element
    */
   createWordPopup(word, meaning, examples, shouldAllowFetchMoreExamples = true, languageCode = null) {
@@ -3830,9 +4152,23 @@ const WordSelector = {
     meaningDiv.innerHTML = `<span class="word-bold"></span>${meaning}`;
     popup.appendChild(meaningDiv);
     
-    // Examples container
+    // Examples container (has separator line on top)
     const examplesContainer = document.createElement('div');
     examplesContainer.className = 'vocab-word-popup-examples-container';
+    
+    // Examples heading - light purple, horizontally centered, below separator
+    if (examples && examples.length > 0) {
+      const examplesHeading = document.createElement('div');
+      examplesHeading.className = 'vocab-word-popup-examples-heading';
+      examplesHeading.textContent = 'Examples';
+      examplesHeading.style.setProperty('color', 'rgba(147, 51, 234, 0.7)', 'important'); // Light purple
+      examplesHeading.style.setProperty('text-align', 'center', 'important');
+      examplesHeading.style.setProperty('font-size', '14px', 'important'); // Bigger font size
+      examplesHeading.style.setProperty('font-weight', '600', 'important'); // Thicker/bolder
+      examplesHeading.style.setProperty('margin-bottom', '10px', 'important');
+      examplesHeading.style.setProperty('margin-top', '8px', 'important'); // Space below separator
+      examplesContainer.appendChild(examplesHeading);
+    }
     
     if (examples && examples.length > 0) {
       const examplesList = document.createElement('ul');
@@ -3863,66 +4199,21 @@ const WordSelector = {
     const bottomContainer = document.createElement('div');
     bottomContainer.className = 'vocab-word-popup-bottom-container';
     
-    // Speaker icon for pronunciation - only show if languageCode is "EN"
+    // Speaker icon for pronunciation - HIDDEN for now
     // Add it to bottom container at the leftmost position
-    if (languageCode === 'EN') {
-      const speakerBtn = document.createElement('button');
-      speakerBtn.className = 'vocab-word-popup-speaker';
-      speakerBtn.setAttribute('aria-label', `Pronounce "${word}"`);
-      speakerBtn.innerHTML = this.createSpeakerIcon();
-      speakerBtn.addEventListener('click', async (e) => {
-        e.stopPropagation();
-        await this.handlePronunciation(word, speakerBtn);
-      });
-      bottomContainer.appendChild(speakerBtn);
-      // Add class to popup to indicate speaker icon exists
-      popup.classList.add('has-speaker-icon');
-    }
-    
-    // Language tab group - show if languageCode is not "EN"
-    if (languageCode && languageCode !== 'EN') {
-      const tabGroup = document.createElement('div');
-      tabGroup.className = 'vocab-word-popup-tab-group';
-      
-      // Local language tab (initially active)
-      const localTab = document.createElement('button');
-      localTab.className = 'vocab-word-popup-tab vocab-word-popup-tab-active';
-      localTab.textContent = languageCode;
-      localTab.setAttribute('data-tab', languageCode);
-      localTab.setAttribute('aria-label', `Show ${languageCode} content`);
-      localTab.addEventListener('click', async (e) => {
-        e.stopPropagation();
-        // Only switch if not already active
-        if (!localTab.classList.contains('vocab-word-popup-tab-active')) {
-          await this.switchLanguageTab(popup, word, languageCode, localTab, enTab, languageCode);
-        }
-      });
-      
-      // EN tab
-      const enTab = document.createElement('button');
-      enTab.className = 'vocab-word-popup-tab';
-      enTab.textContent = 'EN';
-      enTab.setAttribute('data-tab', 'EN');
-      enTab.setAttribute('aria-label', 'Show English content');
-      enTab.addEventListener('click', async (e) => {
-        e.stopPropagation();
-        // Only switch if not already active
-        if (!enTab.classList.contains('vocab-word-popup-tab-active')) {
-          await this.switchLanguageTab(popup, word, languageCode, localTab, enTab, 'EN');
-        }
-      });
-      
-      tabGroup.appendChild(localTab);
-      tabGroup.appendChild(enTab);
-      bottomContainer.appendChild(tabGroup);
-      
-      // Set initial active tab for CSS sliding animation
-      tabGroup.setAttribute('data-active-tab', languageCode);
-      
-      // Store tab references for later use
-      popup.setAttribute('data-local-tab', '');
-      popup.setAttribute('data-en-tab', '');
-    }
+    // if (languageCode === 'ENGLISH') {
+    //   const speakerBtn = document.createElement('button');
+    //   speakerBtn.className = 'vocab-word-popup-speaker';
+    //   speakerBtn.setAttribute('aria-label', `Pronounce "${word}"`);
+    //   speakerBtn.innerHTML = this.createSpeakerIcon();
+    //   speakerBtn.addEventListener('click', async (e) => {
+    //     e.stopPropagation();
+    //     await this.handlePronunciation(word, speakerBtn);
+    //   });
+    //   bottomContainer.appendChild(speakerBtn);
+    //   // Add class to popup to indicate speaker icon exists
+    //   popup.classList.add('has-speaker-icon');
+    // }
     
     // View more button - bigger, bottom-right positioned
     const button = document.createElement('button');
@@ -3931,25 +4222,11 @@ const WordSelector = {
     button.setAttribute('data-word', word.toLowerCase());
     button.setAttribute('data-meaning', meaning);
     
-    // Check if tabs exist (languageCode is not "EN" and not null)
-    const hasTabs = languageCode && languageCode !== 'EN';
-    const currentTab = popup.getAttribute('data-current-tab');
-    const isEnTabActive = currentTab === 'EN';
-    
-    // Set initial button visibility:
-    // - If tabs exist and EN tab is active: always hide
-    // - If tabs exist and local language tab is active: show based on shouldAllowFetchMoreExamples
-    // - If no tabs exist: show based on shouldAllowFetchMoreExamples
-    if (hasTabs && isEnTabActive) {
-      // EN tab is active, always hide button
-      button.style.display = 'none';
-      popup.classList.add('no-more-examples-button');
-    } else if (!shouldAllowFetchMoreExamples) {
-      // Local language tab active or no tabs, but shouldAllowFetchMoreExamples is false
+    // Set initial button visibility based on shouldAllowFetchMoreExamples
+    if (!shouldAllowFetchMoreExamples) {
       button.style.display = 'none';
       popup.classList.add('no-more-examples-button');
     } else {
-      // Local language tab active or no tabs, and shouldAllowFetchMoreExamples is true
       button.style.display = 'block';
     }
     
@@ -4440,6 +4717,40 @@ const WordSelector = {
     const meaningDiv = popup.querySelector('.vocab-word-popup-meaning');
     if (meaningDiv) {
       meaningDiv.innerHTML = `<span class="word-bold">${word}</span> means ${meaning}`;
+    }
+    
+    // Update examples section - ensure heading exists below separator
+    const examplesContainer = popup.querySelector('.vocab-word-popup-examples-container');
+    if (examples && examples.length > 0) {
+      let examplesHeading = popup.querySelector('.vocab-word-popup-examples-heading');
+      if (!examplesHeading && examplesContainer) {
+        examplesHeading = document.createElement('div');
+        examplesHeading.className = 'vocab-word-popup-examples-heading';
+        examplesHeading.textContent = 'Examples';
+        examplesHeading.style.setProperty('color', 'rgba(147, 51, 234, 0.7)', 'important'); // Light purple
+        examplesHeading.style.setProperty('text-align', 'center', 'important');
+        examplesHeading.style.setProperty('font-size', '14px', 'important'); // Bigger font size
+        examplesHeading.style.setProperty('font-weight', '600', 'important'); // Thicker/bolder
+        examplesHeading.style.setProperty('margin-bottom', '10px', 'important');
+        examplesHeading.style.setProperty('margin-top', '8px', 'important'); // Space below separator
+        // Insert heading as first child of examples container (after separator)
+        const examplesList = examplesContainer.querySelector('.vocab-word-popup-examples');
+        if (examplesList) {
+          examplesContainer.insertBefore(examplesHeading, examplesList);
+        } else {
+          examplesContainer.appendChild(examplesHeading);
+        }
+      } else if (examplesHeading) {
+        // Update existing heading styles
+        examplesHeading.style.setProperty('font-size', '14px', 'important');
+        examplesHeading.style.setProperty('font-weight', '600', 'important');
+      }
+    } else {
+      // Remove heading if no examples
+      const examplesHeading = popup.querySelector('.vocab-word-popup-examples-heading');
+      if (examplesHeading) {
+        examplesHeading.remove();
+      }
     }
     
     // Update examples
@@ -5550,10 +5861,10 @@ const WordSelector = {
       
       /* Green background for explained words */
       .vocab-word-explained {
-        background-color: rgba(134, 239, 172, 0.7) !important; /* Lighter green with slight transparency */
+        background-color: rgba(240, 253, 244, 0.5) !important; /* Very light green, semi-transparent */
         cursor: pointer;
         border-radius: 8px;
-        border: none !important;
+        border: 0.5px solid #22c55e !important; /* Green border (not light green) */
         padding: 0 2px;
         margin-top: 0 !important; /* Prevent top margin from affecting line spacing */
         margin-bottom: 0 !important; /* Prevent bottom margin from affecting line spacing */
@@ -5563,7 +5874,7 @@ const WordSelector = {
         min-width: auto !important; /* Prevent min-width from forcing expansion */
         user-select: none;
         -webkit-user-select: none;
-        transition: background-color 0.3s ease-in-out, opacity 0.3s ease-in-out, transform 0.15s ease-out;
+        transition: background-color 0.3s ease-in-out, opacity 0.3s ease-in-out;
         box-decoration-break: clone; /* Ensure background wraps correctly on line breaks */
         -webkit-box-decoration-break: clone;
         line-height: normal !important; /* Use normal line height to prevent expansion */
@@ -5600,14 +5911,45 @@ const WordSelector = {
         }
       }
       
+      /* Popup animation for green word when it first appears - pops twice to show clickable entity */
+      .vocab-word-explained.word-popup {
+        display: inline-block !important; /* Need inline-block for transform animation */
+        width: auto !important; /* Prevent width from expanding */
+        max-width: fit-content !important; /* Ensure it only wraps the text content */
+        will-change: transform !important; /* Optimize for animation */
+        transition: none !important; /* Disable transition during animation */
+        animation: wordPopup 0.6s cubic-bezier(0.68, -0.55, 0.265, 1.55) !important;
+      }
+      
+      @keyframes wordPopup {
+        0% {
+          transform: scale(1);
+        }
+        20% {
+          transform: scale(1.3);
+        }
+        40% {
+          transform: scale(1);
+        }
+        60% {
+          transform: scale(1.3);
+        }
+        80% {
+          transform: scale(1);
+        }
+        100% {
+          transform: scale(1);
+        }
+      }
+      
       .vocab-word-explained:hover {
-        background-color: rgba(74, 222, 128, 0.8) !important; /* Lighter green on hover with slight transparency */
+        background-color: rgba(187, 247, 208, 0.75) !important; /* Darker green on hover to show clickable */
       }
       
       .vocab-word-explained:active,
       .vocab-word-explained.vocab-word-clicking {
         transform: scale(0.97) !important; /* Reduced scale-down animation - less pronounced */
-        background-color: rgba(74, 222, 128, 0.8) !important; /* Lighter green on active with slight transparency */
+        background-color: rgba(167, 243, 208, 0.8) !important; /* Darker green on active/click to show interaction */
       }
       
       /* Smooth animation for green word highlight disappearance - 0.3s duration */
@@ -5617,7 +5959,7 @@ const WordSelector = {
       
       @keyframes wordFadeOut {
         0% {
-          background-color: rgba(134, 239, 172, 0.7); /* Lighter green with slight transparency */
+          background-color: rgba(240, 253, 244, 0.5); /* Very light green, semi-transparent */
           opacity: 1;
         }
         100% {
@@ -6675,212 +7017,7 @@ const TextSelector = {
       });
     }, 0);
     
-    // Create and append remove button FIRST (at top-left of highlight)
-    const removeBtn = this.createRemoveButton(text);
-    highlight.appendChild(removeBtn);
-    
-    // Create icons wrapper for magic-meaning button (positioned at the END of selected text)
-    const iconsWrapper = document.createElement('div');
-    iconsWrapper.className = 'vocab-text-icons-wrapper vocab-text-icons-wrapper-magic';
-    iconsWrapper.setAttribute('data-text-key', textKey);
-    
-    // Add magic-meaning button
-    const magicMeaningBtn = this.createMagicMeaningButton(textKey);
-    iconsWrapper.appendChild(magicMeaningBtn);
-    
-    // Append icons wrapper to highlight
-    highlight.appendChild(iconsWrapper);
-    
-    // Position icons relative to highlight - centered at mouse release point
-    // Force absolute positioning to ensure it's always outside the text
-    iconsWrapper.style.setProperty('position', 'absolute', 'important');
-    iconsWrapper.style.setProperty('display', 'flex', 'important');
-    iconsWrapper.style.setProperty('margin', '0', 'important');
-    iconsWrapper.style.setProperty('padding', '0', 'important');
-    
-    // Function to position button at mouse release coordinates
-    const positionAtMouseRelease = () => {
-      try {
-        // Wait for DOM to be ready
-        if (!highlight.offsetParent && highlight.offsetWidth === 0 && highlight.offsetHeight === 0) {
-          // Element not yet in DOM or not visible, retry later
-          setTimeout(positionAtMouseRelease, 100);
-          return;
-        }
-        
-        // Get the highlight's bounding rectangle (relative to viewport)
-        const highlightRect = highlight.getBoundingClientRect();
-        
-        if (!highlightRect || highlightRect.width === 0 && highlightRect.height === 0) {
-          throw new Error('Highlight not visible or has no dimensions');
-        }
-        
-        // Use mouse release coordinates if available, otherwise fall back to DOM-based positioning
-        if (mouseReleaseCoords && mouseReleaseCoords.x !== undefined && mouseReleaseCoords.y !== undefined) {
-          // Mouse release coordinates are in viewport coordinates (clientX, clientY)
-          const mouseX = mouseReleaseCoords.x;
-          const mouseY = mouseReleaseCoords.y;
-          
-          // For multi-line selections, we need to find the left edge of the line where the mouse was released
-          // This prevents the button from being offset by the indentation of the first line
-          let lineLeftEdge = highlightRect.left;
-          
-          try {
-            // Get a range at the mouse release point to find which line the mouse is on
-            let rangeAtPoint = null;
-            
-            // Modern browsers support caretRangeFromPoint
-            if (document.caretRangeFromPoint) {
-              rangeAtPoint = document.caretRangeFromPoint(mouseX, mouseY);
-            } else if (document.caretPositionFromPoint) {
-              // Firefox fallback
-              const caretPos = document.caretPositionFromPoint(mouseX, mouseY);
-              if (caretPos) {
-                rangeAtPoint = document.createRange();
-                rangeAtPoint.setStart(caretPos.offsetNode, caretPos.offset);
-                rangeAtPoint.setEnd(caretPos.offsetNode, caretPos.offset);
-              }
-            }
-            
-            if (rangeAtPoint) {
-              // Get the bounding rect of the range at the mouse point
-              const rangeRect = rangeAtPoint.getBoundingClientRect();
-              
-              // Now we need to find the left edge of the line where this range is
-              // We'll create a range from the start of the text node to the mouse point
-              // and find the leftmost rect at the same Y level
-              const container = rangeAtPoint.commonAncestorContainer;
-              
-              if (container && container.nodeType === Node.TEXT_NODE) {
-                // Create a range from the start of the text node to the mouse point
-                const lineRange = document.createRange();
-                lineRange.setStart(container, 0);
-                lineRange.setEnd(container, rangeAtPoint.startOffset);
-                
-                // Get all client rects for this range
-                const rects = lineRange.getClientRects();
-                
-                if (rects && rects.length > 0) {
-                  // Find the leftmost rect that's on the same line as the mouse point
-                  let minLeft = Infinity;
-                  const tolerance = 10; // 10px tolerance for line detection
-                  
-                  for (let i = 0; i < rects.length; i++) {
-                    const rect = rects[i];
-                    // Check if this rect is on the same line (similar Y coordinate)
-                    const isOnSameLine = (
-                      Math.abs(rect.top - mouseY) < tolerance || 
-                      Math.abs(rect.bottom - mouseY) < tolerance ||
-                      (rect.top <= mouseY && rect.bottom >= mouseY)
-                    );
-                    
-                    if (isOnSameLine && rect.left < minLeft) {
-                      minLeft = rect.left;
-                    }
-                  }
-                  
-                  if (minLeft !== Infinity) {
-                    lineLeftEdge = minLeft;
-                  } else {
-                    // Fallback: use the left edge of the range rect
-                    lineLeftEdge = rangeRect.left;
-                  }
-                } else {
-                  // Fallback: use the left edge of the range rect
-                  lineLeftEdge = rangeRect.left;
-                }
-              } else {
-                // Fallback: use the left edge of the range rect
-                lineLeftEdge = rangeRect.left;
-              }
-            } else {
-              // Fallback: try to find element at point
-              const elementAtPoint = document.elementFromPoint(mouseX, mouseY);
-              if (elementAtPoint) {
-                const elementRect = elementAtPoint.getBoundingClientRect();
-                lineLeftEdge = elementRect.left;
-              }
-            }
-          } catch (error) {
-            console.warn('[TextSelector] Error finding line left edge, using highlight left:', error);
-            // Fallback to using highlight left edge
-            lineLeftEdge = highlightRect.left;
-          }
-          
-          // Convert viewport coordinates to relative coordinates within the highlight
-          // Use the line's left edge for horizontal calculation to handle indentation correctly
-          // The relativeLeft is calculated from the line's left edge, not the highlight's left edge
-          const relativeLeftFromLine = mouseX - lineLeftEdge;
-          const relativeTop = mouseY - highlightRect.top;
-          
-          // Now convert to position relative to the highlight element
-          // We need to add the offset between the line's left edge and the highlight's left edge
-          const lineOffsetFromHighlight = lineLeftEdge - highlightRect.left;
-          const relativeLeft = relativeLeftFromLine + lineOffsetFromHighlight;
-          
-          // Validate coordinates - ensure they're reasonable
-          if (isNaN(relativeLeft) || isNaN(relativeTop)) {
-            throw new Error(`NaN coordinates: left=${relativeLeft}, top=${relativeTop}`);
-          }
-          
-          // Ensure coordinates are within reasonable bounds
-          if (relativeLeft < -1000 || relativeLeft > 10000 || relativeTop < -1000 || relativeTop > 10000) {
-            throw new Error(`Coordinates out of bounds: left=${relativeLeft}, top=${relativeTop}`);
-          }
-          
-          // Center the button container at the mouse release point
-          // Button size is 32px, so center offset is -16px (half of 32px)
-          const buttonSize = 32;
-          const centerOffset = buttonSize / 2;
-          
-          // Final position relative to highlight element
-          const finalRelativeLeft = relativeLeft;
-          
-          iconsWrapper.style.setProperty('left', `${finalRelativeLeft - centerOffset}px`, 'important');
-          iconsWrapper.style.setProperty('right', 'auto', 'important');
-          iconsWrapper.style.setProperty('top', `${relativeTop - centerOffset}px`, 'important');
-          iconsWrapper.style.setProperty('bottom', 'auto', 'important');
-          
-          console.log('[TextSelector] Positioned magic button at mouse release point:', { 
-            mouseX, 
-            mouseY,
-            lineLeftEdge,
-            highlightRectLeft: highlightRect.left,
-            lineOffsetFromHighlight,
-            relativeLeftFromLine,
-            relativeLeft, 
-            relativeTop,
-            finalRelativeLeft,
-            centerOffset,
-            highlightRect: { left: highlightRect.left, top: highlightRect.top, width: highlightRect.width, height: highlightRect.height }
-          });
-        } else {
-          // Fallback to DOM-based positioning if mouse coordinates not available
-          throw new Error('Mouse release coordinates not available, using fallback');
-        }
-      } catch (error) {
-        console.warn('[TextSelector] Error positioning button at mouse release point, using fallback:', error);
-        // Fallback: use original positioning (right side of highlight)
-        const highlightRect = highlight.getBoundingClientRect();
-        const isInModal = highlight.closest('.vocab-custom-content-modal');
-        
-        if (isInModal) {
-          iconsWrapper.style.setProperty('right', '-50px', 'important');
-          iconsWrapper.style.setProperty('left', 'auto', 'important');
-          iconsWrapper.style.setProperty('top', '-2px', 'important');
-        } else {
-          iconsWrapper.style.setProperty('right', '-45px', 'important');
-          iconsWrapper.style.setProperty('left', 'auto', 'important');
-          iconsWrapper.style.setProperty('top', '0px', 'important');
-        }
-      }
-    };
-    
-    // Position immediately and also after a short delay to ensure DOM is ready
-    positionAtMouseRelease();
-    setTimeout(() => {
-      positionAtMouseRelease();
-    }, 50);
+    // Remove button (purple cross icon) is not shown - removed similar to magic meaning button
     
     // Remove the appearing class after animation completes
     setTimeout(() => {
@@ -6889,6 +7026,15 @@ const TextSelector = {
     
     // Store the highlight in our map (O(1) operation)
     this.textToHighlights.set(textKey, highlight);
+    
+    // Automatically call simplify API (magic meaning) for this text
+    // Add a small delay to ensure DOM is ready
+    setTimeout(() => {
+      if (typeof ButtonPanel !== 'undefined' && ButtonPanel.handleMagicMeaningForText) {
+        console.log('[TextSelector] Automatically calling magic meaning for text:', textKey);
+        ButtonPanel.handleMagicMeaningForText(textKey);
+      }
+    }, 100);
   },
   
   /**
@@ -8315,11 +8461,11 @@ const TextSelector = {
         height: 10px;
       }
       
-      /* Light green dashed underline for simplified texts - same green as chat icon */
+      /* Dark green dashed underline for simplified texts - darker green */
       .vocab-text-simplified {
-        text-decoration-color: #22c55e !important;
+        text-decoration-color: #16a34a !important; /* Darker green */
         text-decoration-style: dashed !important;
-        text-decoration-thickness: 1.1px !important;
+        text-decoration-thickness: 1.1px !important; /* Original thickness */
         transition: text-decoration-color 0.3s ease-out;
       }
       
@@ -8535,6 +8681,50 @@ const TextSelector = {
         display: block;
         width: 24px;
         height: 24px;
+      }
+      
+      /* Semi-circular X close button - attached to right edge, positioned below ask-about-page button */
+      .vocab-close-btn {
+        position: fixed;
+        top: 78px; /* Below ask-about-page button: 20px (top) + 48px (height) + 10px (gap) */
+        right: -25px; /* Half off-screen to create protruding effect, flat edge at screen edge */
+        width: 50px; /* Wider button for rectangular shape */
+        height: 36px; /* Keep height same */
+        background: #9527F5; /* Purple background */
+        border: 2px solid white; /* White border */
+        border-right: none; /* No right border for flat edge (touching screen edge) */
+        border-radius: 18px 0 0 18px; /* Semi-circular: rounded on left (semi-circle), flat on right */
+        display: flex;
+        align-items: center;
+        justify-content: flex-start; /* Align to left */
+        cursor: pointer;
+        opacity: 0.95;
+        transition: opacity 0.2s ease, transform 0.15s ease, box-shadow 0.2s ease;
+        padding-left: 9px; /* Center icon in semi-circle: 18px radius / 2 = 9px */
+        padding-right: 0;
+        z-index: 10000000;
+        box-shadow: 0 2px 8px rgba(149, 39, 245, 0.4);
+        pointer-events: auto;
+        user-select: none;
+        -webkit-user-select: none;
+      }
+      
+      .vocab-close-btn:hover {
+        transform: translateX(-8px); /* Slide out from right edge on hover */
+        opacity: 1;
+        box-shadow: 0 4px 12px rgba(149, 39, 245, 0.6);
+      }
+      
+      .vocab-close-btn:active {
+        transform: translateX(-4px); /* Slight slide out on active */
+      }
+      
+      .vocab-close-btn svg,
+      .vocab-close-btn .vocab-close-x-icon {
+        pointer-events: none;
+        display: block;
+        width: 16px; /* Smaller icon for smaller button */
+        height: 16px; /* Smaller icon for smaller button */
       }
       
       /* Tooltip for ask-about-page button - Similar to import-content button tooltip */
@@ -12584,7 +12774,7 @@ const ChatDialog = {
         font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
         user-select: none;  /* Disable text selection in popup */
         background: white !important;
-        border-radius: 16px 0 0 16px; /* top-left top-right bottom-right bottom-left */
+        border-radius: 30px 0 0 30px; /* top-left top-right bottom-right bottom-left */
       }
       
       .vocab-chat-dialog.visible {
@@ -12649,7 +12839,7 @@ const ChatDialog = {
       .vocab-chat-content {
         background: white !important;
         height: 100%;
-        border-radius: 16px 0 0 16px; /* top-left top-right bottom-right bottom-left */
+        border-radius: 30px 0 0 30px; /* top-left top-right bottom-right bottom-left */
         box-shadow: -4px 0 24px rgba(149, 39, 245, 0.2), -2px 0 12px rgba(149, 39, 245, 0.1);
         display: flex;
         flex-direction: column;
@@ -15313,7 +15503,7 @@ const ChatDialog = {
         border-left: 4px solid #9527F5;
         border-right: none;
         border-bottom: none;
-        border-radius: 20px 0 0 0;
+        border-radius: 30px 0 0 0;
         background: transparent;
       }
 
@@ -15323,7 +15513,7 @@ const ChatDialog = {
         border-right: 4px solid #9527F5;
         border-left: none;
         border-bottom: none;
-        border-radius: 0 20px 0 0;
+        border-radius: 0 30px 0 0;
         background: transparent;
       }
 
@@ -15333,7 +15523,7 @@ const ChatDialog = {
         border-left: 4px solid #9527F5;
         border-right: none;
         border-top: none;
-        border-radius: 0 0 0 20px;
+        border-radius: 0 0 0 30px;
         background: transparent;
       }
 
@@ -15343,7 +15533,7 @@ const ChatDialog = {
         border-right: 4px solid #9527F5;
         border-left: none;
         border-top: none;
-        border-radius: 0 0 20px 0;
+        border-radius: 0 0 30px 0;
         background: transparent;
       }
 
@@ -19064,6 +19254,55 @@ const ButtonPanel = {
     // Add loading animation class (already added in click handler, but ensure it's there)
     highlight.classList.add('vocab-text-loading');
     
+    // Create purple spinner at book icon location during API call
+    const spinnerWrapper = document.createElement('div');
+    spinnerWrapper.className = 'vocab-text-book-spinner-wrapper';
+    spinnerWrapper.setAttribute('data-text-key', textKey);
+    spinnerWrapper.style.setProperty('position', 'absolute', 'important');
+    spinnerWrapper.style.setProperty('display', 'flex', 'important');
+    spinnerWrapper.style.setProperty('align-items', 'center', 'important');
+    spinnerWrapper.style.setProperty('justify-content', 'center', 'important');
+    spinnerWrapper.style.setProperty('margin', '0', 'important');
+    spinnerWrapper.style.setProperty('padding', '0', 'important');
+    spinnerWrapper.style.setProperty('z-index', '10000003', 'important');
+    
+    const isInModal = highlight.closest('.vocab-custom-content-modal');
+    if (isInModal) {
+      spinnerWrapper.style.setProperty('left', '-50px', 'important');
+      spinnerWrapper.style.setProperty('right', 'auto', 'important');
+      spinnerWrapper.style.setProperty('top', '-2px', 'important');
+    } else {
+      spinnerWrapper.style.setProperty('left', '-45px', 'important');
+      spinnerWrapper.style.setProperty('right', 'auto', 'important');
+      spinnerWrapper.style.setProperty('top', '0px', 'important');
+    }
+    
+    // Create white circular background for spinner
+    const spinnerBackground = document.createElement('div');
+    spinnerBackground.style.setProperty('width', '32px', 'important');
+    spinnerBackground.style.setProperty('height', '32px', 'important');
+    spinnerBackground.style.setProperty('background-color', '#FFFFFF', 'important');
+    spinnerBackground.style.setProperty('border-radius', '50%', 'important');
+    spinnerBackground.style.setProperty('box-shadow', '0 2px 4px rgba(149, 39, 245, 0.2)', 'important'); // Purple shadow matching chat container
+    spinnerBackground.style.setProperty('display', 'flex', 'important');
+    spinnerBackground.style.setProperty('align-items', 'center', 'important');
+    spinnerBackground.style.setProperty('justify-content', 'center', 'important');
+    spinnerBackground.style.setProperty('margin', '0', 'important');
+    spinnerBackground.style.setProperty('padding', '0', 'important');
+    
+    const spinner = document.createElement('div');
+    spinner.className = 'vocab-text-book-spinner';
+    spinner.style.setProperty('width', '20px', 'important');
+    spinner.style.setProperty('height', '20px', 'important');
+    spinner.style.setProperty('border', '3px solid rgba(147, 51, 234, 0.3)', 'important'); // Purple with transparency
+    spinner.style.setProperty('border-top-color', '#9333ea', 'important'); // Purple
+    spinner.style.setProperty('border-radius', '50%', 'important');
+    spinner.style.setProperty('animation', 'vocab-spin 0.8s linear infinite', 'important');
+    
+    spinnerBackground.appendChild(spinner);
+    spinnerWrapper.appendChild(spinnerBackground);
+    highlight.appendChild(spinnerWrapper);
+    
     // Track if dialog has been opened for this text
     let dialogOpened = false;
     let bookIconCreated = false;
@@ -19089,6 +19328,12 @@ const ButtonPanel = {
             // Create book icon and green cross button on first chunk (only once)
             if (!bookIconCreated) {
               bookIconCreated = true;
+              
+              // Remove purple spinner at book icon location
+              const bookSpinnerWrapper = highlight.querySelector('.vocab-text-book-spinner-wrapper');
+              if (bookSpinnerWrapper) {
+                bookSpinnerWrapper.remove();
+              }
               
               // Hide spinner if it exists
           const iconsWrapper = highlight.querySelector('.vocab-text-icons-wrapper');
@@ -19323,6 +19568,12 @@ const ButtonPanel = {
         
         // Remove loading animation on error
         highlight.classList.remove('vocab-text-loading');
+        
+        // Remove purple spinner at book icon location on error
+        const bookSpinnerWrapper = highlight.querySelector('.vocab-text-book-spinner-wrapper');
+        if (bookSpinnerWrapper) {
+          bookSpinnerWrapper.remove();
+        }
         
         // Hide spinner and restore button on error
         const iconsWrapper = highlight.querySelector('.vocab-text-icons-wrapper');
@@ -20042,14 +20293,23 @@ const ButtonPanel = {
                 oldBtn.remove();
               }
               
-              // Change background to green with breathing animation
-              console.log(`[ButtonPanel] Adding vocab-word-explained class for green background`);
-              wordHighlight.classList.add('vocab-word-explained', 'word-breathing');
+              // Force a reflow to ensure the element is ready for animation
+              void wordHighlight.offsetWidth;
               
-              // Remove breathing animation after it completes (0.8s)
+              // Change background to green with popup animation
+              console.log(`[ButtonPanel] Adding vocab-word-explained class for green background`);
+              wordHighlight.classList.add('vocab-word-explained', 'word-popup');
+              
+              // Force another reflow to trigger the animation
+              void wordHighlight.offsetWidth;
+              
+              // Remove popup animation after it completes (0.6s)
               setTimeout(() => {
-                wordHighlight.classList.remove('word-breathing');
-              }, 800);
+                wordHighlight.classList.remove('word-popup');
+                // Re-enable transition after animation completes
+                wordHighlight.style.transition = '';
+                wordHighlight.style.willChange = '';
+              }, 600);
               
               // Store explanation data on the element
               console.log(`[ButtonPanel] Storing explanation data on element`);
