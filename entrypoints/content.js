@@ -3808,7 +3808,7 @@ const WordSelector = {
    * @param {string} meaning - The meaning
    * @param {Array<string>} examples - Example sentences
    * @param {boolean} shouldAllowFetchMoreExamples - Whether to show the "View more examples" button
-   * @param {string|null} languageCode - Language code from API response (e.g., "EN"). If "EN", shows speaker icon for pronunciation
+   * @param {string|null} languageCode - Language code from API response (e.g., "ENGLISH"). If "ENGLISH", shows speaker icon for pronunciation
    * @returns {HTMLElement} Popup element
    */
   createWordPopup(word, meaning, examples, shouldAllowFetchMoreExamples = true, languageCode = null) {
@@ -3863,66 +3863,21 @@ const WordSelector = {
     const bottomContainer = document.createElement('div');
     bottomContainer.className = 'vocab-word-popup-bottom-container';
     
-    // Speaker icon for pronunciation - only show if languageCode is "EN"
+    // Speaker icon for pronunciation - HIDDEN for now
     // Add it to bottom container at the leftmost position
-    if (languageCode === 'EN') {
-      const speakerBtn = document.createElement('button');
-      speakerBtn.className = 'vocab-word-popup-speaker';
-      speakerBtn.setAttribute('aria-label', `Pronounce "${word}"`);
-      speakerBtn.innerHTML = this.createSpeakerIcon();
-      speakerBtn.addEventListener('click', async (e) => {
-        e.stopPropagation();
-        await this.handlePronunciation(word, speakerBtn);
-      });
-      bottomContainer.appendChild(speakerBtn);
-      // Add class to popup to indicate speaker icon exists
-      popup.classList.add('has-speaker-icon');
-    }
-    
-    // Language tab group - show if languageCode is not "EN"
-    if (languageCode && languageCode !== 'EN') {
-      const tabGroup = document.createElement('div');
-      tabGroup.className = 'vocab-word-popup-tab-group';
-      
-      // Local language tab (initially active)
-      const localTab = document.createElement('button');
-      localTab.className = 'vocab-word-popup-tab vocab-word-popup-tab-active';
-      localTab.textContent = languageCode;
-      localTab.setAttribute('data-tab', languageCode);
-      localTab.setAttribute('aria-label', `Show ${languageCode} content`);
-      localTab.addEventListener('click', async (e) => {
-        e.stopPropagation();
-        // Only switch if not already active
-        if (!localTab.classList.contains('vocab-word-popup-tab-active')) {
-          await this.switchLanguageTab(popup, word, languageCode, localTab, enTab, languageCode);
-        }
-      });
-      
-      // EN tab
-      const enTab = document.createElement('button');
-      enTab.className = 'vocab-word-popup-tab';
-      enTab.textContent = 'EN';
-      enTab.setAttribute('data-tab', 'EN');
-      enTab.setAttribute('aria-label', 'Show English content');
-      enTab.addEventListener('click', async (e) => {
-        e.stopPropagation();
-        // Only switch if not already active
-        if (!enTab.classList.contains('vocab-word-popup-tab-active')) {
-          await this.switchLanguageTab(popup, word, languageCode, localTab, enTab, 'EN');
-        }
-      });
-      
-      tabGroup.appendChild(localTab);
-      tabGroup.appendChild(enTab);
-      bottomContainer.appendChild(tabGroup);
-      
-      // Set initial active tab for CSS sliding animation
-      tabGroup.setAttribute('data-active-tab', languageCode);
-      
-      // Store tab references for later use
-      popup.setAttribute('data-local-tab', '');
-      popup.setAttribute('data-en-tab', '');
-    }
+    // if (languageCode === 'ENGLISH') {
+    //   const speakerBtn = document.createElement('button');
+    //   speakerBtn.className = 'vocab-word-popup-speaker';
+    //   speakerBtn.setAttribute('aria-label', `Pronounce "${word}"`);
+    //   speakerBtn.innerHTML = this.createSpeakerIcon();
+    //   speakerBtn.addEventListener('click', async (e) => {
+    //     e.stopPropagation();
+    //     await this.handlePronunciation(word, speakerBtn);
+    //   });
+    //   bottomContainer.appendChild(speakerBtn);
+    //   // Add class to popup to indicate speaker icon exists
+    //   popup.classList.add('has-speaker-icon');
+    // }
     
     // View more button - bigger, bottom-right positioned
     const button = document.createElement('button');
@@ -3931,25 +3886,11 @@ const WordSelector = {
     button.setAttribute('data-word', word.toLowerCase());
     button.setAttribute('data-meaning', meaning);
     
-    // Check if tabs exist (languageCode is not "EN" and not null)
-    const hasTabs = languageCode && languageCode !== 'EN';
-    const currentTab = popup.getAttribute('data-current-tab');
-    const isEnTabActive = currentTab === 'EN';
-    
-    // Set initial button visibility:
-    // - If tabs exist and EN tab is active: always hide
-    // - If tabs exist and local language tab is active: show based on shouldAllowFetchMoreExamples
-    // - If no tabs exist: show based on shouldAllowFetchMoreExamples
-    if (hasTabs && isEnTabActive) {
-      // EN tab is active, always hide button
-      button.style.display = 'none';
-      popup.classList.add('no-more-examples-button');
-    } else if (!shouldAllowFetchMoreExamples) {
-      // Local language tab active or no tabs, but shouldAllowFetchMoreExamples is false
+    // Set initial button visibility based on shouldAllowFetchMoreExamples
+    if (!shouldAllowFetchMoreExamples) {
       button.style.display = 'none';
       popup.classList.add('no-more-examples-button');
     } else {
-      // Local language tab active or no tabs, and shouldAllowFetchMoreExamples is true
       button.style.display = 'block';
     }
     
@@ -6675,212 +6616,7 @@ const TextSelector = {
       });
     }, 0);
     
-    // Create and append remove button FIRST (at top-left of highlight)
-    const removeBtn = this.createRemoveButton(text);
-    highlight.appendChild(removeBtn);
-    
-    // Create icons wrapper for magic-meaning button (positioned at the END of selected text)
-    const iconsWrapper = document.createElement('div');
-    iconsWrapper.className = 'vocab-text-icons-wrapper vocab-text-icons-wrapper-magic';
-    iconsWrapper.setAttribute('data-text-key', textKey);
-    
-    // Add magic-meaning button
-    const magicMeaningBtn = this.createMagicMeaningButton(textKey);
-    iconsWrapper.appendChild(magicMeaningBtn);
-    
-    // Append icons wrapper to highlight
-    highlight.appendChild(iconsWrapper);
-    
-    // Position icons relative to highlight - centered at mouse release point
-    // Force absolute positioning to ensure it's always outside the text
-    iconsWrapper.style.setProperty('position', 'absolute', 'important');
-    iconsWrapper.style.setProperty('display', 'flex', 'important');
-    iconsWrapper.style.setProperty('margin', '0', 'important');
-    iconsWrapper.style.setProperty('padding', '0', 'important');
-    
-    // Function to position button at mouse release coordinates
-    const positionAtMouseRelease = () => {
-      try {
-        // Wait for DOM to be ready
-        if (!highlight.offsetParent && highlight.offsetWidth === 0 && highlight.offsetHeight === 0) {
-          // Element not yet in DOM or not visible, retry later
-          setTimeout(positionAtMouseRelease, 100);
-          return;
-        }
-        
-        // Get the highlight's bounding rectangle (relative to viewport)
-        const highlightRect = highlight.getBoundingClientRect();
-        
-        if (!highlightRect || highlightRect.width === 0 && highlightRect.height === 0) {
-          throw new Error('Highlight not visible or has no dimensions');
-        }
-        
-        // Use mouse release coordinates if available, otherwise fall back to DOM-based positioning
-        if (mouseReleaseCoords && mouseReleaseCoords.x !== undefined && mouseReleaseCoords.y !== undefined) {
-          // Mouse release coordinates are in viewport coordinates (clientX, clientY)
-          const mouseX = mouseReleaseCoords.x;
-          const mouseY = mouseReleaseCoords.y;
-          
-          // For multi-line selections, we need to find the left edge of the line where the mouse was released
-          // This prevents the button from being offset by the indentation of the first line
-          let lineLeftEdge = highlightRect.left;
-          
-          try {
-            // Get a range at the mouse release point to find which line the mouse is on
-            let rangeAtPoint = null;
-            
-            // Modern browsers support caretRangeFromPoint
-            if (document.caretRangeFromPoint) {
-              rangeAtPoint = document.caretRangeFromPoint(mouseX, mouseY);
-            } else if (document.caretPositionFromPoint) {
-              // Firefox fallback
-              const caretPos = document.caretPositionFromPoint(mouseX, mouseY);
-              if (caretPos) {
-                rangeAtPoint = document.createRange();
-                rangeAtPoint.setStart(caretPos.offsetNode, caretPos.offset);
-                rangeAtPoint.setEnd(caretPos.offsetNode, caretPos.offset);
-              }
-            }
-            
-            if (rangeAtPoint) {
-              // Get the bounding rect of the range at the mouse point
-              const rangeRect = rangeAtPoint.getBoundingClientRect();
-              
-              // Now we need to find the left edge of the line where this range is
-              // We'll create a range from the start of the text node to the mouse point
-              // and find the leftmost rect at the same Y level
-              const container = rangeAtPoint.commonAncestorContainer;
-              
-              if (container && container.nodeType === Node.TEXT_NODE) {
-                // Create a range from the start of the text node to the mouse point
-                const lineRange = document.createRange();
-                lineRange.setStart(container, 0);
-                lineRange.setEnd(container, rangeAtPoint.startOffset);
-                
-                // Get all client rects for this range
-                const rects = lineRange.getClientRects();
-                
-                if (rects && rects.length > 0) {
-                  // Find the leftmost rect that's on the same line as the mouse point
-                  let minLeft = Infinity;
-                  const tolerance = 10; // 10px tolerance for line detection
-                  
-                  for (let i = 0; i < rects.length; i++) {
-                    const rect = rects[i];
-                    // Check if this rect is on the same line (similar Y coordinate)
-                    const isOnSameLine = (
-                      Math.abs(rect.top - mouseY) < tolerance || 
-                      Math.abs(rect.bottom - mouseY) < tolerance ||
-                      (rect.top <= mouseY && rect.bottom >= mouseY)
-                    );
-                    
-                    if (isOnSameLine && rect.left < minLeft) {
-                      minLeft = rect.left;
-                    }
-                  }
-                  
-                  if (minLeft !== Infinity) {
-                    lineLeftEdge = minLeft;
-                  } else {
-                    // Fallback: use the left edge of the range rect
-                    lineLeftEdge = rangeRect.left;
-                  }
-                } else {
-                  // Fallback: use the left edge of the range rect
-                  lineLeftEdge = rangeRect.left;
-                }
-              } else {
-                // Fallback: use the left edge of the range rect
-                lineLeftEdge = rangeRect.left;
-              }
-            } else {
-              // Fallback: try to find element at point
-              const elementAtPoint = document.elementFromPoint(mouseX, mouseY);
-              if (elementAtPoint) {
-                const elementRect = elementAtPoint.getBoundingClientRect();
-                lineLeftEdge = elementRect.left;
-              }
-            }
-          } catch (error) {
-            console.warn('[TextSelector] Error finding line left edge, using highlight left:', error);
-            // Fallback to using highlight left edge
-            lineLeftEdge = highlightRect.left;
-          }
-          
-          // Convert viewport coordinates to relative coordinates within the highlight
-          // Use the line's left edge for horizontal calculation to handle indentation correctly
-          // The relativeLeft is calculated from the line's left edge, not the highlight's left edge
-          const relativeLeftFromLine = mouseX - lineLeftEdge;
-          const relativeTop = mouseY - highlightRect.top;
-          
-          // Now convert to position relative to the highlight element
-          // We need to add the offset between the line's left edge and the highlight's left edge
-          const lineOffsetFromHighlight = lineLeftEdge - highlightRect.left;
-          const relativeLeft = relativeLeftFromLine + lineOffsetFromHighlight;
-          
-          // Validate coordinates - ensure they're reasonable
-          if (isNaN(relativeLeft) || isNaN(relativeTop)) {
-            throw new Error(`NaN coordinates: left=${relativeLeft}, top=${relativeTop}`);
-          }
-          
-          // Ensure coordinates are within reasonable bounds
-          if (relativeLeft < -1000 || relativeLeft > 10000 || relativeTop < -1000 || relativeTop > 10000) {
-            throw new Error(`Coordinates out of bounds: left=${relativeLeft}, top=${relativeTop}`);
-          }
-          
-          // Center the button container at the mouse release point
-          // Button size is 32px, so center offset is -16px (half of 32px)
-          const buttonSize = 32;
-          const centerOffset = buttonSize / 2;
-          
-          // Final position relative to highlight element
-          const finalRelativeLeft = relativeLeft;
-          
-          iconsWrapper.style.setProperty('left', `${finalRelativeLeft - centerOffset}px`, 'important');
-          iconsWrapper.style.setProperty('right', 'auto', 'important');
-          iconsWrapper.style.setProperty('top', `${relativeTop - centerOffset}px`, 'important');
-          iconsWrapper.style.setProperty('bottom', 'auto', 'important');
-          
-          console.log('[TextSelector] Positioned magic button at mouse release point:', { 
-            mouseX, 
-            mouseY,
-            lineLeftEdge,
-            highlightRectLeft: highlightRect.left,
-            lineOffsetFromHighlight,
-            relativeLeftFromLine,
-            relativeLeft, 
-            relativeTop,
-            finalRelativeLeft,
-            centerOffset,
-            highlightRect: { left: highlightRect.left, top: highlightRect.top, width: highlightRect.width, height: highlightRect.height }
-          });
-        } else {
-          // Fallback to DOM-based positioning if mouse coordinates not available
-          throw new Error('Mouse release coordinates not available, using fallback');
-        }
-      } catch (error) {
-        console.warn('[TextSelector] Error positioning button at mouse release point, using fallback:', error);
-        // Fallback: use original positioning (right side of highlight)
-        const highlightRect = highlight.getBoundingClientRect();
-        const isInModal = highlight.closest('.vocab-custom-content-modal');
-        
-        if (isInModal) {
-          iconsWrapper.style.setProperty('right', '-50px', 'important');
-          iconsWrapper.style.setProperty('left', 'auto', 'important');
-          iconsWrapper.style.setProperty('top', '-2px', 'important');
-        } else {
-          iconsWrapper.style.setProperty('right', '-45px', 'important');
-          iconsWrapper.style.setProperty('left', 'auto', 'important');
-          iconsWrapper.style.setProperty('top', '0px', 'important');
-        }
-      }
-    };
-    
-    // Position immediately and also after a short delay to ensure DOM is ready
-    positionAtMouseRelease();
-    setTimeout(() => {
-      positionAtMouseRelease();
-    }, 50);
+    // Remove button (purple cross icon) is not shown - removed similar to magic meaning button
     
     // Remove the appearing class after animation completes
     setTimeout(() => {
@@ -6889,6 +6625,15 @@ const TextSelector = {
     
     // Store the highlight in our map (O(1) operation)
     this.textToHighlights.set(textKey, highlight);
+    
+    // Automatically call simplify API (magic meaning) for this text
+    // Add a small delay to ensure DOM is ready
+    setTimeout(() => {
+      if (typeof ButtonPanel !== 'undefined' && ButtonPanel.handleMagicMeaningForText) {
+        console.log('[TextSelector] Automatically calling magic meaning for text:', textKey);
+        ButtonPanel.handleMagicMeaningForText(textKey);
+      }
+    }, 100);
   },
   
   /**
@@ -19064,6 +18809,55 @@ const ButtonPanel = {
     // Add loading animation class (already added in click handler, but ensure it's there)
     highlight.classList.add('vocab-text-loading');
     
+    // Create purple spinner at book icon location during API call
+    const spinnerWrapper = document.createElement('div');
+    spinnerWrapper.className = 'vocab-text-book-spinner-wrapper';
+    spinnerWrapper.setAttribute('data-text-key', textKey);
+    spinnerWrapper.style.setProperty('position', 'absolute', 'important');
+    spinnerWrapper.style.setProperty('display', 'flex', 'important');
+    spinnerWrapper.style.setProperty('align-items', 'center', 'important');
+    spinnerWrapper.style.setProperty('justify-content', 'center', 'important');
+    spinnerWrapper.style.setProperty('margin', '0', 'important');
+    spinnerWrapper.style.setProperty('padding', '0', 'important');
+    spinnerWrapper.style.setProperty('z-index', '10000003', 'important');
+    
+    const isInModal = highlight.closest('.vocab-custom-content-modal');
+    if (isInModal) {
+      spinnerWrapper.style.setProperty('left', '-50px', 'important');
+      spinnerWrapper.style.setProperty('right', 'auto', 'important');
+      spinnerWrapper.style.setProperty('top', '-2px', 'important');
+    } else {
+      spinnerWrapper.style.setProperty('left', '-45px', 'important');
+      spinnerWrapper.style.setProperty('right', 'auto', 'important');
+      spinnerWrapper.style.setProperty('top', '0px', 'important');
+    }
+    
+    // Create white circular background for spinner
+    const spinnerBackground = document.createElement('div');
+    spinnerBackground.style.setProperty('width', '32px', 'important');
+    spinnerBackground.style.setProperty('height', '32px', 'important');
+    spinnerBackground.style.setProperty('background-color', '#FFFFFF', 'important');
+    spinnerBackground.style.setProperty('border-radius', '50%', 'important');
+    spinnerBackground.style.setProperty('box-shadow', '0 2px 4px rgba(149, 39, 245, 0.2)', 'important'); // Purple shadow matching chat container
+    spinnerBackground.style.setProperty('display', 'flex', 'important');
+    spinnerBackground.style.setProperty('align-items', 'center', 'important');
+    spinnerBackground.style.setProperty('justify-content', 'center', 'important');
+    spinnerBackground.style.setProperty('margin', '0', 'important');
+    spinnerBackground.style.setProperty('padding', '0', 'important');
+    
+    const spinner = document.createElement('div');
+    spinner.className = 'vocab-text-book-spinner';
+    spinner.style.setProperty('width', '20px', 'important');
+    spinner.style.setProperty('height', '20px', 'important');
+    spinner.style.setProperty('border', '3px solid rgba(147, 51, 234, 0.3)', 'important'); // Purple with transparency
+    spinner.style.setProperty('border-top-color', '#9333ea', 'important'); // Purple
+    spinner.style.setProperty('border-radius', '50%', 'important');
+    spinner.style.setProperty('animation', 'vocab-spin 0.8s linear infinite', 'important');
+    
+    spinnerBackground.appendChild(spinner);
+    spinnerWrapper.appendChild(spinnerBackground);
+    highlight.appendChild(spinnerWrapper);
+    
     // Track if dialog has been opened for this text
     let dialogOpened = false;
     let bookIconCreated = false;
@@ -19089,6 +18883,12 @@ const ButtonPanel = {
             // Create book icon and green cross button on first chunk (only once)
             if (!bookIconCreated) {
               bookIconCreated = true;
+              
+              // Remove purple spinner at book icon location
+              const bookSpinnerWrapper = highlight.querySelector('.vocab-text-book-spinner-wrapper');
+              if (bookSpinnerWrapper) {
+                bookSpinnerWrapper.remove();
+              }
               
               // Hide spinner if it exists
           const iconsWrapper = highlight.querySelector('.vocab-text-icons-wrapper');
@@ -19323,6 +19123,12 @@ const ButtonPanel = {
         
         // Remove loading animation on error
         highlight.classList.remove('vocab-text-loading');
+        
+        // Remove purple spinner at book icon location on error
+        const bookSpinnerWrapper = highlight.querySelector('.vocab-text-book-spinner-wrapper');
+        if (bookSpinnerWrapper) {
+          bookSpinnerWrapper.remove();
+        }
         
         // Hide spinner and restore button on error
         const iconsWrapper = highlight.querySelector('.vocab-text-icons-wrapper');
