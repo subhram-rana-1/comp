@@ -1458,26 +1458,24 @@ export default defineContentScript({
       
       // Extension is enabled, now check preferred language
       getSavedLanguage().then((savedLanguage) => {
-        // Only show modal if language is 'none' (not defined/set)
-        // Note: 'dynamic' is treated as a set value (like "English", "Spanish"), so modal won't show if language is 'dynamic'
+        // Set the language variable but don't automatically show modal on page load
+        // Modal should only be shown when user explicitly requests it (e.g., via close button or settings)
         if (savedLanguage === 'none') {
-          // Language is not defined, show modal
-          console.log('[Content Script] Language is not set, showing language modal');
-          // Wait for DOM to be ready
-          if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', showLanguageSelectionModal);
-          } else {
-            // Use setTimeout to ensure modal appears after page load
-            setTimeout(showLanguageSelectionModal, 100);
-          }
+          // Language is not defined, but don't show modal automatically
+          console.log('[Content Script] Language is not set, but not showing modal automatically');
+          language = 'none';
+          window.language = 'none';
         } else {
-          // Language is already defined/set, don't show modal
-          console.log('[Content Script] Language is already set:', savedLanguage, '- not showing modal');
+          // Language is already defined/set
+          console.log('[Content Script] Language is already set:', savedLanguage);
           language = savedLanguage;
           window.language = savedLanguage;
         }
       }).catch((error) => {
         console.error('[Content Script] Error checking saved language:', error);
+        // Set default value on error
+        language = 'none';
+        window.language = 'none';
       });
     }).catch((error) => {
       console.error('[Content Script] Error checking extension state:', error);
