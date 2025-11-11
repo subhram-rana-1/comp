@@ -374,11 +374,14 @@ export default defineContentScript({
         existingModal.remove();
       }
       
+      // Hide close button when modal opens
+      hideCloseButton();
+      
       // Blur ask-about-page button and banner when modal is visible
       blurAskAboutPageButton();
       blurBanner();
       
-      // Create overlay
+      // Create overlay (transparent, non-blocking - similar to chat dialog)
       const overlay = document.createElement('div');
       overlay.id = 'prefered-language-overlay';
       overlay.style.cssText = `
@@ -387,21 +390,29 @@ export default defineContentScript({
         left: 0;
         width: 100%;
         height: 100%;
-        background-color: rgba(0, 0, 0, 0.5);
-        z-index: 100000;
+        background-color: transparent;
+        z-index: 2147483647;
         display: flex;
-        justify-content: center;
-        align-items: center;
-        opacity: 0;
-        transition: opacity 0.3s ease;
+        justify-content: flex-end;
+        align-items: flex-start;
+        pointer-events: auto;
+        opacity: 1;
+        isolation: isolate;
       `;
       
-      // Function to close modal with scale-down animation
+      // Blur chat dialog when preferred-language modal is open
+      const chatDialog = document.getElementById('vocab-chat-dialog');
+      if (chatDialog) {
+        chatDialog.style.filter = 'blur(4px)';
+        chatDialog.style.opacity = '0.6';
+        chatDialog.style.transition = 'filter 0.3s ease, opacity 0.3s ease';
+      }
+      
+      // Function to close modal with slide-out animation (going outside the page to the right)
       function closeModalWithAnimation() {
-        // Scale down and fade out modal
-        modal.style.transform = 'scale(0)';
+        // Slide out to the right and fade out modal
+        modal.style.transform = 'translateX(100%)';
         modal.style.opacity = '0';
-        overlay.style.opacity = '0';
         
         // Notify popup to show settings button when modal is closed
         try {
@@ -414,36 +425,61 @@ export default defineContentScript({
           // Ignore if popup is not available
         }
         
-        // Remove overlay after animation completes
+        // Remove overlay after animation completes (match 0.4s animation duration)
         setTimeout(() => {
           overlay.remove();
+          // Remove dropdown list from body when modal closes
+          if (dropdownList && dropdownList.parentNode) {
+            dropdownList.remove();
+          }
           // Restore ask-about-page button and banner after modal is closed
           restoreAskAboutPageButton();
           restoreBanner();
-        }, 300);
+          // Show close button when modal is closed
+          showCloseButton();
+          // Restore chat dialog (remove blur)
+          const chatDialog = document.getElementById('vocab-chat-dialog');
+          if (chatDialog) {
+            chatDialog.style.filter = '';
+            chatDialog.style.opacity = '';
+          }
+        }, 400);
       }
       
-      // Create modal container
+      // Create modal container (small dimensions, aligned with close button top)
       const modal = document.createElement('div');
       modal.id = 'prefered-language-modal';
       modal.style.cssText = `
-        background-color: white;
-        border-radius: 30px;
-        padding: 40px;
-        max-width: 500px;
-        width: 90%;
+        background-color: white !important;
+        border-radius: 30px 0 0 30px;
+        padding: 20px;
+        max-width: 400px;
+        width: auto;
+        min-width: 300px;
+        height: auto;
+        max-height: calc(100vh - 100px);
         display: flex;
         flex-direction: column;
-        gap: 30px;
-        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+        gap: 0;
+        box-shadow: -10px 0 40px rgba(149, 39, 245, 0.3), -5px 0 20px rgba(149, 39, 245, 0.2);
         user-select: none;
         -webkit-user-select: none;
         -moz-user-select: none;
         -ms-user-select: none;
-        transform: scale(0);
-        transform-origin: center center;
+        position: relative;
+        top: 78px;
+        right: 0;
+        transform: translateX(100%);
         opacity: 0;
-        transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.3s ease;
+        transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.4s ease;
+        overflow-y: visible;
+        overflow-x: visible;
+        pointer-events: auto;
+        z-index: 2147483648;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif !important;
+        font-size: 16px !important;
+        line-height: 1.5 !important;
+        color: #000 !important;
       `;
       
       // Prevent double-click and text selection on modal
@@ -469,7 +505,7 @@ export default defineContentScript({
         }
       });
       
-      // First container: Heading
+      // First container: Heading (positioned lower than minimize button)
       const headingContainer = document.createElement('div');
       headingContainer.style.cssText = `
         text-align: center;
@@ -482,29 +518,37 @@ export default defineContentScript({
         -webkit-user-select: none;
         -moz-user-select: none;
         -ms-user-select: none;
+        margin-top: 60px;
+        margin-bottom: 30px;
+        padding-bottom: 20px;
       `;
       
       // Branding name with sparkle logo
       const brandingHeading = document.createElement('h2');
       brandingHeading.style.cssText = `
-        margin: 0;
-        font-size: 28px;
-        font-weight: 600;
-        color: #9527F5;
+        margin: 0 !important;
+        font-size: 28px !important;
+        font-weight: 600 !important;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif !important;
+        color: #9527F5 !important;
         user-select: none;
         -webkit-user-select: none;
         -moz-user-select: none;
         -ms-user-select: none;
         pointer-events: none;
-        display: flex;
+        display: flex !important;
         align-items: center;
         justify-content: center;
         gap: 8px;
+        text-shadow: none !important;
+        background: transparent !important;
+        opacity: 1 !important;
+        visibility: visible !important;
       `;
       brandingHeading.innerHTML = `
-        Explain AI
-        <span class="brand-icon" style="display: inline-flex; align-items: center;">
-          <svg width="24" height="24" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <span style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif !important; color: #9527F5 !important; font-size: 28px !important; font-weight: 600 !important; text-shadow: none !important; background: transparent !important; opacity: 1 !important; visibility: visible !important;">Explain AI</span>
+        <span class="brand-icon" style="display: inline-flex; align-items: center; opacity: 1 !important; visibility: visible !important;">
+          <svg width="24" height="24" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg" style="opacity: 1 !important; visibility: visible !important;">
             <path d="M14 0L17 8L25 11L17 14L14 22L11 14L3 11L11 8L14 0Z" fill="#9527F5"/>
             <path d="M22 16L23.5 20L27.5 21.5L23.5 23L22 27L20.5 23L16.5 21.5L20.5 20L22 16Z" fill="#9527F5"/>
             <path d="M8 21L9.5 24.5L13 26L9.5 27.5L8 31L6.5 27.5L3 26L6.5 24.5L8 21Z" fill="#9527F5"/>
@@ -514,17 +558,23 @@ export default defineContentScript({
       
       // Subheading
       const subHeading = document.createElement('p');
-      subHeading.textContent = 'Choose your preferred language';
+      subHeading.textContent = 'Choose your native language';
       subHeading.style.cssText = `
-        margin: 0;
-        font-size: 16px;
-        font-weight: 400;
-        color: #000000;
+        margin: 0 !important;
+        margin-bottom: 8px !important;
+        font-size: 16px !important;
+        font-weight: 400 !important;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif !important;
+        color: #000000 !important;
         user-select: none;
         -webkit-user-select: none;
         -moz-user-select: none;
         -ms-user-select: none;
         pointer-events: none;
+        text-shadow: none !important;
+        background: transparent !important;
+        opacity: 1 !important;
+        visibility: visible !important;
       `;
       
       // Prevent double-click on headings
@@ -541,7 +591,6 @@ export default defineContentScript({
       });
       
       headingContainer.appendChild(brandingHeading);
-      headingContainer.appendChild(subHeading);
       
       // Second container: Tabs with sliding indicator
       const tabsContainer = document.createElement('div');
@@ -702,8 +751,9 @@ export default defineContentScript({
       // Dropdown container
       const dropdownContainer = document.createElement('div');
       dropdownContainer.style.cssText = `
-        width: 100%;
+        width: 80%;
         position: relative;
+        z-index: 1;
       `;
       
       // Searchable dropdown input
@@ -716,12 +766,15 @@ export default defineContentScript({
         padding: 12px 45px 12px 16px;
         border: 2px solid #e5e5e5;
         border-radius: 8px;
-        font-size: 16px;
+        font-size: 16px !important;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif !important;
+        font-weight: 400 !important;
         box-sizing: border-box;
         outline: none;
         transition: border-color 0.2s;
         background-color: white !important;
         color: black !important;
+        text-shadow: none !important;
       `;
       // Allow text selection in input field for typing
       dropdownInput.style.userSelect = 'text';
@@ -732,7 +785,7 @@ export default defineContentScript({
       dropdownInput.style.setProperty('color', 'black', 'important');
       dropdownInput.style.setProperty('background', 'white', 'important');
       
-      // Dropdown icon
+      // Dropdown icon (inside input box)
       const dropdownIcon = document.createElement('div');
       dropdownIcon.id = 'vocab-language-dropdown-icon';
       dropdownIcon.innerHTML = `
@@ -747,34 +800,34 @@ export default defineContentScript({
         transform: translateY(-50%);
         pointer-events: none;
         transition: transform 0.2s;
-        z-index: 1;
+        z-index: 2;
       `;
       
       // Track keyboard navigation
       let selectedIndex = -1;
       let filteredLanguages = [];
       
-      // Dropdown list
+      // Dropdown list (positioned with highest z-index to appear above modal)
       const dropdownList = document.createElement('div');
       dropdownList.id = 'vocab-language-dropdown-list';
       dropdownList.style.cssText = `
-        position: absolute;
-        top: 100%;
-        left: 0;
-        right: 0;
-        background-color: white;
-        border: 2px solid #e5e5e5;
+        position: fixed !important;
+        background-color: white !important;
+        border-left: 2px solid #e5e5e5;
+        border-right: 2px solid #e5e5e5;
         border-top: none;
+        border-bottom: 2px solid #e5e5e5;
         border-radius: 0 0 8px 8px;
         max-height: 300px;
         overflow-y: auto;
         display: none;
-        z-index: 1000;
+        z-index: 2147483649 !important;
         box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
         user-select: none;
         -webkit-user-select: none;
         -moz-user-select: none;
         -ms-user-select: none;
+        isolation: isolate;
       `;
       
       // Prevent double-click and text selection on dropdown list
@@ -848,17 +901,24 @@ export default defineContentScript({
         updateButtonState();
       });
       
-      // Function to select language from dropdown
-      function selectLanguage(lang) {
+      // Function to select language from dropdown (auto-saves)
+      async function selectLanguage(lang) {
+        // If "As per website" is selected, save as 'none' for API
+        const languageToSave = lang === 'As per website' ? 'none' : lang;
         dropdownInput.value = lang;
         dropdownList.style.display = 'none';
         selectedIndex = -1;
         // Reset dropdown icon rotation
         dropdownIcon.style.transform = 'translateY(-50%) rotate(0deg)';
-        // Update preferred language text when language is selected
-        updatePreferredLanguageText(lang);
-        // Update button state
-        updateButtonState();
+        
+        // Auto-save language preference
+        await saveLanguage(languageToSave);
+        language = languageToSave;
+        window.language = languageToSave;
+        console.log('[Language Selection] Language auto-saved:', languageToSave);
+        
+        // Close modal after saving
+        closeModalWithAnimation();
       }
       
       // Function to highlight selected item
@@ -883,15 +943,26 @@ export default defineContentScript({
         filteredLanguages = [];
         selectedIndex = -1;
         
-        // If no filter, show all languages
+        // Always add "As per website" as first option
+        const AS_PER_WEBSITE = 'As per website';
+        
+        // If no filter, show "As per website" + all languages
         let filtered = [];
         if (!filter || filter.trim() === '') {
-          filtered = TOP_LANGUAGES;
+          filtered = [AS_PER_WEBSITE, ...TOP_LANGUAGES];
         } else {
-          // Filter by prefix matching
-          filtered = TOP_LANGUAGES.filter(lang => 
+          // Check if filter matches "As per website"
+          const matchesAsPerWebsite = AS_PER_WEBSITE.toLowerCase().includes(filter.toLowerCase());
+          // Filter languages by prefix matching
+          const filteredLangs = TOP_LANGUAGES.filter(lang => 
             lang.toLowerCase().startsWith(filter.toLowerCase())
           );
+          // Add "As per website" first if it matches, otherwise add filtered languages
+          if (matchesAsPerWebsite) {
+            filtered = [AS_PER_WEBSITE, ...filteredLangs];
+          } else {
+            filtered = filteredLangs;
+          }
         }
         
         // Store filtered languages for keyboard navigation
@@ -1046,6 +1117,12 @@ export default defineContentScript({
           e.preventDefault();
           if (selectedIndex >= 0 && selectedIndex < filteredLanguages.length) {
             selectLanguage(filteredLanguages[selectedIndex]);
+          } else {
+            // If no item selected but input has value, save it as new language
+            const inputValue = dropdownInput.value.trim();
+            if (inputValue) {
+              selectLanguage(inputValue);
+            }
           }
         } else if (e.key === 'Escape') {
           dropdownList.style.display = 'none';
@@ -1055,11 +1132,39 @@ export default defineContentScript({
         }
       });
       
+      // Function to update dropdown position (for fixed positioning)
+      function updateDropdownPosition() {
+        const inputRect = dropdownInput.getBoundingClientRect();
+        const viewportHeight = window.innerHeight;
+        const dropdownHeight = 300; // max-height of dropdown
+        const spaceBelow = viewportHeight - inputRect.bottom;
+        const spaceAbove = inputRect.top;
+        
+        dropdownList.style.left = `${inputRect.left}px`;
+        dropdownList.style.width = `${inputRect.width}px`;
+        
+        // If there's not enough space below, show dropdown above the input
+        if (spaceBelow < dropdownHeight && spaceAbove > spaceBelow) {
+          dropdownList.style.top = `${inputRect.top - Math.min(dropdownHeight, spaceAbove)}px`;
+          dropdownList.style.maxHeight = `${Math.min(dropdownHeight, spaceAbove - 10)}px`;
+          dropdownList.style.borderRadius = '8px 8px 0 0';
+          dropdownList.style.borderTop = '2px solid #e5e5e5';
+          dropdownList.style.borderBottom = 'none';
+        } else {
+          dropdownList.style.top = `${inputRect.bottom}px`;
+          dropdownList.style.maxHeight = `${Math.min(dropdownHeight, spaceBelow - 10)}px`;
+          dropdownList.style.borderRadius = '0 0 8px 8px';
+          dropdownList.style.borderTop = 'none';
+          dropdownList.style.borderBottom = '2px solid #e5e5e5';
+        }
+      }
+      
       // Dropdown input handlers
       dropdownInput.addEventListener('focus', () => {
         dropdownInput.style.borderColor = '#9333ea';
         const currentValue = dropdownInput.value;
         populateDropdownList(currentValue);
+        updateDropdownPosition();
         dropdownList.style.display = 'block';
         selectedIndex = -1;
         // Rotate dropdown icon
@@ -1080,28 +1185,46 @@ export default defineContentScript({
       dropdownInput.addEventListener('input', (e) => {
         const value = e.target.value;
         populateDropdownList(value);
+        updateDropdownPosition();
         dropdownList.style.display = 'block';
         selectedIndex = -1;
-        // Update preferred language text as user types
-        updatePreferredLanguageText(value);
-        // Update button state
-        updateButtonState();
+      });
+      
+      // Handle Enter key on input (when dropdown might be closed)
+      dropdownInput.addEventListener('keydown', async (e) => {
+        if (e.key === 'Enter' && (dropdownList.style.display === 'none' || !dropdownList.style.display)) {
+          e.preventDefault();
+          const inputValue = dropdownInput.value.trim();
+          if (inputValue) {
+            // If "As per website" is typed, save as 'none'
+            if (inputValue === 'As per website') {
+              await selectLanguage('As per website');
+            } else {
+              await selectLanguage(inputValue);
+            }
+          }
+        }
       });
       
       // Close dropdown when clicking outside
       let clickHandler = (e) => {
-        if (!dropdownContainer.contains(e.target)) {
+        if (!dropdownContainer.contains(e.target) && !dropdownList.contains(e.target)) {
           dropdownList.style.display = 'none';
         }
       };
       document.addEventListener('click', clickHandler);
+      
+      // Update dropdown position on scroll/resize
+      window.addEventListener('scroll', updateDropdownPosition, true);
+      window.addEventListener('resize', updateDropdownPosition);
       
       // Initial population - show all languages
       populateDropdownList('');
       
       dropdownContainer.appendChild(dropdownInput);
       dropdownContainer.appendChild(dropdownIcon);
-      dropdownContainer.appendChild(dropdownList);
+      // Append dropdown list to body instead of container for fixed positioning
+      document.body.appendChild(dropdownList);
       customTabContent.appendChild(preferredLanguageText);
       customTabContent.appendChild(dropdownContainer);
       
@@ -1194,32 +1317,106 @@ export default defineContentScript({
       updateButtonState();
       buttonContainer.appendChild(saveButton);
       
-      // Assemble modal
+      // Create minimize button (top-left corner of modal) - same design as chat dialog collapse button
+      const minimizeButton = document.createElement('button');
+      minimizeButton.className = 'vocab-chat-collapse-btn-small';
+      minimizeButton.setAttribute('aria-label', 'Close');
+      minimizeButton.innerHTML = `
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M9 18L15 12L9 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      `;
+      minimizeButton.style.cssText = `
+        position: absolute;
+        top: 20px;
+        left: 20px;
+        width: 32px;
+        height: 32px;
+        background: white;
+        border: 1.5px solid #d1d5db;
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        z-index: 10;
+        transition: all 0.2s ease;
+        text-decoration: none;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
+        opacity: 0.95;
+      `;
+      minimizeButton.addEventListener('mouseenter', () => {
+        minimizeButton.style.background = '#f3f4f6';
+        minimizeButton.style.borderColor = '#9527F5';
+        minimizeButton.style.boxShadow = '0 3px 6px rgba(149, 39, 245, 0.15)';
+        minimizeButton.style.transform = 'scale(1.05)';
+        minimizeButton.style.opacity = '1';
+      });
+      minimizeButton.addEventListener('mouseleave', () => {
+        minimizeButton.style.background = 'white';
+        minimizeButton.style.borderColor = '#d1d5db';
+        minimizeButton.style.boxShadow = '0 2px 4px rgba(0, 0, 0, 0.08)';
+        minimizeButton.style.transform = 'scale(1)';
+        minimizeButton.style.opacity = '0.95';
+      });
+      minimizeButton.addEventListener('click', closeModalWithAnimation);
+      minimizeButton.addEventListener('mousedown', () => {
+        minimizeButton.style.transform = 'scale(0.95)';
+        minimizeButton.style.boxShadow = '0 1px 2px rgba(0, 0, 0, 0.1)';
+      });
+      minimizeButton.addEventListener('mouseup', () => {
+        minimizeButton.style.transform = 'scale(1.05)';
+        minimizeButton.style.boxShadow = '0 3px 6px rgba(149, 39, 245, 0.15)';
+      });
+      
+      // Assemble modal (only heading and dropdown, no tabs or buttons)
+      modal.appendChild(minimizeButton);
       modal.appendChild(headingContainer);
-      modal.appendChild(tabsContainer);
-      modal.appendChild(tabContentContainer);
-      modal.appendChild(buttonContainer);
+      // Add dropdown directly to modal (from customTabContent)
+      const dropdownWrapper = document.createElement('div');
+      dropdownWrapper.style.cssText = `
+        width: 100%;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        align-items: center;
+        justify-content: center;
+        margin-top: 0;
+      `;
+      dropdownWrapper.appendChild(subHeading);
+      dropdownWrapper.appendChild(dropdownContainer);
+      modal.appendChild(dropdownWrapper);
       
       overlay.appendChild(modal);
       document.body.appendChild(overlay);
+      
+      // Close modal when clicking outside (on overlay)
+      overlay.addEventListener('click', (e) => {
+        // Only close if clicking directly on overlay, not on modal
+        if (e.target === overlay) {
+          closeModalWithAnimation();
+        }
+      });
+      
+      // Prevent modal clicks from closing
+      modal.addEventListener('click', (e) => {
+        e.stopPropagation();
+      });
+      
+      // Trigger slide-in animation from right
+      setTimeout(() => {
+        modal.style.transform = 'translateX(0)';
+        modal.style.opacity = '1';
+      }, 10);
       
       // Load saved language for current domain and populate the input
       getSavedLanguage().then((savedLanguage) => {
         if (savedLanguage && savedLanguage !== 'none' && savedLanguage !== 'dynamic') {
           // Populate input with saved language
           dropdownInput.value = savedLanguage;
-          // Update preferred language text
-          updatePreferredLanguageText(savedLanguage);
-          // Ensure Fixed tab is active
-          activeTab = 'fixed';
-          customTab.style.color = 'white';
-          websiteTab.style.color = '#666';
-          customTabContent.style.display = 'flex';
-          websiteTabContent.style.display = 'none';
-          // Update sliding indicator position
-          requestAnimationFrame(() => {
-            updateSlidingIndicator(customTab);
-          });
+        } else if (savedLanguage === 'none') {
+          // Show "As per website" when saved language is 'none'
+          dropdownInput.value = 'As per website';
         } else if (savedLanguage === 'dynamic') {
           // Switch to Dynamic tab if dynamic is selected
           activeTab = 'dynamic';
@@ -1364,6 +1561,9 @@ export default defineContentScript({
       button.classList.add('vocab-ask-about-page-btn-visible');
       
       console.log('[Content Script] Ask-about-page button shown with animation');
+      
+      // Show close button when ask-about-page button is shown
+      showCloseButton();
     }
     
     /**
@@ -1377,6 +1577,38 @@ export default defineContentScript({
       
       button.classList.remove('vocab-ask-about-page-btn-visible');
       button.classList.add('vocab-ask-about-page-btn-hidden');
+      
+      // Hide close button when ask-about-page button is hidden
+      hideCloseButton();
+    }
+    
+    /**
+     * Show close button
+     */
+    function showCloseButton() {
+      const button = document.getElementById('vocab-close-btn');
+      if (!button) {
+        return;
+      }
+      
+      button.style.display = 'flex';
+      button.style.opacity = '0.95';
+      
+      console.log('[Content Script] Close button shown');
+    }
+    
+    /**
+     * Hide close button
+     */
+    function hideCloseButton() {
+      const button = document.getElementById('vocab-close-btn');
+      if (!button) {
+        return;
+      }
+      
+      button.style.display = 'none';
+      
+      console.log('[Content Script] Close button hidden');
     }
     
     /**
@@ -1496,6 +1728,46 @@ export default defineContentScript({
       attachAskAboutPageClickHandler(button);
       
       console.log('[Content Script] Ask-about-page button created (hidden initially)');
+      
+      // Create the X button below the ask-about-page button
+      createCloseButton();
+    }
+    
+    /**
+     * Create circular X button below ask-about-page button
+     */
+    function createCloseButton() {
+      // Check if button already exists
+      if (document.getElementById('vocab-close-btn')) {
+        return;
+      }
+      
+      // Create button element
+      const button = document.createElement('button');
+      button.id = 'vocab-close-btn';
+      button.className = 'vocab-close-btn';
+      button.setAttribute('aria-label', 'Close');
+      
+      // Initially hide the button (will be shown when extension is enabled)
+      button.style.display = 'none';
+      
+      // Use white thick bold X icon with faceted/geometric design (SVG)
+      button.innerHTML = `
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" class="vocab-close-x-icon">
+          <path d="M18 6L6 18M6 6L18 18" stroke="white" stroke-width="4" stroke-linecap="square" stroke-linejoin="miter" stroke-miterlimit="10"/>
+        </svg>
+      `;
+      
+      // Append to body
+      document.body.appendChild(button);
+      
+      // Add click handler to show language modal
+      button.addEventListener('click', () => {
+        console.log('[Content Script] Close button clicked - showing language modal');
+        showLanguageSelectionModal();
+      });
+      
+      console.log('[Content Script] Close X button created (initially hidden)');
     }
     
     /**
@@ -8370,6 +8642,50 @@ const TextSelector = {
         height: 24px;
       }
       
+      /* Semi-circular X close button - attached to right edge, positioned below ask-about-page button */
+      .vocab-close-btn {
+        position: fixed;
+        top: 78px; /* Below ask-about-page button: 20px (top) + 48px (height) + 10px (gap) */
+        right: -25px; /* Half off-screen to create protruding effect, flat edge at screen edge */
+        width: 50px; /* Wider button for rectangular shape */
+        height: 36px; /* Keep height same */
+        background: #9527F5; /* Purple background */
+        border: 2px solid white; /* White border */
+        border-right: none; /* No right border for flat edge (touching screen edge) */
+        border-radius: 18px 0 0 18px; /* Semi-circular: rounded on left (semi-circle), flat on right */
+        display: flex;
+        align-items: center;
+        justify-content: flex-start; /* Align to left */
+        cursor: pointer;
+        opacity: 0.95;
+        transition: opacity 0.2s ease, transform 0.15s ease, box-shadow 0.2s ease;
+        padding-left: 9px; /* Center icon in semi-circle: 18px radius / 2 = 9px */
+        padding-right: 0;
+        z-index: 10000000;
+        box-shadow: 0 2px 8px rgba(149, 39, 245, 0.4);
+        pointer-events: auto;
+        user-select: none;
+        -webkit-user-select: none;
+      }
+      
+      .vocab-close-btn:hover {
+        transform: translateX(-8px); /* Slide out from right edge on hover */
+        opacity: 1;
+        box-shadow: 0 4px 12px rgba(149, 39, 245, 0.6);
+      }
+      
+      .vocab-close-btn:active {
+        transform: translateX(-4px); /* Slight slide out on active */
+      }
+      
+      .vocab-close-btn svg,
+      .vocab-close-btn .vocab-close-x-icon {
+        pointer-events: none;
+        display: block;
+        width: 16px; /* Smaller icon for smaller button */
+        height: 16px; /* Smaller icon for smaller button */
+      }
+      
       /* Tooltip for ask-about-page button - Similar to import-content button tooltip */
       .vocab-ask-about-page-tooltip {
         position: fixed !important;
@@ -12417,7 +12733,7 @@ const ChatDialog = {
         font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
         user-select: none;  /* Disable text selection in popup */
         background: white !important;
-        border-radius: 16px 0 0 16px; /* top-left top-right bottom-right bottom-left */
+        border-radius: 30px 0 0 30px; /* top-left top-right bottom-right bottom-left */
       }
       
       .vocab-chat-dialog.visible {
@@ -12482,7 +12798,7 @@ const ChatDialog = {
       .vocab-chat-content {
         background: white !important;
         height: 100%;
-        border-radius: 16px 0 0 16px; /* top-left top-right bottom-right bottom-left */
+        border-radius: 30px 0 0 30px; /* top-left top-right bottom-right bottom-left */
         box-shadow: -4px 0 24px rgba(149, 39, 245, 0.2), -2px 0 12px rgba(149, 39, 245, 0.1);
         display: flex;
         flex-direction: column;
@@ -15146,7 +15462,7 @@ const ChatDialog = {
         border-left: 4px solid #9527F5;
         border-right: none;
         border-bottom: none;
-        border-radius: 20px 0 0 0;
+        border-radius: 30px 0 0 0;
         background: transparent;
       }
 
@@ -15156,7 +15472,7 @@ const ChatDialog = {
         border-right: 4px solid #9527F5;
         border-left: none;
         border-bottom: none;
-        border-radius: 0 20px 0 0;
+        border-radius: 0 30px 0 0;
         background: transparent;
       }
 
@@ -15166,7 +15482,7 @@ const ChatDialog = {
         border-left: 4px solid #9527F5;
         border-right: none;
         border-top: none;
-        border-radius: 0 0 0 20px;
+        border-radius: 0 0 0 30px;
         background: transparent;
       }
 
@@ -15176,7 +15492,7 @@ const ChatDialog = {
         border-right: 4px solid #9527F5;
         border-left: none;
         border-top: none;
-        border-radius: 0 0 20px 0;
+        border-radius: 0 0 30px 0;
         background: transparent;
       }
 
