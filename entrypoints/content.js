@@ -8002,9 +8002,12 @@ const TextSelector = {
         /* Text nodes will inherit naturally from the highlight span's parent context */
         /* Child elements with inline styles or color classes will maintain their colors */
         letter-spacing: inherit !important; /* Preserve original letter spacing */
+        /* When display is block, ensure no margins/padding interfere with child element spacing */
+        margin: 0;
+        padding: 0;
       }
       
-      /* Ensure block-level elements inside highlight maintain their display and spacing */
+      /* Ensure block-level elements inside highlight maintain their display, spacing, and original font sizes */
       .vocab-text-highlight p,
       .vocab-text-highlight div,
       .vocab-text-highlight h1,
@@ -8024,10 +8027,16 @@ const TextSelector = {
       .vocab-text-highlight pre,
       .vocab-text-highlight address {
         display: block !important; /* Ensure block-level elements maintain their block display */
-        margin-top: inherit !important; /* Preserve top margin */
-        margin-bottom: inherit !important; /* Preserve bottom margin */
-        margin-left: inherit !important; /* Preserve left margin */
-        margin-right: inherit !important; /* Preserve right margin */
+        /* DO NOT set margins to inherit - margins don't inherit in CSS */
+        /* Let block elements use their original margins from the website's CSS */
+        /* Removing margin rules allows the browser to use default/website-defined margins */
+        text-decoration: inherit; /* Preserve underline from parent */
+        box-sizing: border-box; /* Consistent box model */
+        font-family: inherit !important; /* Preserve font family */
+        /* DO NOT set font-size: inherit - let block elements use their original font sizes from website CSS */
+        /* DO NOT set line-height: inherit - let block elements use their original line heights */
+        /* DO NOT set letter-spacing: inherit - let block elements use their original letter spacing */
+        /* Block elements should maintain their original computed font sizes and margins, not inherit from the span */
       }
       
       /* Smooth animation for underline appearance - 0.3s duration */
@@ -8066,16 +8075,23 @@ const TextSelector = {
         }
       }
       
-      /* For block-level elements inside highlight, maintain underline */
+      /* For inline elements inside highlight, maintain underline and inherit font-size */
       /* DO NOT override font-weight or color for formatting elements - let them use their own styles */
       /* Exclude elements with color classes or inline styles from the universal selector */
-      .vocab-text-highlight *:not([class*="user-"]):not([class*="rated-"]):not([style*="color"]):not([style*="Color"]) {
+      /* Block-level elements are handled separately to preserve their original font sizes */
+      .vocab-text-highlight span:not([class*="user-"]):not([class*="rated-"]):not([style*="color"]):not([style*="Color"]),
+      .vocab-text-highlight b:not([class*="user-"]):not([class*="rated-"]):not([style*="color"]):not([style*="Color"]),
+      .vocab-text-highlight strong:not([class*="user-"]):not([class*="rated-"]):not([style*="color"]):not([style*="Color"]),
+      .vocab-text-highlight em:not([class*="user-"]):not([class*="rated-"]):not([style*="color"]):not([style*="Color"]),
+      .vocab-text-highlight i:not([class*="user-"]):not([class*="rated-"]):not([style*="color"]):not([style*="Color"]),
+      .vocab-text-highlight u:not([class*="user-"]):not([class*="rated-"]):not([style*="color"]):not([style*="Color"]),
+      .vocab-text-highlight a:not([class*="user-"]):not([class*="rated-"]):not([style*="color"]):not([style*="Color"]),
+      .vocab-text-highlight code:not([class*="user-"]):not([class*="rated-"]):not([style*="color"]):not([style*="Color"]),
+      .vocab-text-highlight small:not([class*="user-"]):not([class*="rated-"]):not([style*="color"]):not([style*="Color"]) {
         text-decoration: inherit;
         box-sizing: border-box;
-        font-size: inherit !important; /* Preserve original font size for child elements */
+        font-size: inherit !important; /* Preserve original font size for inline child elements */
         font-family: inherit !important; /* Preserve original font family for child elements */
-        /* DO NOT set font-weight: inherit - let formatting elements (b, strong) use their default bold */
-        /* DO NOT set color: inherit - let child elements use their own colors (inline styles, classes, etc.) */
         line-height: inherit !important; /* Preserve original line height for child elements */
         letter-spacing: inherit !important; /* Preserve original letter spacing for child elements */
       }
