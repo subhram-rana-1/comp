@@ -6965,7 +6965,7 @@ const TextSelector = {
     highlight.setAttribute('data-highlight-id', `text-highlight-${this.highlightIdCounter++}`);
     
     // Ensure the highlight span doesn't interfere with child formatting
-    // Set display to inline to preserve text flow
+    // Set display to inline to preserve text flow (will be adjusted if block elements are detected)
     highlight.style.setProperty('display', 'inline', 'important');
     highlight.style.setProperty('position', 'relative', 'important');
     // DO NOT set font properties - let children inherit or use their own styles
@@ -6979,8 +6979,115 @@ const TextSelector = {
       // Check if range might contain formatting elements by checking the HTML
       const rangeClone = range.cloneContents();
       const hasFormattingElements = rangeClone.querySelector('b, strong, em, i, u, span, font, a, h1, h2, h3, h4, h5, h6');
+      const listItems = rangeClone.querySelectorAll('li');
+      const listContainers = rangeClone.querySelectorAll('ul, ol');
+      // Check for block-level elements that need to maintain their spacing
+      const blockElements = rangeClone.querySelectorAll('p, div, h1, h2, h3, h4, h5, h6, section, article, aside, header, footer, nav, main, blockquote, pre, address');
       
-      if (hasFormattingElements) {
+      // Check if range contains list items
+      if (listItems.length > 0 || listContainers.length > 0) {
+        // Range contains list items - we need to handle this carefully
+        // List items MUST be direct children of ul/ol, so we can't wrap them in a span
+        // Instead, we should wrap the parent ul/ol container, or wrap content inside each li
+        
+        // Find the common ancestor that is a ul/ol, or find all ul/ol containers in the range
+        const startContainer = range.startContainer;
+        const endContainer = range.endContainer;
+        
+        // Helper function to find the nearest ul/ol ancestor
+        const findListContainer = (node) => {
+          let current = node.nodeType === Node.TEXT_NODE ? node.parentElement : node;
+          while (current && current !== document.body) {
+            if (current.tagName === 'UL' || current.tagName === 'OL') {
+              return current;
+            }
+            current = current.parentElement;
+          }
+          return null;
+        };
+        
+        // Check if we can find a common ul/ol container
+        const startListContainer = findListContainer(startContainer);
+        const endListContainer = findListContainer(endContainer);
+        
+        // If both start and end are in the same list container, wrap that container
+        if (startListContainer && endListContainer && startListContainer === endListContainer) {
+          // Wrap the entire list container
+          console.log('[TextSelector] Range contains list items within same list container - wrapping parent list');
+          highlight.style.setProperty('display', 'block', 'important');
+          const listContainer = startListContainer;
+          const parent = listContainer.parentNode;
+          const nextSibling = listContainer.nextSibling;
+          // Move the list container into the highlight
+          highlight.appendChild(listContainer);
+          // Insert the highlight where the list container was
+          parent.insertBefore(highlight, nextSibling);
+          console.log('[TextSelector] Wrapped parent list container - list structure preserved');
+        } else {
+          // Range spans multiple lists or partial list items - wrap only text content inside each li
+          // This is more complex - we need to wrap content within each li, not the li itself
+          console.log('[TextSelector] Range contains list items - wrapping content within list items to preserve structure');
+          highlight.style.setProperty('display', 'contents', 'important');
+          
+          // Use extractContents but then restructure to avoid breaking list semantics
+          const extractedContents = range.extractContents();
+          
+          // If extracted contents contain complete list items, we need to handle them differently
+          const extractedListItems = extractedContents.querySelectorAll('li');
+          if (extractedListItems.length > 0) {
+            // We have extracted list items - this will break the structure
+            // Instead, we need to wrap the parent ul/ol if it exists in the range
+            const extractedListContainers = extractedContents.querySelectorAll('ul, ol');
+            if (extractedListContainers.length > 0) {
+              // We have complete list containers - wrap them
+              highlight.style.setProperty('display', 'block', 'important');
+              highlight.appendChild(extractedContents);
+              range.insertNode(highlight);
+            } else {
+              // We have list items but no container - this is problematic
+              // Find the parent ul/ol of the first list item and wrap that
+              const firstListItem = listItems[0] || extractedListItems[0];
+              if (firstListItem) {
+                const parentList = firstListItem.closest('ul, ol');
+                if (parentList && range.intersectsNode(parentList)) {
+                  // Wrap the entire parent list
+                  highlight.style.setProperty('display', 'block', 'important');
+                  const parent = parentList.parentNode;
+                  const nextSibling = parentList.nextSibling;
+                  highlight.appendChild(parentList);
+                  parent.insertBefore(highlight, nextSibling);
+                  console.log('[TextSelector] Wrapped parent list to preserve structure');
+                } else {
+                  // Fallback: use display contents
+                  highlight.style.setProperty('display', 'contents', 'important');
+                  highlight.appendChild(extractedContents);
+                  range.insertNode(highlight);
+                }
+              } else {
+                highlight.style.setProperty('display', 'contents', 'important');
+                highlight.appendChild(extractedContents);
+                range.insertNode(highlight);
+              }
+            }
+          } else {
+            // No complete list items extracted - safe to use normal wrapping
+            highlight.style.setProperty('display', 'contents', 'important');
+            highlight.appendChild(extractedContents);
+            range.insertNode(highlight);
+          }
+          console.log('[TextSelector] Used extractContents with special list handling - list structure preserved');
+        }
+      } else if (blockElements.length > 0) {
+        // Range contains block-level elements (p, div, h1-h6, etc.) - need to preserve block behavior
+        // Block elements inside an inline span lose their margins and spacing
+        // Change display to block to allow block-level children to maintain their spacing
+        console.log('[TextSelector] Range contains block-level elements - using block display to preserve spacing');
+        highlight.style.setProperty('display', 'block', 'important');
+        const extractedContents = range.extractContents();
+        highlight.appendChild(extractedContents);
+        range.insertNode(highlight);
+        console.log('[TextSelector] Used extractContents with block display - block element spacing preserved');
+      } else if (hasFormattingElements) {
         // Range contains formatting elements - use extractContents to preserve structure
         console.log('[TextSelector] Range contains formatting elements - using extractContents to preserve formatting');
         const extractedContents = range.extractContents();
@@ -6995,9 +7102,51 @@ const TextSelector = {
     } catch (error) {
       // surroundContents failed - use extractContents which preserves DOM structure
       console.warn('[TextSelector] surroundContents failed, using extractContents:', error);
-      const extractedContents = range.extractContents();
-      highlight.appendChild(extractedContents);
-      range.insertNode(highlight);
+      const rangeClone = range.cloneContents();
+      const listItems = rangeClone.querySelectorAll('li');
+      const listContainers = rangeClone.querySelectorAll('ul, ol');
+      const blockElements = rangeClone.querySelectorAll('p, div, h1, h2, h3, h4, h5, h6, section, article, aside, header, footer, nav, main, blockquote, pre, address');
+      
+      if (listItems.length > 0 || listContainers.length > 0) {
+        // If it contains list items, try to wrap the parent list container
+        const startContainer = range.startContainer;
+        const findListContainer = (node) => {
+          let current = node.nodeType === Node.TEXT_NODE ? node.parentElement : node;
+          while (current && current !== document.body) {
+            if (current.tagName === 'UL' || current.tagName === 'OL') {
+              return current;
+            }
+            current = current.parentElement;
+          }
+          return null;
+        };
+        
+        const listContainer = findListContainer(startContainer);
+        if (listContainer && range.intersectsNode(listContainer)) {
+          highlight.style.setProperty('display', 'block', 'important');
+          const parent = listContainer.parentNode;
+          const nextSibling = listContainer.nextSibling;
+          highlight.appendChild(listContainer);
+          parent.insertBefore(highlight, nextSibling);
+          console.log('[TextSelector] Wrapped parent list in fallback - list structure preserved');
+        } else {
+          highlight.style.setProperty('display', 'contents', 'important');
+          const extractedContents = range.extractContents();
+          highlight.appendChild(extractedContents);
+          range.insertNode(highlight);
+        }
+      } else if (blockElements.length > 0) {
+        // Range contains block-level elements - use block display to preserve spacing
+        highlight.style.setProperty('display', 'block', 'important');
+        const extractedContents = range.extractContents();
+        highlight.appendChild(extractedContents);
+        range.insertNode(highlight);
+        console.log('[TextSelector] Used extractContents with block display (fallback) - block element spacing preserved');
+      } else {
+        const extractedContents = range.extractContents();
+        highlight.appendChild(extractedContents);
+        range.insertNode(highlight);
+      }
       console.log('[TextSelector] Used extractContents (fallback) - formatting preserved');
     }
     
@@ -7853,6 +8002,41 @@ const TextSelector = {
         /* Text nodes will inherit naturally from the highlight span's parent context */
         /* Child elements with inline styles or color classes will maintain their colors */
         letter-spacing: inherit !important; /* Preserve original letter spacing */
+        /* When display is block, ensure no margins/padding interfere with child element spacing */
+        margin: 0;
+        padding: 0;
+      }
+      
+      /* Ensure block-level elements inside highlight maintain their display, spacing, and original font sizes */
+      .vocab-text-highlight p,
+      .vocab-text-highlight div,
+      .vocab-text-highlight h1,
+      .vocab-text-highlight h2,
+      .vocab-text-highlight h3,
+      .vocab-text-highlight h4,
+      .vocab-text-highlight h5,
+      .vocab-text-highlight h6,
+      .vocab-text-highlight section,
+      .vocab-text-highlight article,
+      .vocab-text-highlight aside,
+      .vocab-text-highlight header,
+      .vocab-text-highlight footer,
+      .vocab-text-highlight nav,
+      .vocab-text-highlight main,
+      .vocab-text-highlight blockquote,
+      .vocab-text-highlight pre,
+      .vocab-text-highlight address {
+        display: block !important; /* Ensure block-level elements maintain their block display */
+        /* DO NOT set margins to inherit - margins don't inherit in CSS */
+        /* Let block elements use their original margins from the website's CSS */
+        /* Removing margin rules allows the browser to use default/website-defined margins */
+        text-decoration: inherit; /* Preserve underline from parent */
+        box-sizing: border-box; /* Consistent box model */
+        font-family: inherit !important; /* Preserve font family */
+        /* DO NOT set font-size: inherit - let block elements use their original font sizes from website CSS */
+        /* DO NOT set line-height: inherit - let block elements use their original line heights */
+        /* DO NOT set letter-spacing: inherit - let block elements use their original letter spacing */
+        /* Block elements should maintain their original computed font sizes and margins, not inherit from the span */
       }
       
       /* Smooth animation for underline appearance - 0.3s duration */
@@ -7891,16 +8075,23 @@ const TextSelector = {
         }
       }
       
-      /* For block-level elements inside highlight, maintain underline */
+      /* For inline elements inside highlight, maintain underline and inherit font-size */
       /* DO NOT override font-weight or color for formatting elements - let them use their own styles */
       /* Exclude elements with color classes or inline styles from the universal selector */
-      .vocab-text-highlight *:not([class*="user-"]):not([class*="rated-"]):not([style*="color"]):not([style*="Color"]) {
+      /* Block-level elements are handled separately to preserve their original font sizes */
+      .vocab-text-highlight span:not([class*="user-"]):not([class*="rated-"]):not([style*="color"]):not([style*="Color"]),
+      .vocab-text-highlight b:not([class*="user-"]):not([class*="rated-"]):not([style*="color"]):not([style*="Color"]),
+      .vocab-text-highlight strong:not([class*="user-"]):not([class*="rated-"]):not([style*="color"]):not([style*="Color"]),
+      .vocab-text-highlight em:not([class*="user-"]):not([class*="rated-"]):not([style*="color"]):not([style*="Color"]),
+      .vocab-text-highlight i:not([class*="user-"]):not([class*="rated-"]):not([style*="color"]):not([style*="Color"]),
+      .vocab-text-highlight u:not([class*="user-"]):not([class*="rated-"]):not([style*="color"]):not([style*="Color"]),
+      .vocab-text-highlight a:not([class*="user-"]):not([class*="rated-"]):not([style*="color"]):not([style*="Color"]),
+      .vocab-text-highlight code:not([class*="user-"]):not([class*="rated-"]):not([style*="color"]):not([style*="Color"]),
+      .vocab-text-highlight small:not([class*="user-"]):not([class*="rated-"]):not([style*="color"]):not([style*="Color"]) {
         text-decoration: inherit;
         box-sizing: border-box;
-        font-size: inherit !important; /* Preserve original font size for child elements */
+        font-size: inherit !important; /* Preserve original font size for inline child elements */
         font-family: inherit !important; /* Preserve original font family for child elements */
-        /* DO NOT set font-weight: inherit - let formatting elements (b, strong) use their default bold */
-        /* DO NOT set color: inherit - let child elements use their own colors (inline styles, classes, etc.) */
         line-height: inherit !important; /* Preserve original line height for child elements */
         letter-spacing: inherit !important; /* Preserve original letter spacing for child elements */
       }
