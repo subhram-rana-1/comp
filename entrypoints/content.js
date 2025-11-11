@@ -8148,11 +8148,11 @@ const TextSelector = {
         height: 10px;
       }
       
-      /* Light green dashed underline for simplified texts - same green as chat icon */
+      /* Dark green dashed underline for simplified texts - darker green */
       .vocab-text-simplified {
-        text-decoration-color: #22c55e !important;
+        text-decoration-color: #16a34a !important; /* Darker green */
         text-decoration-style: dashed !important;
-        text-decoration-thickness: 1.1px !important;
+        text-decoration-thickness: 1.1px !important; /* Original thickness */
         transition: text-decoration-color 0.3s ease-out;
       }
       
