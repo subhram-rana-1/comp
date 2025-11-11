@@ -466,12 +466,13 @@ export default defineContentScript({
         -webkit-user-select: none;
         -moz-user-select: none;
         -ms-user-select: none;
-        position: relative;
+        position: fixed;
         top: 78px;
         right: 0;
         transform: translateX(100%);
         opacity: 0;
-        transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.4s ease;
+        transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.4s ease;
+        will-change: transform, opacity;
         overflow-y: visible;
         overflow-x: visible;
         pointer-events: auto;
@@ -518,7 +519,7 @@ export default defineContentScript({
         -webkit-user-select: none;
         -moz-user-select: none;
         -ms-user-select: none;
-        margin-top: 60px;
+        margin-top: 20px;
         margin-bottom: 30px;
         padding-bottom: 20px;
       `;
@@ -828,6 +829,10 @@ export default defineContentScript({
         -moz-user-select: none;
         -ms-user-select: none;
         isolation: isolate;
+        font-size: 16px !important;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif !important;
+        font-weight: 400 !important;
+        line-height: 1.5 !important;
       `;
       
       // Prevent double-click and text selection on dropdown list
@@ -983,10 +988,18 @@ export default defineContentScript({
             -ms-user-select: none;
             background-color: white !important;
             color: black !important;
+            font-size: 16px !important;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif !important;
+            font-weight: 400 !important;
+            line-height: 1.5 !important;
           `;
           // Force white background and black text using setProperty for stronger enforcement
           item.style.setProperty('background-color', 'white', 'important');
           item.style.setProperty('color', 'black', 'important');
+          item.style.setProperty('font-size', '16px', 'important');
+          item.style.setProperty('font-family', '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif', 'important');
+          item.style.setProperty('font-weight', '400', 'important');
+          item.style.setProperty('line-height', '1.5', 'important');
           item.addEventListener('mouseenter', () => {
             // Reset all highlights
             const items = dropdownList.querySelectorAll('div');
@@ -1035,7 +1048,24 @@ export default defineContentScript({
             -webkit-user-select: none;
             -moz-user-select: none;
             -ms-user-select: none;
+            font-size: 16px !important;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif !important;
+            font-weight: 400 !important;
+            line-height: 1.5 !important;
           `;
+          // Force font properties using setProperty for stronger enforcement
+          newLangItem.style.setProperty('font-size', '16px', 'important');
+          newLangItem.style.setProperty('font-family', '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif', 'important');
+          newLangItem.style.setProperty('font-weight', '400', 'important');
+          newLangItem.style.setProperty('line-height', '1.5', 'important');
+          // Ensure strong tag inside also has correct font-size
+          const strongTag = newLangItem.querySelector('strong');
+          if (strongTag) {
+            strongTag.style.setProperty('font-size', '16px', 'important');
+            strongTag.style.setProperty('font-family', '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif', 'important');
+            strongTag.style.setProperty('font-weight', '600', 'important');
+            strongTag.style.setProperty('line-height', '1.5', 'important');
+          }
           filteredLanguages.push(filter);
           newLangItem.addEventListener('mouseenter', () => {
             // Reset all highlights
@@ -1223,8 +1253,8 @@ export default defineContentScript({
       
       dropdownContainer.appendChild(dropdownInput);
       dropdownContainer.appendChild(dropdownIcon);
-      // Append dropdown list to body instead of container for fixed positioning
-      document.body.appendChild(dropdownList);
+      // Append dropdown list to overlay (as sibling of modal) for proper z-index stacking
+      // This ensures it appears above the modal despite the overlay's isolation context
       customTabContent.appendChild(preferredLanguageText);
       customTabContent.appendChild(dropdownContainer);
       
@@ -1317,78 +1347,34 @@ export default defineContentScript({
       updateButtonState();
       buttonContainer.appendChild(saveButton);
       
-      // Create minimize button (top-left corner of modal) - same design as chat dialog collapse button
-      const minimizeButton = document.createElement('button');
-      minimizeButton.className = 'vocab-chat-collapse-btn-small';
-      minimizeButton.setAttribute('aria-label', 'Close');
-      minimizeButton.innerHTML = `
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path d="M9 18L15 12L9 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>
-      `;
-      minimizeButton.style.cssText = `
-        position: absolute;
-        top: 20px;
-        left: 20px;
-        width: 32px;
-        height: 32px;
-        background: white;
-        border: 1.5px solid #d1d5db;
-        border-radius: 8px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        cursor: pointer;
-        z-index: 10;
-        transition: all 0.2s ease;
-        text-decoration: none;
-        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
-        opacity: 0.95;
-      `;
-      minimizeButton.addEventListener('mouseenter', () => {
-        minimizeButton.style.background = '#f3f4f6';
-        minimizeButton.style.borderColor = '#9527F5';
-        minimizeButton.style.boxShadow = '0 3px 6px rgba(149, 39, 245, 0.15)';
-        minimizeButton.style.transform = 'scale(1.05)';
-        minimizeButton.style.opacity = '1';
-      });
-      minimizeButton.addEventListener('mouseleave', () => {
-        minimizeButton.style.background = 'white';
-        minimizeButton.style.borderColor = '#d1d5db';
-        minimizeButton.style.boxShadow = '0 2px 4px rgba(0, 0, 0, 0.08)';
-        minimizeButton.style.transform = 'scale(1)';
-        minimizeButton.style.opacity = '0.95';
-      });
-      minimizeButton.addEventListener('click', closeModalWithAnimation);
-      minimizeButton.addEventListener('mousedown', () => {
-        minimizeButton.style.transform = 'scale(0.95)';
-        minimizeButton.style.boxShadow = '0 1px 2px rgba(0, 0, 0, 0.1)';
-      });
-      minimizeButton.addEventListener('mouseup', () => {
-        minimizeButton.style.transform = 'scale(1.05)';
-        minimizeButton.style.boxShadow = '0 3px 6px rgba(149, 39, 245, 0.15)';
-      });
-      
       // Assemble modal (only heading and dropdown, no tabs or buttons)
-      modal.appendChild(minimizeButton);
       modal.appendChild(headingContainer);
       // Add dropdown directly to modal (from customTabContent)
       const dropdownWrapper = document.createElement('div');
       dropdownWrapper.style.cssText = `
-        width: 100%;
+        width: calc(100% - 40px);
         display: flex;
         flex-direction: column;
         gap: 8px;
         align-items: center;
         justify-content: center;
         margin-top: 0;
+        margin-left: 20px;
+        margin-right: 20px;
+        margin-bottom: 20px;
       `;
       dropdownWrapper.appendChild(subHeading);
       dropdownWrapper.appendChild(dropdownContainer);
       modal.appendChild(dropdownWrapper);
       
       overlay.appendChild(modal);
+      // Append dropdown list to overlay as sibling of modal for proper z-index stacking
+      // This ensures it appears above the modal within the same stacking context
+      overlay.appendChild(dropdownList);
       document.body.appendChild(overlay);
+      
+      // Force a reflow to ensure the modal is positioned before animation starts
+      void overlay.offsetWidth;
       
       // Close modal when clicking outside (on overlay)
       overlay.addEventListener('click', (e) => {
@@ -1404,10 +1390,13 @@ export default defineContentScript({
       });
       
       // Trigger slide-in animation from right
-      setTimeout(() => {
-        modal.style.transform = 'translateX(0)';
-        modal.style.opacity = '1';
-      }, 10);
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          overlay.style.opacity = '1';
+          modal.style.transform = 'translateX(0)';
+          modal.style.opacity = '1';
+        });
+      });
       
       // Load saved language for current domain and populate the input
       getSavedLanguage().then((savedLanguage) => {
@@ -1435,13 +1424,6 @@ export default defineContentScript({
       
       // Update button state after loading saved language
       updateButtonState();
-      
-      // Trigger scale-up animation after modal is added to DOM
-      requestAnimationFrame(() => {
-        overlay.style.opacity = '1';
-        modal.style.transform = 'scale(1)';
-        modal.style.opacity = '1';
-      });
       
       // Notify popup to hide settings button when modal is open
       try {
@@ -1729,8 +1711,8 @@ export default defineContentScript({
       
       console.log('[Content Script] Ask-about-page button created (hidden initially)');
       
-      // Create the X button below the ask-about-page button
-      createCloseButton();
+      // Note: X button is already created earlier in initialization
+      // Just ensure it's shown/hidden based on extension state
     }
     
     /**
@@ -1742,32 +1724,65 @@ export default defineContentScript({
         return;
       }
       
-      // Create button element
-      const button = document.createElement('button');
-      button.id = 'vocab-close-btn';
-      button.className = 'vocab-close-btn';
-      button.setAttribute('aria-label', 'Close');
+      // Function to actually create and append the button
+      const createButton = () => {
+        // Check if button already exists (might have been created by another call)
+        if (document.getElementById('vocab-close-btn')) {
+          return;
+        }
+        
+        // Create button element
+        const button = document.createElement('button');
+        button.id = 'vocab-close-btn';
+        button.className = 'vocab-close-btn';
+        button.setAttribute('aria-label', 'Close');
+        
+        // Initially hide the button (will be shown when extension is enabled)
+        button.style.display = 'none';
+        
+        // Use white thick bold X icon with faceted/geometric design (SVG)
+        button.innerHTML = `
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" class="vocab-close-x-icon">
+            <path d="M18 6L6 18M6 6L18 18" stroke="white" stroke-width="4" stroke-linecap="square" stroke-linejoin="miter" stroke-miterlimit="10"/>
+          </svg>
+        `;
+        
+        // Append to body
+        document.body.appendChild(button);
+        
+        // Add click handler to show language modal
+        button.addEventListener('click', () => {
+          console.log('[Content Script] Close button clicked - showing language modal');
+          showLanguageSelectionModal();
+        });
+        
+        console.log('[Content Script] Close X button created (initially hidden)');
+      };
       
-      // Initially hide the button (will be shown when extension is enabled)
-      button.style.display = 'none';
-      
-      // Use white thick bold X icon with faceted/geometric design (SVG)
-      button.innerHTML = `
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" class="vocab-close-x-icon">
-          <path d="M18 6L6 18M6 6L18 18" stroke="white" stroke-width="4" stroke-linecap="square" stroke-linejoin="miter" stroke-miterlimit="10"/>
-        </svg>
-      `;
-      
-      // Append to body
-      document.body.appendChild(button);
-      
-      // Add click handler to show language modal
-      button.addEventListener('click', () => {
-        console.log('[Content Script] Close button clicked - showing language modal');
-        showLanguageSelectionModal();
-      });
-      
-      console.log('[Content Script] Close X button created (initially hidden)');
+      // Try to create immediately if body exists
+      if (document.body) {
+        createButton();
+      } else {
+        // If body doesn't exist yet, wait for it using MutationObserver
+        const observer = new MutationObserver((mutations, obs) => {
+          if (document.body) {
+            createButton();
+            obs.disconnect(); // Stop observing once body is found
+          }
+        });
+        
+        // Start observing the document
+        observer.observe(document.documentElement, {
+          childList: true,
+          subtree: true
+        });
+        
+        // Fallback: also check immediately in case body already exists
+        if (document.body) {
+          observer.disconnect();
+          createButton();
+        }
+      }
     }
     
     /**
@@ -1900,6 +1915,9 @@ export default defineContentScript({
     }
     
     console.log('[Content Script] Initializing with global storage key:', GLOBAL_STORAGE_KEY);
+    
+    // Create preferred language button immediately (before other initializations)
+    createCloseButton();
     
     // Initialize the button panel when content script loads
     await ButtonPanel.init();
@@ -2060,6 +2078,18 @@ export default defineContentScript({
         this.bannerContainer.appendChild(instructions);
         this.bannerContainer.appendChild(footer);
         
+        // Prevent double-click and text selection on banner
+        this.bannerContainer.addEventListener('dblclick', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          return false;
+        });
+        
+        this.bannerContainer.addEventListener('selectstart', (e) => {
+          e.preventDefault();
+          return false;
+        });
+        
         // Add styles
         this.addStyles();
         
@@ -2089,13 +2119,24 @@ export default defineContentScript({
             border-radius: 30px !important;
             padding: 20px !important;
             box-shadow: 0 4px 20px rgba(149, 39, 245, 0.15) !important;
-            z-index: 10000 !important;
+            z-index: 10000001 !important;
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif !important;
             transform: translateX(400px);
             opacity: 0;
             transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.4s ease;
             visibility: visible !important;
             display: block !important;
+            user-select: none !important;
+            -webkit-user-select: none !important;
+            -moz-user-select: none !important;
+            -ms-user-select: none !important;
+          }
+          
+          .explain-ai-banner * {
+            user-select: none !important;
+            -webkit-user-select: none !important;
+            -moz-user-select: none !important;
+            -ms-user-select: none !important;
           }
           
           .explain-ai-banner.show {
