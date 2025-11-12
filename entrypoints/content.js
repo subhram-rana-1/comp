@@ -1118,11 +1118,11 @@ export default defineContentScript({
         
         if (activeTab === 'fixed') {
           // Fixed tab - always show button since "As per website" is a valid selection
-          saveButton.style.display = 'block';
-          saveButton.textContent = 'Save and Close';
-          saveButton.style.backgroundColor = '#9333ea';
-          saveButton.style.color = 'white';
-          saveButton.style.border = 'none';
+            saveButton.style.display = 'block';
+            saveButton.textContent = 'Save and Close';
+            saveButton.style.backgroundColor = '#9333ea';
+            saveButton.style.color = 'white';
+            saveButton.style.border = 'none';
         } else {
           // Dynamic tab = "Save and Close" with solid purple background
           saveButton.style.display = 'block';
@@ -2240,7 +2240,7 @@ export default defineContentScript({
           }
           
           .banner-dont-show {
-            background: rgba(149, 39, 245, 0.45);
+            background: rgba(149, 39, 245, 0.35);
             border: none;
             color: #9527F5;
             font-size: 13px;
@@ -2252,11 +2252,11 @@ export default defineContentScript({
           }
           
           .banner-dont-show:hover {
-            background-color: rgba(149, 39, 245, 0.55);
+            background-color: rgba(149, 39, 245, 0.45);
           }
           
           .banner-dont-show:active {
-            background-color: rgba(149, 39, 245, 0.6);
+            background-color: rgba(149, 39, 245, 0.5);
           }
         `;
         
@@ -10647,14 +10647,14 @@ const ChatDialog = {
           this.clearSummary();
         }, true); // Use capture phase
       } else {
-        // Add onclick handler to call summarise API
-        summariseBtn.addEventListener('click', (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          e.stopImmediatePropagation();
-          console.log('[ChatDialog] Summarise button clicked in simplified content!');
-          this.handleSummarisePage();
-        }, true); // Use capture phase
+      // Add onclick handler to call summarise API
+      summariseBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
+        console.log('[ChatDialog] Summarise button clicked in simplified content!');
+        this.handleSummarisePage();
+      }, true); // Use capture phase
       }
       
       buttonContainer.appendChild(summariseBtn);
@@ -11097,7 +11097,7 @@ const ChatDialog = {
               }
               
               // Change button to "Clear summary" after completion
-              if (summariseBtn) {
+        if (summariseBtn) {
                 summariseBtn.disabled = false;
                 summariseBtn.classList.remove('loading', 'disabled');
                 summariseBtn.innerHTML = 'Clear summary';
@@ -11150,7 +11150,7 @@ const ChatDialog = {
               summariseBtn.disabled = false;
               summariseBtn.classList.remove('disabled', 'loading');
               summariseBtn.innerHTML = originalContent;
-            }
+        }
           }
         );
       } catch (error) {
@@ -11343,6 +11343,15 @@ const ChatDialog = {
     // Trigger animation by forcing a reflow
     void questionsContainer.offsetHeight;
     
+    // Scroll to bottom after questions are rendered to ensure they're visible
+    const chatContainer = document.getElementById('vocab-chat-messages');
+    if (chatContainer) {
+      // Use setTimeout to ensure DOM is fully updated before scrolling
+      setTimeout(() => {
+        this.scrollToBottom(chatContainer, false);
+      }, 50);
+    }
+    
     return questionsContainer;
   },
   
@@ -11491,14 +11500,14 @@ const ChatDialog = {
           this.clearSummary();
         }, true); // Use capture phase
       } else {
-        // Add onclick handler to call summarise API
-        summariseBtn.addEventListener('click', (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          e.stopImmediatePropagation();
-          console.log('[ChatDialog] Summarise button clicked!');
-          this.handleSummarisePage();
-        }, true); // Use capture phase
+      // Add onclick handler to call summarise API
+      summariseBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
+        console.log('[ChatDialog] Summarise button clicked!');
+        this.handleSummarisePage();
+      }, true); // Use capture phase
       }
       
       buttonContainer.appendChild(summariseBtn);
@@ -12484,6 +12493,8 @@ const ChatDialog = {
     
     // Get the message bubble parent
     const messageBubble = messageContent.closest('.vocab-chat-message');
+    let questionsAdded = false;
+    
     if (messageBubble) {
       // Only update questions if possibleQuestions is explicitly provided (not undefined)
       // This prevents removing questions during streaming updates
@@ -12502,6 +12513,7 @@ const ChatDialog = {
           if (questionsContainer) {
             console.log('[ChatDialog] updateStreamingMessage: Questions container created, appending to message bubble');
             messageBubble.appendChild(questionsContainer);
+            questionsAdded = true;
           } else {
             console.log('[ChatDialog] updateStreamingMessage: Questions container is null, not appending');
           }
@@ -12514,17 +12526,28 @@ const ChatDialog = {
     }
     
     // Auto-scroll to bottom
+    // Use immediate scroll during streaming (when possibleQuestions is undefined)
+    // Use normal scroll when questions are added (to ensure smooth transition)
     const chatContainer = document.getElementById('vocab-chat-messages');
     if (chatContainer) {
-      this.scrollToBottom(chatContainer);
+      const isStreaming = possibleQuestions === undefined;
+      this.scrollToBottom(chatContainer, isStreaming);
+      
+      // If questions were added, scroll again after a short delay to ensure DOM is fully updated
+      if (questionsAdded) {
+        setTimeout(() => {
+          this.scrollToBottom(chatContainer, false);
+        }, 100);
+      }
     }
   },
   
   /**
    * Scroll chat container to bottom with smooth behavior
    * @param {HTMLElement} chatContainer - The chat messages container
+   * @param {boolean} immediate - If true, use immediate scroll (no smooth animation). Default: false
    */
-  scrollToBottom(chatContainer) {
+  scrollToBottom(chatContainer, immediate = false) {
     if (!chatContainer) {
       console.log('[ChatDialog] scrollToBottom: No chat container provided');
       return;
@@ -12537,20 +12560,33 @@ const ChatDialog = {
       return;
     }
     
-    console.log('[ChatDialog] scrollToBottom: Scrolling tab content to bottom');
+    console.log('[ChatDialog] scrollToBottom: Scrolling tab content to bottom, immediate:', immediate);
     console.log('[ChatDialog] scrollToBottom: Tab content scrollHeight:', tabContent.scrollHeight);
     console.log('[ChatDialog] scrollToBottom: Tab content clientHeight:', tabContent.clientHeight);
     
     // Use requestAnimationFrame to ensure DOM updates are complete
     requestAnimationFrame(() => {
-      // Scroll the tab content (outer scrollbar) to bottom
+      // For immediate scroll (during streaming), use instant scroll
+      if (immediate) {
       tabContent.scrollTop = tabContent.scrollHeight;
-      
-      // Also try smooth scroll
+      } else {
+        // For normal scroll, use smooth behavior
       tabContent.scrollTo({
         top: tabContent.scrollHeight,
         behavior: 'smooth'
       });
+      }
+      
+      // Double-check with a small delay to ensure we're at the bottom
+      // This handles cases where DOM updates happen after the initial scroll
+      setTimeout(() => {
+        const currentScroll = tabContent.scrollTop;
+        const maxScroll = tabContent.scrollHeight - tabContent.clientHeight;
+        // If we're not at the bottom (within 10px tolerance), scroll again
+        if (Math.abs(currentScroll - maxScroll) > 10) {
+          tabContent.scrollTop = tabContent.scrollHeight;
+        }
+      }, 50);
     });
   },
   
@@ -13793,7 +13829,7 @@ const ChatDialog = {
         line-height: 1.5;
         color: #6b7280;
         cursor: pointer;
-        transition: color 0.2s ease;
+        transition: color 0.2s ease, transform 0.15s ease;
         word-wrap: break-word;
         display: flex;
         align-items: center;
@@ -13880,7 +13916,7 @@ const ChatDialog = {
         line-height: 1.5;
         color: #6b7280;
         cursor: pointer;
-        transition: color 0.2s ease;
+        transition: color 0.2s ease, transform 0.15s ease;
         word-wrap: break-word;
         display: flex;
         align-items: center;
@@ -13914,6 +13950,7 @@ const ChatDialog = {
       
       .vocab-chat-message-question-item:active {
         color: #7a1fd9;
+        transform: scale(0.95);
       }
       
       .vocab-chat-message-question-icon {
@@ -14243,7 +14280,8 @@ const ChatDialog = {
         padding: 16px;
         border-top: 1px solid #e5e7eb;
         background: white;
-        align-items: flex-end;
+        align-items: center; /* centers items vertically on the same horizontal axis */
+        justify-content: center; /* centers items horizontally */
       }
       
       .vocab-chat-input {
@@ -14275,8 +14313,8 @@ const ChatDialog = {
       
       /* Send Button - Wireframe Purple Circular */
       .vocab-chat-send-btn {
-        width: 44px;
-        height: 44px;
+        width: 30px;
+        height: 30px;
         background: white;
         border: 2px solid #9527F5;
         border-radius: 50%;
@@ -14610,8 +14648,8 @@ const ChatDialog = {
       
       /* Delete Conversation Button - Wireframe Red Circular */
       .vocab-chat-delete-conversation-btn {
-        width: 44px;
-        height: 44px;
+        width: 35px;
+        height: 35px;
         background: white;
         border: 2px solid #ef4444;
         border-radius: 50%;
