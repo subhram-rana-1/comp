@@ -38,26 +38,30 @@ class SummariseService {
           // Get language from chrome.storage.local (global)
           const storageKey = 'language';
           const result = await chrome.storage.local.get([storageKey]);
-          const language = result[storageKey] || 'none';
+          const language = result[storageKey] || 'WEBSITE_LANGUAGE';
           
-          // If language is "none" or "dynamic", return "none" (use page language)
-          if (language === 'none' || language === 'dynamic') {
-            return 'none';
+          // If language is "WEBSITE_LANGUAGE", "none", or "dynamic", return null (use page language)
+          if (language === 'WEBSITE_LANGUAGE' || language === 'none' || language === 'dynamic') {
+            return null;
           }
           // Otherwise, convert to uppercase (e.g., "Spanish" -> "SPANISH")
           return language.toUpperCase();
         } catch (error) {
           console.warn('[SummariseService] Error getting language from storage:', error);
-          return 'none';
+          return null;
         }
       };
       
       // Prepare request payload
       const languageCode = await getLanguageCode();
       const requestBody = {
-        text: text,
-        languageCode: languageCode
+        text: text
       };
+      
+      // Only include languageCode if it's not null
+      if (languageCode !== null) {
+        requestBody.languageCode = languageCode;
+      }
       
       // Make the SSE request
       const response = await fetch(url, {
@@ -150,11 +154,13 @@ class SummariseService {
                   // Handle complete event (final summary)
                   else if (data.type === 'complete') {
                     console.log('[SummariseService] Complete event - summary length:', data.summary?.length || 0);
+                    console.log('[SummariseService] Possible questions:', data.possibleQuestions?.length || 0);
                     if (onEvent) {
-                      // Pass complete event with final data
+                      // Pass complete event with final data including possibleQuestions
                       onEvent({
                         type: 'complete',
-                        summary: data.summary
+                        summary: data.summary,
+                        possibleQuestions: data.possibleQuestions || []
                       });
                     }
                   }
