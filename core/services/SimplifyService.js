@@ -36,26 +36,30 @@ class SimplifyService {
           // Get language from chrome.storage.local (global)
           const storageKey = 'language';
           const result = await chrome.storage.local.get([storageKey]);
-          const language = result[storageKey] || 'none';
+          const language = result[storageKey] || 'WEBSITE_LANGUAGE';
           
-          // If language is "none" or "dynamic", return "none" (use page language)
-          if (language === 'none' || language === 'dynamic') {
-            return 'none';
+          // If language is "WEBSITE_LANGUAGE", "none", or "dynamic", return null (use page language)
+          if (language === 'WEBSITE_LANGUAGE' || language === 'none' || language === 'dynamic') {
+            return null;
           }
           // Otherwise, convert to uppercase (e.g., "Spanish" -> "SPANISH")
           return language.toUpperCase();
         } catch (error) {
           console.warn('[SimplifyService] Error getting language from storage:', error);
-          return 'none';
+          return null;
         }
       };
       
-      // Add languageCode to each text segment
+      // Add languageCode to each text segment (only if not null)
       const languageCode = await getLanguageCode();
-      const textSegmentsWithLanguage = textSegments.map(segment => ({
-        ...segment,
-        languageCode: languageCode
-      }));
+      const textSegmentsWithLanguage = textSegments.map(segment => {
+        const segmentWithLang = { ...segment };
+        // Only include languageCode if it's not null
+        if (languageCode !== null) {
+          segmentWithLang.languageCode = languageCode;
+        }
+        return segmentWithLang;
+      });
       
       // Create abort controller for cancellation
       const abortController = new AbortController();

@@ -307,23 +307,113 @@ export default defineContentScript({
     
     // Global language variable - fetched from chrome.storage.local (shared across all tabs and domains)
     // Initialize language variable - will be loaded from global storage
-    let language = 'none';
+    let language = 'WEBSITE_LANGUAGE';
     
     // Load saved language from global storage on initialization
     getSavedLanguage().then((savedLanguage) => {
-      language = savedLanguage;
-      window.language = savedLanguage;
+      language = savedLanguage || 'WEBSITE_LANGUAGE';
+      window.language = language;
     }).catch((error) => {
       console.warn('[Content Script] Error loading saved language on init:', error);
       // Set default value on error
-      window.language = 'none';
+      window.language = 'WEBSITE_LANGUAGE';
     });
     
-    // Top 20 languages list
+    // Comprehensive languages list with native names
     const TOP_LANGUAGES = [
-      'English', 'Spanish', 'French', 'German', 'Italian', 'Portuguese', 'Russian',
-      'Chinese', 'Japanese', 'Korean', 'Arabic', 'Hindi', 'Dutch', 'Turkish',
-      'Polish', 'Swedish', 'Norwegian', 'Danish', 'Finnish', 'Greek'
+      'English', // English
+      'Español', // Spanish
+      'Français', // French
+      'Deutsch', // German
+      'Italiano', // Italian
+      'Português', // Portuguese
+      'Русский', // Russian
+      '中文', // Chinese (Simplified)
+      '日本語', // Japanese
+      '한국어', // Korean
+      'العربية', // Arabic
+      'हिन्दी', // Hindi
+      'Nederlands', // Dutch
+      'Türkçe', // Turkish
+      'Polski', // Polish
+      'Svenska', // Swedish
+      'Norsk', // Norwegian
+      'Dansk', // Danish
+      'Suomi', // Finnish
+      'Ελληνικά', // Greek
+      'Čeština', // Czech
+      'Magyar', // Hungarian
+      'Română', // Romanian
+      'Български', // Bulgarian
+      'Hrvatski', // Croatian
+      'Srpski', // Serbian
+      'Slovenčina', // Slovak
+      'Slovenščina', // Slovenian
+      'Українська', // Ukrainian
+      'עברית', // Hebrew
+      'فارسی', // Persian/Farsi
+      'اردو', // Urdu
+      'বাংলা', // Bengali
+      'தமிழ்', // Tamil
+      'తెలుగు', // Telugu
+      'मराठी', // Marathi
+      'ગુજરાતી', // Gujarati
+      'ಕನ್ನಡ', // Kannada
+      'മലയാളം', // Malayalam
+      'ਪੰਜਾਬੀ', // Punjabi
+      'ଓଡ଼ିଆ', // Odia
+      'नेपाली', // Nepali
+      'සිංහල', // Sinhala
+      'ไทย', // Thai
+      'Tiếng Việt', // Vietnamese
+      'Bahasa Indonesia', // Indonesian
+      'Bahasa Melayu', // Malay
+      'Filipino', // Filipino
+      'Tagalog', // Tagalog
+      'မြန်မာ', // Burmese
+      'ភាសាខ្មែរ', // Khmer
+      'Lao', // Lao
+      'Монгол', // Mongolian
+      'ქართული', // Georgian
+      'Հայերեն', // Armenian
+      'Azərbaycan', // Azerbaijani
+      'Қазақ', // Kazakh
+      'Oʻzbek', // Uzbek
+      'Кыргызча', // Kyrgyz
+      'Türkmen', // Turkmen
+      'Afrikaans', // Afrikaans
+      'Kiswahili', // Swahili
+      'Yorùbá', // Yoruba
+      'Hausa', // Hausa
+      'Igbo', // Igbo
+      'Zulu', // Zulu
+      'Xhosa', // Xhosa
+      'Amharic', // Amharic
+      'አማርኛ', // Amharic (Ethiopic)
+      'Somali', // Somali
+      'Kinyarwanda', // Kinyarwanda
+      'Luganda', // Luganda
+      'Shona', // Shona
+      'Malagasy', // Malagasy
+      'Maltese', // Maltese
+      'Íslenska', // Icelandic
+      'Gaeilge', // Irish
+      'Cymraeg', // Welsh
+      'Brezhoneg', // Breton
+      'Català', // Catalan
+      'Galego', // Galician
+      'Euskara', // Basque
+      'Latviešu', // Latvian
+      'Lietuvių', // Lithuanian
+      'Eesti', // Estonian
+      'Shqip', // Albanian
+      'Македонски', // Macedonian
+      'Bosanski', // Bosnian
+      'Esperanto', // Esperanto
+      'Interlingua', // Interlingua
+      'Lingua Latina', // Latin
+      'Klingon', // Klingon (for fun)
+      'Toki Pona' // Toki Pona
     ];
     
     /**
@@ -339,16 +429,17 @@ export default defineContentScript({
     
     /**
      * Get the saved language preference (global, shared across all tabs and domains)
-     * @returns {Promise<string>} The saved language or 'none' if not found
+     * @returns {Promise<string>} The saved language or 'WEBSITE_LANGUAGE' if not found
      */
     async function getSavedLanguage() {
       try {
         const storageKey = getLanguageStorageKey();
         const result = await chrome.storage.local.get([storageKey]);
-        return result[storageKey] || 'none';
+        // Return 'WEBSITE_LANGUAGE' as default, but keep backward compatibility with 'none'
+        return result[storageKey] || 'WEBSITE_LANGUAGE';
       } catch (error) {
         console.warn('[Language Selection] Error getting saved language:', error);
-        return 'none';
+        return 'WEBSITE_LANGUAGE';
       }
     }
     
@@ -757,11 +848,12 @@ export default defineContentScript({
         z-index: 1;
       `;
       
-      // Searchable dropdown input
+      // Dropdown input (readonly - click only, no typing)
       const dropdownInput = document.createElement('input');
       dropdownInput.type = 'text';
       dropdownInput.id = 'vocab-language-dropdown-input';
-      dropdownInput.placeholder = 'Search or type a language...';
+      dropdownInput.placeholder = 'Click to select a language...';
+      dropdownInput.readOnly = true;
       dropdownInput.style.cssText = `
         width: 100%;
         padding: 12px 45px 12px 16px;
@@ -776,10 +868,11 @@ export default defineContentScript({
         background-color: white !important;
         color: black !important;
         text-shadow: none !important;
+        cursor: pointer;
       `;
-      // Allow text selection in input field for typing
-      dropdownInput.style.userSelect = 'text';
-      dropdownInput.style.webkitUserSelect = 'text';
+      // Prevent text selection in input field
+      dropdownInput.style.userSelect = 'none';
+      dropdownInput.style.webkitUserSelect = 'none';
       
       // Force white background and black text using setProperty for stronger enforcement
       dropdownInput.style.setProperty('background-color', 'white', 'important');
@@ -908,8 +1001,8 @@ export default defineContentScript({
       
       // Function to select language from dropdown (auto-saves)
       async function selectLanguage(lang) {
-        // If "As per website" is selected, save as 'none' for API
-        const languageToSave = lang === 'As per website' ? 'none' : lang;
+        // If "As per website" is selected, save as 'WEBSITE_LANGUAGE' for API
+        const languageToSave = lang === 'As per website' ? 'WEBSITE_LANGUAGE' : lang;
         dropdownInput.value = lang;
         dropdownList.style.display = 'none';
         selectedIndex = -1;
@@ -951,29 +1044,14 @@ export default defineContentScript({
         // Always add "As per website" as first option
         const AS_PER_WEBSITE = 'As per website';
         
-        // If no filter, show "As per website" + all languages
-        let filtered = [];
-        if (!filter || filter.trim() === '') {
-          filtered = [AS_PER_WEBSITE, ...TOP_LANGUAGES];
-        } else {
-          // Check if filter matches "As per website"
-          const matchesAsPerWebsite = AS_PER_WEBSITE.toLowerCase().includes(filter.toLowerCase());
-          // Filter languages by prefix matching
-          const filteredLangs = TOP_LANGUAGES.filter(lang => 
-            lang.toLowerCase().startsWith(filter.toLowerCase())
-          );
-          // Add "As per website" first if it matches, otherwise add filtered languages
-          if (matchesAsPerWebsite) {
-            filtered = [AS_PER_WEBSITE, ...filteredLangs];
-          } else {
-            filtered = filteredLangs;
-          }
-        }
+        // Since input is readonly, filter is not used for typing
+        // Always show "As per website" + all languages
+        let filtered = [AS_PER_WEBSITE, ...TOP_LANGUAGES];
         
         // Store filtered languages for keyboard navigation
         filteredLanguages = [...filtered];
         
-        // Add filtered languages
+        // Add filtered languages (no need to check for new language since input is readonly)
         filtered.forEach((lang, index) => {
           const item = document.createElement('div');
           item.textContent = lang;
@@ -1032,72 +1110,6 @@ export default defineContentScript({
           });
           dropdownList.appendChild(item);
         });
-        
-        // If filter doesn't match any language, show option to add new language
-        if (filter && filter.trim() !== '' && !TOP_LANGUAGES.some(lang => lang.toLowerCase() === filter.toLowerCase())) {
-          const newLangItem = document.createElement('div');
-          newLangItem.innerHTML = `<strong>Add "${filter}" as new language</strong>`;
-          newLangItem.setAttribute('data-index', filtered.length);
-          newLangItem.style.cssText = `
-            padding: 12px 16px;
-            cursor: pointer;
-            color: #9333ea;
-            border-top: 1px solid #e5e5e5;
-            transition: background-color 0.2s, color 0.2s;
-            user-select: none;
-            -webkit-user-select: none;
-            -moz-user-select: none;
-            -ms-user-select: none;
-            font-size: 16px !important;
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif !important;
-            font-weight: 400 !important;
-            line-height: 1.5 !important;
-          `;
-          // Force font properties using setProperty for stronger enforcement
-          newLangItem.style.setProperty('font-size', '16px', 'important');
-          newLangItem.style.setProperty('font-family', '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif', 'important');
-          newLangItem.style.setProperty('font-weight', '400', 'important');
-          newLangItem.style.setProperty('line-height', '1.5', 'important');
-          // Ensure strong tag inside also has correct font-size
-          const strongTag = newLangItem.querySelector('strong');
-          if (strongTag) {
-            strongTag.style.setProperty('font-size', '16px', 'important');
-            strongTag.style.setProperty('font-family', '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif', 'important');
-            strongTag.style.setProperty('font-weight', '600', 'important');
-            strongTag.style.setProperty('line-height', '1.5', 'important');
-          }
-          filteredLanguages.push(filter);
-          newLangItem.addEventListener('mouseenter', () => {
-            // Reset all highlights
-            const items = dropdownList.querySelectorAll('div');
-            items.forEach(i => {
-              i.style.setProperty('background-color', 'white', 'important');
-              i.style.setProperty('color', 'black', 'important');
-            });
-            newLangItem.style.backgroundColor = '#e9d5ff';
-            selectedIndex = filtered.length;
-          });
-          newLangItem.addEventListener('mouseleave', () => {
-            if (selectedIndex !== filtered.length) {
-              newLangItem.style.setProperty('background-color', 'white', 'important');
-              newLangItem.style.setProperty('color', '#9333ea', 'important');
-            }
-          });
-          newLangItem.addEventListener('click', () => {
-            selectLanguage(filter);
-          });
-          // Prevent double-click and text selection
-          newLangItem.addEventListener('dblclick', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            return false;
-          });
-          newLangItem.addEventListener('selectstart', (e) => {
-            e.preventDefault();
-            return false;
-          });
-          dropdownList.appendChild(newLangItem);
-        }
       }
       
       // Function to update button based on tab and language
@@ -1105,17 +1117,12 @@ export default defineContentScript({
         const hasLanguage = dropdownInput.value.trim() !== '';
         
         if (activeTab === 'fixed') {
-          if (!hasLanguage) {
-            // Fixed tab + no language = Hide button
-            saveButton.style.display = 'none';
-          } else {
-            // Fixed tab + language entered = "Save and Close" with solid purple background
-            saveButton.style.display = 'block';
-            saveButton.textContent = 'Save and Close';
-            saveButton.style.backgroundColor = '#9333ea';
-            saveButton.style.color = 'white';
-            saveButton.style.border = 'none';
-          }
+          // Fixed tab - always show button since "As per website" is a valid selection
+          saveButton.style.display = 'block';
+          saveButton.textContent = 'Save and Close';
+          saveButton.style.backgroundColor = '#9333ea';
+          saveButton.style.color = 'white';
+          saveButton.style.border = 'none';
         } else {
           // Dynamic tab = "Save and Close" with solid purple background
           saveButton.style.display = 'block';
@@ -1147,12 +1154,6 @@ export default defineContentScript({
           e.preventDefault();
           if (selectedIndex >= 0 && selectedIndex < filteredLanguages.length) {
             selectLanguage(filteredLanguages[selectedIndex]);
-          } else {
-            // If no item selected but input has value, save it as new language
-            const inputValue = dropdownInput.value.trim();
-            if (inputValue) {
-              selectLanguage(inputValue);
-            }
           }
         } else if (e.key === 'Escape') {
           dropdownList.style.display = 'none';
@@ -1190,6 +1191,18 @@ export default defineContentScript({
       }
       
       // Dropdown input handlers
+      // Click handler to open dropdown (since input is readonly)
+      dropdownInput.addEventListener('click', () => {
+        dropdownInput.style.borderColor = '#9333ea';
+        const currentValue = dropdownInput.value;
+        populateDropdownList(currentValue);
+        updateDropdownPosition();
+        dropdownList.style.display = 'block';
+        selectedIndex = -1;
+        // Rotate dropdown icon
+        dropdownIcon.style.transform = 'translateY(-50%) rotate(180deg)';
+      });
+      
       dropdownInput.addEventListener('focus', () => {
         dropdownInput.style.borderColor = '#9333ea';
         const currentValue = dropdownInput.value;
@@ -1212,29 +1225,8 @@ export default defineContentScript({
         }, 200);
       });
       
-      dropdownInput.addEventListener('input', (e) => {
-        const value = e.target.value;
-        populateDropdownList(value);
-        updateDropdownPosition();
-        dropdownList.style.display = 'block';
-        selectedIndex = -1;
-      });
-      
-      // Handle Enter key on input (when dropdown might be closed)
-      dropdownInput.addEventListener('keydown', async (e) => {
-        if (e.key === 'Enter' && (dropdownList.style.display === 'none' || !dropdownList.style.display)) {
-          e.preventDefault();
-          const inputValue = dropdownInput.value.trim();
-          if (inputValue) {
-            // If "As per website" is typed, save as 'none'
-            if (inputValue === 'As per website') {
-              await selectLanguage('As per website');
-            } else {
-              await selectLanguage(inputValue);
-            }
-          }
-        }
-      });
+      // Remove input event handler since field is readonly
+      // Users can only select from dropdown list
       
       // Close dropdown when clicking outside
       let clickHandler = (e) => {
@@ -1250,6 +1242,9 @@ export default defineContentScript({
       
       // Initial population - show all languages
       populateDropdownList('');
+      
+      // Set default value to "As per website"
+      dropdownInput.value = 'As per website';
       
       dropdownContainer.appendChild(dropdownInput);
       dropdownContainer.appendChild(dropdownIcon);
@@ -1311,12 +1306,14 @@ export default defineContentScript({
         updateButtonState();
       });
       saveButton.addEventListener('click', async () => {
-        let selectedLanguage = 'none';
+        let selectedLanguage = 'WEBSITE_LANGUAGE';
         
         // Check which tab is active
         if (activeTab === 'fixed') {
           // Fixed tab is selected
-          selectedLanguage = dropdownInput.value.trim() || 'none';
+          const inputValue = dropdownInput.value.trim();
+          // If "As per website" is selected, save as 'WEBSITE_LANGUAGE'
+          selectedLanguage = inputValue === 'As per website' ? 'WEBSITE_LANGUAGE' : (inputValue || 'WEBSITE_LANGUAGE');
         } else {
           // Dynamic tab is selected - save as "dynamic" to global storage
           selectedLanguage = 'dynamic';
@@ -1400,11 +1397,11 @@ export default defineContentScript({
       
       // Load saved language for current domain and populate the input
       getSavedLanguage().then((savedLanguage) => {
-        if (savedLanguage && savedLanguage !== 'none' && savedLanguage !== 'dynamic') {
+        if (savedLanguage && savedLanguage !== 'WEBSITE_LANGUAGE' && savedLanguage !== 'none' && savedLanguage !== 'dynamic') {
           // Populate input with saved language
           dropdownInput.value = savedLanguage;
-        } else if (savedLanguage === 'none') {
-          // Show "As per website" when saved language is 'none'
+        } else if (savedLanguage === 'WEBSITE_LANGUAGE' || savedLanguage === 'none') {
+          // Show "As per website" when saved language is 'WEBSITE_LANGUAGE' or 'none' (for backward compatibility)
           dropdownInput.value = 'As per website';
         } else if (savedLanguage === 'dynamic') {
           // Switch to Dynamic tab if dynamic is selected
@@ -1460,22 +1457,16 @@ export default defineContentScript({
       getSavedLanguage().then((savedLanguage) => {
         // Set the language variable but don't automatically show modal on page load
         // Modal should only be shown when user explicitly requests it (e.g., via close button or settings)
-        if (savedLanguage === 'none') {
-          // Language is not defined, but don't show modal automatically
-          console.log('[Content Script] Language is not set, but not showing modal automatically');
-          language = 'none';
-          window.language = 'none';
-        } else {
-          // Language is already defined/set
-          console.log('[Content Script] Language is already set:', savedLanguage);
-          language = savedLanguage;
-          window.language = savedLanguage;
-        }
+        // Convert 'none' to 'WEBSITE_LANGUAGE' for backward compatibility
+        const normalizedLanguage = (savedLanguage === 'none') ? 'WEBSITE_LANGUAGE' : savedLanguage;
+        language = normalizedLanguage;
+        window.language = normalizedLanguage;
+        console.log('[Content Script] Language loaded:', normalizedLanguage);
       }).catch((error) => {
         console.error('[Content Script] Error checking saved language:', error);
         // Set default value on error
-        language = 'none';
-        window.language = 'none';
+        language = 'WEBSITE_LANGUAGE';
+        window.language = 'WEBSITE_LANGUAGE';
       });
     }).catch((error) => {
       console.error('[Content Script] Error checking extension state:', error);
@@ -9171,6 +9162,7 @@ const ChatDialog = {
   mediaRecorder: null, // MediaRecorder instance
   audioChunks: [], // Store audio chunks during recording
   pageSummary: null, // Store the fetched page summary
+  pagePossibleQuestions: [], // Store possible questions from summary API
   
   /**
    * Initialize chat dialog
@@ -9210,10 +9202,12 @@ const ChatDialog = {
       if (this.currentTextKey !== textKey && this.currentTextKey !== null) {
         console.log('[ChatDialog] Clearing page summary for new page');
         this.pageSummary = null;
+        this.pagePossibleQuestions = [];
       }
     } else {
       // Clear summary if not a page-general context
       this.pageSummary = null;
+      this.pagePossibleQuestions = [];
     }
     
     // Generate proper contextual textKey based on chat context
@@ -10615,12 +10609,7 @@ const ChatDialog = {
       
       // Render summary if it exists
       if (this.pageSummary) {
-        summaryContainer.innerHTML = `
-          <h3 class="vocab-chat-page-summary-header">Summary</h3>
-          <div class="vocab-chat-page-summary-content">
-            ${this.renderMarkdown(this.pageSummary)}
-          </div>
-        `;
+        this.renderPageSummaryWithQuestions(summaryContainer);
       }
       
       scrollableContainer.appendChild(summaryContainer);
@@ -10639,25 +10628,34 @@ const ChatDialog = {
       console.log('[ChatDialog] Adding Summarise the page button');
       const summariseBtn = document.createElement('button');
       summariseBtn.className = 'vocab-chat-simplify-more-btn';
-      summariseBtn.textContent = 'Summarise the page';
+      summariseBtn.innerHTML = `${this.createSparkleIcon()} Summarise this page`;
       summariseBtn.id = 'vocab-chat-summarise-page-btn';
       
-      // Disable button if summary already exists
+      // If summary already exists, show "Clear summary" button
       if (this.pageSummary) {
-        summariseBtn.disabled = true;
-        summariseBtn.classList.add('disabled');
-        console.log('[ChatDialog] Summarise button disabled - summary already exists');
+        summariseBtn.innerHTML = 'Clear summary';
+        summariseBtn.disabled = false;
+        summariseBtn.classList.remove('disabled');
+        console.log('[ChatDialog] Summary exists - showing "Clear summary" button');
+        
+        // Add onclick handler to clear summary
+        summariseBtn.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          e.stopImmediatePropagation();
+          console.log('[ChatDialog] Clear summary button clicked in simplified content!');
+          this.clearSummary();
+        }, true); // Use capture phase
+      } else {
+        // Add onclick handler to call summarise API
+        summariseBtn.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          e.stopImmediatePropagation();
+          console.log('[ChatDialog] Summarise button clicked in simplified content!');
+          this.handleSummarisePage();
+        }, true); // Use capture phase
       }
-      
-      // Add onclick handler to call summarise API
-      // Use capture phase to ensure it runs before TextSelector's handler
-      summariseBtn.addEventListener('click', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        e.stopImmediatePropagation();
-        console.log('[ChatDialog] Summarise button clicked in simplified content!');
-        this.handleSummarisePage();
-      }, true); // Use capture phase
       
       buttonContainer.appendChild(summariseBtn);
     } else if (this.chatContext !== 'general' && this.mode === 'simplified') {
@@ -10688,7 +10686,7 @@ const ChatDialog = {
     // If we have existing chat history, render it
     if (this.chatHistory && this.chatHistory.length > 0) {
       this.chatHistory.forEach(item => {
-        this.renderChatMessage(chatContainer, item.type, item.message);
+        this.renderChatMessage(chatContainer, item.type, item.message, item.possibleQuestions || []);
       });
       
       // Update delete button visibility and scroll to bottom after rendering
@@ -11002,8 +11000,8 @@ const ChatDialog = {
     summariseBtn.disabled = true;
     summariseBtn.classList.add('disabled', 'loading');
     
-    // Store original content
-    const originalText = summariseBtn.textContent;
+    // Store original content (with icon)
+    const originalContent = summariseBtn.innerHTML;
     
     // Show white spinner inside button
     summariseBtn.innerHTML = `
@@ -11033,8 +11031,9 @@ const ChatDialog = {
       
       // Call SummariseService with SSE
       try {
-        // Initialize streaming summary
+        // Initialize streaming summary and questions
         this.pageSummary = '';
+        this.pagePossibleQuestions = [];
         let summaryContainer = null;
         let summaryShown = false;
         
@@ -11065,22 +11064,16 @@ const ChatDialog = {
               if (eventData.accumulated) {
                 this.pageSummary = eventData.accumulated;
                 
-                // Show summary container on first chunk and hide button
+                // Show summary container on first chunk
                 if (summaryContainer && !summaryShown) {
                   summaryShown = true;
                   console.log('[ChatDialog] Showing summary container on first chunk');
-                  
-                  // Hide the button completely instead of disabling it
-                  if (summariseBtn) {
-                    summariseBtn.style.display = 'none';
-                    console.log('[ChatDialog] Summarise button hidden on first chunk');
-                  }
                 }
                 
                 // Update summary UI in real-time
                 if (summaryContainer) {
                   summaryContainer.innerHTML = `
-                    <h3 class="vocab-chat-page-summary-header">Summary</h3>
+                    <h3 class="vocab-chat-page-summary-header">Page summary</h3>
                     <div class="vocab-chat-page-summary-content">
                       ${this.renderMarkdown(this.pageSummary)}
                     </div>
@@ -11092,24 +11085,36 @@ const ChatDialog = {
             // Handle complete event (final summary)
             else if (eventData.type === 'complete' && eventData.summary) {
               console.log('[ChatDialog] Complete event - summary length:', eventData.summary.length);
+              console.log('[ChatDialog] Possible questions:', eventData.possibleQuestions?.length || 0);
               
-              // Store final summary
+              // Store final summary and possible questions
               this.pageSummary = eventData.summary;
+              this.pagePossibleQuestions = eventData.possibleQuestions || [];
               
-              // Update summary UI with final data
+              // Update summary UI with final data including questions
               if (summaryContainer) {
-                summaryContainer.innerHTML = `
-                  <h3 class="vocab-chat-page-summary-header">Summary</h3>
-                  <div class="vocab-chat-page-summary-content">
-                    ${this.renderMarkdown(this.pageSummary)}
-                  </div>
-                `;
+                this.renderPageSummaryWithQuestions(summaryContainer);
               }
               
-              // Button is already hidden from first chunk, just remove loading state if needed
-        if (summariseBtn) {
-          summariseBtn.classList.remove('loading');
-                console.log('[ChatDialog] Summarise button remains hidden after completion');
+              // Change button to "Clear summary" after completion
+              if (summariseBtn) {
+                summariseBtn.disabled = false;
+                summariseBtn.classList.remove('loading', 'disabled');
+                summariseBtn.innerHTML = 'Clear summary';
+                summariseBtn.style.display = 'block';
+                
+                // Update click handler to clear summary
+                summariseBtn.replaceWith(summariseBtn.cloneNode(true));
+                const newBtn = document.getElementById('vocab-chat-summarise-page-btn');
+                newBtn.addEventListener('click', (e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  e.stopImmediatePropagation();
+                  console.log('[ChatDialog] Clear summary button clicked!');
+                  this.clearSummary();
+                }, true);
+                
+                console.log('[ChatDialog] Button changed to "Clear summary" after completion');
               }
             }
           },
@@ -11144,8 +11149,8 @@ const ChatDialog = {
             if (summariseBtn) {
               summariseBtn.disabled = false;
               summariseBtn.classList.remove('disabled', 'loading');
-          summariseBtn.textContent = originalText;
-        }
+              summariseBtn.innerHTML = originalContent;
+            }
           }
         );
       } catch (error) {
@@ -11174,7 +11179,7 @@ const ChatDialog = {
         if (summariseBtn) {
           summariseBtn.disabled = false;
           summariseBtn.classList.remove('disabled', 'loading');
-          summariseBtn.textContent = originalText;
+          summariseBtn.innerHTML = originalContent;
         }
       }
     } catch (error) {
@@ -11187,7 +11192,7 @@ const ChatDialog = {
       if (summariseBtn) {
         summariseBtn.disabled = false;
         summariseBtn.classList.remove('disabled', 'loading');
-        summariseBtn.textContent = originalText;
+        summariseBtn.innerHTML = originalContent;
       }
     }
   },
@@ -11220,15 +11225,210 @@ const ChatDialog = {
       buttonContainer.parentNode.insertBefore(summaryContainer, buttonContainer);
     }
     
-    // Render summary content
+    // Render summary with questions
+    this.renderPageSummaryWithQuestions(summaryContainer);
+    
+    console.log('[ChatDialog] Page summary rendered above button');
+  },
+  
+  /**
+   * Render page summary with possible questions
+   * @param {HTMLElement} summaryContainer - The container element to render into
+   */
+  renderPageSummaryWithQuestions(summaryContainer) {
+    if (!this.pageSummary) {
+      return;
+    }
+    
+    // Build questions HTML if they exist
+    let questionsHTML = '';
+    if (this.pagePossibleQuestions && this.pagePossibleQuestions.length > 0) {
+      const validQuestions = this.pagePossibleQuestions.filter(q => q && q.trim() !== '');
+      if (validQuestions.length > 0) {
+        questionsHTML = `
+          <div class="vocab-chat-page-questions-container">
+            <h4 class="vocab-chat-page-questions-header">Would you like to know ?</h4>
+            <div class="vocab-chat-page-questions-list">
+              ${validQuestions.map((question, index) => `
+                <div class="vocab-chat-page-question-item" data-question="${this.escapeHtml(question)}">
+                  <span class="vocab-chat-page-question-icon">+</span>
+                  <span>${this.escapeHtml(question)}</span>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        `;
+      }
+    }
+    
+    // Render summary content with questions
     summaryContainer.innerHTML = `
-      <h3 class="vocab-chat-page-summary-header">Summary</h3>
+      <h3 class="vocab-chat-page-summary-header">Page summary</h3>
       <div class="vocab-chat-page-summary-content">
         ${this.renderMarkdown(this.pageSummary)}
       </div>
+      ${questionsHTML}
     `;
     
-    console.log('[ChatDialog] Page summary rendered above button');
+    // Add click handlers to question items
+    const questionItems = summaryContainer.querySelectorAll('.vocab-chat-page-question-item');
+    questionItems.forEach(item => {
+      item.addEventListener('click', () => {
+        const question = item.getAttribute('data-question');
+        console.log('[ChatDialog] Question clicked:', question);
+        this.askQuestion(question);
+      });
+    });
+    
+    // Trigger animation by forcing a reflow for questions container
+    const questionsContainer = summaryContainer.querySelector('.vocab-chat-page-questions-container');
+    if (questionsContainer) {
+      void questionsContainer.offsetHeight;
+    }
+    
+    console.log('[ChatDialog] Page summary with questions rendered');
+  },
+  
+  /**
+   * Render possible questions below a chat message
+   * @param {Array<string>} possibleQuestions - Array of question strings
+   * @returns {HTMLElement|null} The questions container element or null if no valid questions
+   */
+  renderMessageQuestions(possibleQuestions) {
+    console.log('[ChatDialog] renderMessageQuestions called with:', possibleQuestions);
+    console.log('[ChatDialog] renderMessageQuestions type:', typeof possibleQuestions);
+    console.log('[ChatDialog] renderMessageQuestions is array:', Array.isArray(possibleQuestions));
+    
+    if (!possibleQuestions || possibleQuestions.length === 0) {
+      console.log('[ChatDialog] renderMessageQuestions: No questions or empty array, returning null');
+      return null;
+    }
+    
+    const validQuestions = possibleQuestions.filter(q => q && q.trim() !== '');
+    console.log('[ChatDialog] renderMessageQuestions: Valid questions after filtering:', validQuestions);
+    if (validQuestions.length === 0) {
+      console.log('[ChatDialog] renderMessageQuestions: No valid questions after filtering, returning null');
+      return null;
+    }
+    
+    // Create questions container
+    const questionsContainer = document.createElement('div');
+    questionsContainer.className = 'vocab-chat-message-questions-container';
+    
+    // Build questions HTML
+    const questionsHTML = `
+      <h4 class="vocab-chat-message-questions-header">You might be interested on:</h4>
+      <div class="vocab-chat-message-questions-list">
+        ${validQuestions.map((question, index) => `
+          <div class="vocab-chat-message-question-item" data-question="${this.escapeHtml(question)}">
+            <span class="vocab-chat-message-question-icon">+</span>
+            <span>${this.escapeHtml(question)}</span>
+          </div>
+        `).join('')}
+      </div>
+    `;
+    
+    questionsContainer.innerHTML = questionsHTML;
+    
+    // Add click handlers to question items
+    const questionItems = questionsContainer.querySelectorAll('.vocab-chat-message-question-item');
+    questionItems.forEach(item => {
+      item.addEventListener('click', () => {
+        const question = item.getAttribute('data-question');
+        console.log('[ChatDialog] Message question clicked:', question);
+        this.askQuestion(question);
+      });
+    });
+    
+    // Trigger animation by forcing a reflow
+    void questionsContainer.offsetHeight;
+    
+    return questionsContainer;
+  },
+  
+  /**
+   * Escape HTML to prevent XSS
+   * @param {string} text - Text to escape
+   * @returns {string} Escaped text
+   */
+  escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  },
+  
+  /**
+   * Ask a question by setting it in the input and sending it
+   * @param {string} question - The question to ask
+   */
+  askQuestion(question) {
+    if (!question || question.trim() === '') {
+      return;
+    }
+    
+    // Find the input field
+    const inputField = document.getElementById('vocab-chat-input');
+    if (!inputField) {
+      console.warn('[ChatDialog] Input field not found');
+      return;
+    }
+    
+    // Set the question in the input field
+    inputField.value = question.trim();
+    
+    // Trigger input event to ensure UI updates
+    inputField.dispatchEvent(new Event('input', { bubbles: true }));
+    
+    // Focus the input
+    inputField.focus();
+    
+    // Send the message
+    setTimeout(() => {
+      this.sendMessage();
+    }, 100);
+    
+    console.log('[ChatDialog] Question set in input and sent:', question);
+  },
+  
+  /**
+   * Clear the page summary and reset the button
+   */
+  clearSummary() {
+    console.log('[ChatDialog] Clearing page summary and questions');
+    
+    // Clear the summary data and questions
+    this.pageSummary = '';
+    this.pagePossibleQuestions = [];
+    console.log('[ChatDialog] Summary and questions data cleared');
+    
+    // Remove summary container (which includes questions)
+    const summaryContainer = document.getElementById('vocab-chat-page-summary-container');
+    if (summaryContainer) {
+      summaryContainer.remove();
+      console.log('[ChatDialog] Summary container (including questions) removed');
+    }
+    
+    // Reset button to "Summarise the page"
+    const summariseBtn = document.getElementById('vocab-chat-summarise-page-btn');
+    if (summariseBtn) {
+      summariseBtn.disabled = false;
+      summariseBtn.classList.remove('disabled', 'loading');
+      summariseBtn.innerHTML = `${this.createSparkleIcon()} Summarise this page`;
+      summariseBtn.style.display = 'block';
+      
+      // Update click handler back to handleSummarisePage
+      summariseBtn.replaceWith(summariseBtn.cloneNode(true));
+      const newBtn = document.getElementById('vocab-chat-summarise-page-btn');
+      newBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
+        console.log('[ChatDialog] Summarise button clicked!');
+        this.handleSummarisePage();
+      }, true);
+      
+      console.log('[ChatDialog] Button reset to "Summarise the page"');
+    }
   },
   
   /**
@@ -11252,8 +11452,7 @@ const ChatDialog = {
       // Render summary if it exists
       if (this.pageSummary) {
         summaryContainer.innerHTML = `
-          <h3 class="vocab-chat-page-summary-header">Summary</h3>
-          <h3 class="vocab-chat-page-summary-header">Summary</h3>
+          <h3 class="vocab-chat-page-summary-header">Page summary</h3>
           <div class="vocab-chat-page-summary-content">
             ${this.renderMarkdown(this.pageSummary)}
           </div>
@@ -11273,25 +11472,34 @@ const ChatDialog = {
       console.log('[ChatDialog] Adding Summarise the page button to ask content');
       const summariseBtn = document.createElement('button');
       summariseBtn.className = 'vocab-chat-simplify-more-btn';
-      summariseBtn.textContent = 'Summarise the page';
+      summariseBtn.innerHTML = `${this.createSparkleIcon()} Summarise this page`;
       summariseBtn.id = 'vocab-chat-summarise-page-btn';
       
-      // Disable button if summary already exists
+      // If summary already exists, show "Clear summary" button
       if (this.pageSummary) {
-        summariseBtn.disabled = true;
-        summariseBtn.classList.add('disabled');
-        console.log('[ChatDialog] Summarise button disabled - summary already exists');
+        summariseBtn.innerHTML = 'Clear summary';
+        summariseBtn.disabled = false;
+        summariseBtn.classList.remove('disabled');
+        console.log('[ChatDialog] Summary exists - showing "Clear summary" button');
+        
+        // Add onclick handler to clear summary
+        summariseBtn.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          e.stopImmediatePropagation();
+          console.log('[ChatDialog] Clear summary button clicked!');
+          this.clearSummary();
+        }, true); // Use capture phase
+      } else {
+        // Add onclick handler to call summarise API
+        summariseBtn.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          e.stopImmediatePropagation();
+          console.log('[ChatDialog] Summarise button clicked!');
+          this.handleSummarisePage();
+        }, true); // Use capture phase
       }
-      
-      // Add onclick handler to call summarise API
-      // Use capture phase to ensure it runs before TextSelector's handler
-      summariseBtn.addEventListener('click', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        e.stopImmediatePropagation();
-        console.log('[ChatDialog] Summarise button clicked!');
-        this.handleSummarisePage();
-      }, true); // Use capture phase
       
       buttonContainer.appendChild(summariseBtn);
       content.appendChild(buttonContainer);
@@ -11305,7 +11513,7 @@ const ChatDialog = {
     // If we have existing chat history, render it
     if (this.chatHistory && this.chatHistory.length > 0) {
       this.chatHistory.forEach(item => {
-        this.renderChatMessage(chatContainer, item.type, item.message);
+        this.renderChatMessage(chatContainer, item.type, item.message, item.possibleQuestions || []);
       });
       
       // Update delete button visibility and scroll to bottom after rendering
@@ -11354,7 +11562,7 @@ const ChatDialog = {
     // If we have existing chat history, render it
     if (this.chatHistory && this.chatHistory.length > 0) {
       this.chatHistory.forEach(item => {
-        this.renderChatMessage(chatContainer, item.type, item.message);
+        this.renderChatMessage(chatContainer, item.type, item.message, item.possibleQuestions || []);
       });
       
       // Update delete button visibility and scroll to bottom after rendering
@@ -11389,7 +11597,7 @@ const ChatDialog = {
    * @param {string} type - Message type ('user' or 'assistant')
    * @param {string} message - Message content
    */
-  renderChatMessage(container, type, message) {
+  renderChatMessage(container, type, message, possibleQuestions = []) {
     // Create message bubble with correct class names
     const messageBubble = document.createElement('div');
     messageBubble.className = `vocab-chat-message vocab-chat-message-${type}`;
@@ -11405,6 +11613,15 @@ const ChatDialog = {
     }
     
     messageBubble.appendChild(messageContent);
+    
+    // Add questions below AI messages if they exist
+    if (type === 'ai' && possibleQuestions && possibleQuestions.length > 0) {
+      const questionsContainer = this.renderMessageQuestions(possibleQuestions);
+      if (questionsContainer) {
+        messageBubble.appendChild(questionsContainer);
+      }
+    }
+    
     container.appendChild(messageBubble);
   },
   
@@ -11419,7 +11636,7 @@ const ChatDialog = {
     const inputField = document.createElement('textarea');
     inputField.className = 'vocab-chat-input';
     inputField.id = 'vocab-chat-input';
-    inputField.placeholder = 'Type your question here ...';
+    inputField.placeholder = 'Ask AI ...';
     inputField.rows = 1;
     
     // Apply inline styles as a fallback to ensure visibility even if CSS is overridden
@@ -11632,6 +11849,7 @@ const ChatDialog = {
     let streamingMessageContent = null;
     let streamingMessageBubble = null;
     let accumulatedText = '';
+    let possibleQuestions = []; // Store possibleQuestions during streaming
     let abortRequest = null;
     
     // Check if we're still in the same chat tab that initiated the request
@@ -11661,19 +11879,37 @@ const ChatDialog = {
           
           // Check if we're still in the same chat tab
           if (this.currentTextKey === requestTextKey && streamingMessageContent) {
-            // Update the message bubble in real-time
-            this.updateStreamingMessage(streamingMessageContent, accumulatedText);
+            // Update the message bubble in real-time (don't pass possibleQuestions during streaming)
+            this.updateStreamingMessage(streamingMessageContent, accumulatedText, undefined);
           } else if (!isSameChat) {
             // User switched tabs, but we still want to update if they switch back
             // We'll handle this in the complete callback
             console.log('[ChatDialog] User switched tabs during streaming, will update on complete');
           }
         },
-        onComplete: (chat_history) => {
+        onComplete: (chat_history, receivedPossibleQuestions = []) => {
+          console.log('[ChatDialog] ===== ONCOMPLETE CALLBACK CALLED =====');
           console.log('[ChatDialog] Stream complete, chat_history:', chat_history);
+          console.log('[ChatDialog] Received possibleQuestions parameter:', receivedPossibleQuestions);
+          console.log('[ChatDialog] Received possibleQuestions type:', typeof receivedPossibleQuestions);
+          console.log('[ChatDialog] Received possibleQuestions is array:', Array.isArray(receivedPossibleQuestions));
+          console.log('[ChatDialog] Received possibleQuestions length:', receivedPossibleQuestions?.length || 0);
+          console.log('[ChatDialog] Received possibleQuestions value (stringified):', JSON.stringify(receivedPossibleQuestions));
       
       // Remove loading animation
       this.removeLoadingAnimation();
+      
+          // Store the received possibleQuestions - ensure it's an array
+          if (Array.isArray(receivedPossibleQuestions)) {
+            possibleQuestions = receivedPossibleQuestions;
+          } else if (receivedPossibleQuestions) {
+            console.log('[ChatDialog] WARNING: receivedPossibleQuestions is not an array, converting:', receivedPossibleQuestions);
+            possibleQuestions = [receivedPossibleQuestions];
+          } else {
+            possibleQuestions = [];
+          }
+          console.log('[ChatDialog] Stored possibleQuestions:', possibleQuestions);
+          console.log('[ChatDialog] Stored possibleQuestions length:', possibleQuestions.length);
       
           // Get the final AI response
           let aiResponse = accumulatedText || 'No response received';
@@ -11689,23 +11925,25 @@ const ChatDialog = {
         }
         
           console.log('[ChatDialog] Final AI response:', aiResponse);
+          console.log('[ChatDialog] Final possibleQuestions to display:', possibleQuestions);
         
         // Check if we're still in the same chat tab that initiated the request
         if (this.currentTextKey === requestTextKey) {
             // We're still in the same chat, update the streaming message or add it if it doesn't exist
             if (streamingMessageContent) {
-              // Update the existing streaming message with final content
-              this.updateStreamingMessage(streamingMessageContent, aiResponse);
+              // Update the existing streaming message with final content and questions
+              this.updateStreamingMessage(streamingMessageContent, aiResponse, possibleQuestions);
               
               // Add the AI response to history (user message was already added before API call)
               this.chatHistory.push({
                 type: 'ai',
                 message: aiResponse,
+                possibleQuestions: possibleQuestions,
                 timestamp: new Date().toISOString()
               });
             } else {
               // Message bubble was removed or doesn't exist, add it normally
-          this.addMessageToChat('ai', aiResponse);
+          this.addMessageToChat('ai', aiResponse, possibleQuestions);
             }
             
             // Update stored chat history
@@ -11723,6 +11961,7 @@ const ChatDialog = {
           originalChatHistory.push({
             type: 'ai',
             message: aiResponse,
+            possibleQuestions: possibleQuestions,
             timestamp: new Date().toISOString()
           });
           
@@ -12087,7 +12326,7 @@ const ChatDialog = {
    * @param {string} message - Message content
    * @returns {HTMLElement|null} The message bubble element (for streaming updates)
    */
-  addMessageToChat(type, message) {
+  addMessageToChat(type, message, possibleQuestions = []) {
     const chatContainer = document.getElementById('vocab-chat-messages');
     
     // Remove "Ask me anything about the page" message if exists
@@ -12111,6 +12350,22 @@ const ChatDialog = {
     }
     
     messageBubble.appendChild(messageContent);
+    
+    // Add questions below AI messages if they exist
+    console.log('[ChatDialog] addMessageToChat: type=', type, 'possibleQuestions=', possibleQuestions);
+    if (type === 'ai' && possibleQuestions && possibleQuestions.length > 0) {
+      console.log('[ChatDialog] addMessageToChat: Questions found, calling renderMessageQuestions');
+      const questionsContainer = this.renderMessageQuestions(possibleQuestions);
+      if (questionsContainer) {
+        console.log('[ChatDialog] addMessageToChat: Questions container created, appending to message bubble');
+        messageBubble.appendChild(questionsContainer);
+      } else {
+        console.log('[ChatDialog] addMessageToChat: Questions container is null, not appending');
+      }
+    } else {
+      console.log('[ChatDialog] addMessageToChat: No questions (type is not ai or questions are empty)');
+    }
+    
     chatContainer.appendChild(messageBubble);
     
     // Show global clear button
@@ -12125,7 +12380,7 @@ const ChatDialog = {
     }, 100);
     
     // Store in history
-    const messageData = { type, message, timestamp: new Date().toISOString() };
+    const messageData = { type, message, possibleQuestions: possibleQuestions || [], timestamp: new Date().toISOString() };
     this.chatHistory.push(messageData);
     
     // Also update the stored chat history for this textKey
@@ -12221,11 +12476,42 @@ const ChatDialog = {
    * @param {HTMLElement} messageContent - The message content element
    * @param {string} accumulatedText - The accumulated text to display
    */
-  updateStreamingMessage(messageContent, accumulatedText) {
+  updateStreamingMessage(messageContent, accumulatedText, possibleQuestions = undefined) {
     if (!messageContent) return;
     
     // Update the content with markdown rendering
     messageContent.innerHTML = this.renderMarkdown(accumulatedText);
+    
+    // Get the message bubble parent
+    const messageBubble = messageContent.closest('.vocab-chat-message');
+    if (messageBubble) {
+      // Only update questions if possibleQuestions is explicitly provided (not undefined)
+      // This prevents removing questions during streaming updates
+      if (possibleQuestions !== undefined) {
+        // Remove existing questions container if any
+        const existingQuestions = messageBubble.querySelector('.vocab-chat-message-questions-container');
+        if (existingQuestions) {
+          existingQuestions.remove();
+        }
+        
+        // Add questions if they exist and are non-empty
+        console.log('[ChatDialog] updateStreamingMessage: Checking for possibleQuestions:', possibleQuestions);
+        if (possibleQuestions && Array.isArray(possibleQuestions) && possibleQuestions.length > 0) {
+          console.log('[ChatDialog] updateStreamingMessage: Questions found, calling renderMessageQuestions');
+          const questionsContainer = this.renderMessageQuestions(possibleQuestions);
+          if (questionsContainer) {
+            console.log('[ChatDialog] updateStreamingMessage: Questions container created, appending to message bubble');
+            messageBubble.appendChild(questionsContainer);
+          } else {
+            console.log('[ChatDialog] updateStreamingMessage: Questions container is null, not appending');
+          }
+        } else {
+          console.log('[ChatDialog] updateStreamingMessage: No questions or empty array');
+        }
+      } else {
+        console.log('[ChatDialog] updateStreamingMessage: possibleQuestions is undefined, preserving existing questions');
+      }
+    }
     
     // Auto-scroll to bottom
     const chatContainer = document.getElementById('vocab-chat-messages');
@@ -12918,6 +13204,21 @@ const ChatDialog = {
   },
   
   /**
+   * Create AI sparkle icon SVG (solid white, for button)
+   * @param {number} size - Icon size in pixels (default: 18)
+   * @returns {string} SVG markup
+   */
+  createSparkleIcon(size = 18) {
+    return `
+      <svg width="${size}" height="${size}" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M14 0L17 8L25 11L17 14L14 22L11 14L3 11L11 8L14 0Z" fill="white"/>
+        <path d="M22 16L23.5 20L27.5 21.5L23.5 23L22 27L20.5 23L16.5 21.5L20.5 20L22 16Z" fill="white"/>
+        <path d="M8 21L9.5 24.5L13 26L9.5 27.5L8 31L6.5 27.5L3 26L6.5 24.5L8 21Z" fill="white"/>
+      </svg>
+    `;
+  },
+  
+  /**
    * Create chat empty icon (professional purple)
    */
   createChatEmptyIcon() {
@@ -13414,7 +13715,7 @@ const ChatDialog = {
       .vocab-chat-page-summary-header {
         text-align: center;
         color: #9527F5;
-        font-weight: 300;
+        font-weight: 600;
         font-size: 18px;
         margin: 0 0 12px 0;
         padding: 0;
@@ -13424,9 +13725,9 @@ const ChatDialog = {
       
       .vocab-chat-page-summary-content {
         padding: 16px;
-        background: #f9fafb;
-        border: 1px solid #e5e7eb;
-        border-radius: 8px;
+        background: #ffffff;
+        border: none;
+        border-radius: 20px;
         font-size: 14px;
         line-height: 1.6;
         color: #374151;
@@ -13447,10 +13748,189 @@ const ChatDialog = {
         color: #1f2937;
       }
       
+      /* Page Summary Questions */
+      .vocab-chat-page-questions-container {
+        margin-top: 5px;
+        padding-top: 16px;
+        // border-top: 1px solid #e5e7eb;
+        animation: vocab-chat-questions-fade-in 0.5s ease-out;
+      }
+      
+      @keyframes vocab-chat-questions-fade-in {
+        from {
+          opacity: 0;
+          transform: translateY(10px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+      
+      .vocab-chat-page-questions-header {
+        font-size: 14px;
+        font-weight: 600;
+        color: #9527F5;
+        margin: 0 0 12px 0;
+        padding: 0;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      }
+      
+      .vocab-chat-page-questions-list {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+      }
+      
+      .vocab-chat-page-question-item {
+        padding: 2px;
+        margin: 2px;
+        background: #ffffff;
+        border: none;
+        border-top: 1px solid rgba(149, 39, 245, 0.2);
+        border-radius: 0;
+        font-size: 14px;
+        line-height: 1.5;
+        color: #6b7280;
+        cursor: pointer;
+        transition: color 0.2s ease;
+        word-wrap: break-word;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        animation: vocab-chat-question-item-fade-in 0.4s ease-out backwards;
+      }
+      
+      .vocab-chat-page-question-item:nth-child(1) {
+        animation-delay: 0.1s;
+      }
+      
+      .vocab-chat-page-question-item:nth-child(2) {
+        animation-delay: 0.15s;
+      }
+      
+      .vocab-chat-page-question-item:nth-child(3) {
+        animation-delay: 0.2s;
+      }
+      
+      .vocab-chat-page-question-item:nth-child(4) {
+        animation-delay: 0.25s;
+      }
+      
+      .vocab-chat-page-question-item:nth-child(5) {
+        animation-delay: 0.3s;
+      }
+      
+      @keyframes vocab-chat-question-item-fade-in {
+        from {
+          opacity: 0;
+          transform: translateX(-10px);
+        }
+        to {
+          opacity: 1;
+          transform: translateX(0);
+        }
+      }
+      
+      .vocab-chat-page-question-item:hover {
+        color: #9527F5;
+      }
+      
+      .vocab-chat-page-question-item:active {
+        color: #7a1fd9;
+      }
+      
+      .vocab-chat-page-question-icon {
+        flex-shrink: 0;
+        color: #9527F5;
+        font-weight: 600;
+        font-size: 16px;
+      }
+      
+      /* Message Questions Container - Below AI messages */
+      .vocab-chat-message-questions-container {
+        margin-top: 12px;
+        padding: 0;
+        animation: vocab-chat-questions-fade-in 0.5s ease-out;
+      }
+      
+      .vocab-chat-message-questions-header {
+        font-size: 13px;
+        font-weight: 500;
+        color: #9527F5;
+        margin: 0 0 8px 0;
+        padding: 0;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      }
+      
+      .vocab-chat-message-questions-list {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+      }
+      
+      .vocab-chat-message-question-item {
+        padding: 2px;
+        margin: 2px;
+        background: #ffffff;
+        border: none;
+        border-top: 1px solid rgba(149, 39, 245, 0.2);
+        border-radius: 0;
+        font-size: 14px;
+        line-height: 1.5;
+        color: #6b7280;
+        cursor: pointer;
+        transition: color 0.2s ease;
+        word-wrap: break-word;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        animation: vocab-chat-question-item-fade-in 0.4s ease-out backwards;
+      }
+      
+      .vocab-chat-message-question-item:nth-child(1) {
+        animation-delay: 0.1s;
+      }
+      
+      .vocab-chat-message-question-item:nth-child(2) {
+        animation-delay: 0.15s;
+      }
+      
+      .vocab-chat-message-question-item:nth-child(3) {
+        animation-delay: 0.2s;
+      }
+      
+      .vocab-chat-message-question-item:nth-child(4) {
+        animation-delay: 0.25s;
+      }
+      
+      .vocab-chat-message-question-item:nth-child(5) {
+        animation-delay: 0.3s;
+      }
+      
+      .vocab-chat-message-question-item:hover {
+        color: #9527F5;
+      }
+      
+      .vocab-chat-message-question-item:active {
+        color: #7a1fd9;
+      }
+      
+      .vocab-chat-message-question-icon {
+        flex-shrink: 0;
+        color: #9527F5;
+        font-weight: 600;
+        font-size: 16px;
+      }
+      
       .vocab-chat-simplify-more-container {
         display: flex;
         justify-content: flex-end;
         margin-top: 12px;
+        margin-right: 0;
+        padding-right: 0;
+        width: 100%;
+        box-sizing: border-box;
       }
       
       .vocab-chat-simplify-more-btn {
@@ -13461,6 +13941,9 @@ const ChatDialog = {
         padding: 10px 20px;
         font-size: 14px;
         font-weight: 500;
+        display: flex;
+        align-items: center;
+        gap: 8px;
         cursor: pointer;
         transition: all 0.2s ease;
         font-family: inherit;
@@ -13595,8 +14078,10 @@ const ChatDialog = {
       }
       
       .vocab-chat-message-ai {
-        align-items: flex-start;
-        margin-left: 12px;
+        align-items: center;
+        margin-left: 0;
+        margin-right: 0;
+        width: 100%;
       }
       
       .vocab-chat-message-content {
@@ -13615,9 +14100,18 @@ const ChatDialog = {
       }
       
       .vocab-chat-message-ai .vocab-chat-message-content {
-        background: white;
+        padding: 16px;
+        background: #ffffff;
+        border: none;
+        border-radius: 8px;
+        font-size: 14px;
+        line-height: 1.6;
         color: #374151;
-        box-shadow: 0 2px 8px rgba(149, 39, 245, 0.15), 0 1px 4px rgba(149, 39, 245, 0.1);
+        word-wrap: break-word;
+        overflow-wrap: break-word;
+        box-shadow: none;
+        max-width: none;
+        width: auto;
       }
       
       /* Loading Animation - Three Dots Waving */
@@ -13685,6 +14179,14 @@ const ChatDialog = {
         padding: 0;
         font-size: 12px;
         line-height: 1.5;
+      }
+      
+      .vocab-chat-message-ai .vocab-chat-message-content p {
+        margin: 0 0 12px 0;
+      }
+      
+      .vocab-chat-message-ai .vocab-chat-message-content p:last-child {
+        margin-bottom: 0;
       }
       
       .vocab-chat-message-ai .vocab-chat-message-content strong {
@@ -16441,9 +16943,9 @@ const ButtonPanel = {
    * Create AI sparkle icon SVG (solid white, larger and prominent)
    * @returns {string} SVG markup
    */
-  createSparkleIcon() {
+  createSparkleIcon(size = 18) {
     return `
-      <svg width="28" height="28" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <svg width="${size}" height="${size}" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
         <path d="M14 0L17 8L25 11L17 14L14 22L11 14L3 11L11 8L14 0Z" fill="white"/>
         <path d="M22 16L23.5 20L27.5 21.5L23.5 23L22 27L20.5 23L16.5 21.5L20.5 20L22 16Z" fill="white"/>
         <path d="M8 21L9.5 24.5L13 26L9.5 27.5L8 31L6.5 27.5L3 26L6.5 24.5L8 21Z" fill="white"/>
