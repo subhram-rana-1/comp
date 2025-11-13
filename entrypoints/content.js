@@ -1729,10 +1729,10 @@ export default defineContentScript({
         // Initially hide the button (will be shown when extension is enabled)
         button.style.display = 'none';
         
-        // Use white thick bold X icon with faceted/geometric design (SVG)
+        // Use gear icon (settings icon) with white fill
         button.innerHTML = `
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" class="vocab-close-x-icon">
-            <path d="M18 6L6 18M6 6L18 18" stroke="white" stroke-width="4" stroke-linecap="square" stroke-linejoin="miter" stroke-miterlimit="10"/>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="white" xmlns="http://www.w3.org/2000/svg" class="vocab-close-gear-icon">
+            <path d="M19.14,12.94c0.04-0.31,0.06-0.63,0.06-0.94s-0.02-0.63-0.06-0.94l2.03-1.58c0.18-0.14,0.23-0.41,0.12-0.61l-1.92-3.32c-0.11-0.2-0.35-0.27-0.56-0.2l-2.39,0.96c-0.5-0.38-1.03-0.7-1.62-0.94L14.5,2.5C14.47,2.22,14.24,2,13.95,2h-3.9c-0.29,0-0.52,0.22-0.55,0.5L9.1,5.37C8.5,5.61,7.97,5.93,7.47,6.31L5.08,5.35c-0.21-0.08-0.45,0-0.56,0.2L2.6,8.87c-0.11,0.2-0.06,0.47,0.12,0.61l2.03,1.58C4.71,11.37,4.68,11.69,4.68,12s0.02,0.63,0.06,0.94l-2.03,1.58c-0.18,0.14-0.23,0.41-0.12,0.61l1.92,3.32c0.11,0.2,0.35,0.27,0.56,0.2l2.39-0.96c0.5,0.38,1.03,0.7,1.62,0.94l0.4,2.87c0.03,0.28,0.26,0.5,0.55,0.5h3.9c0.29,0,0.52-0.22,0.55-0.5l0.4-2.87c0.59-0.24,1.12-0.56,1.62-0.94l2.39,0.96c0.21,0.08,0.45,0,0.56-0.2l1.92-3.32c0.11-0.2,0.06-0.47-0.12-0.61L19.14,12.94z M12,15.5c-1.93,0-3.5-1.57-3.5-3.5S10.07,8.5,12,8.5s3.5,1.57,3.5,3.5S13.93,15.5,12,15.5z"/>
           </svg>
         `;
         
@@ -8900,11 +8900,17 @@ const TextSelector = {
       }
       
       .vocab-close-btn svg,
-      .vocab-close-btn .vocab-close-x-icon {
+      .vocab-close-btn .vocab-close-gear-icon {
         pointer-events: none;
         display: block;
         width: 16px; /* Smaller icon for smaller button */
         height: 16px; /* Smaller icon for smaller button */
+        transition: transform 0.2s ease;
+      }
+      
+      .vocab-close-btn:hover svg,
+      .vocab-close-btn:hover .vocab-close-gear-icon {
+        transform: rotate(90deg);
       }
       
       /* Tooltip for ask-about-page button - Similar to import-content button tooltip */
@@ -13886,7 +13892,7 @@ const ChatDialog = {
       /* Message Questions Container - Below AI messages */
       .vocab-chat-message-questions-container {
         margin-top: 12px;
-        padding: 0;
+        padding: 16px;
         animation: vocab-chat-questions-fade-in 0.5s ease-out;
       }
       
