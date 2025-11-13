@@ -1714,7 +1714,7 @@ export default defineContentScript({
       }
       
       // Function to actually create and append the button
-      const createButton = () => {
+      const createButton = async () => {
         // Check if button already exists (might have been created by another call)
         if (document.getElementById('vocab-close-btn')) {
           return;
@@ -1729,12 +1729,26 @@ export default defineContentScript({
         // Initially hide the button (will be shown when extension is enabled)
         button.style.display = 'none';
         
-        // Use gear icon (settings icon) with white fill
-        button.innerHTML = `
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="white" xmlns="http://www.w3.org/2000/svg" class="vocab-close-gear-icon">
-            <path d="M19.14,12.94c0.04-0.31,0.06-0.63,0.06-0.94s-0.02-0.63-0.06-0.94l2.03-1.58c0.18-0.14,0.23-0.41,0.12-0.61l-1.92-3.32c-0.11-0.2-0.35-0.27-0.56-0.2l-2.39,0.96c-0.5-0.38-1.03-0.7-1.62-0.94L14.5,2.5C14.47,2.22,14.24,2,13.95,2h-3.9c-0.29,0-0.52,0.22-0.55,0.5L9.1,5.37C8.5,5.61,7.97,5.93,7.47,6.31L5.08,5.35c-0.21-0.08-0.45,0-0.56,0.2L2.6,8.87c-0.11,0.2-0.06,0.47,0.12,0.61l2.03,1.58C4.71,11.37,4.68,11.69,4.68,12s0.02,0.63,0.06,0.94l-2.03,1.58c-0.18,0.14-0.23,0.41-0.12,0.61l1.92,3.32c0.11,0.2,0.35,0.27,0.56,0.2l2.39-0.96c0.5,0.38,1.03,0.7,1.62,0.94l0.4,2.87c0.03,0.28,0.26,0.5,0.55,0.5h3.9c0.29,0,0.52-0.22,0.55-0.5l0.4-2.87c0.59-0.24,1.12-0.56,1.62-0.94l2.39,0.96c0.21,0.08,0.45,0,0.56-0.2l1.92-3.32c0.11-0.2,0.06-0.47-0.12-0.61L19.14,12.94z M12,15.5c-1.93,0-3.5-1.57-3.5-3.5S10.07,8.5,12,8.5s3.5,1.57,3.5,3.5S13.93,15.5,12,15.5z"/>
-          </svg>
-        `;
+        // Load gear icon SVG from assets
+        try {
+          const svgUrl = chrome.runtime.getURL('assets/gear-icon.svg');
+          const response = await fetch(svgUrl);
+          const svgContent = await response.text();
+          button.innerHTML = svgContent;
+          // Add class to the SVG element for styling
+          const svgElement = button.querySelector('svg');
+          if (svgElement) {
+            svgElement.classList.add('vocab-close-gear-icon');
+          }
+        } catch (error) {
+          console.error('[Content Script] Failed to load gear icon SVG:', error);
+          // Fallback to inline SVG if file loading fails
+          button.innerHTML = `
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="white" xmlns="http://www.w3.org/2000/svg" class="vocab-close-gear-icon">
+              <path d="M19.14,12.94c0.04-0.31,0.06-0.63,0.06-0.94s-0.02-0.63-0.06-0.94l2.03-1.58c0.18-0.14,0.23-0.41,0.12-0.61l-1.92-3.32c-0.11-0.2-0.35-0.27-0.56-0.2l-2.39,0.96c-0.5-0.38-1.03-0.7-1.62-0.94L14.5,2.5C14.47,2.22,14.24,2,13.95,2h-3.9c-0.29,0-0.52,0.22-0.55,0.5L9.1,5.37C8.5,5.61,7.97,5.93,7.47,6.31L5.08,5.35c-0.21-0.08-0.45,0-0.56,0.2L2.6,8.87c-0.11,0.2-0.06,0.47,0.12,0.61l2.03,1.58C4.71,11.37,4.68,11.69,4.68,12s0.02,0.63,0.06,0.94l-2.03,1.58c-0.18,0.14-0.23,0.41-0.12,0.61l1.92,3.32c0.11,0.2,0.35,0.27,0.56,0.2l2.39-0.96c0.5,0.38,1.03,0.7,1.62,0.94l0.4,2.87c0.03,0.28,0.26,0.5,0.55,0.5h3.9c0.29,0,0.52-0.22,0.55-0.5l0.4-2.87c0.59-0.24,1.12-0.56,1.62-0.94l2.39,0.96c0.21,0.08,0.45,0,0.56-0.2l1.92-3.32c0.11-0.2,0.06-0.47-0.12-0.61L19.14,12.94z M12,15.5c-1.93,0-3.5-1.57-3.5-3.5S10.07,8.5,12,8.5s3.5,1.57,3.5,3.5S13.93,15.5,12,15.5z"/>
+            </svg>
+          `;
+        }
         
         // Append to body
         document.body.appendChild(button);
@@ -9169,6 +9183,7 @@ const ChatDialog = {
   audioChunks: [], // Store audio chunks during recording
   pageSummary: null, // Store the fetched page summary
   pagePossibleQuestions: [], // Store possible questions from summary API
+  simplifiedPossibleQuestions: [], // Store possible questions from simplify API
   
   /**
    * Initialize chat dialog
@@ -10741,27 +10756,78 @@ const ChatDialog = {
     
     // Always try to get the latest data from TextSelector first (for streaming updates)
     let dataToRender = null;
+    let textSelectorData = null;
     if (this.currentTextKey) {
       // Try to get data from TextSelector using the original textKey
       const originalTextKey = this.currentTextKey.replace(/-selected$/, '').replace(/-generic$/, '');
-      dataToRender = TextSelector.simplifiedTexts.get(originalTextKey);
-      if (dataToRender) {
+      textSelectorData = TextSelector.simplifiedTexts.get(originalTextKey);
+      if (textSelectorData) {
         console.log('[ChatDialog] Retrieved simplified data from TextSelector for key:', originalTextKey);
+        console.log('[ChatDialog] TextSelector data.possibleQuestions:', textSelectorData.possibleQuestions);
+        console.log('[ChatDialog] TextSelector data.possibleQuestions length:', textSelectorData.possibleQuestions?.length || 0);
       }
     }
     
-    // Fallback to this.simplifiedData if not found in TextSelector
-    if (!dataToRender) {
+    // Prefer this.simplifiedData if it has possibleQuestions (more recent complete event data)
+    // Otherwise use TextSelector data if available
+    if (this.simplifiedData && this.simplifiedData.possibleQuestions && this.simplifiedData.possibleQuestions.length > 0) {
       dataToRender = this.simplifiedData;
-      if (dataToRender) {
-        console.log('[ChatDialog] Using simplifiedData from ChatDialog');
-      }
+      console.log('[ChatDialog] Using simplifiedData from ChatDialog (has possibleQuestions)');
+      console.log('[ChatDialog] ChatDialog simplifiedData.possibleQuestions:', dataToRender.possibleQuestions);
+      console.log('[ChatDialog] ChatDialog simplifiedData.possibleQuestions length:', dataToRender.possibleQuestions?.length || 0);
+    } else if (textSelectorData) {
+      dataToRender = textSelectorData;
+      console.log('[ChatDialog] Using simplifiedData from TextSelector');
+    } else if (this.simplifiedData) {
+      dataToRender = this.simplifiedData;
+      console.log('[ChatDialog] Using simplifiedData from ChatDialog (fallback)');
+      console.log('[ChatDialog] ChatDialog simplifiedData.possibleQuestions:', dataToRender.possibleQuestions);
+      console.log('[ChatDialog] ChatDialog simplifiedData.possibleQuestions length:', dataToRender.possibleQuestions?.length || 0);
     }
     
     if (!dataToRender) {
       console.log('[ChatDialog] No simplified data available to render');
       return;
     }
+    
+    console.log('[ChatDialog] renderSimplifiedExplanations - dataToRender.possibleQuestions:', dataToRender.possibleQuestions);
+    console.log('[ChatDialog] renderSimplifiedExplanations - dataToRender.possibleQuestions type:', typeof dataToRender.possibleQuestions);
+    console.log('[ChatDialog] renderSimplifiedExplanations - dataToRender.possibleQuestions is array:', Array.isArray(dataToRender.possibleQuestions));
+    console.log('[ChatDialog] renderSimplifiedExplanations - dataToRender.possibleQuestions length:', dataToRender.possibleQuestions?.length || 0);
+    
+    // Get questions to render - ALWAYS prefer this.simplifiedPossibleQuestions first (from complete event)
+    // This matches the pattern used in ask API (possibleQuestions parameter) and summarise API (this.pagePossibleQuestions)
+    console.log('[SUBHRAM] ===== START QUESTION RETRIEVAL =====');
+    console.log('[SUBHRAM] this.simplifiedPossibleQuestions:', this.simplifiedPossibleQuestions);
+    console.log('[SUBHRAM] this.simplifiedPossibleQuestions type:', typeof this.simplifiedPossibleQuestions);
+    console.log('[SUBHRAM] this.simplifiedPossibleQuestions is array:', Array.isArray(this.simplifiedPossibleQuestions));
+    console.log('[SUBHRAM] this.simplifiedPossibleQuestions length:', this.simplifiedPossibleQuestions?.length || 0);
+    console.log('[SUBHRAM] this.simplifiedPossibleQuestions value:', JSON.stringify(this.simplifiedPossibleQuestions));
+    
+    console.log('[SUBHRAM] dataToRender.possibleQuestions:', dataToRender.possibleQuestions);
+    console.log('[SUBHRAM] dataToRender.possibleQuestions type:', typeof dataToRender.possibleQuestions);
+    console.log('[SUBHRAM] dataToRender.possibleQuestions is array:', Array.isArray(dataToRender.possibleQuestions));
+    console.log('[SUBHRAM] dataToRender.possibleQuestions length:', dataToRender.possibleQuestions?.length || 0);
+    console.log('[SUBHRAM] dataToRender.possibleQuestions value:', JSON.stringify(dataToRender.possibleQuestions));
+    
+    let questionsToRender = [];
+    if (this.simplifiedPossibleQuestions && this.simplifiedPossibleQuestions.length > 0) {
+      questionsToRender = this.simplifiedPossibleQuestions;
+      console.log('[SUBHRAM] ✓ Using this.simplifiedPossibleQuestions (from complete event)');
+      console.log('[SUBHRAM] questionsToRender set to:', questionsToRender);
+    } else if (dataToRender.possibleQuestions && dataToRender.possibleQuestions.length > 0) {
+      questionsToRender = Array.isArray(dataToRender.possibleQuestions) 
+        ? dataToRender.possibleQuestions 
+        : [dataToRender.possibleQuestions];
+      console.log('[SUBHRAM] ✓ Using dataToRender.possibleQuestions');
+      console.log('[SUBHRAM] questionsToRender set to:', questionsToRender);
+    } else {
+      console.log('[SUBHRAM] ✗ No questions found in either source');
+    }
+    
+    console.log('[SUBHRAM] Final questionsToRender:', questionsToRender);
+    console.log('[SUBHRAM] Final questionsToRender length:', questionsToRender.length);
+    console.log('[SUBHRAM] Final questionsToRender value:', JSON.stringify(questionsToRender));
     
     container.innerHTML = '';
     
@@ -10780,6 +10846,16 @@ const ChatDialog = {
     console.log('[ChatDialog] Previous explanations count:', previousSimplifiedTextsArray.length);
     console.log('[ChatDialog] Current simplified text exists:', !!dataToRender.simplifiedText);
     
+    // Filter valid questions
+    console.log('[SUBHRAM] ===== FILTERING VALID QUESTIONS =====');
+    console.log('[SUBHRAM] questionsToRender before filter:', questionsToRender);
+    const validQuestions = questionsToRender && questionsToRender.length > 0
+      ? questionsToRender.filter(q => q && q.trim() !== '')
+      : [];
+    console.log('[SUBHRAM] validQuestions after filter:', validQuestions);
+    console.log('[SUBHRAM] validQuestions length:', validQuestions.length);
+    console.log('[SUBHRAM] validQuestions value:', JSON.stringify(validQuestions));
+    
     // Render each explanation with header
     allExplanations.forEach((explanation, index) => {
       const item = document.createElement('div');
@@ -10797,8 +10873,97 @@ const ChatDialog = {
       
       item.appendChild(header);
       item.appendChild(textDisplay);
+      
+      // Render questions whenever they exist - show them no matter what if possibleQuestions array is non-empty
+      const isLastExplanation = index === allExplanations.length - 1;
+      console.log('[SUBHRAM] ===== CHECKING IF SHOULD RENDER QUESTIONS =====');
+      console.log('[SUBHRAM] index:', index, 'allExplanations.length:', allExplanations.length);
+      console.log('[SUBHRAM] isLastExplanation:', isLastExplanation);
+      console.log('[SUBHRAM] validQuestions.length:', validQuestions.length);
+      
+      // Show questions if they exist - NO MATTER WHAT (as requested by user)
+      // Prefer showing on last explanation to avoid duplicates, but show on any explanation if questions exist
+      const shouldRenderQuestions = validQuestions.length > 0;
+      console.log('[SUBHRAM] shouldRenderQuestions (validQuestions.length > 0):', shouldRenderQuestions);
+      
+      if (shouldRenderQuestions) {
+        // Show questions whenever they exist - user requirement: "show it no matter what"
+        // Prefer last explanation to avoid duplicates, but show on current if not last
+        if (isLastExplanation) {
+          console.log('[SUBHRAM] ✓✓✓ RENDERING QUESTIONS ON LAST EXPLANATION ✓✓✓');
+        } else {
+          console.log('[SUBHRAM] ✓✓✓ RENDERING QUESTIONS (not last, but questions exist - showing anyway) ✓✓✓');
+        }
+        
+        console.log('[SUBHRAM] validQuestions to render:', validQuestions);
+        console.log('[SUBHRAM] Creating questions container...');
+        
+        const questionsContainer = document.createElement('div');
+        questionsContainer.className = 'vocab-chat-message-questions-container';
+        
+        console.log('[SUBHRAM] Building questions HTML...');
+        const questionsHTML = `
+          <h4 class="vocab-chat-message-questions-header">You might be interested on:</h4>
+          <div class="vocab-chat-message-questions-list">
+            ${validQuestions.map((question, qIndex) => {
+              console.log('[SUBHRAM] Mapping question', qIndex, ':', question);
+              return `
+              <div class="vocab-chat-message-question-item" data-question="${this.escapeHtml(question)}">
+                <span class="vocab-chat-message-question-icon">+</span>
+                <span>${this.escapeHtml(question)}</span>
+              </div>
+            `;
+            }).join('')}
+          </div>
+        `;
+        
+        console.log('[SUBHRAM] Questions HTML created, length:', questionsHTML.length);
+        console.log('[SUBHRAM] Setting innerHTML on questionsContainer...');
+        questionsContainer.innerHTML = questionsHTML;
+        
+        // Verify the HTML was set
+        console.log('[SUBHRAM] questionsContainer.innerHTML length after setting:', questionsContainer.innerHTML.length);
+        console.log('[SUBHRAM] questionsContainer children count:', questionsContainer.children.length);
+        
+        // Add click handlers to question items
+        const questionItems = questionsContainer.querySelectorAll('.vocab-chat-message-question-item');
+        console.log('[SUBHRAM] Found question items:', questionItems.length);
+        questionItems.forEach((qItem, qIndex) => {
+          console.log('[SUBHRAM] Adding click handler to question item', qIndex);
+          qItem.addEventListener('click', () => {
+            const question = qItem.getAttribute('data-question');
+            console.log('[ChatDialog] Simplified explanation question clicked:', question);
+            this.askQuestion(question);
+          });
+        });
+        
+        // Append questions container to the explanation item
+        console.log('[SUBHRAM] Appending questionsContainer to item...');
+        item.appendChild(questionsContainer);
+        console.log('[SUBHRAM] questionsContainer appended. Item children count:', item.children.length);
+        
+        // Verify it's in the DOM
+        const verifyContainer = item.querySelector('.vocab-chat-message-questions-container');
+        console.log('[SUBHRAM] Verification - questionsContainer found in item:', !!verifyContainer);
+        
+        // Trigger animation by forcing a reflow
+        setTimeout(() => {
+          void questionsContainer.offsetHeight;
+          console.log('[SUBHRAM] Animation trigger executed');
+        }, 0);
+      } else {
+        console.log('[SUBHRAM] ✗✗✗ NOT RENDERING QUESTIONS ✗✗✗');
+        console.log('[SUBHRAM] Reason - validQuestions.length is 0');
+      }
+      
       container.appendChild(item);
+      console.log('[SUBHRAM] Item appended to container. Container children count:', container.children.length);
     });
+    
+    console.log('[SUBHRAM] ===== FINISHED RENDERING ALL EXPLANATIONS =====');
+    console.log('[SUBHRAM] Final container children count:', container.children.length);
+    const finalQuestionsContainer = container.querySelector('.vocab-chat-message-questions-container');
+    console.log('[SUBHRAM] Final verification - questionsContainer found in main container:', !!finalQuestionsContainer);
   },
   
   /**
@@ -10869,7 +11034,8 @@ const ChatDialog = {
             text: eventData.text,
             simplifiedText: eventData.accumulatedSimplifiedText || '', // Use accumulated text for streaming
             previousSimplifiedTexts: previousSimplifiedTextsArray,
-            shouldAllowSimplifyMore: false // Will be set on complete
+            shouldAllowSimplifyMore: false, // Will be set on complete
+            possibleQuestions: [] // Will be set on complete
           };
           
           // Update stored data - use original text key for storage
@@ -10895,8 +11061,23 @@ const ChatDialog = {
         }
         
         // Handle complete event (final data)
-        else if (eventData.type === 'complete' || eventData.simplifiedText) {
+        // IMPORTANT: Check for type === 'complete' first to ensure we get possibleQuestions
+        else if (eventData.type === 'complete') {
+          console.log('[ChatDialog] ===== COMPLETE EVENT HANDLER TRIGGERED =====');
           console.log('[ChatDialog] Complete event - simplifiedText:', eventData.simplifiedText, 'shouldAllowSimplifyMore:', eventData.shouldAllowSimplifyMore);
+          console.log('[ChatDialog] Complete event - possibleQuestions received:', eventData.possibleQuestions);
+          console.log('[ChatDialog] Complete event - possibleQuestions type:', typeof eventData.possibleQuestions);
+          console.log('[ChatDialog] Complete event - possibleQuestions is array:', Array.isArray(eventData.possibleQuestions));
+          console.log('[ChatDialog] Complete event - possibleQuestions length:', eventData.possibleQuestions?.length || 0);
+          console.log('[ChatDialog] Complete event - possibleQuestions value (stringified):', JSON.stringify(eventData.possibleQuestions));
+          
+          // Ensure possibleQuestions is an array and store directly in ChatDialog property (like pagePossibleQuestions)
+          this.simplifiedPossibleQuestions = Array.isArray(eventData.possibleQuestions) 
+            ? eventData.possibleQuestions 
+            : (eventData.possibleQuestions ? [eventData.possibleQuestions] : []);
+          
+          console.log('[ChatDialog] Stored simplifiedPossibleQuestions:', this.simplifiedPossibleQuestions);
+          console.log('[ChatDialog] Stored simplifiedPossibleQuestions length:', this.simplifiedPossibleQuestions.length);
           
           // Update simplified data with final text
           // previousSimplifiedTextsArray already includes all previous + the old current simplified text
@@ -10907,8 +11088,12 @@ const ChatDialog = {
           text: eventData.text,
           simplifiedText: eventData.simplifiedText,
             previousSimplifiedTexts: previousSimplifiedTexts, // Use the array we sent to API (includes all previous + old current)
-          shouldAllowSimplifyMore: eventData.shouldAllowSimplifyMore || false
+          shouldAllowSimplifyMore: eventData.shouldAllowSimplifyMore || false,
+          possibleQuestions: this.simplifiedPossibleQuestions
         };
+        
+        console.log('[ChatDialog] Updated simplifiedData.possibleQuestions:', this.simplifiedData.possibleQuestions);
+        console.log('[ChatDialog] Updated simplifiedData.possibleQuestions length:', this.simplifiedData.possibleQuestions.length);
           
           console.log('[ChatDialog] Updated simplifiedData after complete event:', {
             previousSimplifiedTextsCount: previousSimplifiedTexts.length,
@@ -10924,13 +11109,24 @@ const ChatDialog = {
           textKey: originalTextKey,
           previousSimplifiedTextsCount: previousSimplifiedTextsArray.length,
           hasCurrentSimplifiedText: !!eventData.simplifiedText,
-          shouldAllowSimplifyMore: eventData.shouldAllowSimplifyMore || false
+          shouldAllowSimplifyMore: eventData.shouldAllowSimplifyMore || false,
+          possibleQuestionsCount: this.simplifiedData.possibleQuestions.length
         });
+        
+        // Verify the data was stored correctly
+        const storedData = TextSelector.simplifiedTexts.get(originalTextKey);
+        console.log('[ChatDialog] Verification - stored data.possibleQuestions:', storedData?.possibleQuestions);
+        console.log('[ChatDialog] Verification - stored data.possibleQuestions length:', storedData?.possibleQuestions?.length || 0);
         
           // Update UI - re-render all explanations with final text
         const container = this.dialogContainer.querySelector('#vocab-chat-simplified-container');
         if (container) {
+          console.log('[ChatDialog] About to call renderSimplifiedExplanations - this.simplifiedData.possibleQuestions:', this.simplifiedData.possibleQuestions);
+          console.log('[ChatDialog] About to call renderSimplifiedExplanations - this.simplifiedData.possibleQuestions length:', this.simplifiedData.possibleQuestions.length);
           this.renderSimplifiedExplanations(container);
+          console.log('[ChatDialog] After renderSimplifiedExplanations call');
+        } else {
+          console.log('[ChatDialog] Container not found for rendering questions');
         }
         
           // Reset button - always enable
@@ -10942,6 +11138,37 @@ const ChatDialog = {
         }
         
         this.isSimplifying = false;
+        }
+        // Fallback: Handle events with simplifiedText but no type (backward compatibility)
+        else if (eventData.simplifiedText && !eventData.chunk && eventData.type !== 'complete') {
+          console.log('[ChatDialog] Fallback complete event (has simplifiedText but no type)');
+          console.log('[ChatDialog] Fallback - possibleQuestions received:', eventData.possibleQuestions);
+          
+          // Ensure possibleQuestions is an array
+          const possibleQuestionsArray = Array.isArray(eventData.possibleQuestions) 
+            ? eventData.possibleQuestions 
+            : (eventData.possibleQuestions ? [eventData.possibleQuestions] : []);
+          
+          // Update simplified data
+          this.simplifiedData = {
+            textStartIndex: eventData.textStartIndex,
+            textLength: eventData.textLength,
+            text: eventData.text,
+            simplifiedText: eventData.simplifiedText,
+            previousSimplifiedTexts: previousSimplifiedTexts,
+            shouldAllowSimplifyMore: eventData.shouldAllowSimplifyMore || false,
+            possibleQuestions: possibleQuestionsArray
+          };
+          
+          // Update stored data
+          const originalTextKey = this.currentTextKey.replace(/-selected$/, '').replace(/-generic$/, '');
+          TextSelector.simplifiedTexts.set(originalTextKey, this.simplifiedData);
+          
+          // Re-render
+          const container = this.dialogContainer.querySelector('#vocab-chat-simplified-container');
+          if (container) {
+            this.renderSimplifiedExplanations(container);
+          }
         }
       },
       // onComplete callback
@@ -11414,6 +11641,7 @@ const ChatDialog = {
     // Clear the summary data and questions
     this.pageSummary = '';
     this.pagePossibleQuestions = [];
+    this.simplifiedPossibleQuestions = []; // Also clear simplified questions
     console.log('[ChatDialog] Summary and questions data cleared');
     
     // Remove summary container (which includes questions)
@@ -13722,7 +13950,7 @@ const ChatDialog = {
       /* Simplified Text */
       .vocab-chat-simplified-text {
         padding: 16px;
-        background: #faf5ff;
+        background: #ffffff;
         border-radius: 12px;
         font-size: 14px;
         line-height: 1.6;
@@ -13733,10 +13961,14 @@ const ChatDialog = {
       }
       
       .vocab-chat-simplified-header {
-        font-size: 13px;
-        font-weight: 600;
+        text-align: center;
         color: #9527F5;
-        margin-bottom: 8px;
+        font-weight: 600;
+        font-size: 18px;
+        margin: 0 0 12px 0;
+        padding: 0;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+        letter-spacing: 0.5px;
       }
       
       .vocab-chat-simplified-item {
@@ -20162,6 +20394,7 @@ const ButtonPanel = {
             textLength: eventData.textLength,
             previousSimplifiedTexts: eventData.previousSimplifiedTexts || [],
               shouldAllowSimplifyMore: false, // Will be set on complete
+            possibleQuestions: [], // Will be set on complete
             highlight: highlight
           };
           
@@ -20232,8 +20465,16 @@ const ButtonPanel = {
               textLength: eventData.textLength,
               previousSimplifiedTexts: eventData.previousSimplifiedTexts || [],
               shouldAllowSimplifyMore: eventData.shouldAllowSimplifyMore || false,
+              possibleQuestions: eventData.possibleQuestions || [],
               highlight: highlight
             };
+            
+            // Store possibleQuestions in ChatDialog (like pagePossibleQuestions for summarise)
+            if (eventData.possibleQuestions && Array.isArray(eventData.possibleQuestions) && eventData.possibleQuestions.length > 0) {
+              ChatDialog.simplifiedPossibleQuestions = eventData.possibleQuestions;
+              console.log('[ButtonPanel] Stored simplifiedPossibleQuestions in ChatDialog:', ChatDialog.simplifiedPossibleQuestions);
+              console.log('[ButtonPanel] Stored simplifiedPossibleQuestions length:', ChatDialog.simplifiedPossibleQuestions.length);
+            }
             
             // Store final simplified text data
             TextSelector.simplifiedTexts.set(textKey, simplifiedData);
@@ -20536,6 +20777,7 @@ const ButtonPanel = {
                   textLength: eventData.textLength,
                   previousSimplifiedTexts: eventData.previousSimplifiedTexts || [],
                     shouldAllowSimplifyMore: false, // Will be set on complete
+                    possibleQuestions: [], // Will be set on complete
                     highlight: highlight
                   };
                   
@@ -20606,8 +20848,16 @@ const ButtonPanel = {
                     textLength: eventData.textLength,
                   previousSimplifiedTexts: eventData.previousSimplifiedTexts || [],
                   shouldAllowSimplifyMore: eventData.shouldAllowSimplifyMore || false,
+                  possibleQuestions: eventData.possibleQuestions || [],
                   highlight: highlight
                   };
+                  
+                  // Store possibleQuestions in ChatDialog (like pagePossibleQuestions for summarise)
+                  if (eventData.possibleQuestions && Array.isArray(eventData.possibleQuestions) && eventData.possibleQuestions.length > 0) {
+                    ChatDialog.simplifiedPossibleQuestions = eventData.possibleQuestions;
+                    console.log('[ButtonPanel] Stored simplifiedPossibleQuestions in ChatDialog:', ChatDialog.simplifiedPossibleQuestions);
+                    console.log('[ButtonPanel] Stored simplifiedPossibleQuestions length:', ChatDialog.simplifiedPossibleQuestions.length);
+                  }
                   
                   // Store final simplified text data
                   TextSelector.simplifiedTexts.set(matchingTextKey, simplifiedData);
