@@ -158,16 +158,18 @@ class SimplifyService {
                   
                   // Handle complete event (final simplified text for a text object)
                   else if (data.type === 'complete') {
-                    console.log('[SimplifyService] Complete event - textStartIndex:', data.textStartIndex, 'simplifiedText:', data.simplifiedText, 'shouldAllowSimplifyMore:', data.shouldAllowSimplifyMore);
+                    console.log('[SimplifyService] Complete event - textStartIndex:', data.textStartIndex, 'simplifiedText:', data.simplifiedText, 'shouldAllowSimplifyMore:', data.shouldAllowSimplifyMore, 'possibleQuestions:', data.possibleQuestions);
                     if (onEvent) {
                       // Pass complete event with final data
                       onEvent({
+                        type: 'complete',
                         textStartIndex: data.textStartIndex,
                         textLength: data.textLength,
                         text: data.text,
                         previousSimplifiedTexts: data.previousSimplifiedTexts || [],
                         simplifiedText: data.simplifiedText,
-                        shouldAllowSimplifyMore: data.shouldAllowSimplifyMore
+                        shouldAllowSimplifyMore: data.shouldAllowSimplifyMore,
+                        possibleQuestions: data.possibleQuestions || []
                       });
                     }
                   }
