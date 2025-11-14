@@ -11311,6 +11311,35 @@ const ChatDialog = {
                       ${this.renderMarkdown(this.pageSummary)}
                     </div>
                   `;
+                  
+                  // Auto-scroll to bottom as content is being added
+                  // Find the scrollable content container - try multiple methods
+                  let scrollableContent = summaryContainer.closest('.vocab-chat-scrollable-content');
+                  
+                  // If not found via closest, try finding it from the parent
+                  if (!scrollableContent) {
+                    let parent = summaryContainer.parentElement;
+                    while (parent && !scrollableContent) {
+                      if (parent.classList && parent.classList.contains('vocab-chat-scrollable-content')) {
+                        scrollableContent = parent;
+                        break;
+                      }
+                      parent = parent.parentElement;
+                    }
+                  }
+                  
+                  // If still not found, try querying from the dialog container
+                  if (!scrollableContent && this.dialogContainer) {
+                    scrollableContent = this.dialogContainer.querySelector('.vocab-chat-scrollable-content');
+                  }
+                  
+                  if (scrollableContent) {
+                    // Only auto-scroll if user is already at or near the bottom
+                    // This prevents forcing scroll when user has manually scrolled up
+                    this.scrollScrollableContent(scrollableContent, true, true);
+                  } else {
+                    console.warn('[ChatDialog] Could not find scrollable content container for auto-scroll');
+                  }
                 }
               }
             }
@@ -12762,15 +12791,20 @@ const ChatDialog = {
     // Auto-scroll to bottom
     // Use immediate scroll during streaming (when possibleQuestions is undefined)
     // Use normal scroll when questions are added (to ensure smooth transition)
+    // Only scroll if user is already at bottom (conditional auto-scroll)
     const chatContainer = document.getElementById('vocab-chat-messages');
     if (chatContainer) {
       const isStreaming = possibleQuestions === undefined;
-      this.scrollToBottom(chatContainer, isStreaming);
+      // During streaming, only auto-scroll if user is at bottom
+      // When questions are added (complete), always scroll to show them
+      const onlyIfAtBottom = isStreaming;
+      this.scrollToBottom(chatContainer, isStreaming, onlyIfAtBottom);
       
       // If questions were added, scroll again after a short delay to ensure DOM is fully updated
+      // Always scroll when questions are added (user wants to see them)
       if (questionsAdded) {
         setTimeout(() => {
-          this.scrollToBottom(chatContainer, false);
+          this.scrollToBottom(chatContainer, false, false);
         }, 100);
       }
     }
@@ -12780,45 +12814,105 @@ const ChatDialog = {
    * Scroll chat container to bottom with smooth behavior
    * @param {HTMLElement} chatContainer - The chat messages container
    * @param {boolean} immediate - If true, use immediate scroll (no smooth animation). Default: false
+   * @param {boolean} onlyIfAtBottom - If true, only scroll if user is already at bottom. Default: false
    */
-  scrollToBottom(chatContainer, immediate = false) {
+  scrollToBottom(chatContainer, immediate = false, onlyIfAtBottom = false) {
     if (!chatContainer) {
       console.log('[ChatDialog] scrollToBottom: No chat container provided');
       return;
     }
     
-    // Find the scrollable parent container (tab content)
-    const tabContent = chatContainer.closest('.vocab-chat-tab-content');
-    if (!tabContent) {
-      console.log('[ChatDialog] scrollToBottom: No tab content found');
+    // Find the scrollable content container (vocab-chat-scrollable-content)
+    // This is the actual scrollable element, not the tab content
+    const scrollableContent = chatContainer.closest('.vocab-chat-scrollable-content');
+    if (!scrollableContent) {
+      // Fallback: try to find it from tab content
+      const tabContent = chatContainer.closest('.vocab-chat-tab-content');
+      if (tabContent) {
+        const foundScrollable = tabContent.querySelector('.vocab-chat-scrollable-content');
+        if (foundScrollable) {
+          this.scrollScrollableContent(foundScrollable, immediate, onlyIfAtBottom);
+          return;
+        }
+      }
+      console.log('[ChatDialog] scrollToBottom: No scrollable content found');
       return;
     }
     
-    console.log('[ChatDialog] scrollToBottom: Scrolling tab content to bottom, immediate:', immediate);
-    console.log('[ChatDialog] scrollToBottom: Tab content scrollHeight:', tabContent.scrollHeight);
-    console.log('[ChatDialog] scrollToBottom: Tab content clientHeight:', tabContent.clientHeight);
+    this.scrollScrollableContent(scrollableContent, immediate, onlyIfAtBottom);
+  },
+  
+  /**
+   * Check if user is at or near the bottom of the scrollable content
+   * @param {HTMLElement} scrollableContent - The scrollable content container
+   * @param {number} tolerance - Pixel tolerance for "near bottom" (default: 50px)
+   * @returns {boolean} True if user is at or near the bottom
+   */
+  isAtBottom(scrollableContent, tolerance = 50) {
+    if (!scrollableContent) return false;
+    
+    const currentScroll = scrollableContent.scrollTop;
+    const maxScroll = scrollableContent.scrollHeight - scrollableContent.clientHeight;
+    const distanceFromBottom = maxScroll - currentScroll;
+    
+    // User is at bottom if they're within tolerance pixels of the bottom
+    return distanceFromBottom <= tolerance;
+  },
+  
+  /**
+   * Scroll the scrollable content container to bottom
+   * @param {HTMLElement} scrollableContent - The scrollable content container
+   * @param {boolean} immediate - If true, use immediate scroll (no smooth animation). Default: false
+   * @param {boolean} onlyIfAtBottom - If true, only scroll if user is already at bottom. Default: false
+   */
+  scrollScrollableContent(scrollableContent, immediate = false, onlyIfAtBottom = false) {
+    if (!scrollableContent) return;
+    
+    // If onlyIfAtBottom is true, check if user is at bottom before scrolling
+    if (onlyIfAtBottom && !this.isAtBottom(scrollableContent)) {
+      console.log('[ChatDialog] scrollScrollableContent: User has scrolled up, skipping auto-scroll');
+      return;
+    }
+    
+    console.log('[ChatDialog] scrollScrollableContent: Scrolling to bottom, immediate:', immediate);
+    console.log('[ChatDialog] scrollScrollableContent: scrollHeight:', scrollableContent.scrollHeight);
+    console.log('[ChatDialog] scrollScrollableContent: clientHeight:', scrollableContent.clientHeight);
+    
+    // Function to perform the actual scroll
+    const performScroll = () => {
+      if (immediate) {
+        // For immediate scroll (during streaming), use instant scroll
+        scrollableContent.scrollTop = scrollableContent.scrollHeight;
+      } else {
+        // For normal scroll, use smooth behavior
+        scrollableContent.scrollTo({
+          top: scrollableContent.scrollHeight,
+          behavior: 'smooth'
+        });
+      }
+    };
     
     // Use requestAnimationFrame to ensure DOM updates are complete
     requestAnimationFrame(() => {
-      // For immediate scroll (during streaming), use instant scroll
-      if (immediate) {
-      tabContent.scrollTop = tabContent.scrollHeight;
-      } else {
-        // For normal scroll, use smooth behavior
-      tabContent.scrollTo({
-        top: tabContent.scrollHeight,
-        behavior: 'smooth'
-      });
-      }
+      performScroll();
       
-      // Double-check with a small delay to ensure we're at the bottom
-      // This handles cases where DOM updates happen after the initial scroll
+      // Multiple scroll attempts to handle async DOM updates and layout recalculation
+      // This is especially important during streaming when content is added word by word
       setTimeout(() => {
-        const currentScroll = tabContent.scrollTop;
-        const maxScroll = tabContent.scrollHeight - tabContent.clientHeight;
+        performScroll();
+      }, 0);
+      
+      setTimeout(() => {
+        performScroll();
+      }, 10);
+      
+      // Final check with a small delay to ensure we're at the bottom
+      setTimeout(() => {
+        const currentScroll = scrollableContent.scrollTop;
+        const maxScroll = scrollableContent.scrollHeight - scrollableContent.clientHeight;
         // If we're not at the bottom (within 10px tolerance), scroll again
         if (Math.abs(currentScroll - maxScroll) > 10) {
-          tabContent.scrollTop = tabContent.scrollHeight;
+          scrollableContent.scrollTop = scrollableContent.scrollHeight;
         }
       }, 50);
     });
