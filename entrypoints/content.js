@@ -2,6 +2,7 @@ import ApiService from '../core/services/ApiService.js';
 import SimplifyService from '../core/services/SimplifyService.js';
 import SummariseService from '../core/services/SummariseService.js';
 import WordExplanationService from '../core/services/WordExplanationService.js';
+import WebSearchService from '../core/services/WebSearchService.js';
 import ApiConfig from '../core/config/apiConfig.js';
 
 export default defineContentScript({
@@ -4222,7 +4223,7 @@ const WordSelector = {
     //   popup.classList.add('has-speaker-icon');
     // }
     
-    // View more button - bigger, bottom-right positioned
+    // View more button - bottom-left positioned
     const button = document.createElement('button');
     button.className = 'vocab-word-popup-button';
     button.textContent = 'Get more examples';
@@ -4234,7 +4235,7 @@ const WordSelector = {
       button.style.display = 'none';
       popup.classList.add('no-more-examples-button');
     } else {
-      button.style.display = 'block';
+      button.style.display = 'flex';
     }
     
     button.addEventListener('click', async (e) => {
@@ -4242,7 +4243,34 @@ const WordSelector = {
       console.log('[WordSelector] View more examples clicked for:', word);
       await this.handleViewMoreExamples(word, meaning, examples, button, popup);
     });
+    
+    // Search icon button - bottom-right positioned
+    const searchButton = document.createElement('button');
+    searchButton.className = 'vocab-word-popup-search-button';
+    searchButton.setAttribute('aria-label', 'Search');
+    searchButton.innerHTML = `
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M21 21L15 15M17 10C17 13.866 13.866 17 10 17C6.13401 17 3 13.866 3 10C3 6.13401 6.13401 3 10 3C13.866 3 17 6.13401 17 10Z" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    `;
+    
+    // Set initial search button visibility based on shouldAllowFetchMoreExamples
+    if (!shouldAllowFetchMoreExamples) {
+      searchButton.style.display = 'none';
+    } else {
+      searchButton.style.display = 'flex';
+    }
+    
+    searchButton.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      console.log('[WordSelector] Search clicked for:', word);
+      // Open web search modal - pass search button for positioning
+      this.openWebSearchModal(word, meaning, examples, popup, searchButton);
+    });
+    
+    // Add button first (left), then search button (right)
     bottomContainer.appendChild(button);
+    bottomContainer.appendChild(searchButton);
     
     // Append bottom container to popup
     popup.appendChild(bottomContainer);
@@ -4377,13 +4405,20 @@ const WordSelector = {
           console.log('[WordSelector] Updated examples for word:', word);
         }
         
-        // Update button visibility based on shouldAllowFetchMoreExamples
+        // Update button and search button visibility based on shouldAllowFetchMoreExamples
+        const searchButton = popup.querySelector('.vocab-word-popup-search-button');
         if (shouldAllowFetchMoreExamples) {
-          button.style.display = 'block';
+          button.style.display = 'flex';
           button.disabled = false;
           button.classList.remove('disabled');
+          if (searchButton) {
+            searchButton.style.display = 'flex';
+          }
         } else {
           button.style.display = 'none';
+          if (searchButton) {
+            searchButton.style.display = 'none';
+          }
         }
         
         // Update stored word data with new examples and shouldAllowFetchMoreExamples value
@@ -4586,6 +4621,7 @@ const WordSelector = {
       
       // Update button visibility: show button when local language tab is active
       const button = popup.querySelector('.vocab-word-popup-button');
+      const searchButton = popup.querySelector('.vocab-word-popup-search-button');
       if (button) {
         // Get shouldAllowFetchMoreExamples from wordData
         const normalizedWord = word.toLowerCase();
@@ -4598,11 +4634,17 @@ const WordSelector = {
         }
         
         if (shouldAllowFetchMoreExamples) {
-          button.style.display = 'block';
+          button.style.display = 'flex';
           popup.classList.remove('no-more-examples-button');
+          if (searchButton) {
+            searchButton.style.display = 'flex';
+          }
         } else {
           button.style.display = 'none';
           popup.classList.add('no-more-examples-button');
+          if (searchButton) {
+            searchButton.style.display = 'none';
+          }
         }
       }
       
@@ -4696,9 +4738,13 @@ const WordSelector = {
         
         // Update button visibility: always hide button when EN tab is active
         const button = popup.querySelector('.vocab-word-popup-button');
+        const searchButton = popup.querySelector('.vocab-word-popup-search-button');
         if (button) {
           button.style.display = 'none';
           popup.classList.add('no-more-examples-button');
+          if (searchButton) {
+            searchButton.style.display = 'none';
+          }
         }
         
       } catch (error) {
@@ -4776,6 +4822,643 @@ const WordSelector = {
     }
     
     console.log('[WordSelector] Popup content updated');
+  },
+  
+  /**
+   * Position popup relative to word highlight
+   * @param {HTMLElement} popup - The popup element
+   * @param {HTMLElement} wordElement - The word highlight element
+   */
+  positionPopup(popup, wordElement) {
+    console.log('[WordSelector] ===== POSITIONING POPUP =====');
+    
+    // Validate inputs
+    if (!popup || !wordElement) {
+      console.error('[WordSelector] ✗ Invalid inputs for positionPopup:', { popup, wordElement });
+      return;
+    }
+    
+    if (!document.body.contains(wordElement)) {
+      console.error('[WordSelector] ✗ wordElement is not in DOM');
+      return;
+    }
+    
+    if (!document.body.contains(popup)) {
+      console.error('[WordSelector] ✗ popup is not in DOM');
+      return;
+    }
+    
+    const rect = wordElement.getBoundingClientRect();
+    console.log('[WordSelector] Word element bounding rect:', {
+      top: rect.top,
+      left: rect.left,
+      bottom: rect.bottom,
+      right: rect.right,
+      width: rect.width,
+      height: rect.height,
+      scrollY: window.scrollY,
+      scrollX: window.scrollX
+    });
+    
+    // Check if element is visible
+    if (rect.width === 0 || rect.height === 0) {
+      console.warn('[WordSelector] ⚠ Word element has zero dimensions, may not be visible');
+    }
+    
+    const popupHeight = popup.offsetHeight || 250; // Estimated height
+    const popupWidth = popup.offsetWidth || 340;
+    
+    console.log('[WordSelector] Popup dimensions:', {
+      width: popupWidth,
+      height: popupHeight,
+      offsetWidth: popup.offsetWidth,
+      offsetHeight: popup.offsetHeight
+    });
+    
+    // Calculate position (bottom-right of word, not overlapping)
+    let top = rect.bottom + window.scrollY + 8; // 8px gap below word
+    let left = rect.right + window.scrollX - popupWidth / 2; // Center horizontally with word
+    
+    console.log('[WordSelector] Initial calculated position:', { top, left });
+    
+    // Adjust if popup goes off-screen
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+    
+    console.log('[WordSelector] Viewport dimensions:', {
+      width: viewportWidth,
+      height: viewportHeight
+    });
+    
+    // Horizontal adjustment
+    if (left + popupWidth > viewportWidth + window.scrollX) {
+      const oldLeft = left;
+      left = viewportWidth + window.scrollX - popupWidth - 10;
+      console.log('[WordSelector] Adjusted left (right edge):', { oldLeft, newLeft: left });
+    }
+    if (left < window.scrollX + 10) {
+      const oldLeft = left;
+      left = window.scrollX + 10;
+      console.log('[WordSelector] Adjusted left (left edge):', { oldLeft, newLeft: left });
+    }
+    
+    // Vertical adjustment (if not enough space below, show above)
+    if (rect.bottom + popupHeight > viewportHeight + window.scrollY) {
+      const oldTop = top;
+      top = rect.top + window.scrollY - popupHeight - 8; // Show above
+      console.log('[WordSelector] Adjusted top (showing above):', { oldTop, newTop: top });
+    }
+    
+    popup.style.top = `${top}px`;
+    popup.style.left = `${left}px`;
+    
+    console.log('[WordSelector] ✓ Final popup position set:', {
+      top: `${top}px`,
+      left: `${left}px`,
+      styleTop: popup.style.top,
+      styleLeft: popup.style.left
+    });
+  },
+  
+  /**
+   * Open web search modal for a word
+   * @param {string} word - The word to search for
+   * @param {string} meaning - The word meaning
+   * @param {Array<string>} examples - Example sentences
+   * @param {HTMLElement} wordPopup - The word meaning popup element
+   * @param {HTMLElement} searchButton - The search button element for positioning
+   */
+  openWebSearchModal(word, meaning, examples, wordPopup, searchButton) {
+    console.log('[WordSelector] Opening web search modal for:', word);
+    
+    // Close any existing web search modal
+    const existingModal = document.querySelector('.word-web-search-modal');
+    if (existingModal) {
+      existingModal.remove();
+    }
+    
+    // Get search button position for modal positioning
+    // For position: fixed, use viewport coordinates (getBoundingClientRect already gives viewport coords)
+    const searchButtonRect = searchButton.getBoundingClientRect();
+    const searchButtonTop = searchButtonRect.top;
+    const searchButtonBottom = searchButtonRect.bottom;
+    const searchButtonLeft = searchButtonRect.left;
+    const searchButtonRight = searchButtonRect.right;
+    
+    // Also get word popup position for reference
+    const wordPopupRect = wordPopup.getBoundingClientRect();
+    const wordPopupTop = wordPopupRect.top;
+    const wordPopupBottom = wordPopupRect.bottom;
+    
+    // Create modal container
+    const modal = document.createElement('div');
+    modal.className = 'word-web-search-modal';
+    modal.setAttribute('data-word', word.toLowerCase());
+    
+    // Create modal content container
+    const modalContent = document.createElement('div');
+    modalContent.className = 'word-web-search-modal-content';
+    
+    // Create header with close button
+    const header = document.createElement('div');
+    header.className = 'word-web-search-modal-header';
+    const closeBtn = document.createElement('button');
+    closeBtn.className = 'word-web-search-modal-close';
+    closeBtn.innerHTML = '×';
+    closeBtn.setAttribute('aria-label', 'Close');
+    closeBtn.addEventListener('click', () => {
+      modal.remove();
+    });
+    header.appendChild(closeBtn);
+    
+    // Create search results container
+    const resultsContainer = document.createElement('div');
+    resultsContainer.className = 'word-web-search-results';
+    
+    // Create loading indicator
+    const loadingIndicator = document.createElement('div');
+    loadingIndicator.className = 'word-web-search-loading';
+    loadingIndicator.innerHTML = `
+      <div class="word-web-search-loading-spinner"></div>
+      <div class="word-web-search-loading-text">Searching the web...</div>
+    `;
+    resultsContainer.appendChild(loadingIndicator);
+    
+    // Create metadata display
+    const metadataDiv = document.createElement('div');
+    metadataDiv.className = 'word-web-search-metadata';
+    metadataDiv.style.display = 'none';
+    
+    // Create results list
+    const resultsList = document.createElement('div');
+    resultsList.className = 'word-web-search-results-list';
+    
+    // Create chat input area (similar to vocab-chat-input-area)
+    const inputArea = document.createElement('div');
+    inputArea.className = 'word-web-search-input-area';
+    
+    const inputField = document.createElement('textarea');
+    inputField.className = 'word-web-search-input';
+    inputField.placeholder = 'ask AI anything ...';
+    inputField.rows = 1;
+    
+    // Auto-resize textarea
+    inputField.addEventListener('input', (e) => {
+      e.target.style.height = 'auto';
+      const maxHeight = 120;
+      const newHeight = Math.min(e.target.scrollHeight, maxHeight);
+      e.target.style.height = newHeight + 'px';
+      
+      if (e.target.scrollHeight > maxHeight) {
+        e.target.style.overflowY = 'auto';
+      } else {
+        e.target.style.overflowY = 'hidden';
+      }
+    });
+    
+    // Handle Enter key
+    inputField.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        this.sendWebSearchChatMessage(modal, word, inputField);
+      }
+    });
+    
+    // Create send button (upward arrow)
+    const sendBtn = document.createElement('button');
+    sendBtn.className = 'word-web-search-send-btn';
+    sendBtn.setAttribute('aria-label', 'Send message');
+    sendBtn.innerHTML = this.createSendIcon();
+    sendBtn.addEventListener('click', () => {
+      this.sendWebSearchChatMessage(modal, word, inputField);
+    });
+    
+    // Create delete button
+    const deleteBtn = document.createElement('button');
+    deleteBtn.className = 'word-web-search-delete-btn';
+    deleteBtn.setAttribute('aria-label', 'Clear chat history');
+    deleteBtn.title = 'Clear chat history';
+    deleteBtn.innerHTML = this.createTrashIcon();
+    deleteBtn.style.display = 'none'; // Hidden by default, show when chat history exists
+    deleteBtn.addEventListener('click', () => {
+      this.clearWebSearchChatHistory(modal);
+    });
+    
+    inputArea.appendChild(inputField);
+    inputArea.appendChild(sendBtn);
+    inputArea.appendChild(deleteBtn);
+    
+    // Assemble modal
+    modalContent.appendChild(header);
+    modalContent.appendChild(resultsContainer);
+    resultsContainer.appendChild(metadataDiv);
+    resultsContainer.appendChild(resultsList);
+    modalContent.appendChild(inputArea);
+    modal.appendChild(modalContent);
+    
+    // Append to body
+    document.body.appendChild(modal);
+    
+    // Set initial styles to ensure visibility - make it visible immediately
+    modal.style.setProperty('position', 'fixed', 'important');
+    modal.style.setProperty('z-index', '10000020', 'important');
+    modal.style.setProperty('display', 'flex', 'important');
+    modal.style.setProperty('visibility', 'visible', 'important');
+    modal.style.setProperty('opacity', '1', 'important');
+    modal.style.setProperty('transform', 'scale(1)', 'important');
+    modal.style.setProperty('background', 'white', 'important');
+    modal.style.setProperty('pointer-events', 'all', 'important');
+    
+    // Position modal relative to search button
+    // Set initial position near search button (using viewport coordinates for position: fixed)
+    modal.style.setProperty('top', `${searchButtonTop}px`, 'important');
+    modal.style.setProperty('left', `${searchButtonRight + 20}px`, 'important');
+    
+    // Wait for modal to be rendered to get its actual height and adjust positioning
+    setTimeout(() => {
+      const modalRect = modal.getBoundingClientRect();
+      const modalHeight = modalRect.height;
+      const modalWidth = modalRect.width;
+      
+      // Calculate top position - align with word popup top or search button, whichever is higher
+      let modalTop = Math.min(wordPopupTop, searchButtonTop);
+      
+      // Calculate bottom position (using viewport coordinates for position: fixed)
+      const modalBottom = modalTop + modalHeight;
+      
+      // If modal goes below viewport, adjust to align bottom with word popup bottom
+      const viewportHeight = window.innerHeight;
+      const viewportBottom = viewportHeight;
+      
+      if (modalBottom > viewportBottom) {
+        // Align bottom with word popup bottom
+        modalTop = wordPopupBottom - modalHeight;
+        
+        // But don't go above the search button or word popup top
+        if (modalTop < Math.min(wordPopupTop, searchButtonTop)) {
+          modalTop = Math.min(wordPopupTop, searchButtonTop);
+        }
+      }
+      
+      // Ensure modal doesn't go above viewport (viewport coordinates start at 0)
+      const minTop = 10;
+      if (modalTop < minTop) {
+        modalTop = minTop;
+      }
+      
+      // Position horizontally - place to the right of search button
+      let modalLeft = searchButtonRight + 20; // 20px gap to the right
+      
+      // If modal goes off-screen to the right, position it to the left of search button
+      const viewportWidth = window.innerWidth;
+      if (modalLeft + modalWidth > viewportWidth) {
+        modalLeft = searchButtonLeft - modalWidth - 20; // 20px gap to the left
+      }
+      
+      // Ensure modal doesn't go off-screen to the left (viewport coordinates start at 0)
+      if (modalLeft < 10) {
+        modalLeft = 10;
+      }
+      
+      modal.style.setProperty('top', `${modalTop}px`, 'important');
+      modal.style.setProperty('left', `${modalLeft}px`, 'important');
+      
+      console.log('[WordSelector] Modal positioned:', {
+        searchButtonTop,
+        searchButtonBottom,
+        wordPopupTop,
+        wordPopupBottom,
+        modalTop,
+        modalHeight,
+        modalBottom: modalTop + modalHeight,
+        modalLeft,
+        modalWidth,
+        computedStyle: window.getComputedStyle(modal).display,
+        computedOpacity: window.getComputedStyle(modal).opacity,
+        computedVisibility: window.getComputedStyle(modal).visibility
+      });
+    }, 50);
+    
+    // Add visible class immediately (no delay needed since we set opacity to 1)
+    modal.classList.add('visible');
+    
+    // Store initial context (will be set after search completes)
+    modal.setAttribute('data-initial-context', '');
+    modal.setAttribute('data-chat-history', JSON.stringify([]));
+    
+    // Start web search automatically
+    this.performWebSearch(modal, word, meaning, examples);
+    
+    // Focus input after a short delay
+    setTimeout(() => {
+      inputField.focus();
+    }, 300);
+  },
+  
+  /**
+   * Perform web search and display results
+   * @param {HTMLElement} modal - The modal element
+   * @param {string} word - The word to search for
+   * @param {string} meaning - The word meaning
+   * @param {Array<string>} examples - Example sentences
+   */
+  async performWebSearch(modal, word, meaning, examples) {
+    console.log('[WordSelector] Performing web search for:', word);
+    
+    const loadingIndicator = modal.querySelector('.word-web-search-loading');
+    const metadataDiv = modal.querySelector('.word-web-search-metadata');
+    const resultsList = modal.querySelector('.word-web-search-results-list');
+    
+    // Clear previous results
+    resultsList.innerHTML = '';
+    metadataDiv.style.display = 'none';
+    metadataDiv.innerHTML = '';
+    
+    let searchContext = ''; // Will accumulate search results for initial_context
+    
+    const abortSearch = await WebSearchService.search({
+      query: word,
+      max_results: 10,
+      region: 'wt-wt',
+      onMetadata: (metadata) => {
+        console.log('[WordSelector] Search metadata received:', metadata);
+        
+        // Display metadata
+        const searchInfo = metadata.searchInformation || {};
+        const totalResults = searchInfo.formattedTotalResults || searchInfo.totalResults || '0';
+        const searchTime = searchInfo.formattedSearchTime || searchInfo.searchTime || '0';
+        
+        metadataDiv.innerHTML = `
+          <div class="word-web-search-metadata-text">
+            About ${totalResults} results (${searchTime} seconds)
+          </div>
+        `;
+        metadataDiv.style.display = 'block';
+      },
+      onResult: (result) => {
+        console.log('[WordSelector] Search result received:', result);
+        
+        // Hide loading indicator after first result
+        if (loadingIndicator && loadingIndicator.parentNode) {
+          loadingIndicator.style.display = 'none';
+        }
+        
+        // Build search context from results
+        if (searchContext) {
+          searchContext += '\n\n';
+        }
+        searchContext += `Title: ${result.title}\n`;
+        searchContext += `Link: ${result.link}\n`;
+        searchContext += `Snippet: ${result.snippet || ''}\n`;
+        
+        // Create result item
+        const resultItem = document.createElement('div');
+        resultItem.className = 'word-web-search-result-item';
+        
+        // Create result content
+        const resultContent = document.createElement('div');
+        resultContent.className = 'word-web-search-result-content';
+        
+        // Title with link
+        const titleLink = document.createElement('a');
+        titleLink.href = result.link;
+        titleLink.target = '_blank';
+        titleLink.rel = 'noopener noreferrer';
+        titleLink.className = 'word-web-search-result-title';
+        titleLink.textContent = result.title;
+        
+        // Display link
+        const displayLink = document.createElement('div');
+        displayLink.className = 'word-web-search-result-link';
+        displayLink.textContent = result.displayLink || new URL(result.link).hostname;
+        
+        // Snippet
+        const snippet = document.createElement('div');
+        snippet.className = 'word-web-search-result-snippet';
+        snippet.textContent = result.snippet || '';
+        
+        // Image (if available)
+        if (result.image && result.image.url) {
+          const imageContainer = document.createElement('div');
+          imageContainer.className = 'word-web-search-result-image-container';
+          const image = document.createElement('img');
+          image.src = result.image.url;
+          image.alt = result.title;
+          image.className = 'word-web-search-result-image';
+          imageContainer.appendChild(image);
+          resultContent.appendChild(imageContainer);
+        }
+        
+        resultContent.appendChild(titleLink);
+        resultContent.appendChild(displayLink);
+        resultContent.appendChild(snippet);
+        resultItem.appendChild(resultContent);
+        
+        // Add fade-in animation
+        resultItem.style.opacity = '0';
+        resultsList.appendChild(resultItem);
+        
+        // Animate in
+        setTimeout(() => {
+          resultItem.style.transition = 'opacity 0.3s ease';
+          resultItem.style.opacity = '1';
+        }, 10);
+      },
+      onComplete: () => {
+        console.log('[WordSelector] Web search completed');
+        
+        // Hide loading indicator
+        if (loadingIndicator && loadingIndicator.parentNode) {
+          loadingIndicator.style.display = 'none';
+        }
+        
+        // Store search context for chat
+        modal.setAttribute('data-initial-context', searchContext);
+        
+        // If no results, show message
+        if (resultsList.children.length === 0) {
+          const noResults = document.createElement('div');
+          noResults.className = 'word-web-search-no-results';
+          noResults.textContent = 'No results found';
+          resultsList.appendChild(noResults);
+        }
+      },
+      onError: (error) => {
+        console.error('[WordSelector] Web search error:', error);
+        
+        // Hide loading indicator
+        if (loadingIndicator && loadingIndicator.parentNode) {
+          loadingIndicator.style.display = 'none';
+        }
+        
+        // Show error message
+        const errorDiv = document.createElement('div');
+        errorDiv.className = 'word-web-search-error';
+        errorDiv.textContent = `Error: ${error.message}`;
+        resultsList.appendChild(errorDiv);
+      }
+    });
+    
+    // Store abort function
+    modal.setAttribute('data-search-abort', abortSearch.toString());
+  },
+  
+  /**
+   * Send chat message in web search modal
+   * @param {HTMLElement} modal - The modal element
+   * @param {string} word - The word
+   * @param {HTMLElement} inputField - The input field element
+   */
+  async sendWebSearchChatMessage(modal, word, inputField) {
+    const question = inputField.value.trim();
+    if (!question) return;
+    
+    console.log('[WordSelector] Sending chat message:', question);
+    
+    // Clear input
+    inputField.value = '';
+    inputField.style.height = 'auto';
+    
+    // Get chat history
+    const chatHistoryJson = modal.getAttribute('data-chat-history') || '[]';
+    let chatHistory = [];
+    try {
+      chatHistory = JSON.parse(chatHistoryJson);
+    } catch (e) {
+      console.error('[WordSelector] Error parsing chat history:', e);
+      chatHistory = [];
+    }
+    
+    // Get initial context from search results
+    const initialContext = modal.getAttribute('data-initial-context') || '';
+    
+    // Add user message to chat history
+    chatHistory.push({
+      role: 'user',
+      content: question
+    });
+    
+    // Display user message
+    const resultsList = modal.querySelector('.word-web-search-results-list');
+    const userMessageDiv = document.createElement('div');
+    userMessageDiv.className = 'word-web-search-chat-message user-message';
+    userMessageDiv.textContent = question;
+    resultsList.appendChild(userMessageDiv);
+    
+    // Create AI response container
+    const aiMessageDiv = document.createElement('div');
+    aiMessageDiv.className = 'word-web-search-chat-message ai-message';
+    const aiResponseText = document.createElement('div');
+    aiResponseText.className = 'word-web-search-chat-response-text';
+    aiMessageDiv.appendChild(aiResponseText);
+    resultsList.appendChild(aiMessageDiv);
+    
+    // Scroll to bottom
+    resultsList.scrollTop = resultsList.scrollHeight;
+    
+    // Disable input and send button
+    inputField.disabled = true;
+    const sendBtn = modal.querySelector('.word-web-search-send-btn');
+    sendBtn.disabled = true;
+    
+    // Show delete button if not already shown
+    const deleteBtn = modal.querySelector('.word-web-search-delete-btn');
+    if (deleteBtn) {
+      deleteBtn.style.display = 'flex';
+    }
+    
+    // Call v2/ask API
+    let accumulatedText = '';
+    const abortAsk = await ApiService.ask({
+      initial_context: initialContext,
+      chat_history: chatHistory,
+      question: question,
+      context_type: 'web_search',
+      onChunk: (chunk, accumulated) => {
+        accumulatedText = accumulated || accumulatedText + chunk;
+        aiResponseText.textContent = accumulatedText;
+        
+        // Auto-scroll
+        resultsList.scrollTop = resultsList.scrollHeight;
+      },
+      onComplete: (updatedChatHistory, possibleQuestions) => {
+        console.log('[WordSelector] Chat response completed');
+        
+        // Update chat history
+        if (updatedChatHistory && Array.isArray(updatedChatHistory)) {
+          modal.setAttribute('data-chat-history', JSON.stringify(updatedChatHistory));
+        } else {
+          // Fallback: add AI response manually
+          chatHistory.push({
+            role: 'assistant',
+            content: accumulatedText
+          });
+          modal.setAttribute('data-chat-history', JSON.stringify(chatHistory));
+        }
+        
+        // Re-enable input and send button
+        inputField.disabled = false;
+        sendBtn.disabled = false;
+        inputField.focus();
+      },
+      onError: (error) => {
+        console.error('[WordSelector] Chat error:', error);
+        aiResponseText.textContent = `Error: ${error.message}`;
+        
+        // Re-enable input and send button
+        inputField.disabled = false;
+        sendBtn.disabled = false;
+        inputField.focus();
+      }
+    });
+    
+    // Store abort function
+    modal.setAttribute('data-ask-abort', abortAsk.toString());
+  },
+  
+  /**
+   * Clear chat history in web search modal
+   * @param {HTMLElement} modal - The modal element
+   */
+  clearWebSearchChatHistory(modal) {
+    console.log('[WordSelector] Clearing web search chat history');
+    
+    // Reset chat history
+    modal.setAttribute('data-chat-history', JSON.stringify([]));
+    
+    // Remove chat messages from results list
+    const resultsList = modal.querySelector('.word-web-search-results-list');
+    const chatMessages = resultsList.querySelectorAll('.word-web-search-chat-message');
+    chatMessages.forEach(msg => msg.remove());
+    
+    // Hide delete button
+    const deleteBtn = modal.querySelector('.word-web-search-delete-btn');
+    if (deleteBtn) {
+      deleteBtn.style.display = 'none';
+    }
+  },
+  
+  /**
+   * Create send icon (upward arrow)
+   */
+  createSendIcon() {
+    return `
+      <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M10 15V5M10 5L5 10M10 5L15 10" stroke="#9527F5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    `;
+  },
+  
+  /**
+   * Create trash icon
+   */
+  createTrashIcon() {
+    return `
+      <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M3 5h14M6.5 5V3.5a1.5 1.5 0 0 1 1.5-1.5h4a1.5 1.5 0 0 1 1.5 1.5V5M15 5v10.5a1.5 1.5 0 0 1-1.5 1.5h-7a1.5 1.5 0 0 1-1.5-1.5V5h10Z" stroke="#ef4444" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M8 9v5M12 9v5" stroke="#ef4444" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    `;
   },
   
   /**
@@ -6208,7 +6891,7 @@ const WordSelector = {
         left: 24px;
         right: 24px;
         display: flex;
-        justify-content: flex-start;
+        justify-content: space-between;
         align-items: center;
         z-index: 20;
         gap: 12px;
@@ -6296,7 +6979,40 @@ const WordSelector = {
         animation: vocab-spin 0.8s linear infinite;
       }
       
-      /* View more button - bigger, right side */
+      /* Search icon button - bottom-right positioned */
+      .vocab-word-popup-search-button {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 40px;
+        height: 40px;
+        border: none;
+        border-radius: 10px;
+        background: transparent;
+        color: #A020F0;
+        cursor: pointer;
+        transition: background-color 0.2s ease, transform 0.2s ease;
+        flex-shrink: 0;
+        padding: 0;
+      }
+      
+      .vocab-word-popup-search-button:hover {
+        background: rgba(160, 32, 240, 0.1);
+        transform: scale(1.1);
+      }
+      
+      .vocab-word-popup-search-button:active {
+        transform: scale(0.95);
+        background: rgba(160, 32, 240, 0.2);
+      }
+      
+      .vocab-word-popup-search-button svg {
+        display: block;
+        width: 18px;
+        height: 18px;
+      }
+      
+      /* View more button - bottom-left positioned */
       .vocab-word-popup-button {
         padding: 10px 18px;
         border: none;
@@ -6310,7 +7026,9 @@ const WordSelector = {
         text-align: center;
         min-width: 140px; /* Ensure button has minimum width */
         flex-shrink: 0;
-        margin-left: auto; /* Push button to the rightmost position */
+        display: flex;
+        align-items: center;
+        justify-content: center;
       }
       
       .vocab-word-popup-button:hover:not(.loading) {
@@ -6331,6 +7049,299 @@ const WordSelector = {
       .vocab-word-popup-button:disabled {
         opacity: 0.6;
         cursor: not-allowed;
+      }
+      
+      /* Web Search Modal */
+      .word-web-search-modal {
+        position: fixed !important;
+        background: white !important;
+        border-radius: 20px;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15), 0 2px 8px rgba(0, 0, 0, 0.1) !important;
+        z-index: 10000020 !important;
+        max-width: 600px !important;
+        width: 90vw !important;
+        max-height: 80vh !important;
+        display: flex !important;
+        flex-direction: column !important;
+        opacity: 1 !important;
+        transform: scale(1) !important;
+        transition: opacity 0.2s ease, transform 0.2s ease;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif !important;
+        visibility: visible !important;
+        pointer-events: all !important;
+        overflow: hidden !important;
+      }
+      
+      .word-web-search-modal.visible {
+        opacity: 1 !important;
+        transform: scale(1) !important;
+      }
+      
+      .word-web-search-modal-content {
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+        max-height: 80vh;
+      }
+      
+      .word-web-search-modal-header {
+        display: flex;
+        justify-content: flex-end;
+        padding: 12px 16px;
+        border-bottom: 1px solid #e5e7eb;
+      }
+      
+      .word-web-search-modal-close {
+        width: 28px;
+        height: 28px;
+        border: none;
+        background: transparent;
+        font-size: 24px;
+        color: #6b7280;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 50%;
+        transition: background-color 0.2s ease;
+      }
+      
+      .word-web-search-modal-close:hover {
+        background: #f3f4f6;
+      }
+      
+      .word-web-search-results {
+        flex: 1;
+        overflow-y: auto;
+        padding: 16px;
+        min-height: 0;
+      }
+      
+      .word-web-search-loading {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 40px 20px;
+        gap: 16px;
+      }
+      
+      .word-web-search-loading-spinner {
+        width: 32px;
+        height: 32px;
+        border: 3px solid #f3f4f6;
+        border-top-color: #A020F0;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+      }
+      
+      @keyframes spin {
+        to { transform: rotate(360deg); }
+      }
+      
+      .word-web-search-loading-text {
+        color: #6b7280;
+        font-size: 14px;
+      }
+      
+      .word-web-search-metadata {
+        padding: 8px 0;
+        margin-bottom: 16px;
+        color: #6b7280;
+        font-size: 14px;
+        border-bottom: 1px solid #e5e7eb;
+      }
+      
+      .word-web-search-metadata-text {
+        color: #6b7280;
+      }
+      
+      .word-web-search-results-list {
+        display: flex;
+        flex-direction: column;
+        gap: 24px;
+      }
+      
+      .word-web-search-result-item {
+        padding: 12px 0;
+        border-bottom: 1px solid #f3f4f6;
+      }
+      
+      .word-web-search-result-item:last-child {
+        border-bottom: none;
+      }
+      
+      .word-web-search-result-content {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+      
+      .word-web-search-result-image-container {
+        float: right;
+        margin-left: 16px;
+        margin-bottom: 8px;
+      }
+      
+      .word-web-search-result-image {
+        width: 120px;
+        height: auto;
+        border-radius: 8px;
+        object-fit: cover;
+      }
+      
+      .word-web-search-result-title {
+        font-size: 18px;
+        font-weight: 400;
+        color: #1a0dab;
+        text-decoration: none;
+        line-height: 1.3;
+        cursor: pointer;
+      }
+      
+      .word-web-search-result-title:hover {
+        text-decoration: underline;
+      }
+      
+      .word-web-search-result-link {
+        font-size: 14px;
+        color: #006621;
+        line-height: 1.3;
+      }
+      
+      .word-web-search-result-snippet {
+        font-size: 14px;
+        color: #545454;
+        line-height: 1.5;
+        margin-top: 4px;
+      }
+      
+      .word-web-search-no-results,
+      .word-web-search-error {
+        padding: 40px 20px;
+        text-align: center;
+        color: #6b7280;
+        font-size: 14px;
+      }
+      
+      .word-web-search-error {
+        color: #ef4444;
+      }
+      
+      /* Chat messages in web search modal */
+      .word-web-search-chat-message {
+        padding: 12px 16px;
+        margin-bottom: 12px;
+        border-radius: 12px;
+        max-width: 85%;
+        word-wrap: break-word;
+      }
+      
+      .word-web-search-chat-message.user-message {
+        background: #f3f4f6;
+        color: #1f2937;
+        align-self: flex-end;
+        margin-left: auto;
+      }
+      
+      .word-web-search-chat-message.ai-message {
+        background: #f0e6ff;
+        color: #1f2937;
+        align-self: flex-start;
+      }
+      
+      .word-web-search-chat-response-text {
+        line-height: 1.6;
+      }
+      
+      /* Input area */
+      .word-web-search-input-area {
+        display: flex;
+        gap: 8px;
+        padding: 16px;
+        border-top: 1px solid #e5e7eb;
+        background: white;
+        align-items: center;
+      }
+      
+      .word-web-search-input {
+        flex: 1;
+        padding: 10px 12px;
+        border: 1px solid #e5e7eb;
+        border-radius: 10px;
+        font-size: 14px;
+        font-family: inherit;
+        resize: none;
+        outline: none;
+        transition: border-color 0.2s ease;
+        min-height: 40px;
+        max-height: 120px;
+        color: #1f2937 !important;
+        caret-color: #9527F5 !important;
+        background-color: white !important;
+      }
+      
+      .word-web-search-input:focus {
+        border-color: #9527F5;
+        color: #1f2937 !important;
+        caret-color: #9527F5 !important;
+      }
+      
+      .word-web-search-input::placeholder {
+        color: #9ca3af !important;
+      }
+      
+      .word-web-search-send-btn {
+        width: 30px;
+        height: 30px;
+        background: white;
+        border: 2px solid #9527F5;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        flex-shrink: 0;
+      }
+      
+      .word-web-search-send-btn:hover {
+        background: #f0e6ff;
+        border-color: #7a1fd9;
+        transform: translateY(-1px);
+      }
+      
+      .word-web-search-send-btn:active {
+        transform: translateY(0) scale(0.95);
+      }
+      
+      .word-web-search-send-btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+      
+      .word-web-search-delete-btn {
+        width: 30px;
+        height: 30px;
+        background: white;
+        border: 2px solid #ef4444;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        flex-shrink: 0;
+      }
+      
+      .word-web-search-delete-btn:hover {
+        background: #fef2f2;
+        border-color: #dc2626;
+        transform: translateY(-1px);
+      }
+      
+      .word-web-search-delete-btn:active {
+        transform: translateY(0) scale(0.95);
       }
       
       /* Close button for popup */

@@ -27,7 +27,8 @@ class ApiConfig {
     SUMMARISE: '/api/v2/summarise',
     WORDS_EXPLANATION: '/api/v2/words-explanation',
     VOICE_TO_TEXT: '/api/v2/voice-to-text',
-    TRANSLATE: '/api/v2/translate'
+    TRANSLATE: '/api/v2/translate',
+    WEB_SEARCH_STREAM: '/api/v2/web-search-stream'
   };
   
   // Helper method to get full URL for an endpoint
