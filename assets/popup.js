@@ -87,22 +87,12 @@ const UIManager = {
    * @param {boolean} isEnabled - Whether the extension is enabled
    */
   updateUI(isEnabled) {
-    const settingsButton = document.getElementById('settingsButton');
-    const settingsContainer = document.querySelector('.settings-container');
-    
     if (isEnabled) {
       // ON state
       this.catIcon.classList.add('active');
       document.body.classList.add('extension-on');
       this.instructions.classList.add('show');
       this.fingerPoint.style.display = 'none';
-      // Show settings button
-      if (settingsContainer) {
-        settingsContainer.style.display = 'flex';
-      }
-      if (settingsButton) {
-        settingsButton.style.display = 'block';
-      }
       console.log('Extension Enabled');
     } else {
       // OFF state
@@ -110,13 +100,6 @@ const UIManager = {
       document.body.classList.remove('extension-on');
       this.instructions.classList.remove('show');
       this.fingerPoint.style.display = 'block';
-      // Hide settings button
-      if (settingsContainer) {
-        settingsContainer.style.display = 'none';
-      }
-      if (settingsButton) {
-        settingsButton.style.display = 'none';
-      }
       console.log('Extension Disabled');
     }
   },
@@ -281,97 +264,6 @@ PopupApp.init();
 // ===================================
 // Settings Button Handler
 // ===================================
-document.addEventListener('DOMContentLoaded', () => {
-  const settingsButton = document.getElementById('settingsButton');
-  const settingsContainer = document.querySelector('.settings-container');
-  
-  // Function to hide settings button
-  const hideSettingsButton = () => {
-    if (settingsContainer) {
-      settingsContainer.style.display = 'none';
-    }
-    if (settingsButton) {
-      settingsButton.style.display = 'none';
-    }
-  };
-  
-  // Function to show settings button (if extension is enabled)
-  const showSettingsButton = async () => {
-    const savedState = await StorageManager.loadToggleState();
-    if (savedState) {
-      // Extension is enabled - show settings button
-      if (settingsContainer) {
-        settingsContainer.style.display = 'flex';
-      }
-      if (settingsButton) {
-        settingsButton.style.display = 'block';
-      }
-    }
-  };
-  
-  // Check if modal is open when popup loads
-  const checkModalState = async () => {
-    try {
-      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-      if (tab?.id) {
-        // Send message to content script to check if modal is open
-        chrome.tabs.sendMessage(tab.id, {
-          type: 'CHECK_MODAL_STATE'
-        }, (response) => {
-          if (chrome.runtime.lastError) {
-            // Content script might not be loaded, ignore
-            return;
-          }
-          if (response && response.isModalOpen) {
-            hideSettingsButton();
-          }
-        });
-      }
-    } catch (error) {
-      // Ignore errors
-    }
-  };
-  
-  // Check modal state on load
-  checkModalState();
-  
-  // Listen for messages from content script
-  chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-    if (message.type === 'LANGUAGE_MODAL_OPENED') {
-      hideSettingsButton();
-      sendResponse({ success: true });
-    } else if (message.type === 'LANGUAGE_MODAL_CLOSED') {
-      showSettingsButton();
-      sendResponse({ success: true });
-    }
-    return true; // Keep channel open for async response
-  });
-  
-  if (settingsButton) {
-    settingsButton.addEventListener('click', async () => {
-      try {
-        // Get the current active tab
-        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-        
-        if (tab?.id) {
-          // Send message to content script to show language selection modal
-          await chrome.tabs.sendMessage(tab.id, {
-            type: 'SHOW_LANGUAGE_MODAL'
-          });
-          console.log('[Popup] Language modal open request sent to tab:', tab.id);
-          
-          // Hide settings button immediately
-          hideSettingsButton();
-          
-          // Close popup after sending message
-          window.close();
-        } else {
-          console.error('[Popup] No active tab found');
-        }
-      } catch (error) {
-        console.error('[Popup] Error opening language modal:', error);
-      }
-    });
-  }
-});
+// Settings button has been moved to the close button in content script
+// No longer needed in popup
 

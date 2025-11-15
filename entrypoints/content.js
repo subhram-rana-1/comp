@@ -305,25 +305,119 @@ export default defineContentScript({
     // Make pageTextContent accessible globally for ChatDialog
     window.pageTextContent = pageTextContent;
     
+    // Global variables for page summary (persist across dialog open/close)
+    window.pageSummary = null;
+    window.pageSummaryPossibleQuestions = null;
+    
     // Global language variable - fetched from chrome.storage.local (shared across all tabs and domains)
     // Initialize language variable - will be loaded from global storage
-    let language = 'none';
+    let language = 'WEBSITE_LANGUAGE';
     
     // Load saved language from global storage on initialization
     getSavedLanguage().then((savedLanguage) => {
-      language = savedLanguage;
-      window.language = savedLanguage;
+      language = savedLanguage || 'WEBSITE_LANGUAGE';
+      window.language = language;
     }).catch((error) => {
       console.warn('[Content Script] Error loading saved language on init:', error);
       // Set default value on error
-      window.language = 'none';
+      window.language = 'WEBSITE_LANGUAGE';
     });
     
-    // Top 20 languages list
+    // Comprehensive languages list with native names
     const TOP_LANGUAGES = [
-      'English', 'Spanish', 'French', 'German', 'Italian', 'Portuguese', 'Russian',
-      'Chinese', 'Japanese', 'Korean', 'Arabic', 'Hindi', 'Dutch', 'Turkish',
-      'Polish', 'Swedish', 'Norwegian', 'Danish', 'Finnish', 'Greek'
+      'English', // English
+      'Español', // Spanish
+      'Français', // French
+      'Deutsch', // German
+      'Italiano', // Italian
+      'Português', // Portuguese
+      'Русский', // Russian
+      '中文', // Chinese (Simplified)
+      '日本語', // Japanese
+      '한국어', // Korean
+      'العربية', // Arabic
+      'हिन्दी', // Hindi
+      'Nederlands', // Dutch
+      'Türkçe', // Turkish
+      'Polski', // Polish
+      'Svenska', // Swedish
+      'Norsk', // Norwegian
+      'Dansk', // Danish
+      'Suomi', // Finnish
+      'Ελληνικά', // Greek
+      'Čeština', // Czech
+      'Magyar', // Hungarian
+      'Română', // Romanian
+      'Български', // Bulgarian
+      'Hrvatski', // Croatian
+      'Srpski', // Serbian
+      'Slovenčina', // Slovak
+      'Slovenščina', // Slovenian
+      'Українська', // Ukrainian
+      'עברית', // Hebrew
+      'فارسی', // Persian/Farsi
+      'اردو', // Urdu
+      'বাংলা', // Bengali
+      'தமிழ்', // Tamil
+      'తెలుగు', // Telugu
+      'मराठी', // Marathi
+      'ગુજરાતી', // Gujarati
+      'ಕನ್ನಡ', // Kannada
+      'മലയാളം', // Malayalam
+      'ਪੰਜਾਬੀ', // Punjabi
+      'ଓଡ଼ିଆ', // Odia
+      'नेपाली', // Nepali
+      'සිංහල', // Sinhala
+      'ไทย', // Thai
+      'Tiếng Việt', // Vietnamese
+      'Bahasa Indonesia', // Indonesian
+      'Bahasa Melayu', // Malay
+      'Filipino', // Filipino
+      'Tagalog', // Tagalog
+      'မြန်မာ', // Burmese
+      'ភាសាខ្មែរ', // Khmer
+      'Lao', // Lao
+      'Монгол', // Mongolian
+      'ქართული', // Georgian
+      'Հայերեն', // Armenian
+      'Azərbaycan', // Azerbaijani
+      'Қазақ', // Kazakh
+      'Oʻzbek', // Uzbek
+      'Кыргызча', // Kyrgyz
+      'Türkmen', // Turkmen
+      'Afrikaans', // Afrikaans
+      'Kiswahili', // Swahili
+      'Yorùbá', // Yoruba
+      'Hausa', // Hausa
+      'Igbo', // Igbo
+      'Zulu', // Zulu
+      'Xhosa', // Xhosa
+      'Amharic', // Amharic
+      'አማርኛ', // Amharic (Ethiopic)
+      'Somali', // Somali
+      'Kinyarwanda', // Kinyarwanda
+      'Luganda', // Luganda
+      'Shona', // Shona
+      'Malagasy', // Malagasy
+      'Maltese', // Maltese
+      'Íslenska', // Icelandic
+      'Gaeilge', // Irish
+      'Cymraeg', // Welsh
+      'Brezhoneg', // Breton
+      'Català', // Catalan
+      'Galego', // Galician
+      'Euskara', // Basque
+      'Latviešu', // Latvian
+      'Lietuvių', // Lithuanian
+      'Eesti', // Estonian
+      'Shqip', // Albanian
+      'Македонски', // Macedonian
+      'Bosanski', // Bosnian
+      'Esperanto', // Esperanto
+      'Interlingua', // Interlingua
+      'Lingua Latina', // Latin
+      'Klingon', // Klingon (for fun)
+      'Toki Pona' // Toki Pona
     ];
     
     /**
@@ -339,16 +433,17 @@ export default defineContentScript({
     
     /**
      * Get the saved language preference (global, shared across all tabs and domains)
-     * @returns {Promise<string>} The saved language or 'none' if not found
+     * @returns {Promise<string>} The saved language or 'WEBSITE_LANGUAGE' if not found
      */
     async function getSavedLanguage() {
       try {
         const storageKey = getLanguageStorageKey();
         const result = await chrome.storage.local.get([storageKey]);
-        return result[storageKey] || 'none';
+        // Return 'WEBSITE_LANGUAGE' as default, but keep backward compatibility with 'none'
+        return result[storageKey] || 'WEBSITE_LANGUAGE';
       } catch (error) {
         console.warn('[Language Selection] Error getting saved language:', error);
-        return 'none';
+        return 'WEBSITE_LANGUAGE';
       }
     }
     
@@ -757,11 +852,12 @@ export default defineContentScript({
         z-index: 1;
       `;
       
-      // Searchable dropdown input
+      // Dropdown input (readonly - click only, no typing)
       const dropdownInput = document.createElement('input');
       dropdownInput.type = 'text';
       dropdownInput.id = 'vocab-language-dropdown-input';
-      dropdownInput.placeholder = 'Search or type a language...';
+      dropdownInput.placeholder = 'Click to select a language...';
+      dropdownInput.readOnly = true;
       dropdownInput.style.cssText = `
         width: 100%;
         padding: 12px 45px 12px 16px;
@@ -776,10 +872,11 @@ export default defineContentScript({
         background-color: white !important;
         color: black !important;
         text-shadow: none !important;
+        cursor: pointer;
       `;
-      // Allow text selection in input field for typing
-      dropdownInput.style.userSelect = 'text';
-      dropdownInput.style.webkitUserSelect = 'text';
+      // Prevent text selection in input field
+      dropdownInput.style.userSelect = 'none';
+      dropdownInput.style.webkitUserSelect = 'none';
       
       // Force white background and black text using setProperty for stronger enforcement
       dropdownInput.style.setProperty('background-color', 'white', 'important');
@@ -908,8 +1005,8 @@ export default defineContentScript({
       
       // Function to select language from dropdown (auto-saves)
       async function selectLanguage(lang) {
-        // If "As per website" is selected, save as 'none' for API
-        const languageToSave = lang === 'As per website' ? 'none' : lang;
+        // If "As per website" is selected, save as 'WEBSITE_LANGUAGE' for API
+        const languageToSave = lang === 'As per website' ? 'WEBSITE_LANGUAGE' : lang;
         dropdownInput.value = lang;
         dropdownList.style.display = 'none';
         selectedIndex = -1;
@@ -951,29 +1048,14 @@ export default defineContentScript({
         // Always add "As per website" as first option
         const AS_PER_WEBSITE = 'As per website';
         
-        // If no filter, show "As per website" + all languages
-        let filtered = [];
-        if (!filter || filter.trim() === '') {
-          filtered = [AS_PER_WEBSITE, ...TOP_LANGUAGES];
-        } else {
-          // Check if filter matches "As per website"
-          const matchesAsPerWebsite = AS_PER_WEBSITE.toLowerCase().includes(filter.toLowerCase());
-          // Filter languages by prefix matching
-          const filteredLangs = TOP_LANGUAGES.filter(lang => 
-            lang.toLowerCase().startsWith(filter.toLowerCase())
-          );
-          // Add "As per website" first if it matches, otherwise add filtered languages
-          if (matchesAsPerWebsite) {
-            filtered = [AS_PER_WEBSITE, ...filteredLangs];
-          } else {
-            filtered = filteredLangs;
-          }
-        }
+        // Since input is readonly, filter is not used for typing
+        // Always show "As per website" + all languages
+        let filtered = [AS_PER_WEBSITE, ...TOP_LANGUAGES];
         
         // Store filtered languages for keyboard navigation
         filteredLanguages = [...filtered];
         
-        // Add filtered languages
+        // Add filtered languages (no need to check for new language since input is readonly)
         filtered.forEach((lang, index) => {
           const item = document.createElement('div');
           item.textContent = lang;
@@ -1032,72 +1114,6 @@ export default defineContentScript({
           });
           dropdownList.appendChild(item);
         });
-        
-        // If filter doesn't match any language, show option to add new language
-        if (filter && filter.trim() !== '' && !TOP_LANGUAGES.some(lang => lang.toLowerCase() === filter.toLowerCase())) {
-          const newLangItem = document.createElement('div');
-          newLangItem.innerHTML = `<strong>Add "${filter}" as new language</strong>`;
-          newLangItem.setAttribute('data-index', filtered.length);
-          newLangItem.style.cssText = `
-            padding: 12px 16px;
-            cursor: pointer;
-            color: #9333ea;
-            border-top: 1px solid #e5e5e5;
-            transition: background-color 0.2s, color 0.2s;
-            user-select: none;
-            -webkit-user-select: none;
-            -moz-user-select: none;
-            -ms-user-select: none;
-            font-size: 16px !important;
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif !important;
-            font-weight: 400 !important;
-            line-height: 1.5 !important;
-          `;
-          // Force font properties using setProperty for stronger enforcement
-          newLangItem.style.setProperty('font-size', '16px', 'important');
-          newLangItem.style.setProperty('font-family', '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif', 'important');
-          newLangItem.style.setProperty('font-weight', '400', 'important');
-          newLangItem.style.setProperty('line-height', '1.5', 'important');
-          // Ensure strong tag inside also has correct font-size
-          const strongTag = newLangItem.querySelector('strong');
-          if (strongTag) {
-            strongTag.style.setProperty('font-size', '16px', 'important');
-            strongTag.style.setProperty('font-family', '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif', 'important');
-            strongTag.style.setProperty('font-weight', '600', 'important');
-            strongTag.style.setProperty('line-height', '1.5', 'important');
-          }
-          filteredLanguages.push(filter);
-          newLangItem.addEventListener('mouseenter', () => {
-            // Reset all highlights
-            const items = dropdownList.querySelectorAll('div');
-            items.forEach(i => {
-              i.style.setProperty('background-color', 'white', 'important');
-              i.style.setProperty('color', 'black', 'important');
-            });
-            newLangItem.style.backgroundColor = '#e9d5ff';
-            selectedIndex = filtered.length;
-          });
-          newLangItem.addEventListener('mouseleave', () => {
-            if (selectedIndex !== filtered.length) {
-              newLangItem.style.setProperty('background-color', 'white', 'important');
-              newLangItem.style.setProperty('color', '#9333ea', 'important');
-            }
-          });
-          newLangItem.addEventListener('click', () => {
-            selectLanguage(filter);
-          });
-          // Prevent double-click and text selection
-          newLangItem.addEventListener('dblclick', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            return false;
-          });
-          newLangItem.addEventListener('selectstart', (e) => {
-            e.preventDefault();
-            return false;
-          });
-          dropdownList.appendChild(newLangItem);
-        }
       }
       
       // Function to update button based on tab and language
@@ -1105,17 +1121,12 @@ export default defineContentScript({
         const hasLanguage = dropdownInput.value.trim() !== '';
         
         if (activeTab === 'fixed') {
-          if (!hasLanguage) {
-            // Fixed tab + no language = Hide button
-            saveButton.style.display = 'none';
-          } else {
-            // Fixed tab + language entered = "Save and Close" with solid purple background
+          // Fixed tab - always show button since "As per website" is a valid selection
             saveButton.style.display = 'block';
             saveButton.textContent = 'Save and Close';
             saveButton.style.backgroundColor = '#9333ea';
             saveButton.style.color = 'white';
             saveButton.style.border = 'none';
-          }
         } else {
           // Dynamic tab = "Save and Close" with solid purple background
           saveButton.style.display = 'block';
@@ -1147,12 +1158,6 @@ export default defineContentScript({
           e.preventDefault();
           if (selectedIndex >= 0 && selectedIndex < filteredLanguages.length) {
             selectLanguage(filteredLanguages[selectedIndex]);
-          } else {
-            // If no item selected but input has value, save it as new language
-            const inputValue = dropdownInput.value.trim();
-            if (inputValue) {
-              selectLanguage(inputValue);
-            }
           }
         } else if (e.key === 'Escape') {
           dropdownList.style.display = 'none';
@@ -1190,6 +1195,18 @@ export default defineContentScript({
       }
       
       // Dropdown input handlers
+      // Click handler to open dropdown (since input is readonly)
+      dropdownInput.addEventListener('click', () => {
+        dropdownInput.style.borderColor = '#9333ea';
+        const currentValue = dropdownInput.value;
+        populateDropdownList(currentValue);
+        updateDropdownPosition();
+        dropdownList.style.display = 'block';
+        selectedIndex = -1;
+        // Rotate dropdown icon
+        dropdownIcon.style.transform = 'translateY(-50%) rotate(180deg)';
+      });
+      
       dropdownInput.addEventListener('focus', () => {
         dropdownInput.style.borderColor = '#9333ea';
         const currentValue = dropdownInput.value;
@@ -1212,29 +1229,8 @@ export default defineContentScript({
         }, 200);
       });
       
-      dropdownInput.addEventListener('input', (e) => {
-        const value = e.target.value;
-        populateDropdownList(value);
-        updateDropdownPosition();
-        dropdownList.style.display = 'block';
-        selectedIndex = -1;
-      });
-      
-      // Handle Enter key on input (when dropdown might be closed)
-      dropdownInput.addEventListener('keydown', async (e) => {
-        if (e.key === 'Enter' && (dropdownList.style.display === 'none' || !dropdownList.style.display)) {
-          e.preventDefault();
-          const inputValue = dropdownInput.value.trim();
-          if (inputValue) {
-            // If "As per website" is typed, save as 'none'
-            if (inputValue === 'As per website') {
-              await selectLanguage('As per website');
-            } else {
-              await selectLanguage(inputValue);
-            }
-          }
-        }
-      });
+      // Remove input event handler since field is readonly
+      // Users can only select from dropdown list
       
       // Close dropdown when clicking outside
       let clickHandler = (e) => {
@@ -1250,6 +1246,9 @@ export default defineContentScript({
       
       // Initial population - show all languages
       populateDropdownList('');
+      
+      // Set default value to "As per website"
+      dropdownInput.value = 'As per website';
       
       dropdownContainer.appendChild(dropdownInput);
       dropdownContainer.appendChild(dropdownIcon);
@@ -1311,12 +1310,14 @@ export default defineContentScript({
         updateButtonState();
       });
       saveButton.addEventListener('click', async () => {
-        let selectedLanguage = 'none';
+        let selectedLanguage = 'WEBSITE_LANGUAGE';
         
         // Check which tab is active
         if (activeTab === 'fixed') {
           // Fixed tab is selected
-          selectedLanguage = dropdownInput.value.trim() || 'none';
+          const inputValue = dropdownInput.value.trim();
+          // If "As per website" is selected, save as 'WEBSITE_LANGUAGE'
+          selectedLanguage = inputValue === 'As per website' ? 'WEBSITE_LANGUAGE' : (inputValue || 'WEBSITE_LANGUAGE');
         } else {
           // Dynamic tab is selected - save as "dynamic" to global storage
           selectedLanguage = 'dynamic';
@@ -1400,11 +1401,11 @@ export default defineContentScript({
       
       // Load saved language for current domain and populate the input
       getSavedLanguage().then((savedLanguage) => {
-        if (savedLanguage && savedLanguage !== 'none' && savedLanguage !== 'dynamic') {
+        if (savedLanguage && savedLanguage !== 'WEBSITE_LANGUAGE' && savedLanguage !== 'none' && savedLanguage !== 'dynamic') {
           // Populate input with saved language
           dropdownInput.value = savedLanguage;
-        } else if (savedLanguage === 'none') {
-          // Show "As per website" when saved language is 'none'
+        } else if (savedLanguage === 'WEBSITE_LANGUAGE' || savedLanguage === 'none') {
+          // Show "As per website" when saved language is 'WEBSITE_LANGUAGE' or 'none' (for backward compatibility)
           dropdownInput.value = 'As per website';
         } else if (savedLanguage === 'dynamic') {
           // Switch to Dynamic tab if dynamic is selected
@@ -1460,22 +1461,16 @@ export default defineContentScript({
       getSavedLanguage().then((savedLanguage) => {
         // Set the language variable but don't automatically show modal on page load
         // Modal should only be shown when user explicitly requests it (e.g., via close button or settings)
-        if (savedLanguage === 'none') {
-          // Language is not defined, but don't show modal automatically
-          console.log('[Content Script] Language is not set, but not showing modal automatically');
-          language = 'none';
-          window.language = 'none';
-        } else {
-          // Language is already defined/set
-          console.log('[Content Script] Language is already set:', savedLanguage);
-          language = savedLanguage;
-          window.language = savedLanguage;
-        }
+        // Convert 'none' to 'WEBSITE_LANGUAGE' for backward compatibility
+        const normalizedLanguage = (savedLanguage === 'none') ? 'WEBSITE_LANGUAGE' : savedLanguage;
+        language = normalizedLanguage;
+        window.language = normalizedLanguage;
+        console.log('[Content Script] Language loaded:', normalizedLanguage);
       }).catch((error) => {
         console.error('[Content Script] Error checking saved language:', error);
         // Set default value on error
-        language = 'none';
-        window.language = 'none';
+        language = 'WEBSITE_LANGUAGE';
+        window.language = 'WEBSITE_LANGUAGE';
       });
     }).catch((error) => {
       console.error('[Content Script] Error checking extension state:', error);
@@ -1723,7 +1718,7 @@ export default defineContentScript({
       }
       
       // Function to actually create and append the button
-      const createButton = () => {
+      const createButton = async () => {
         // Check if button already exists (might have been created by another call)
         if (document.getElementById('vocab-close-btn')) {
           return;
@@ -1738,12 +1733,26 @@ export default defineContentScript({
         // Initially hide the button (will be shown when extension is enabled)
         button.style.display = 'none';
         
-        // Use white thick bold X icon with faceted/geometric design (SVG)
-        button.innerHTML = `
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" class="vocab-close-x-icon">
-            <path d="M18 6L6 18M6 6L18 18" stroke="white" stroke-width="4" stroke-linecap="square" stroke-linejoin="miter" stroke-miterlimit="10"/>
-          </svg>
-        `;
+        // Load gear icon SVG from assets
+        try {
+          const svgUrl = chrome.runtime.getURL('assets/gear-icon.svg');
+          const response = await fetch(svgUrl);
+          const svgContent = await response.text();
+          button.innerHTML = svgContent;
+          // Add class to the SVG element for styling
+          const svgElement = button.querySelector('svg');
+          if (svgElement) {
+            svgElement.classList.add('vocab-close-gear-icon');
+          }
+        } catch (error) {
+          console.error('[Content Script] Failed to load gear icon SVG:', error);
+          // Fallback to inline SVG if file loading fails
+          button.innerHTML = `
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="white" xmlns="http://www.w3.org/2000/svg" class="vocab-close-gear-icon">
+              <path d="M19.14,12.94c0.04-0.31,0.06-0.63,0.06-0.94s-0.02-0.63-0.06-0.94l2.03-1.58c0.18-0.14,0.23-0.41,0.12-0.61l-1.92-3.32c-0.11-0.2-0.35-0.27-0.56-0.2l-2.39,0.96c-0.5-0.38-1.03-0.7-1.62-0.94L14.5,2.5C14.47,2.22,14.24,2,13.95,2h-3.9c-0.29,0-0.52,0.22-0.55,0.5L9.1,5.37C8.5,5.61,7.97,5.93,7.47,6.31L5.08,5.35c-0.21-0.08-0.45,0-0.56,0.2L2.6,8.87c-0.11,0.2-0.06,0.47,0.12,0.61l2.03,1.58C4.71,11.37,4.68,11.69,4.68,12s0.02,0.63,0.06,0.94l-2.03,1.58c-0.18,0.14-0.23,0.41-0.12,0.61l1.92,3.32c0.11,0.2,0.35,0.27,0.56,0.2l2.39-0.96c0.5,0.38,1.03,0.7,1.62,0.94l0.4,2.87c0.03,0.28,0.26,0.5,0.55,0.5h3.9c0.29,0,0.52-0.22,0.55-0.5l0.4-2.87c0.59-0.24,1.12-0.56,1.62-0.94l2.39,0.96c0.21,0.08,0.45,0,0.56-0.2l1.92-3.32c0.11-0.2,0.06-0.47-0.12-0.61L19.14,12.94z M12,15.5c-1.93,0-3.5-1.57-3.5-3.5S10.07,8.5,12,8.5s3.5,1.57,3.5,3.5S13.93,15.5,12,15.5z"/>
+            </svg>
+          `;
+        }
         
         // Append to body
         document.body.appendChild(button);
@@ -2249,7 +2258,7 @@ export default defineContentScript({
           }
           
           .banner-dont-show {
-            background: rgba(149, 39, 245, 0.45);
+            background: rgba(149, 39, 245, 0.35);
             border: none;
             color: #9527F5;
             font-size: 13px;
@@ -2261,11 +2270,11 @@ export default defineContentScript({
           }
           
           .banner-dont-show:hover {
-            background-color: rgba(149, 39, 245, 0.55);
+            background-color: rgba(149, 39, 245, 0.45);
           }
           
           .banner-dont-show:active {
-            background-color: rgba(149, 39, 245, 0.6);
+            background-color: rgba(149, 39, 245, 0.5);
           }
         `;
         
@@ -8909,11 +8918,17 @@ const TextSelector = {
       }
       
       .vocab-close-btn svg,
-      .vocab-close-btn .vocab-close-x-icon {
+      .vocab-close-btn .vocab-close-gear-icon {
         pointer-events: none;
         display: block;
         width: 16px; /* Smaller icon for smaller button */
         height: 16px; /* Smaller icon for smaller button */
+        transition: transform 0.2s ease;
+      }
+      
+      .vocab-close-btn:hover svg,
+      .vocab-close-btn:hover .vocab-close-gear-icon {
+        transform: rotate(90deg);
       }
       
       /* Tooltip for ask-about-page button - Similar to import-content button tooltip */
@@ -9171,6 +9186,8 @@ const ChatDialog = {
   mediaRecorder: null, // MediaRecorder instance
   audioChunks: [], // Store audio chunks during recording
   pageSummary: null, // Store the fetched page summary
+  pagePossibleQuestions: [], // Store possible questions from summary API
+  simplifiedPossibleQuestions: [], // Store possible questions from simplify API
   
   /**
    * Initialize chat dialog
@@ -9203,17 +9220,23 @@ const ChatDialog = {
     // Set the chat context
     this.chatContext = chatContext;
     
-    // Clear page summary when opening a new page (if textKey starts with 'page-general')
-    // This ensures the button is enabled for a new page
+    // For page-general context, check global variables first
     if (textKey && textKey.startsWith('page-general')) {
-      // Only clear if it's a different page (different textKey)
-      if (this.currentTextKey !== textKey && this.currentTextKey !== null) {
-        console.log('[ChatDialog] Clearing page summary for new page');
+      // Load from global variables if they exist
+      if (window.pageSummary !== null && window.pageSummaryPossibleQuestions !== null) {
+        console.log('[ChatDialog] Loading page summary from global variables');
+        this.pageSummary = window.pageSummary;
+        this.pagePossibleQuestions = window.pageSummaryPossibleQuestions;
+      } else {
+        // If global variables are null, clear instance variables
+        console.log('[ChatDialog] Global page summary variables are null, clearing instance variables');
         this.pageSummary = null;
+        this.pagePossibleQuestions = [];
       }
     } else {
       // Clear summary if not a page-general context
       this.pageSummary = null;
+      this.pagePossibleQuestions = [];
     }
     
     // Generate proper contextual textKey based on chat context
@@ -10609,21 +10632,28 @@ const ChatDialog = {
     
     // Create summary container (above button) for ask-about-page chat
     if (this.chatContext === 'general' && this.currentTextKey && this.currentTextKey.startsWith('page-general')) {
-      const summaryContainer = document.createElement('div');
-      summaryContainer.id = 'vocab-chat-page-summary-container';
-      summaryContainer.className = 'vocab-chat-page-summary-container';
+      // Check global variables first
+      const hasGlobalSummary = window.pageSummary !== null && window.pageSummaryPossibleQuestions !== null;
       
-      // Render summary if it exists
-      if (this.pageSummary) {
-        summaryContainer.innerHTML = `
-          <h3 class="vocab-chat-page-summary-header">Summary</h3>
-          <div class="vocab-chat-page-summary-content">
-            ${this.renderMarkdown(this.pageSummary)}
-          </div>
-        `;
+      // Only create and render summary container if global variables are not null
+      if (hasGlobalSummary) {
+        const summaryContainer = document.createElement('div');
+        summaryContainer.id = 'vocab-chat-page-summary-container';
+        summaryContainer.className = 'vocab-chat-page-summary-container';
+        
+        // Load from global variables to instance variables if needed
+        if (!this.pageSummary) {
+          this.pageSummary = window.pageSummary;
+          this.pagePossibleQuestions = window.pageSummaryPossibleQuestions;
+        }
+        
+        // Render summary if it exists
+        if (this.pageSummary) {
+          this.renderPageSummaryWithQuestions(summaryContainer);
+        }
+        
+        scrollableContainer.appendChild(summaryContainer);
       }
-      
-      scrollableContainer.appendChild(summaryContainer);
     }
     
     // Create "Simplify more" button container
@@ -10635,22 +10665,39 @@ const ChatDialog = {
     console.log('[ChatDialog] Creating Simplify more button - chatContext:', this.chatContext, 'mode:', this.mode, 'textKey:', this.currentTextKey);
     // Check for both 'page-general' and 'page-general-generic' (the transformed key)
     if (this.chatContext === 'general' && this.currentTextKey && this.currentTextKey.startsWith('page-general')) {
+      // Check global variables first
+      const hasGlobalSummary = window.pageSummary !== null && window.pageSummaryPossibleQuestions !== null;
+      
       // Show "Summarise the page" button for ask-about-page chat
       console.log('[ChatDialog] Adding Summarise the page button');
       const summariseBtn = document.createElement('button');
       summariseBtn.className = 'vocab-chat-simplify-more-btn';
-      summariseBtn.textContent = 'Summarise the page';
+      summariseBtn.innerHTML = `${this.createSparkleIcon()} Summarise this page`;
       summariseBtn.id = 'vocab-chat-summarise-page-btn';
       
-      // Disable button if summary already exists
-      if (this.pageSummary) {
-        summariseBtn.disabled = true;
-        summariseBtn.classList.add('disabled');
-        console.log('[ChatDialog] Summarise button disabled - summary already exists');
-      }
-      
+      // If global summary exists, show "Clear summary" button
+      if (hasGlobalSummary) {
+        // Load from global variables to instance variables if needed
+        if (!this.pageSummary) {
+          this.pageSummary = window.pageSummary;
+          this.pagePossibleQuestions = window.pageSummaryPossibleQuestions;
+        }
+        
+        summariseBtn.innerHTML = 'Clear summary';
+        summariseBtn.disabled = false;
+        summariseBtn.classList.remove('disabled');
+        console.log('[ChatDialog] Global summary exists - showing "Clear summary" button');
+        
+        // Add onclick handler to clear summary
+        summariseBtn.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          e.stopImmediatePropagation();
+          console.log('[ChatDialog] Clear summary button clicked in simplified content!');
+          this.clearSummary();
+        }, true); // Use capture phase
+      } else {
       // Add onclick handler to call summarise API
-      // Use capture phase to ensure it runs before TextSelector's handler
       summariseBtn.addEventListener('click', (e) => {
         e.preventDefault();
         e.stopPropagation();
@@ -10658,6 +10705,7 @@ const ChatDialog = {
         console.log('[ChatDialog] Summarise button clicked in simplified content!');
         this.handleSummarisePage();
       }, true); // Use capture phase
+      }
       
       buttonContainer.appendChild(summariseBtn);
     } else if (this.chatContext !== 'general' && this.mode === 'simplified') {
@@ -10688,7 +10736,7 @@ const ChatDialog = {
     // If we have existing chat history, render it
     if (this.chatHistory && this.chatHistory.length > 0) {
       this.chatHistory.forEach(item => {
-        this.renderChatMessage(chatContainer, item.type, item.message);
+        this.renderChatMessage(chatContainer, item.type, item.message, item.possibleQuestions || []);
       });
       
       // Update delete button visibility and scroll to bottom after rendering
@@ -10737,27 +10785,44 @@ const ChatDialog = {
     
     // Always try to get the latest data from TextSelector first (for streaming updates)
     let dataToRender = null;
+    let textSelectorData = null;
     if (this.currentTextKey) {
       // Try to get data from TextSelector using the original textKey
       const originalTextKey = this.currentTextKey.replace(/-selected$/, '').replace(/-generic$/, '');
-      dataToRender = TextSelector.simplifiedTexts.get(originalTextKey);
-      if (dataToRender) {
+      textSelectorData = TextSelector.simplifiedTexts.get(originalTextKey);
+      if (textSelectorData) {
         console.log('[ChatDialog] Retrieved simplified data from TextSelector for key:', originalTextKey);
+        console.log('[ChatDialog] TextSelector data.possibleQuestions:', textSelectorData.possibleQuestions);
+        console.log('[ChatDialog] TextSelector data.possibleQuestions length:', textSelectorData.possibleQuestions?.length || 0);
       }
     }
     
-    // Fallback to this.simplifiedData if not found in TextSelector
-    if (!dataToRender) {
+    // Prefer this.simplifiedData if it has possibleQuestions (more recent complete event data)
+    // Otherwise use TextSelector data if available
+    if (this.simplifiedData && this.simplifiedData.possibleQuestions && this.simplifiedData.possibleQuestions.length > 0) {
       dataToRender = this.simplifiedData;
-      if (dataToRender) {
-        console.log('[ChatDialog] Using simplifiedData from ChatDialog');
-      }
+      console.log('[ChatDialog] Using simplifiedData from ChatDialog (has possibleQuestions)');
+      console.log('[ChatDialog] ChatDialog simplifiedData.possibleQuestions:', dataToRender.possibleQuestions);
+      console.log('[ChatDialog] ChatDialog simplifiedData.possibleQuestions length:', dataToRender.possibleQuestions?.length || 0);
+    } else if (textSelectorData) {
+      dataToRender = textSelectorData;
+      console.log('[ChatDialog] Using simplifiedData from TextSelector');
+    } else if (this.simplifiedData) {
+      dataToRender = this.simplifiedData;
+      console.log('[ChatDialog] Using simplifiedData from ChatDialog (fallback)');
+      console.log('[ChatDialog] ChatDialog simplifiedData.possibleQuestions:', dataToRender.possibleQuestions);
+      console.log('[ChatDialog] ChatDialog simplifiedData.possibleQuestions length:', dataToRender.possibleQuestions?.length || 0);
     }
     
     if (!dataToRender) {
       console.log('[ChatDialog] No simplified data available to render');
       return;
     }
+    
+    console.log('[ChatDialog] renderSimplifiedExplanations - dataToRender.possibleQuestions:', dataToRender.possibleQuestions);
+    console.log('[ChatDialog] renderSimplifiedExplanations - dataToRender.possibleQuestions type:', typeof dataToRender.possibleQuestions);
+    console.log('[ChatDialog] renderSimplifiedExplanations - dataToRender.possibleQuestions is array:', Array.isArray(dataToRender.possibleQuestions));
+    console.log('[ChatDialog] renderSimplifiedExplanations - dataToRender.possibleQuestions length:', dataToRender.possibleQuestions?.length || 0);
     
     container.innerHTML = '';
     
@@ -10776,6 +10841,16 @@ const ChatDialog = {
     console.log('[ChatDialog] Previous explanations count:', previousSimplifiedTextsArray.length);
     console.log('[ChatDialog] Current simplified text exists:', !!dataToRender.simplifiedText);
     
+    // Get explanationQuestions array - stores questions per explanation version
+    // Index 0 = first explanation, Index 1 = second explanation, etc.
+    // This ensures each explanation has its own set of possible questions
+    const explanationQuestions = Array.isArray(dataToRender.explanationQuestions) 
+      ? dataToRender.explanationQuestions 
+      : [];
+    
+    console.log('[ChatDialog] explanationQuestions array:', explanationQuestions);
+    console.log('[ChatDialog] explanationQuestions array length:', explanationQuestions.length);
+    
     // Render each explanation with header
     allExplanations.forEach((explanation, index) => {
       const item = document.createElement('div');
@@ -10793,8 +10868,169 @@ const ChatDialog = {
       
       item.appendChild(header);
       item.appendChild(textDisplay);
+      
+      // Get questions for THIS specific explanation from explanationQuestions array
+      // Each explanation has its own questions stored at the corresponding index
+      const questionsForThisExplanation = explanationQuestions[index] || [];
+      const validQuestions = Array.isArray(questionsForThisExplanation) && questionsForThisExplanation.length > 0
+        ? questionsForThisExplanation.filter(q => q && q.trim() !== '')
+        : [];
+      
+      console.log('[ChatDialog] ===== RENDERING EXPLANATION', index + 1, '=====');
+      console.log('[ChatDialog] Questions for explanation index', index, ':', questionsForThisExplanation);
+      console.log('[ChatDialog] Valid questions count:', validQuestions.length);
+      
+      // Render questions for this specific explanation if they exist
+      if (validQuestions.length > 0) {
+        console.log('[ChatDialog] ✓✓✓ RENDERING QUESTIONS FOR EXPLANATION', index + 1, '✓✓✓');
+        console.log('[ChatDialog] validQuestions to render:', validQuestions);
+        console.log('[SUBHRAM] Creating questions container...');
+        
+        const questionsContainer = document.createElement('div');
+        questionsContainer.className = 'vocab-chat-message-questions-container';
+        
+        console.log('[SUBHRAM] Building questions HTML...');
+        const questionsHTML = `
+          <h4 class="vocab-chat-message-questions-header">You might be interested on:</h4>
+          <div class="vocab-chat-message-questions-list">
+            ${validQuestions.map((question, qIndex) => {
+              console.log('[SUBHRAM] Mapping question', qIndex, ':', question);
+              return `
+              <div class="vocab-chat-message-question-item" data-question="${this.escapeHtml(question)}">
+                <span class="vocab-chat-message-question-icon">+</span>
+                <span>${this.escapeHtml(question)}</span>
+              </div>
+            `;
+            }).join('')}
+          </div>
+        `;
+        
+        console.log('[SUBHRAM] Questions HTML created, length:', questionsHTML.length);
+        console.log('[SUBHRAM] Setting innerHTML on questionsContainer...');
+        questionsContainer.innerHTML = questionsHTML;
+        
+        // Verify the HTML was set
+        console.log('[SUBHRAM] questionsContainer.innerHTML length after setting:', questionsContainer.innerHTML.length);
+        console.log('[SUBHRAM] questionsContainer children count:', questionsContainer.children.length);
+        
+        // Add click handlers to question items
+        const questionItems = questionsContainer.querySelectorAll('.vocab-chat-message-question-item');
+        console.log('[SUBHRAM] Found question items:', questionItems.length);
+        questionItems.forEach((qItem, qIndex) => {
+          console.log('[SUBHRAM] Adding click handler to question item', qIndex);
+          qItem.addEventListener('click', () => {
+            const question = qItem.getAttribute('data-question');
+            console.log('[ChatDialog] Simplified explanation question clicked:', question);
+            this.askQuestion(question);
+          });
+        });
+        
+        // Append questions container to the explanation item
+        console.log('[SUBHRAM] Appending questionsContainer to item...');
+        item.appendChild(questionsContainer);
+        console.log('[SUBHRAM] questionsContainer appended. Item children count:', item.children.length);
+        
+        // Verify it's in the DOM
+        const verifyContainer = item.querySelector('.vocab-chat-message-questions-container');
+        console.log('[SUBHRAM] Verification - questionsContainer found in item:', !!verifyContainer);
+        
+        // Trigger animation by forcing a reflow
+        setTimeout(() => {
+          void questionsContainer.offsetHeight;
+          console.log('[SUBHRAM] Animation trigger executed');
+        }, 0);
+      } else {
+        console.log('[SUBHRAM] ✗✗✗ NOT RENDERING QUESTIONS ✗✗✗');
+        console.log('[SUBHRAM] Reason - validQuestions.length is 0');
+      }
+      
       container.appendChild(item);
+      console.log('[SUBHRAM] Item appended to container. Container children count:', container.children.length);
     });
+    
+    console.log('[SUBHRAM] ===== FINISHED RENDERING ALL EXPLANATIONS =====');
+    console.log('[SUBHRAM] Final container children count:', container.children.length);
+    const finalQuestionsContainer = container.querySelector('.vocab-chat-message-questions-container');
+    console.log('[SUBHRAM] Final verification - questionsContainer found in main container:', !!finalQuestionsContainer);
+    
+    // Check if we need to show brain icon (explanation complete but questions not yet received)
+    // Show brain icon if:
+    // 1. We have at least one explanation rendered
+    // 2. The last explanation doesn't have questions yet
+    // 3. We're still waiting for possibleQuestions from the backend
+    const lastExplanationIndex = allExplanations.length - 1;
+    const lastExplanationQuestions = explanationQuestions[lastExplanationIndex] || [];
+    const hasQuestionsForLastExplanation = Array.isArray(lastExplanationQuestions) && lastExplanationQuestions.length > 0;
+    
+    // Check if we're still waiting for questions (explanation is complete but questions haven't arrived)
+    // This happens when the explanation streaming is done but the complete event with questions hasn't arrived yet
+    const isWaitingForQuestions = allExplanations.length > 0 && !hasQuestionsForLastExplanation;
+    
+    if (isWaitingForQuestions) {
+      console.log('[ChatDialog] Showing brain icon - waiting for possibleQuestions');
+      this.showSimplifiedBrainIcon(container);
+    } else {
+      console.log('[ChatDialog] Hiding brain icon - questions received or no explanations');
+      this.hideSimplifiedBrainIcon(container);
+    }
+  },
+  
+  /**
+   * Show brain icon below simplified explanations while waiting for possibleQuestions
+   * @param {HTMLElement} container - The simplified explanations container
+   */
+  showSimplifiedBrainIcon(container) {
+    if (!container) return;
+    
+    // Remove existing brain icon if any
+    this.hideSimplifiedBrainIcon(container);
+    
+    // Create brain icon container
+    const brainIconContainer = document.createElement('div');
+    brainIconContainer.id = 'vocab-chat-simplified-brain-icon-container';
+    brainIconContainer.className = 'vocab-chat-simplified-brain-icon-container';
+    
+    // Create brain icon SVG with AI text in center (based on reference image)
+    brainIconContainer.innerHTML = `
+      <svg width="48" height="48" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" class="vocab-chat-simplified-brain-icon">
+        <!-- Brain outline (two hemispheres) -->
+        <path d="M12 8C8 8 5 11 5 15C5 17 5.5 18.5 6.5 20C5.5 20.2 5 20.8 5 21.5C5 22.3 5.6 23 6.5 23H7C7 23.6 7.4 24 8 24H9C9.6 24 10 23.6 10 23V22C10 21.4 10.4 21 11 21C11.6 21 12 21.4 12 22V23C12 23.6 12.4 24 13 24H14C14.6 24 15 23.6 15 23H15.5C16.3 23 17 22.3 17 21.5C17 20.8 16.5 20.2 15.5 20C16.5 18.5 17 17 17 15C17 11 14 8 10 8C14 8 17 11 17 15C17 17 16.5 18.5 15.5 20C16.5 20.2 17 20.8 17 21.5C17 22.3 16.3 23 15.5 23H15C15 23.6 14.6 24 14 24H13C12.4 24 12 23.6 12 23V22C12 21.4 11.6 21 11 21C10.4 21 10 21.4 10 22V23C10 23.6 9.6 24 9 24H8C7.4 24 7 23.6 7 23H6.5C5.6 23 5 22.3 5 21.5C5 20.8 5.5 20.2 6.5 20C5.5 18.5 5 17 5 15C5 11 8 8 12 8Z" stroke="#9527F5" stroke-width="2" fill="none"/>
+        <!-- Brain folds (gyri and sulci) -->
+        <path d="M8 12C8.5 11 9.5 10.5 10.5 11" stroke="#9527F5" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+        <path d="M15 12C14.5 11 13.5 10.5 12.5 11" stroke="#9527F5" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+        <path d="M9 15C9.5 14 10.5 13.5 11.5 14" stroke="#9527F5" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+        <path d="M14 15C13.5 14 12.5 13.5 11.5 14" stroke="#9527F5" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+        <path d="M10 18C10.5 17 11.5 16.5 12.5 17" stroke="#9527F5" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+        <!-- Central square with rounded corners for AI text -->
+        <rect x="16" y="16" width="16" height="16" rx="2" stroke="#9527F5" stroke-width="2" fill="#9527F5"/>
+        <!-- AI text inside square -->
+        <text x="24" y="28" font-family="Arial, sans-serif" font-size="10" font-weight="bold" fill="#FFFFFF" text-anchor="middle" dominant-baseline="middle">AI</text>
+      </svg>
+    `;
+    
+    // Append to container
+    container.appendChild(brainIconContainer);
+  },
+  
+  /**
+   * Hide brain icon below simplified explanations
+   * @param {HTMLElement} container - The simplified explanations container
+   */
+  hideSimplifiedBrainIcon(container) {
+    if (!container) {
+      // Try to find container if not provided
+      const defaultContainer = document.getElementById('vocab-chat-simplified-container');
+      if (defaultContainer) {
+        const brainIcon = defaultContainer.querySelector('#vocab-chat-simplified-brain-icon-container');
+        if (brainIcon) brainIcon.remove();
+      }
+      return;
+    }
+    
+    const brainIcon = container.querySelector('#vocab-chat-simplified-brain-icon-container');
+    if (brainIcon) {
+      brainIcon.remove();
+    }
   },
   
   /**
@@ -10835,10 +11071,82 @@ const ChatDialog = {
       previousSimplifiedTexts: previousSimplifiedTexts
     });
     
+    // Get full page text to extract context (same context as original simplify call)
+    let pageText = '';
+    if (pageTextContent) {
+      try {
+        const contentData = JSON.parse(pageTextContent);
+        pageText = contentData.text || '';
+      } catch (e) {
+        console.warn('[ChatDialog] Error parsing pageTextContent, using fallback');
+        pageText = document.body.innerText || document.body.textContent || '';
+      }
+    } else {
+      pageText = document.body.innerText || document.body.textContent || '';
+    }
+    
+    // Extract context: 50 words before + selected text + 50 words after
+    // Use ButtonPanel's extractContextForText method if available, otherwise use inline logic
+    let context = '';
+    if (typeof ButtonPanel !== 'undefined' && ButtonPanel.extractContextForText) {
+      context = ButtonPanel.extractContextForText(
+        pageText,
+        this.simplifiedData.textStartIndex,
+        this.simplifiedData.textLength,
+        this.simplifiedData.text
+      );
+    } else {
+      // Fallback: inline context extraction using sentences
+      const textBefore = pageText.substring(0, this.simplifiedData.textStartIndex);
+      const textAfter = pageText.substring(this.simplifiedData.textStartIndex + this.simplifiedData.textLength);
+      
+      // Helper function to split text into sentences
+      const splitIntoSentences = (text) => {
+        if (!text || text.trim().length === 0) return [];
+        const sentenceRegex = /[.!?]+(?:\s+|$)/g;
+        const sentences = [];
+        let lastIndex = 0;
+        let match;
+        while ((match = sentenceRegex.exec(text)) !== null) {
+          const sentenceEnd = match.index + match[0].length;
+          const sentence = text.substring(lastIndex, sentenceEnd).trim();
+          if (sentence.length > 0) {
+            sentences.push(sentence);
+          }
+          lastIndex = sentenceEnd;
+        }
+        if (lastIndex < text.length) {
+          const remaining = text.substring(lastIndex).trim();
+          if (remaining.length > 0) {
+            sentences.push(remaining);
+          }
+        }
+        return sentences;
+      };
+      
+      const getLastNSentences = (text, n) => {
+        if (!text || n <= 0) return '';
+        const sentences = splitIntoSentences(text);
+        const startIndex = Math.max(0, sentences.length - n);
+        return sentences.slice(startIndex).join(' ');
+      };
+      
+      const getFirstNSentences = (text, n) => {
+        if (!text || n <= 0) return '';
+        const sentences = splitIntoSentences(text);
+        return sentences.slice(0, n).join(' ');
+      };
+      
+      const sentencesBefore = getLastNSentences(textBefore, 3);
+      const sentencesAfter = getFirstNSentences(textAfter, 3);
+      context = [sentencesBefore, this.simplifiedData.text, sentencesAfter].filter(p => p.trim().length > 0).join(' ').trim();
+    }
+    
     const textSegments = [{
       textStartIndex: this.simplifiedData.textStartIndex,
       textLength: this.simplifiedData.textLength,
       text: this.simplifiedData.text,
+      context: context, // Add context parameter
       previousSimplifiedTexts: previousSimplifiedTexts
     }];
     
@@ -10858,6 +11166,11 @@ const ChatDialog = {
         if (eventData.chunk !== undefined) {
           console.log('[ChatDialog] Chunk event - chunk:', eventData.chunk, 'accumulatedSimplifiedText:', eventData.accumulatedSimplifiedText);
           
+          // Get existing data to preserve explanationQuestions structure
+          const originalTextKey = this.currentTextKey.replace(/-selected$/, '').replace(/-generic$/, '');
+          const existingData = TextSelector.simplifiedTexts.get(originalTextKey) || {};
+          const streamingExplanationQuestions = existingData.explanationQuestions || [];
+          
           // Update simplified data with streaming text
           this.simplifiedData = {
             textStartIndex: eventData.textStartIndex,
@@ -10865,11 +11178,13 @@ const ChatDialog = {
             text: eventData.text,
             simplifiedText: eventData.accumulatedSimplifiedText || '', // Use accumulated text for streaming
             previousSimplifiedTexts: previousSimplifiedTextsArray,
-            shouldAllowSimplifyMore: false // Will be set on complete
+            shouldAllowSimplifyMore: false, // Will be set on complete
+            explanationQuestions: streamingExplanationQuestions, // Preserve existing questions structure
+            possibleQuestions: [], // Will be set on complete
+            context: context // Store context for ask API (from closure)
           };
           
           // Update stored data - use original text key for storage
-          const originalTextKey = this.currentTextKey.replace(/-selected$/, '').replace(/-generic$/, '');
           TextSelector.simplifiedTexts.set(originalTextKey, this.simplifiedData);
           
           // Update UI in real-time - re-render all explanations with streaming text
@@ -10891,20 +11206,79 @@ const ChatDialog = {
         }
         
         // Handle complete event (final data)
-        else if (eventData.type === 'complete' || eventData.simplifiedText) {
+        // IMPORTANT: Check for type === 'complete' first to ensure we get possibleQuestions
+        else if (eventData.type === 'complete') {
+          console.log('[ChatDialog] ===== COMPLETE EVENT HANDLER TRIGGERED =====');
           console.log('[ChatDialog] Complete event - simplifiedText:', eventData.simplifiedText, 'shouldAllowSimplifyMore:', eventData.shouldAllowSimplifyMore);
+          console.log('[ChatDialog] Complete event - possibleQuestions received:', eventData.possibleQuestions);
+          console.log('[ChatDialog] Complete event - possibleQuestions type:', typeof eventData.possibleQuestions);
+          console.log('[ChatDialog] Complete event - possibleQuestions is array:', Array.isArray(eventData.possibleQuestions));
+          console.log('[ChatDialog] Complete event - possibleQuestions length:', eventData.possibleQuestions?.length || 0);
+          console.log('[ChatDialog] Complete event - possibleQuestions value (stringified):', JSON.stringify(eventData.possibleQuestions));
+          
+          // Ensure possibleQuestions is an array and store directly in ChatDialog property (like pagePossibleQuestions)
+          this.simplifiedPossibleQuestions = Array.isArray(eventData.possibleQuestions) 
+            ? eventData.possibleQuestions 
+            : (eventData.possibleQuestions ? [eventData.possibleQuestions] : []);
+          
+          console.log('[ChatDialog] Stored simplifiedPossibleQuestions:', this.simplifiedPossibleQuestions);
+          console.log('[ChatDialog] Stored simplifiedPossibleQuestions length:', this.simplifiedPossibleQuestions.length);
           
           // Update simplified data with final text
           // previousSimplifiedTextsArray already includes all previous + the old current simplified text
           // The new simplifiedText becomes the new current
+          
+          // Get existing data to preserve explanationQuestions structure
+          const originalTextKey = this.currentTextKey.replace(/-selected$/, '').replace(/-generic$/, '');
+          const existingData = TextSelector.simplifiedTexts.get(originalTextKey) || {};
+          
+          // Initialize explanationQuestions array if it doesn't exist
+          // This array stores possibleQuestions for each explanation version
+          // Index 0 = first explanation, Index 1 = second explanation, etc.
+          let explanationQuestions = existingData.explanationQuestions || [];
+          
+          // Ensure explanationQuestions is an array
+          if (!Array.isArray(explanationQuestions)) {
+            explanationQuestions = [];
+          }
+          
+          // Calculate the index for the new explanation
+          // The new explanation index = number of previous explanations (including the old current one that was moved to previous)
+          const newExplanationIndex = previousSimplifiedTexts.length;
+          
+          // Store possibleQuestions for this specific explanation version
+          // Ensure it's an array
+          const questionsForThisExplanation = Array.isArray(this.simplifiedPossibleQuestions) 
+            ? this.simplifiedPossibleQuestions 
+            : (this.simplifiedPossibleQuestions ? [this.simplifiedPossibleQuestions] : []);
+          
+          // Extend or update the explanationQuestions array
+          // If the index doesn't exist yet, push to array
+          // If it exists, update it (shouldn't happen, but handle it)
+          if (newExplanationIndex >= explanationQuestions.length) {
+            explanationQuestions.push(questionsForThisExplanation);
+          } else {
+            explanationQuestions[newExplanationIndex] = questionsForThisExplanation;
+          }
+          
+          console.log('[ChatDialog] Storing questions for explanation index:', newExplanationIndex);
+          console.log('[ChatDialog] explanationQuestions array length:', explanationQuestions.length);
+          console.log('[ChatDialog] Questions for this explanation:', questionsForThisExplanation);
+          
         this.simplifiedData = {
           textStartIndex: eventData.textStartIndex,
           textLength: eventData.textLength,
           text: eventData.text,
           simplifiedText: eventData.simplifiedText,
             previousSimplifiedTexts: previousSimplifiedTexts, // Use the array we sent to API (includes all previous + old current)
-          shouldAllowSimplifyMore: eventData.shouldAllowSimplifyMore || false
+          shouldAllowSimplifyMore: eventData.shouldAllowSimplifyMore || false,
+          explanationQuestions: explanationQuestions, // Store questions per explanation version
+          possibleQuestions: this.simplifiedPossibleQuestions, // Keep for backward compatibility, but use explanationQuestions instead
+          context: context // Store context for ask API (from closure)
         };
+        
+        console.log('[ChatDialog] Updated simplifiedData.possibleQuestions:', this.simplifiedData.possibleQuestions);
+        console.log('[ChatDialog] Updated simplifiedData.possibleQuestions length:', this.simplifiedData.possibleQuestions.length);
           
           console.log('[ChatDialog] Updated simplifiedData after complete event:', {
             previousSimplifiedTextsCount: previousSimplifiedTexts.length,
@@ -10912,21 +11286,31 @@ const ChatDialog = {
             previousSimplifiedTexts: previousSimplifiedTexts
           });
         
-        // Update stored data - use original text key for storage
-        const originalTextKey = this.currentTextKey.replace(/-selected$/, '').replace(/-generic$/, '');
+        // Update stored data - use original text key for storage (already defined above)
         TextSelector.simplifiedTexts.set(originalTextKey, this.simplifiedData);
         
         console.log('[ChatDialog] Updated simplified data in TextSelector:', {
           textKey: originalTextKey,
           previousSimplifiedTextsCount: previousSimplifiedTextsArray.length,
           hasCurrentSimplifiedText: !!eventData.simplifiedText,
-          shouldAllowSimplifyMore: eventData.shouldAllowSimplifyMore || false
+          shouldAllowSimplifyMore: eventData.shouldAllowSimplifyMore || false,
+          possibleQuestionsCount: this.simplifiedData.possibleQuestions.length
         });
+        
+        // Verify the data was stored correctly
+        const storedData = TextSelector.simplifiedTexts.get(originalTextKey);
+        console.log('[ChatDialog] Verification - stored data.possibleQuestions:', storedData?.possibleQuestions);
+        console.log('[ChatDialog] Verification - stored data.possibleQuestions length:', storedData?.possibleQuestions?.length || 0);
         
           // Update UI - re-render all explanations with final text
         const container = this.dialogContainer.querySelector('#vocab-chat-simplified-container');
         if (container) {
+          console.log('[ChatDialog] About to call renderSimplifiedExplanations - this.simplifiedData.possibleQuestions:', this.simplifiedData.possibleQuestions);
+          console.log('[ChatDialog] About to call renderSimplifiedExplanations - this.simplifiedData.possibleQuestions length:', this.simplifiedData.possibleQuestions.length);
           this.renderSimplifiedExplanations(container);
+          console.log('[ChatDialog] After renderSimplifiedExplanations call');
+        } else {
+          console.log('[ChatDialog] Container not found for rendering questions');
         }
         
           // Reset button - always enable
@@ -10938,6 +11322,55 @@ const ChatDialog = {
         }
         
         this.isSimplifying = false;
+        }
+        // Fallback: Handle events with simplifiedText but no type (backward compatibility)
+        else if (eventData.simplifiedText && !eventData.chunk && eventData.type !== 'complete') {
+          console.log('[ChatDialog] Fallback complete event (has simplifiedText but no type)');
+          console.log('[ChatDialog] Fallback - possibleQuestions received:', eventData.possibleQuestions);
+          
+          // Ensure possibleQuestions is an array
+          const possibleQuestionsArray = Array.isArray(eventData.possibleQuestions) 
+            ? eventData.possibleQuestions 
+            : (eventData.possibleQuestions ? [eventData.possibleQuestions] : []);
+          
+          // Get existing data to preserve explanationQuestions structure
+          const originalTextKey = this.currentTextKey.replace(/-selected$/, '').replace(/-generic$/, '');
+          const existingData = TextSelector.simplifiedTexts.get(originalTextKey) || {};
+          
+          // Initialize explanationQuestions array if it doesn't exist
+          let explanationQuestions = existingData.explanationQuestions || [];
+          if (!Array.isArray(explanationQuestions)) {
+            explanationQuestions = [];
+          }
+          
+          // For fallback, this is the first explanation (index 0)
+          const explanationIndex = 0;
+          if (explanationIndex >= explanationQuestions.length) {
+            explanationQuestions.push(possibleQuestionsArray);
+          } else {
+            explanationQuestions[explanationIndex] = possibleQuestionsArray;
+          }
+          
+          // Update simplified data
+          this.simplifiedData = {
+            textStartIndex: eventData.textStartIndex,
+            textLength: eventData.textLength,
+            text: eventData.text,
+            simplifiedText: eventData.simplifiedText,
+            previousSimplifiedTexts: previousSimplifiedTexts,
+            shouldAllowSimplifyMore: eventData.shouldAllowSimplifyMore || false,
+            explanationQuestions: explanationQuestions,
+            possibleQuestions: possibleQuestionsArray // Keep for backward compatibility
+          };
+          
+          // Update stored data
+          TextSelector.simplifiedTexts.set(originalTextKey, this.simplifiedData);
+          
+          // Re-render
+          const container = this.dialogContainer.querySelector('#vocab-chat-simplified-container');
+          if (container) {
+            this.renderSimplifiedExplanations(container);
+          }
         }
       },
       // onComplete callback
@@ -11002,8 +11435,8 @@ const ChatDialog = {
     summariseBtn.disabled = true;
     summariseBtn.classList.add('disabled', 'loading');
     
-    // Store original content
-    const originalText = summariseBtn.textContent;
+    // Store original content (with icon)
+    const originalContent = summariseBtn.innerHTML;
     
     // Show white spinner inside button
     summariseBtn.innerHTML = `
@@ -11033,8 +11466,9 @@ const ChatDialog = {
       
       // Call SummariseService with SSE
       try {
-        // Initialize streaming summary
+        // Initialize streaming summary and questions
         this.pageSummary = '';
+        this.pagePossibleQuestions = [];
         let summaryContainer = null;
         let summaryShown = false;
         
@@ -11065,26 +11499,58 @@ const ChatDialog = {
               if (eventData.accumulated) {
                 this.pageSummary = eventData.accumulated;
                 
-                // Show summary container on first chunk and hide button
+                // Store accumulated summary in global variable during streaming
+                window.pageSummary = eventData.accumulated;
+                
+                // Show summary container on first chunk
                 if (summaryContainer && !summaryShown) {
                   summaryShown = true;
                   console.log('[ChatDialog] Showing summary container on first chunk');
-                  
-                  // Hide the button completely instead of disabling it
-                  if (summariseBtn) {
-                    summariseBtn.style.display = 'none';
-                    console.log('[ChatDialog] Summarise button hidden on first chunk');
-                  }
                 }
                 
                 // Update summary UI in real-time
                 if (summaryContainer) {
                   summaryContainer.innerHTML = `
-                    <h3 class="vocab-chat-page-summary-header">Summary</h3>
+                    <h3 class="vocab-chat-page-summary-header">Page summary</h3>
                     <div class="vocab-chat-page-summary-content">
                       ${this.renderMarkdown(this.pageSummary)}
                     </div>
                   `;
+                  
+                  // Attach click handlers to reference markers in summary
+                  const summaryContent = summaryContainer.querySelector('.vocab-chat-page-summary-content');
+                  if (summaryContent) {
+                    this.attachReferenceMarkerHandlers(summaryContent);
+                  }
+                  
+                  // Auto-scroll to bottom as content is being added
+                  // Find the scrollable content container - try multiple methods
+                  let scrollableContent = summaryContainer.closest('.vocab-chat-scrollable-content');
+                  
+                  // If not found via closest, try finding it from the parent
+                  if (!scrollableContent) {
+                    let parent = summaryContainer.parentElement;
+                    while (parent && !scrollableContent) {
+                      if (parent.classList && parent.classList.contains('vocab-chat-scrollable-content')) {
+                        scrollableContent = parent;
+                        break;
+                      }
+                      parent = parent.parentElement;
+                    }
+                  }
+                  
+                  // If still not found, try querying from the dialog container
+                  if (!scrollableContent && this.dialogContainer) {
+                    scrollableContent = this.dialogContainer.querySelector('.vocab-chat-scrollable-content');
+                  }
+                  
+                  if (scrollableContent) {
+                    // Only auto-scroll if user is already at or near the bottom
+                    // This prevents forcing scroll when user has manually scrolled up
+                    this.scrollScrollableContent(scrollableContent, true, true);
+                  } else {
+                    console.warn('[ChatDialog] Could not find scrollable content container for auto-scroll');
+                  }
                 }
               }
             }
@@ -11092,24 +11558,41 @@ const ChatDialog = {
             // Handle complete event (final summary)
             else if (eventData.type === 'complete' && eventData.summary) {
               console.log('[ChatDialog] Complete event - summary length:', eventData.summary.length);
+              console.log('[ChatDialog] Possible questions:', eventData.possibleQuestions?.length || 0);
               
-              // Store final summary
+              // Store final summary and possible questions in instance variables
               this.pageSummary = eventData.summary;
+              this.pagePossibleQuestions = eventData.possibleQuestions || [];
               
-              // Update summary UI with final data
+              // Store in global variables for persistence across dialog open/close
+              window.pageSummary = eventData.summary;
+              window.pageSummaryPossibleQuestions = eventData.possibleQuestions || [];
+              console.log('[ChatDialog] Stored summary in global variables');
+              
+              // Update summary UI with final data including questions
               if (summaryContainer) {
-                summaryContainer.innerHTML = `
-                  <h3 class="vocab-chat-page-summary-header">Summary</h3>
-                  <div class="vocab-chat-page-summary-content">
-                    ${this.renderMarkdown(this.pageSummary)}
-                  </div>
-                `;
+                this.renderPageSummaryWithQuestions(summaryContainer);
               }
               
-              // Button is already hidden from first chunk, just remove loading state if needed
+              // Change button to "Clear summary" after completion
         if (summariseBtn) {
-          summariseBtn.classList.remove('loading');
-                console.log('[ChatDialog] Summarise button remains hidden after completion');
+                summariseBtn.disabled = false;
+                summariseBtn.classList.remove('loading', 'disabled');
+                summariseBtn.innerHTML = 'Clear summary';
+                summariseBtn.style.display = 'block';
+                
+                // Update click handler to clear summary
+                summariseBtn.replaceWith(summariseBtn.cloneNode(true));
+                const newBtn = document.getElementById('vocab-chat-summarise-page-btn');
+                newBtn.addEventListener('click', (e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  e.stopImmediatePropagation();
+                  console.log('[ChatDialog] Clear summary button clicked!');
+                  this.clearSummary();
+                }, true);
+                
+                console.log('[ChatDialog] Button changed to "Clear summary" after completion');
               }
             }
           },
@@ -11144,7 +11627,7 @@ const ChatDialog = {
             if (summariseBtn) {
               summariseBtn.disabled = false;
               summariseBtn.classList.remove('disabled', 'loading');
-          summariseBtn.textContent = originalText;
+              summariseBtn.innerHTML = originalContent;
         }
           }
         );
@@ -11174,7 +11657,7 @@ const ChatDialog = {
         if (summariseBtn) {
           summariseBtn.disabled = false;
           summariseBtn.classList.remove('disabled', 'loading');
-          summariseBtn.textContent = originalText;
+          summariseBtn.innerHTML = originalContent;
         }
       }
     } catch (error) {
@@ -11187,7 +11670,7 @@ const ChatDialog = {
       if (summariseBtn) {
         summariseBtn.disabled = false;
         summariseBtn.classList.remove('disabled', 'loading');
-        summariseBtn.textContent = originalText;
+        summariseBtn.innerHTML = originalContent;
       }
     }
   },
@@ -11220,15 +11703,224 @@ const ChatDialog = {
       buttonContainer.parentNode.insertBefore(summaryContainer, buttonContainer);
     }
     
-    // Render summary content
+    // Render summary with questions
+    this.renderPageSummaryWithQuestions(summaryContainer);
+    
+    console.log('[ChatDialog] Page summary rendered above button');
+  },
+  
+  /**
+   * Render page summary with possible questions
+   * @param {HTMLElement} summaryContainer - The container element to render into
+   */
+  renderPageSummaryWithQuestions(summaryContainer) {
+    if (!this.pageSummary) {
+      return;
+    }
+    
+    // Build questions HTML if they exist
+    let questionsHTML = '';
+    if (this.pagePossibleQuestions && this.pagePossibleQuestions.length > 0) {
+      const validQuestions = this.pagePossibleQuestions.filter(q => q && q.trim() !== '');
+      if (validQuestions.length > 0) {
+        questionsHTML = `
+          <div class="vocab-chat-page-questions-container">
+            <h4 class="vocab-chat-page-questions-header">Would you like to know ?</h4>
+            <div class="vocab-chat-page-questions-list">
+              ${validQuestions.map((question, index) => `
+                <div class="vocab-chat-page-question-item" data-question="${this.escapeHtml(question)}">
+                  <span class="vocab-chat-page-question-icon">+</span>
+                  <span>${this.escapeHtml(question)}</span>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        `;
+      }
+    }
+    
+    // Render summary content with questions
     summaryContainer.innerHTML = `
-      <h3 class="vocab-chat-page-summary-header">Summary</h3>
+      <h3 class="vocab-chat-page-summary-header">Page summary</h3>
       <div class="vocab-chat-page-summary-content">
         ${this.renderMarkdown(this.pageSummary)}
       </div>
+      ${questionsHTML}
     `;
     
-    console.log('[ChatDialog] Page summary rendered above button');
+    // Add click handlers to question items
+    const questionItems = summaryContainer.querySelectorAll('.vocab-chat-page-question-item');
+    questionItems.forEach(item => {
+      item.addEventListener('click', () => {
+        const question = item.getAttribute('data-question');
+        console.log('[ChatDialog] Question clicked:', question);
+        this.askQuestion(question);
+      });
+    });
+    
+    // Trigger animation by forcing a reflow for questions container
+    const questionsContainer = summaryContainer.querySelector('.vocab-chat-page-questions-container');
+    if (questionsContainer) {
+      void questionsContainer.offsetHeight;
+    }
+    
+    console.log('[ChatDialog] Page summary with questions rendered');
+  },
+  
+  /**
+   * Render possible questions below a chat message
+   * @param {Array<string>} possibleQuestions - Array of question strings
+   * @returns {HTMLElement|null} The questions container element or null if no valid questions
+   */
+  renderMessageQuestions(possibleQuestions) {
+    console.log('[ChatDialog] renderMessageQuestions called with:', possibleQuestions);
+    console.log('[ChatDialog] renderMessageQuestions type:', typeof possibleQuestions);
+    console.log('[ChatDialog] renderMessageQuestions is array:', Array.isArray(possibleQuestions));
+    
+    if (!possibleQuestions || possibleQuestions.length === 0) {
+      console.log('[ChatDialog] renderMessageQuestions: No questions or empty array, returning null');
+      return null;
+    }
+    
+    const validQuestions = possibleQuestions.filter(q => q && q.trim() !== '');
+    console.log('[ChatDialog] renderMessageQuestions: Valid questions after filtering:', validQuestions);
+    if (validQuestions.length === 0) {
+      console.log('[ChatDialog] renderMessageQuestions: No valid questions after filtering, returning null');
+      return null;
+    }
+    
+    // Create questions container
+    const questionsContainer = document.createElement('div');
+    questionsContainer.className = 'vocab-chat-message-questions-container';
+    
+    // Build questions HTML
+    const questionsHTML = `
+      <h4 class="vocab-chat-message-questions-header">You might be interested on:</h4>
+      <div class="vocab-chat-message-questions-list">
+        ${validQuestions.map((question, index) => `
+          <div class="vocab-chat-message-question-item" data-question="${this.escapeHtml(question)}">
+            <span class="vocab-chat-message-question-icon">+</span>
+            <span>${this.escapeHtml(question)}</span>
+          </div>
+        `).join('')}
+      </div>
+    `;
+    
+    questionsContainer.innerHTML = questionsHTML;
+    
+    // Add click handlers to question items
+    const questionItems = questionsContainer.querySelectorAll('.vocab-chat-message-question-item');
+    questionItems.forEach(item => {
+      item.addEventListener('click', () => {
+        const question = item.getAttribute('data-question');
+        console.log('[ChatDialog] Message question clicked:', question);
+        this.askQuestion(question);
+      });
+    });
+    
+    // Trigger animation by forcing a reflow
+    void questionsContainer.offsetHeight;
+    
+    // Scroll to bottom after questions are rendered to ensure they're visible
+    const chatContainer = document.getElementById('vocab-chat-messages');
+    if (chatContainer) {
+      // Use setTimeout to ensure DOM is fully updated before scrolling
+      setTimeout(() => {
+        this.scrollToBottom(chatContainer, false);
+      }, 50);
+    }
+    
+    return questionsContainer;
+  },
+  
+  /**
+   * Escape HTML to prevent XSS
+   * @param {string} text - Text to escape
+   * @returns {string} Escaped text
+   */
+  escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  },
+  
+  /**
+   * Ask a question by setting it in the input and sending it
+   * @param {string} question - The question to ask
+   */
+  askQuestion(question) {
+    if (!question || question.trim() === '') {
+      return;
+    }
+    
+    // Find the input field
+    const inputField = document.getElementById('vocab-chat-input');
+    if (!inputField) {
+      console.warn('[ChatDialog] Input field not found');
+      return;
+    }
+    
+    // Set the question in the input field
+    inputField.value = question.trim();
+    
+    // Trigger input event to ensure UI updates
+    inputField.dispatchEvent(new Event('input', { bubbles: true }));
+    
+    // Focus the input
+    inputField.focus();
+    
+    // Send the message
+    setTimeout(() => {
+      this.sendMessage();
+    }, 100);
+    
+    console.log('[ChatDialog] Question set in input and sent:', question);
+  },
+  
+  /**
+   * Clear the page summary and reset the button
+   */
+  clearSummary() {
+    console.log('[ChatDialog] Clearing page summary and questions');
+    
+    // Clear the summary data and questions in instance variables
+    this.pageSummary = '';
+    this.pagePossibleQuestions = [];
+    this.simplifiedPossibleQuestions = []; // Also clear simplified questions
+    
+    // Clear global variables
+    window.pageSummary = null;
+    window.pageSummaryPossibleQuestions = null;
+    console.log('[ChatDialog] Summary and questions data cleared (both instance and global)');
+    
+    // Remove summary container (which includes questions)
+    const summaryContainer = document.getElementById('vocab-chat-page-summary-container');
+    if (summaryContainer) {
+      summaryContainer.remove();
+      console.log('[ChatDialog] Summary container (including questions) removed');
+    }
+    
+    // Reset button to "Summarise the page"
+    const summariseBtn = document.getElementById('vocab-chat-summarise-page-btn');
+    if (summariseBtn) {
+      summariseBtn.disabled = false;
+      summariseBtn.classList.remove('disabled', 'loading');
+      summariseBtn.innerHTML = `${this.createSparkleIcon()} Summarise this page`;
+      summariseBtn.style.display = 'block';
+      
+      // Update click handler back to handleSummarisePage
+      summariseBtn.replaceWith(summariseBtn.cloneNode(true));
+      const newBtn = document.getElementById('vocab-chat-summarise-page-btn');
+      newBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
+        console.log('[ChatDialog] Summarise button clicked!');
+        this.handleSummarisePage();
+      }, true);
+      
+      console.log('[ChatDialog] Button reset to "Summarise the page"');
+    }
   },
   
   /**
@@ -11245,22 +11937,28 @@ const ChatDialog = {
     
     // Create summary container (above button) for ask-about-page chat
     if (this.chatContext === 'general' && this.currentTextKey && this.currentTextKey.startsWith('page-general')) {
-      const summaryContainer = document.createElement('div');
-      summaryContainer.id = 'vocab-chat-page-summary-container';
-      summaryContainer.className = 'vocab-chat-page-summary-container';
+      // Check global variables first
+      const hasGlobalSummary = window.pageSummary !== null && window.pageSummaryPossibleQuestions !== null;
       
-      // Render summary if it exists
-      if (this.pageSummary) {
-        summaryContainer.innerHTML = `
-          <h3 class="vocab-chat-page-summary-header">Summary</h3>
-          <h3 class="vocab-chat-page-summary-header">Summary</h3>
-          <div class="vocab-chat-page-summary-content">
-            ${this.renderMarkdown(this.pageSummary)}
-          </div>
-        `;
+      // Only create and render summary container if global variables are not null
+      if (hasGlobalSummary) {
+        const summaryContainer = document.createElement('div');
+        summaryContainer.id = 'vocab-chat-page-summary-container';
+        summaryContainer.className = 'vocab-chat-page-summary-container';
+        
+        // Load from global variables to instance variables if needed
+        if (!this.pageSummary) {
+          this.pageSummary = window.pageSummary;
+          this.pagePossibleQuestions = window.pageSummaryPossibleQuestions;
+        }
+        
+        // Render summary if it exists
+        if (this.pageSummary) {
+          this.renderPageSummaryWithQuestions(summaryContainer);
+        }
+        
+        content.appendChild(summaryContainer);
       }
-      
-      content.appendChild(summaryContainer);
     }
     
     // Create "Summarise the page" button container for ask-about-page chat
@@ -11270,21 +11968,38 @@ const ChatDialog = {
     // Show "Summarise the page" button for ask-about-page chat (page-general)
     // Check for both 'page-general' and 'page-general-generic' (the transformed key)
     if (this.chatContext === 'general' && this.currentTextKey && this.currentTextKey.startsWith('page-general')) {
+      // Check global variables first
+      const hasGlobalSummary = window.pageSummary !== null && window.pageSummaryPossibleQuestions !== null;
+      
       console.log('[ChatDialog] Adding Summarise the page button to ask content');
       const summariseBtn = document.createElement('button');
       summariseBtn.className = 'vocab-chat-simplify-more-btn';
-      summariseBtn.textContent = 'Summarise the page';
+      summariseBtn.innerHTML = `${this.createSparkleIcon()} Summarise this page`;
       summariseBtn.id = 'vocab-chat-summarise-page-btn';
       
-      // Disable button if summary already exists
-      if (this.pageSummary) {
-        summariseBtn.disabled = true;
-        summariseBtn.classList.add('disabled');
-        console.log('[ChatDialog] Summarise button disabled - summary already exists');
-      }
-      
+      // If global summary exists, show "Clear summary" button
+      if (hasGlobalSummary) {
+        // Load from global variables to instance variables if needed
+        if (!this.pageSummary) {
+          this.pageSummary = window.pageSummary;
+          this.pagePossibleQuestions = window.pageSummaryPossibleQuestions;
+        }
+        
+        summariseBtn.innerHTML = 'Clear summary';
+        summariseBtn.disabled = false;
+        summariseBtn.classList.remove('disabled');
+        console.log('[ChatDialog] Global summary exists - showing "Clear summary" button');
+        
+        // Add onclick handler to clear summary
+        summariseBtn.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          e.stopImmediatePropagation();
+          console.log('[ChatDialog] Clear summary button clicked!');
+          this.clearSummary();
+        }, true); // Use capture phase
+      } else {
       // Add onclick handler to call summarise API
-      // Use capture phase to ensure it runs before TextSelector's handler
       summariseBtn.addEventListener('click', (e) => {
         e.preventDefault();
         e.stopPropagation();
@@ -11292,6 +12007,7 @@ const ChatDialog = {
         console.log('[ChatDialog] Summarise button clicked!');
         this.handleSummarisePage();
       }, true); // Use capture phase
+      }
       
       buttonContainer.appendChild(summariseBtn);
       content.appendChild(buttonContainer);
@@ -11305,7 +12021,7 @@ const ChatDialog = {
     // If we have existing chat history, render it
     if (this.chatHistory && this.chatHistory.length > 0) {
       this.chatHistory.forEach(item => {
-        this.renderChatMessage(chatContainer, item.type, item.message);
+        this.renderChatMessage(chatContainer, item.type, item.message, item.possibleQuestions || []);
       });
       
       // Update delete button visibility and scroll to bottom after rendering
@@ -11354,7 +12070,7 @@ const ChatDialog = {
     // If we have existing chat history, render it
     if (this.chatHistory && this.chatHistory.length > 0) {
       this.chatHistory.forEach(item => {
-        this.renderChatMessage(chatContainer, item.type, item.message);
+        this.renderChatMessage(chatContainer, item.type, item.message, item.possibleQuestions || []);
       });
       
       // Update delete button visibility and scroll to bottom after rendering
@@ -11389,7 +12105,7 @@ const ChatDialog = {
    * @param {string} type - Message type ('user' or 'assistant')
    * @param {string} message - Message content
    */
-  renderChatMessage(container, type, message) {
+  renderChatMessage(container, type, message, possibleQuestions = []) {
     // Create message bubble with correct class names
     const messageBubble = document.createElement('div');
     messageBubble.className = `vocab-chat-message vocab-chat-message-${type}`;
@@ -11405,6 +12121,15 @@ const ChatDialog = {
     }
     
     messageBubble.appendChild(messageContent);
+    
+    // Add questions below AI messages if they exist
+    if (type === 'ai' && possibleQuestions && possibleQuestions.length > 0) {
+      const questionsContainer = this.renderMessageQuestions(possibleQuestions);
+      if (questionsContainer) {
+        messageBubble.appendChild(questionsContainer);
+      }
+    }
+    
     container.appendChild(messageBubble);
   },
   
@@ -11419,7 +12144,7 @@ const ChatDialog = {
     const inputField = document.createElement('textarea');
     inputField.className = 'vocab-chat-input';
     inputField.id = 'vocab-chat-input';
-    inputField.placeholder = 'Type your question here ...';
+    inputField.placeholder = 'Ask AI ...';
     inputField.rows = 1;
     
     // Apply inline styles as a fallback to ensure visibility even if CSS is overridden
@@ -11622,6 +12347,27 @@ const ChatDialog = {
     const requestTextKey = this.currentTextKey;
     const requestText = this.currentText;
     
+    // Get context from simplifiedData if available (for simplified mode chat sessions)
+    // The context should be the same as what was used in the simplify API call
+    let initialContext = requestText; // Default to selected text
+    if (this.simplifiedData && this.simplifiedData.context) {
+      initialContext = this.simplifiedData.context;
+      console.log('[ChatDialog] Using context from simplifiedData for ask API:', initialContext.length, 'characters');
+    } else {
+      console.log('[ChatDialog] No context in simplifiedData, using requestText as initial_context');
+    }
+    
+    // Determine context_type based on mode and chatContext
+    // TEXT: for simplified mode (selected text chat)
+    // PAGE: for ask mode with general context (page/summary chat)
+    let contextType = null;
+    if (this.mode === 'simplified') {
+      contextType = 'TEXT';
+    } else if (this.mode === 'ask' && this.chatContext === 'general') {
+      contextType = 'PAGE';
+    }
+    console.log('[ChatDialog] Determined context_type:', contextType, 'for mode:', this.mode, 'chatContext:', this.chatContext);
+    
     // Prepare chat history from chatHistory
     const chat_history = this.chatHistory.map(item => ({
       role: item.type === 'user' ? 'user' : 'assistant',
@@ -11632,6 +12378,7 @@ const ChatDialog = {
     let streamingMessageContent = null;
     let streamingMessageBubble = null;
     let accumulatedText = '';
+    let possibleQuestions = []; // Store possibleQuestions during streaming
     let abortRequest = null;
     
     // Check if we're still in the same chat tab that initiated the request
@@ -11650,9 +12397,10 @@ const ChatDialog = {
       
       // Call streaming API
       abortRequest = await ApiService.ask({
-        initial_context: requestText,
+        initial_context: initialContext,
         chat_history: chat_history,
         question: message,
+        context_type: contextType,
         onChunk: (chunk, accumulated) => {
           console.log('[ChatDialog] Received chunk:', chunk, 'accumulated:', accumulated);
           
@@ -11661,19 +12409,37 @@ const ChatDialog = {
           
           // Check if we're still in the same chat tab
           if (this.currentTextKey === requestTextKey && streamingMessageContent) {
-            // Update the message bubble in real-time
-            this.updateStreamingMessage(streamingMessageContent, accumulatedText);
+            // Update the message bubble in real-time (don't pass possibleQuestions during streaming)
+            this.updateStreamingMessage(streamingMessageContent, accumulatedText, undefined);
           } else if (!isSameChat) {
             // User switched tabs, but we still want to update if they switch back
             // We'll handle this in the complete callback
             console.log('[ChatDialog] User switched tabs during streaming, will update on complete');
           }
         },
-        onComplete: (chat_history) => {
+        onComplete: (chat_history, receivedPossibleQuestions = []) => {
+          console.log('[ChatDialog] ===== ONCOMPLETE CALLBACK CALLED =====');
           console.log('[ChatDialog] Stream complete, chat_history:', chat_history);
+          console.log('[ChatDialog] Received possibleQuestions parameter:', receivedPossibleQuestions);
+          console.log('[ChatDialog] Received possibleQuestions type:', typeof receivedPossibleQuestions);
+          console.log('[ChatDialog] Received possibleQuestions is array:', Array.isArray(receivedPossibleQuestions));
+          console.log('[ChatDialog] Received possibleQuestions length:', receivedPossibleQuestions?.length || 0);
+          console.log('[ChatDialog] Received possibleQuestions value (stringified):', JSON.stringify(receivedPossibleQuestions));
       
       // Remove loading animation
       this.removeLoadingAnimation();
+      
+          // Store the received possibleQuestions - ensure it's an array
+          if (Array.isArray(receivedPossibleQuestions)) {
+            possibleQuestions = receivedPossibleQuestions;
+          } else if (receivedPossibleQuestions) {
+            console.log('[ChatDialog] WARNING: receivedPossibleQuestions is not an array, converting:', receivedPossibleQuestions);
+            possibleQuestions = [receivedPossibleQuestions];
+          } else {
+            possibleQuestions = [];
+          }
+          console.log('[ChatDialog] Stored possibleQuestions:', possibleQuestions);
+          console.log('[ChatDialog] Stored possibleQuestions length:', possibleQuestions.length);
       
           // Get the final AI response
           let aiResponse = accumulatedText || 'No response received';
@@ -11689,23 +12455,25 @@ const ChatDialog = {
         }
         
           console.log('[ChatDialog] Final AI response:', aiResponse);
+          console.log('[ChatDialog] Final possibleQuestions to display:', possibleQuestions);
         
         // Check if we're still in the same chat tab that initiated the request
         if (this.currentTextKey === requestTextKey) {
             // We're still in the same chat, update the streaming message or add it if it doesn't exist
             if (streamingMessageContent) {
-              // Update the existing streaming message with final content
-              this.updateStreamingMessage(streamingMessageContent, aiResponse);
+              // Update the existing streaming message with final content and questions
+              this.updateStreamingMessage(streamingMessageContent, aiResponse, possibleQuestions);
               
               // Add the AI response to history (user message was already added before API call)
               this.chatHistory.push({
                 type: 'ai',
                 message: aiResponse,
+                possibleQuestions: possibleQuestions,
                 timestamp: new Date().toISOString()
               });
             } else {
               // Message bubble was removed or doesn't exist, add it normally
-          this.addMessageToChat('ai', aiResponse);
+          this.addMessageToChat('ai', aiResponse, possibleQuestions);
             }
             
             // Update stored chat history
@@ -11723,6 +12491,7 @@ const ChatDialog = {
           originalChatHistory.push({
             type: 'ai',
             message: aiResponse,
+            possibleQuestions: possibleQuestions,
             timestamp: new Date().toISOString()
           });
           
@@ -12087,7 +12856,7 @@ const ChatDialog = {
    * @param {string} message - Message content
    * @returns {HTMLElement|null} The message bubble element (for streaming updates)
    */
-  addMessageToChat(type, message) {
+  addMessageToChat(type, message, possibleQuestions = []) {
     const chatContainer = document.getElementById('vocab-chat-messages');
     
     // Remove "Ask me anything about the page" message if exists
@@ -12111,6 +12880,22 @@ const ChatDialog = {
     }
     
     messageBubble.appendChild(messageContent);
+    
+    // Add questions below AI messages if they exist
+    console.log('[ChatDialog] addMessageToChat: type=', type, 'possibleQuestions=', possibleQuestions);
+    if (type === 'ai' && possibleQuestions && possibleQuestions.length > 0) {
+      console.log('[ChatDialog] addMessageToChat: Questions found, calling renderMessageQuestions');
+      const questionsContainer = this.renderMessageQuestions(possibleQuestions);
+      if (questionsContainer) {
+        console.log('[ChatDialog] addMessageToChat: Questions container created, appending to message bubble');
+        messageBubble.appendChild(questionsContainer);
+      } else {
+        console.log('[ChatDialog] addMessageToChat: Questions container is null, not appending');
+      }
+    } else {
+      console.log('[ChatDialog] addMessageToChat: No questions (type is not ai or questions are empty)');
+    }
+    
     chatContainer.appendChild(messageBubble);
     
     // Show global clear button
@@ -12125,7 +12910,7 @@ const ChatDialog = {
     }, 100);
     
     // Store in history
-    const messageData = { type, message, timestamp: new Date().toISOString() };
+    const messageData = { type, message, possibleQuestions: possibleQuestions || [], timestamp: new Date().toISOString() };
     this.chatHistory.push(messageData);
     
     // Also update the stored chat history for this textKey
@@ -12221,50 +13006,176 @@ const ChatDialog = {
    * @param {HTMLElement} messageContent - The message content element
    * @param {string} accumulatedText - The accumulated text to display
    */
-  updateStreamingMessage(messageContent, accumulatedText) {
+  updateStreamingMessage(messageContent, accumulatedText, possibleQuestions = undefined) {
     if (!messageContent) return;
     
     // Update the content with markdown rendering
     messageContent.innerHTML = this.renderMarkdown(accumulatedText);
     
+    // Attach click handlers to reference markers
+    this.attachReferenceMarkerHandlers(messageContent);
+    
+    // Get the message bubble parent
+    const messageBubble = messageContent.closest('.vocab-chat-message');
+    let questionsAdded = false;
+    
+    if (messageBubble) {
+      // Only update questions if possibleQuestions is explicitly provided (not undefined)
+      // This prevents removing questions during streaming updates
+      if (possibleQuestions !== undefined) {
+        // Remove existing questions container if any
+        const existingQuestions = messageBubble.querySelector('.vocab-chat-message-questions-container');
+        if (existingQuestions) {
+          existingQuestions.remove();
+        }
+        
+        // Add questions if they exist and are non-empty
+        console.log('[ChatDialog] updateStreamingMessage: Checking for possibleQuestions:', possibleQuestions);
+        if (possibleQuestions && Array.isArray(possibleQuestions) && possibleQuestions.length > 0) {
+          console.log('[ChatDialog] updateStreamingMessage: Questions found, calling renderMessageQuestions');
+          const questionsContainer = this.renderMessageQuestions(possibleQuestions);
+          if (questionsContainer) {
+            console.log('[ChatDialog] updateStreamingMessage: Questions container created, appending to message bubble');
+            messageBubble.appendChild(questionsContainer);
+            questionsAdded = true;
+          } else {
+            console.log('[ChatDialog] updateStreamingMessage: Questions container is null, not appending');
+          }
+        } else {
+          console.log('[ChatDialog] updateStreamingMessage: No questions or empty array');
+        }
+      } else {
+        console.log('[ChatDialog] updateStreamingMessage: possibleQuestions is undefined, preserving existing questions');
+      }
+    }
+    
     // Auto-scroll to bottom
+    // Use immediate scroll during streaming (when possibleQuestions is undefined)
+    // Use normal scroll when questions are added (to ensure smooth transition)
+    // Only scroll if user is already at bottom (conditional auto-scroll)
     const chatContainer = document.getElementById('vocab-chat-messages');
     if (chatContainer) {
-      this.scrollToBottom(chatContainer);
+      const isStreaming = possibleQuestions === undefined;
+      // During streaming, only auto-scroll if user is at bottom
+      // When questions are added (complete), always scroll to show them
+      const onlyIfAtBottom = isStreaming;
+      this.scrollToBottom(chatContainer, isStreaming, onlyIfAtBottom);
+      
+      // If questions were added, scroll again after a short delay to ensure DOM is fully updated
+      // Always scroll when questions are added (user wants to see them)
+      if (questionsAdded) {
+        setTimeout(() => {
+          this.scrollToBottom(chatContainer, false, false);
+        }, 100);
+      }
     }
   },
   
   /**
    * Scroll chat container to bottom with smooth behavior
    * @param {HTMLElement} chatContainer - The chat messages container
+   * @param {boolean} immediate - If true, use immediate scroll (no smooth animation). Default: false
+   * @param {boolean} onlyIfAtBottom - If true, only scroll if user is already at bottom. Default: false
    */
-  scrollToBottom(chatContainer) {
+  scrollToBottom(chatContainer, immediate = false, onlyIfAtBottom = false) {
     if (!chatContainer) {
       console.log('[ChatDialog] scrollToBottom: No chat container provided');
       return;
     }
     
-    // Find the scrollable parent container (tab content)
-    const tabContent = chatContainer.closest('.vocab-chat-tab-content');
-    if (!tabContent) {
-      console.log('[ChatDialog] scrollToBottom: No tab content found');
+    // Find the scrollable content container (vocab-chat-scrollable-content)
+    // This is the actual scrollable element, not the tab content
+    const scrollableContent = chatContainer.closest('.vocab-chat-scrollable-content');
+    if (!scrollableContent) {
+      // Fallback: try to find it from tab content
+      const tabContent = chatContainer.closest('.vocab-chat-tab-content');
+      if (tabContent) {
+        const foundScrollable = tabContent.querySelector('.vocab-chat-scrollable-content');
+        if (foundScrollable) {
+          this.scrollScrollableContent(foundScrollable, immediate, onlyIfAtBottom);
+          return;
+        }
+      }
+      console.log('[ChatDialog] scrollToBottom: No scrollable content found');
       return;
     }
     
-    console.log('[ChatDialog] scrollToBottom: Scrolling tab content to bottom');
-    console.log('[ChatDialog] scrollToBottom: Tab content scrollHeight:', tabContent.scrollHeight);
-    console.log('[ChatDialog] scrollToBottom: Tab content clientHeight:', tabContent.clientHeight);
+    this.scrollScrollableContent(scrollableContent, immediate, onlyIfAtBottom);
+  },
+  
+  /**
+   * Check if user is at or near the bottom of the scrollable content
+   * @param {HTMLElement} scrollableContent - The scrollable content container
+   * @param {number} tolerance - Pixel tolerance for "near bottom" (default: 50px)
+   * @returns {boolean} True if user is at or near the bottom
+   */
+  isAtBottom(scrollableContent, tolerance = 50) {
+    if (!scrollableContent) return false;
+    
+    const currentScroll = scrollableContent.scrollTop;
+    const maxScroll = scrollableContent.scrollHeight - scrollableContent.clientHeight;
+    const distanceFromBottom = maxScroll - currentScroll;
+    
+    // User is at bottom if they're within tolerance pixels of the bottom
+    return distanceFromBottom <= tolerance;
+  },
+  
+  /**
+   * Scroll the scrollable content container to bottom
+   * @param {HTMLElement} scrollableContent - The scrollable content container
+   * @param {boolean} immediate - If true, use immediate scroll (no smooth animation). Default: false
+   * @param {boolean} onlyIfAtBottom - If true, only scroll if user is already at bottom. Default: false
+   */
+  scrollScrollableContent(scrollableContent, immediate = false, onlyIfAtBottom = false) {
+    if (!scrollableContent) return;
+    
+    // If onlyIfAtBottom is true, check if user is at bottom before scrolling
+    if (onlyIfAtBottom && !this.isAtBottom(scrollableContent)) {
+      console.log('[ChatDialog] scrollScrollableContent: User has scrolled up, skipping auto-scroll');
+      return;
+    }
+    
+    console.log('[ChatDialog] scrollScrollableContent: Scrolling to bottom, immediate:', immediate);
+    console.log('[ChatDialog] scrollScrollableContent: scrollHeight:', scrollableContent.scrollHeight);
+    console.log('[ChatDialog] scrollScrollableContent: clientHeight:', scrollableContent.clientHeight);
+    
+    // Function to perform the actual scroll
+    const performScroll = () => {
+      if (immediate) {
+        // For immediate scroll (during streaming), use instant scroll
+        scrollableContent.scrollTop = scrollableContent.scrollHeight;
+      } else {
+        // For normal scroll, use smooth behavior
+        scrollableContent.scrollTo({
+          top: scrollableContent.scrollHeight,
+          behavior: 'smooth'
+        });
+      }
+    };
     
     // Use requestAnimationFrame to ensure DOM updates are complete
     requestAnimationFrame(() => {
-      // Scroll the tab content (outer scrollbar) to bottom
-      tabContent.scrollTop = tabContent.scrollHeight;
+      performScroll();
       
-      // Also try smooth scroll
-      tabContent.scrollTo({
-        top: tabContent.scrollHeight,
-        behavior: 'smooth'
-      });
+      // Multiple scroll attempts to handle async DOM updates and layout recalculation
+      // This is especially important during streaming when content is added word by word
+      setTimeout(() => {
+        performScroll();
+      }, 0);
+      
+      setTimeout(() => {
+        performScroll();
+      }, 10);
+      
+      // Final check with a small delay to ensure we're at the bottom
+      setTimeout(() => {
+        const currentScroll = scrollableContent.scrollTop;
+        const maxScroll = scrollableContent.scrollHeight - scrollableContent.clientHeight;
+        // If we're not at the bottom (within 10px tolerance), scroll again
+        if (Math.abs(currentScroll - maxScroll) > 10) {
+          scrollableContent.scrollTop = scrollableContent.scrollHeight;
+        }
+      }, 50);
     });
   },
   
@@ -12300,6 +13211,268 @@ const ChatDialog = {
   },
   
   /**
+   * Parse and replace reference markers with clickable buttons
+   * Handles two patterns:
+   * 1. [[[(N) example_substring]]] - uses the number from the pattern, renders as rectangular button
+   * 2. [[[ some string ]]] - assigns sequential numbers (1, 2, 3...), renders as circular button
+   * @param {string} text - Text that may contain reference markers
+   * @returns {string} Text with reference markers replaced by HTML buttons
+   */
+  parseReferenceMarkers(text) {
+    if (!text) return text;
+    
+    let result = text;
+    let sequentialNumber = 1;
+    
+    // First, handle patterns with explicit numbers: [[[(N) example_substring]]]
+    // Pattern matches: [[[( followed by a number in parentheses, optionally followed by space, 
+    // then any text, followed by )]]]
+    const numberedPattern = /\[\[\[\((\d+)\)\s*([^\]]+?)\]\]\]/g;
+    result = result.replace(numberedPattern, (match, refNumber, substring) => {
+      // Trim any leading/trailing whitespace from substring
+      substring = substring.trim();
+      
+      // Create a unique ID for this reference marker
+      const refId = `vocab-ref-${refNumber}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      
+      // Return HTML for clickable reference button (small solid purple circular button with white text)
+      return `<button class="vocab-ref-button-circular" data-ref-number="${refNumber}" data-substring="${this.escapeHtml(substring)}" data-ref-id="${refId}" type="button">${refNumber}</button>`;
+    });
+    
+    // Then, handle patterns without numbers: [[[ some string ]]]
+    // Pattern matches: [[[ followed by any text, followed by ]]]
+    // Since numbered patterns are already replaced with HTML, this will only match unnumbered patterns
+    // We use a more robust pattern that handles content with ] characters by looking for the closing ]]]
+    const unnumberedPattern = /\[\[\[((?:(?!\]\]\]).)+?)\]\]\]/g;
+    result = result.replace(unnumberedPattern, (match, substring) => {
+      // Trim any leading/trailing whitespace from substring
+      substring = substring.trim();
+      
+      // Skip empty substrings
+      if (!substring) {
+        return match; // Return as-is if empty
+      }
+      
+      // Assign sequential number
+      const refNumber = sequentialNumber++;
+      
+      // Create a unique ID for this reference marker
+      const refId = `vocab-ref-${refNumber}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      
+      // Return HTML for clickable circular reference button (small solid purple circle with white text)
+      return `<button class="vocab-ref-button-circular" data-ref-number="${refNumber}" data-substring="${this.escapeHtml(substring)}" data-ref-id="${refId}" type="button">${refNumber}</button>`;
+    });
+    
+    return result;
+  },
+  
+  /**
+   * Escape HTML special characters
+   * @param {string} text - Text to escape
+   * @returns {string} Escaped text
+   */
+  escapeHtml(text) {
+    if (!text) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  },
+  
+  /**
+   * Find and highlight paragraph containing the substring
+   * @param {string} substring - The substring to find
+   */
+  scrollToAndHighlightParagraph(substring) {
+    if (!substring) return;
+    
+    // Remove any existing highlights
+    this.removeReferenceHighlights();
+    
+    // Get the page text content
+    const pageText = document.body.innerText || document.body.textContent || '';
+    
+    // Find the substring in the page (fuzzy match - case insensitive)
+    const searchText = substring.trim();
+    const lowerPageText = pageText.toLowerCase();
+    const lowerSearchText = searchText.toLowerCase();
+    
+    // Try to find the substring
+    let foundIndex = -1;
+    if (lowerPageText.includes(lowerSearchText)) {
+      foundIndex = lowerPageText.indexOf(lowerSearchText);
+    } else {
+      // Try fuzzy matching - find first few words
+      const searchWords = searchText.split(/\s+/).filter(w => w.length > 0);
+      if (searchWords.length > 0) {
+        const firstFewWords = searchWords.slice(0, Math.min(3, searchWords.length)).join(' ').toLowerCase();
+        foundIndex = lowerPageText.indexOf(firstFewWords);
+      }
+    }
+    
+    if (foundIndex === -1) {
+      console.log('[ChatDialog] Could not find substring in page:', substring);
+      return;
+    }
+    
+    // Find the paragraph containing this text
+    // Walk up the DOM tree from the text node to find the paragraph
+    const textNodes = this.getTextNodes(document.body);
+    let targetNode = null;
+    let currentOffset = 0;
+    
+    for (const node of textNodes) {
+      const nodeText = node.textContent || '';
+      const nodeLength = nodeText.length;
+      
+      if (currentOffset <= foundIndex && foundIndex < currentOffset + nodeLength) {
+        targetNode = node;
+        break;
+      }
+      
+      currentOffset += nodeLength;
+    }
+    
+    if (!targetNode) {
+      // Fallback: try to find by searching all elements
+      const allElements = document.body.querySelectorAll('p, div, span, article, section, main');
+      for (const elem of allElements) {
+        const elemText = (elem.innerText || elem.textContent || '').toLowerCase();
+        if (elemText.includes(lowerSearchText)) {
+          targetNode = elem;
+          break;
+        }
+      }
+    }
+    
+    if (targetNode) {
+      // Find the paragraph or container element
+      let paragraph = targetNode;
+      while (paragraph && paragraph !== document.body) {
+        if (paragraph.tagName === 'P' || 
+            paragraph.tagName === 'DIV' || 
+            paragraph.tagName === 'ARTICLE' || 
+            paragraph.tagName === 'SECTION' ||
+            paragraph.tagName === 'MAIN') {
+          break;
+        }
+        paragraph = paragraph.parentElement;
+      }
+      
+      if (paragraph && paragraph !== document.body) {
+        // Highlight the paragraph
+        paragraph.classList.add('vocab-reference-highlight');
+        
+        // Scroll to the paragraph
+        paragraph.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        
+        console.log('[ChatDialog] Scrolled to and highlighted paragraph containing:', substring);
+      }
+    }
+  },
+  
+  /**
+   * Get all text nodes in the document
+   * @param {Node} root - Root node to search from
+   * @returns {Array<Node>} Array of text nodes
+   */
+  getTextNodes(root) {
+    const textNodes = [];
+    const walker = document.createTreeWalker(
+      root,
+      NodeFilter.SHOW_TEXT,
+      null,
+      false
+    );
+    
+    let node;
+    while (node = walker.nextNode()) {
+      textNodes.push(node);
+    }
+    
+    return textNodes;
+  },
+  
+  /**
+   * Remove all reference highlights
+   */
+  removeReferenceHighlights() {
+    const highlighted = document.querySelectorAll('.vocab-reference-highlight');
+    highlighted.forEach(elem => {
+      elem.classList.remove('vocab-reference-highlight');
+    });
+    // Clear active reference tracking when highlights are removed
+    this._activeReferenceId = null;
+  },
+  
+  /**
+   * Attach click handlers to reference markers in a container
+   * @param {HTMLElement} container - Container element to search for reference markers
+   */
+  attachReferenceMarkerHandlers(container) {
+    if (!container) return;
+    
+    // Initialize active reference tracking if not exists
+    if (!this._activeReferenceId) {
+      this._activeReferenceId = null;
+    }
+    
+    // Query for all reference marker and button classes
+    const markers = container.querySelectorAll('.vocab-reference-marker, .vocab-ref-button, .vocab-ref-button-circular');
+    markers.forEach(marker => {
+      // Remove existing listeners by cloning
+      const newMarker = marker.cloneNode(true);
+      marker.parentNode.replaceChild(newMarker, marker);
+      
+      // Add click handler
+      newMarker.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        
+        const refId = newMarker.getAttribute('data-ref-id');
+        const substring = newMarker.getAttribute('data-substring');
+        
+        if (!substring) return;
+        
+        // Check if this is the same button that's currently active
+        const isCurrentlyActive = this._activeReferenceId === refId;
+        const hasHighlights = document.querySelectorAll('.vocab-reference-highlight').length > 0;
+        
+        // If same button clicked and highlights exist, toggle off (remove highlights)
+        if (isCurrentlyActive && hasHighlights) {
+          this.removeReferenceHighlights();
+          this._activeReferenceId = null;
+          console.log('[ChatDialog] Toggled off highlight for reference:', refId);
+        } else {
+          // Different button or no highlights - do normal highlight flow
+          this.scrollToAndHighlightParagraph(substring);
+          this._activeReferenceId = refId;
+          console.log('[ChatDialog] Highlighted reference:', refId);
+        }
+      });
+    });
+    
+    // Add click handler to document to remove highlights when clicking elsewhere
+    const removeHighlightHandler = (e) => {
+      // Check if click is on a reference marker or button
+      if (!e.target.closest('.vocab-reference-marker, .vocab-ref-button, .vocab-ref-button-circular')) {
+        this.removeReferenceHighlights();
+        document.removeEventListener('click', removeHighlightHandler);
+      }
+    };
+    
+    // Remove old listener if exists
+    if (this._referenceHighlightHandler) {
+      document.removeEventListener('click', this._referenceHighlightHandler);
+    }
+    
+    this._referenceHighlightHandler = removeHighlightHandler;
+    // Use setTimeout to avoid immediate trigger
+    setTimeout(() => {
+      document.addEventListener('click', removeHighlightHandler);
+    }, 100);
+  },
+  
+  /**
    * Simple markdown renderer
    * @param {string} text - Markdown text
    * @returns {string} HTML string
@@ -12309,10 +13482,37 @@ const ChatDialog = {
     
     let html = text;
     
-    // Escape HTML first
+    // Parse reference markers first (before escaping HTML)
+    html = this.parseReferenceMarkers(html);
+    
+    // Escape HTML (but preserve the reference marker HTML we just added)
+    // We need to escape only the parts that aren't already HTML
+    // This is a bit tricky - we'll escape, then parse references again
+    // Actually, let's parse references after escaping to avoid issues
+    // Let me rethink this...
+    
+    // Better approach: parse references, then escape the remaining text
+    // But we already parsed references above, so we need to protect them
+    // Let's use a placeholder approach
+    
+    // Store reference markers and buttons temporarily
+    const refPlaceholders = [];
+    // Handle old span markers and new button markers (both rectangular and circular)
+    html = html.replace(/<(span|button) class="vocab-(?:reference-marker|ref-button(?:-circular)?)"[^>]*>(\d+)<\/(span|button)>/g, (match, tag1, num, tag2) => {
+      const placeholder = `__REF_PLACEHOLDER_${refPlaceholders.length}__`;
+      refPlaceholders.push(match);
+      return placeholder;
+    });
+    
+    // Escape HTML
     html = html.replace(/&/g, '&amp;')
                .replace(/</g, '&lt;')
                .replace(/>/g, '&gt;');
+    
+    // Restore reference markers
+    refPlaceholders.forEach((placeholder, index) => {
+      html = html.replace(`__REF_PLACEHOLDER_${index}__`, placeholder);
+    });
     
     // Code blocks (```)
     html = html.replace(/```(\w+)?\n([\s\S]*?)```/g, '<pre><code>$2</code></pre>');
@@ -12918,6 +14118,21 @@ const ChatDialog = {
   },
   
   /**
+   * Create AI sparkle icon SVG (solid white, for button)
+   * @param {number} size - Icon size in pixels (default: 18)
+   * @returns {string} SVG markup
+   */
+  createSparkleIcon(size = 18) {
+    return `
+      <svg width="${size}" height="${size}" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M14 0L17 8L25 11L17 14L14 22L11 14L3 11L11 8L14 0Z" fill="white"/>
+        <path d="M22 16L23.5 20L27.5 21.5L23.5 23L22 27L20.5 23L16.5 21.5L20.5 20L22 16Z" fill="white"/>
+        <path d="M8 21L9.5 24.5L13 26L9.5 27.5L8 31L6.5 27.5L3 26L6.5 24.5L8 21Z" fill="white"/>
+      </svg>
+    `;
+  },
+  
+  /**
    * Create chat empty icon (professional purple)
    */
   createChatEmptyIcon() {
@@ -13379,7 +14594,7 @@ const ChatDialog = {
       /* Simplified Text */
       .vocab-chat-simplified-text {
         padding: 16px;
-        background: #faf5ff;
+        background: #ffffff;
         border-radius: 12px;
         font-size: 14px;
         line-height: 1.6;
@@ -13390,10 +14605,14 @@ const ChatDialog = {
       }
       
       .vocab-chat-simplified-header {
-        font-size: 13px;
-        font-weight: 600;
+        text-align: center;
         color: #9527F5;
-        margin-bottom: 8px;
+        font-weight: 600;
+        font-size: 18px;
+        margin: 0 0 12px 0;
+        padding: 0;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+        letter-spacing: 0.5px;
       }
       
       .vocab-chat-simplified-item {
@@ -13402,6 +14621,32 @@ const ChatDialog = {
       
       .vocab-chat-simplified-item:last-child {
         margin-bottom: 0;
+      }
+      
+      /* Brain Icon Container - Shows while waiting for possibleQuestions */
+      .vocab-chat-simplified-brain-icon-container {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        width: 100%;
+        padding: 20px 0;
+        margin-top: 16px;
+      }
+      
+      .vocab-chat-simplified-brain-icon {
+        display: block;
+        width: 48px;
+        height: 48px;
+        animation: brainBreathing 2s ease-in-out infinite;
+      }
+      
+      @keyframes brainBreathing {
+        0%, 100% {
+          transform: scale(1);
+        }
+        50% {
+          transform: scale(1.2);
+        }
       }
       
       /* Page Summary Container - Above "Summarise the page" button */
@@ -13414,7 +14659,7 @@ const ChatDialog = {
       .vocab-chat-page-summary-header {
         text-align: center;
         color: #9527F5;
-        font-weight: 300;
+        font-weight: 600;
         font-size: 18px;
         margin: 0 0 12px 0;
         padding: 0;
@@ -13424,9 +14669,9 @@ const ChatDialog = {
       
       .vocab-chat-page-summary-content {
         padding: 16px;
-        background: #f9fafb;
-        border: 1px solid #e5e7eb;
-        border-radius: 8px;
+        background: #ffffff;
+        border: none;
+        border-radius: 20px;
         font-size: 14px;
         line-height: 1.6;
         color: #374151;
@@ -13447,10 +14692,190 @@ const ChatDialog = {
         color: #1f2937;
       }
       
+      /* Page Summary Questions */
+      .vocab-chat-page-questions-container {
+        margin-top: 5px;
+        padding-top: 16px;
+        // border-top: 1px solid #e5e7eb;
+        animation: vocab-chat-questions-fade-in 0.5s ease-out;
+      }
+      
+      @keyframes vocab-chat-questions-fade-in {
+        from {
+          opacity: 0;
+          transform: translateY(10px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+      
+      .vocab-chat-page-questions-header {
+        font-size: 14px;
+        font-weight: 600;
+        color: #9527F5;
+        margin: 0 0 12px 0;
+        padding: 0;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      }
+      
+      .vocab-chat-page-questions-list {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+      }
+      
+      .vocab-chat-page-question-item {
+        padding: 2px;
+        margin: 2px;
+        background: #ffffff;
+        border: none;
+        border-top: 1px solid rgba(149, 39, 245, 0.2);
+        border-radius: 0;
+        font-size: 14px;
+        line-height: 1.5;
+        color: #6b7280;
+        cursor: pointer;
+        transition: color 0.2s ease, transform 0.15s ease;
+        word-wrap: break-word;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        animation: vocab-chat-question-item-fade-in 0.4s ease-out backwards;
+      }
+      
+      .vocab-chat-page-question-item:nth-child(1) {
+        animation-delay: 0.1s;
+      }
+      
+      .vocab-chat-page-question-item:nth-child(2) {
+        animation-delay: 0.15s;
+      }
+      
+      .vocab-chat-page-question-item:nth-child(3) {
+        animation-delay: 0.2s;
+      }
+      
+      .vocab-chat-page-question-item:nth-child(4) {
+        animation-delay: 0.25s;
+      }
+      
+      .vocab-chat-page-question-item:nth-child(5) {
+        animation-delay: 0.3s;
+      }
+      
+      @keyframes vocab-chat-question-item-fade-in {
+        from {
+          opacity: 0;
+          transform: translateX(-10px);
+        }
+        to {
+          opacity: 1;
+          transform: translateX(0);
+        }
+      }
+      
+      .vocab-chat-page-question-item:hover {
+        color: #9527F5;
+      }
+      
+      .vocab-chat-page-question-item:active {
+        color: #7a1fd9;
+      }
+      
+      .vocab-chat-page-question-icon {
+        flex-shrink: 0;
+        color: #9527F5;
+        font-weight: 600;
+        font-size: 16px;
+      }
+      
+      /* Message Questions Container - Below AI messages */
+      .vocab-chat-message-questions-container {
+        margin-top: 12px;
+        padding: 16px;
+        animation: vocab-chat-questions-fade-in 0.5s ease-out;
+      }
+      
+      .vocab-chat-message-questions-header {
+        font-size: 13px;
+        font-weight: 500;
+        color: #9527F5;
+        margin: 0 0 8px 0;
+        padding: 0;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      }
+      
+      .vocab-chat-message-questions-list {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+      }
+      
+      .vocab-chat-message-question-item {
+        padding: 2px;
+        margin: 2px;
+        background: #ffffff;
+        border: none;
+        border-top: 1px solid rgba(149, 39, 245, 0.2);
+        border-radius: 0;
+        font-size: 14px;
+        line-height: 1.5;
+        color: #6b7280;
+        cursor: pointer;
+        transition: color 0.2s ease, transform 0.15s ease;
+        word-wrap: break-word;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        animation: vocab-chat-question-item-fade-in 0.4s ease-out backwards;
+      }
+      
+      .vocab-chat-message-question-item:nth-child(1) {
+        animation-delay: 0.1s;
+      }
+      
+      .vocab-chat-message-question-item:nth-child(2) {
+        animation-delay: 0.15s;
+      }
+      
+      .vocab-chat-message-question-item:nth-child(3) {
+        animation-delay: 0.2s;
+      }
+      
+      .vocab-chat-message-question-item:nth-child(4) {
+        animation-delay: 0.25s;
+      }
+      
+      .vocab-chat-message-question-item:nth-child(5) {
+        animation-delay: 0.3s;
+      }
+      
+      .vocab-chat-message-question-item:hover {
+        color: #9527F5;
+      }
+      
+      .vocab-chat-message-question-item:active {
+        color: #7a1fd9;
+        transform: scale(0.95);
+      }
+      
+      .vocab-chat-message-question-icon {
+        flex-shrink: 0;
+        color: #9527F5;
+        font-weight: 600;
+        font-size: 16px;
+      }
+      
       .vocab-chat-simplify-more-container {
         display: flex;
         justify-content: flex-end;
         margin-top: 12px;
+        margin-right: 0;
+        padding-right: 0;
+        width: 100%;
+        box-sizing: border-box;
       }
       
       .vocab-chat-simplify-more-btn {
@@ -13461,6 +14886,9 @@ const ChatDialog = {
         padding: 10px 20px;
         font-size: 14px;
         font-weight: 500;
+        display: flex;
+        align-items: center;
+        gap: 8px;
         cursor: pointer;
         transition: all 0.2s ease;
         font-family: inherit;
@@ -13595,8 +15023,10 @@ const ChatDialog = {
       }
       
       .vocab-chat-message-ai {
-        align-items: flex-start;
-        margin-left: 12px;
+        align-items: center;
+        margin-left: 0;
+        margin-right: 0;
+        width: 100%;
       }
       
       .vocab-chat-message-content {
@@ -13615,9 +15045,18 @@ const ChatDialog = {
       }
       
       .vocab-chat-message-ai .vocab-chat-message-content {
-        background: white;
+        padding: 16px;
+        background: #ffffff;
+        border: none;
+        border-radius: 8px;
+        font-size: 14px;
+        line-height: 1.6;
         color: #374151;
-        box-shadow: 0 2px 8px rgba(149, 39, 245, 0.15), 0 1px 4px rgba(149, 39, 245, 0.1);
+        word-wrap: break-word;
+        overflow-wrap: break-word;
+        box-shadow: none;
+        max-width: none;
+        width: auto;
       }
       
       /* Loading Animation - Three Dots Waving */
@@ -13687,6 +15126,14 @@ const ChatDialog = {
         line-height: 1.5;
       }
       
+      .vocab-chat-message-ai .vocab-chat-message-content p {
+        margin: 0 0 12px 0;
+      }
+      
+      .vocab-chat-message-ai .vocab-chat-message-content p:last-child {
+        margin-bottom: 0;
+      }
+      
       .vocab-chat-message-ai .vocab-chat-message-content strong {
         font-weight: 600;
         color: #1f2937;
@@ -13741,7 +15188,8 @@ const ChatDialog = {
         padding: 16px;
         border-top: 1px solid #e5e7eb;
         background: white;
-        align-items: flex-end;
+        align-items: center; /* centers items vertically on the same horizontal axis */
+        justify-content: center; /* centers items horizontally */
       }
       
       .vocab-chat-input {
@@ -13773,8 +15221,8 @@ const ChatDialog = {
       
       /* Send Button - Wireframe Purple Circular */
       .vocab-chat-send-btn {
-        width: 44px;
-        height: 44px;
+        width: 30px;
+        height: 30px;
         background: white;
         border: 2px solid #9527F5;
         border-radius: 50%;
@@ -14108,8 +15556,8 @@ const ChatDialog = {
       
       /* Delete Conversation Button - Wireframe Red Circular */
       .vocab-chat-delete-conversation-btn {
-        width: 44px;
-        height: 44px;
+        width: 35px;
+        height: 35px;
         background: white;
         border: 2px solid #ef4444;
         border-radius: 50%;
@@ -16441,9 +17889,9 @@ const ButtonPanel = {
    * Create AI sparkle icon SVG (solid white, larger and prominent)
    * @returns {string} SVG markup
    */
-  createSparkleIcon() {
+  createSparkleIcon(size = 18) {
     return `
-      <svg width="28" height="28" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <svg width="${size}" height="${size}" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
         <path d="M14 0L17 8L25 11L17 14L14 22L11 14L3 11L11 8L14 0Z" fill="white"/>
         <path d="M22 16L23.5 20L27.5 21.5L23.5 23L22 27L20.5 23L16.5 21.5L20.5 20L22 16Z" fill="white"/>
         <path d="M8 21L9.5 24.5L13 26L9.5 27.5L8 31L6.5 27.5L3 26L6.5 24.5L8 21Z" fill="white"/>
@@ -18786,6 +20234,83 @@ const ButtonPanel = {
         }
       }
 
+      /* Reference Marker Styles */
+      .vocab-reference-marker {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 24px;
+        height: 24px;
+        background-color: #9527F5;
+        border-radius: 50%;
+        color: white;
+        font-size: 12px;
+        font-weight: bold;
+        cursor: pointer;
+        margin: 0 2px;
+        vertical-align: middle;
+        transition: all 0.2s ease;
+        user-select: none;
+      }
+
+      .vocab-reference-marker:hover {
+        background-color: #7a1fd9;
+        transform: scale(1.1);
+        box-shadow: 0 2px 8px rgba(149, 39, 245, 0.4);
+      }
+
+      .vocab-reference-marker:active {
+        transform: scale(0.95);
+      }
+
+      /* Reference Button Styles (all buttons are circular) */
+      .vocab-ref-button,
+      .vocab-ref-button-circular {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 24px;
+        height: 24px;
+        background-color: #9527F5;
+        border: none;
+        border-radius: 50%;
+        color: white;
+        font-size: 12px;
+        font-weight: bold;
+        cursor: pointer;
+        margin: 0 2px;
+        vertical-align: middle;
+        transition: all 0.2s ease;
+        user-select: none;
+        font-family: inherit;
+        line-height: 1;
+        padding: 0;
+      }
+
+      .vocab-ref-button-circular:hover {
+        background-color: #7a1fd9;
+        transform: scale(1.1);
+        box-shadow: 0 2px 8px rgba(149, 39, 245, 0.4);
+      }
+
+      .vocab-ref-button-circular:active {
+        transform: scale(0.95);
+        background-color: #6a1ac7;
+      }
+
+      .vocab-ref-button-circular:focus {
+        outline: 2px solid rgba(149, 39, 245, 0.5);
+        outline-offset: 2px;
+      }
+
+      /* Reference Highlight Styles */
+      .vocab-reference-highlight {
+        background-color: rgba(149, 39, 245, 0.15) !important;
+        transition: background-color 0.3s ease;
+        padding: 4px 8px;
+        border-radius: 4px;
+      }
+
       /* ===================================
          Processing Spinner Animation
          =================================== */
@@ -19373,6 +20898,92 @@ const ButtonPanel = {
 
 
   /**
+   * Extract context for selected text: 3 sentences before + selected text + 3 sentences after
+   * @param {string} pageText - Full page text content
+   * @param {number} textStartIndex - Start index of selected text in pageText
+   * @param {number} textLength - Length of selected text
+   * @param {string} selectedText - The selected text itself
+   * @returns {string} Context string with 3 sentences before + selected text + 3 sentences after
+   */
+  extractContextForText(pageText, textStartIndex, textLength, selectedText) {
+    if (!pageText || textStartIndex < 0 || textLength <= 0) {
+      console.warn('[ButtonPanel] Invalid parameters for context extraction');
+      return selectedText; // Fallback to just the selected text
+    }
+    
+    // Get the text before the selected text
+    const textBefore = pageText.substring(0, textStartIndex);
+    // Get the text after the selected text
+    const textAfter = pageText.substring(textStartIndex + textLength);
+    
+    // Helper function to split text into sentences
+    // Split on sentence-ending punctuation (. ! ?) followed by whitespace or end of string
+    const splitIntoSentences = (text) => {
+      if (!text || text.trim().length === 0) return [];
+      
+      // Split on sentence-ending punctuation followed by whitespace or end of string
+      // This regex matches: . ! or ? followed by whitespace or end of string
+      const sentenceRegex = /[.!?]+(?:\s+|$)/g;
+      const sentences = [];
+      let lastIndex = 0;
+      let match;
+      
+      while ((match = sentenceRegex.exec(text)) !== null) {
+        const sentenceEnd = match.index + match[0].length;
+        const sentence = text.substring(lastIndex, sentenceEnd).trim();
+        if (sentence.length > 0) {
+          sentences.push(sentence);
+        }
+        lastIndex = sentenceEnd;
+      }
+      
+      // Add remaining text as last sentence if any
+      if (lastIndex < text.length) {
+        const remaining = text.substring(lastIndex).trim();
+        if (remaining.length > 0) {
+          sentences.push(remaining);
+        }
+      }
+      
+      return sentences;
+    };
+    
+    // Helper function to extract last N sentences from a string
+    const getLastNSentences = (text, n) => {
+      if (!text || n <= 0) return '';
+      const sentences = splitIntoSentences(text);
+      const startIndex = Math.max(0, sentences.length - n);
+      return sentences.slice(startIndex).join(' ');
+    };
+    
+    // Helper function to extract first N sentences from a string
+    const getFirstNSentences = (text, n) => {
+      if (!text || n <= 0) return '';
+      const sentences = splitIntoSentences(text);
+      return sentences.slice(0, n).join(' ');
+    };
+    
+    // Extract 3 sentences before (or as many as available)
+    const sentencesBefore = getLastNSentences(textBefore, 3);
+    
+    // Extract 3 sentences after (or as many as available)
+    const sentencesAfter = getFirstNSentences(textAfter, 3);
+    
+    // Construct context: sentences before + selected text + sentences after
+    const contextParts = [sentencesBefore, selectedText, sentencesAfter].filter(part => part.trim().length > 0);
+    const context = contextParts.join(' ').trim();
+    
+    console.log('[ButtonPanel] Extracted context:', {
+      sentencesBeforeCount: splitIntoSentences(sentencesBefore).length,
+      selectedTextLength: selectedText.length,
+      sentencesAfterCount: splitIntoSentences(sentencesAfter).length,
+      totalContextLength: context.length
+    });
+    
+    return context;
+  },
+
+  /**
    * Handler for Magic meaning button for a specific text
    * @param {string} textKey - The specific text key to process
    */
@@ -19409,11 +21020,32 @@ const ButtonPanel = {
     
     console.log('[ButtonPanel] Processing single text segment for:', textKey);
     
+    // Get full page text to extract context
+    let pageText = '';
+    if (pageTextContent) {
+      try {
+        const contentData = JSON.parse(pageTextContent);
+        pageText = contentData.text || '';
+      } catch (e) {
+        console.warn('[ButtonPanel] Error parsing pageTextContent, using fallback');
+        pageText = document.body.innerText || document.body.textContent || '';
+      }
+    } else {
+      pageText = document.body.innerText || document.body.textContent || '';
+    }
+    
+    // Extract context: 50 words before + selected text + 50 words after
+    const context = this.extractContextForText(pageText, positionData.textStartIndex, positionData.textLength, positionData.text);
+    
+    // Store context for later use in ask API
+    // We'll store it in simplifiedData when it's created
+    
     // Build API request payload for this single text
     const textSegments = [{
       textStartIndex: positionData.textStartIndex,
       textLength: positionData.textLength,
       text: positionData.text,
+      context: context, // Add context parameter
       previousSimplifiedTexts: []
     }];
     
@@ -19495,6 +21127,9 @@ const ButtonPanel = {
     // Track if dialog has been opened for this text
     let dialogOpened = false;
     let bookIconCreated = false;
+    
+    // Store context in a variable accessible to the callback
+    const extractedContext = context;
     
     // Call SimplifyService with SSE for this single text
     SimplifyService.simplify(
@@ -19609,6 +21244,10 @@ const ButtonPanel = {
             }
           
             // Store streaming data with accumulated text
+            // Initialize explanationQuestions array for streaming (will be populated on complete)
+            const existingData = TextSelector.simplifiedTexts.get(textKey) || {};
+            const streamingExplanationQuestions = existingData.explanationQuestions || [];
+            
             const streamingSimplifiedData = {
             text: eventData.text,
               simplifiedText: eventData.accumulatedSimplifiedText || '', // Use accumulated text for streaming
@@ -19616,6 +21255,9 @@ const ButtonPanel = {
             textLength: eventData.textLength,
             previousSimplifiedTexts: eventData.previousSimplifiedTexts || [],
               shouldAllowSimplifyMore: false, // Will be set on complete
+            explanationQuestions: streamingExplanationQuestions, // Preserve existing, will be updated on complete
+            possibleQuestions: [], // Will be set on complete
+            context: extractedContext, // Store context for ask API (from closure)
             highlight: highlight
           };
           
@@ -19678,6 +21320,32 @@ const ButtonPanel = {
             // Remove loading animation
             highlight.classList.remove('vocab-text-loading');
             
+            // Get existing data to preserve explanationQuestions structure
+            const existingData = TextSelector.simplifiedTexts.get(textKey) || {};
+            
+            // Initialize explanationQuestions array if it doesn't exist
+            // This is the first explanation, so it should be at index 0
+            let explanationQuestions = existingData.explanationQuestions || [];
+            if (!Array.isArray(explanationQuestions)) {
+              explanationQuestions = [];
+            }
+            
+            // Ensure possibleQuestions is an array
+            const possibleQuestionsArray = Array.isArray(eventData.possibleQuestions) 
+              ? eventData.possibleQuestions 
+              : (eventData.possibleQuestions ? [eventData.possibleQuestions] : []);
+            
+            // Store questions for the first explanation (index 0)
+            const explanationIndex = 0;
+            if (explanationIndex >= explanationQuestions.length) {
+              explanationQuestions.push(possibleQuestionsArray);
+            } else {
+              explanationQuestions[explanationIndex] = possibleQuestionsArray;
+            }
+            
+            console.log('[ButtonPanel] Storing questions for first explanation (index 0)');
+            console.log('[ButtonPanel] explanationQuestions array:', explanationQuestions);
+            
             // Final simplified data
             const simplifiedData = {
               text: eventData.text,
@@ -19686,21 +21354,68 @@ const ButtonPanel = {
               textLength: eventData.textLength,
               previousSimplifiedTexts: eventData.previousSimplifiedTexts || [],
               shouldAllowSimplifyMore: eventData.shouldAllowSimplifyMore || false,
+              explanationQuestions: explanationQuestions, // Store questions per explanation version
+              possibleQuestions: possibleQuestionsArray, // Keep for backward compatibility
+              context: extractedContext, // Store context for ask API (from closure)
               highlight: highlight
             };
+            
+            // Store possibleQuestions in ChatDialog (like pagePossibleQuestions for summarise)
+            if (possibleQuestionsArray.length > 0) {
+              ChatDialog.simplifiedPossibleQuestions = possibleQuestionsArray;
+              console.log('[ButtonPanel] Stored simplifiedPossibleQuestions in ChatDialog:', ChatDialog.simplifiedPossibleQuestions);
+              console.log('[ButtonPanel] Stored simplifiedPossibleQuestions length:', ChatDialog.simplifiedPossibleQuestions.length);
+            }
             
             // Store final simplified text data
             TextSelector.simplifiedTexts.set(textKey, simplifiedData);
             
-            // Update dialog if it's open
-            if (ChatDialog.isOpen && ChatDialog.currentTextKey === textKey) {
+            // Always update ChatDialog.simplifiedData with complete data when dialog is open
+            // This ensures questions are available even if key matching is ambiguous
+            if (ChatDialog.isOpen) {
+              // Update simplifiedData in ChatDialog with the complete data including explanationQuestions
               ChatDialog.simplifiedData = simplifiedData;
-              const container = ChatDialog.dialogContainer?.querySelector('#vocab-chat-simplified-container');
-              if (container) {
-                ChatDialog.renderSimplifiedExplanations(container);
+              
+              // Check if this is the correct dialog by comparing keys (original and transformed)
+              const isDialogOpenForThisText = (
+                ChatDialog.currentTextKey === textKey ||
+                ChatDialog.currentTextKey === `${textKey}-selected` ||
+                ChatDialog.currentTextKey === `${textKey}-generic` ||
+                ChatDialog.currentTextKey?.replace(/-selected$/, '').replace(/-generic$/, '') === textKey
+              );
+              
+              if (isDialogOpenForThisText) {
+                // Find and update the container
+                const container = ChatDialog.dialogContainer?.querySelector('#vocab-chat-simplified-container');
+                if (container) {
+                  console.log('[ButtonPanel] Re-rendering explanations with complete data including questions');
+                  console.log('[ButtonPanel] explanationQuestions:', simplifiedData.explanationQuestions);
+                  console.log('[ButtonPanel] explanationQuestions length:', simplifiedData.explanationQuestions?.length || 0);
+                  ChatDialog.renderSimplifiedExplanations(container);
+                } else {
+                  console.warn('[ButtonPanel] Container not found for re-rendering with questions');
+                  // Try alternative ways to find container
+                  setTimeout(() => {
+                    const altContainer = ChatDialog.dialogContainer?.querySelector('#vocab-chat-simplified-container') ||
+                                       document.getElementById('vocab-chat-simplified-container');
+                    if (altContainer) {
+                      console.log('[ButtonPanel] Found container on retry, re-rendering');
+                      ChatDialog.renderSimplifiedExplanations(altContainer);
+                    }
+                  }, 100);
+                }
+              } else {
+                // Dialog is open but for different text - still try to update if it was opened during streaming
+                // This handles edge cases where the key transformation might have happened
+                console.log('[ButtonPanel] Dialog is open but key mismatch, attempting to update anyway');
+                const container = ChatDialog.dialogContainer?.querySelector('#vocab-chat-simplified-container');
+                if (container) {
+                  console.log('[ButtonPanel] Re-rendering explanations (key mismatch case)');
+                  ChatDialog.renderSimplifiedExplanations(container);
+                }
               }
             } else if (!dialogOpened) {
-              // If dialog wasn't opened during streaming, open it now
+              // If dialog wasn't opened during streaming, open it now with complete data
               dialogOpened = true;
               ChatDialog.open(eventData.text, textKey, 'simplified', simplifiedData, 'selected');
             }
@@ -19816,18 +21531,40 @@ const ButtonPanel = {
     
     // ========== Process Text Segments (existing functionality) ==========
     if (selectedTexts.size > 0) {
+      // Get full page text to extract context
+      let pageText = '';
+      if (pageTextContent) {
+        try {
+          const contentData = JSON.parse(pageTextContent);
+          pageText = contentData.text || '';
+        } catch (e) {
+          console.warn('[ButtonPanel] Error parsing pageTextContent, using fallback');
+          pageText = document.body.innerText || document.body.textContent || '';
+        }
+      } else {
+        pageText = document.body.innerText || document.body.textContent || '';
+      }
+      
       // Build API request payload
       const textSegments = [];
       const textKeysToProcess = [];
+      const contextMap = new Map(); // Store context for each textKey
       
       for (const textKey of selectedTexts) {
         const positionData = TextSelector.textPositions.get(textKey);
         
         if (positionData) {
+          // Extract context: 50 words before + selected text + 50 words after
+          const context = this.extractContextForText(pageText, positionData.textStartIndex, positionData.textLength, positionData.text);
+          
+          // Store context for this textKey
+          contextMap.set(textKey, context);
+          
           textSegments.push({
             textStartIndex: positionData.textStartIndex,
             textLength: positionData.textLength,
             text: positionData.text,
+            context: context, // Add context parameter
             previousSimplifiedTexts: []
           });
           textKeysToProcess.push(textKey);
@@ -19990,6 +21727,8 @@ const ButtonPanel = {
                   textLength: eventData.textLength,
                   previousSimplifiedTexts: eventData.previousSimplifiedTexts || [],
                     shouldAllowSimplifyMore: false, // Will be set on complete
+                    possibleQuestions: [], // Will be set on complete
+                    context: contextMap.get(matchingTextKey) || '', // Store context for ask API
                     highlight: highlight
                   };
                   
@@ -20060,8 +21799,17 @@ const ButtonPanel = {
                     textLength: eventData.textLength,
                   previousSimplifiedTexts: eventData.previousSimplifiedTexts || [],
                   shouldAllowSimplifyMore: eventData.shouldAllowSimplifyMore || false,
+                  possibleQuestions: eventData.possibleQuestions || [],
+                  context: contextMap.get(matchingTextKey) || '', // Store context for ask API
                   highlight: highlight
                   };
+                  
+                  // Store possibleQuestions in ChatDialog (like pagePossibleQuestions for summarise)
+                  if (eventData.possibleQuestions && Array.isArray(eventData.possibleQuestions) && eventData.possibleQuestions.length > 0) {
+                    ChatDialog.simplifiedPossibleQuestions = eventData.possibleQuestions;
+                    console.log('[ButtonPanel] Stored simplifiedPossibleQuestions in ChatDialog:', ChatDialog.simplifiedPossibleQuestions);
+                    console.log('[ButtonPanel] Stored simplifiedPossibleQuestions length:', ChatDialog.simplifiedPossibleQuestions.length);
+                  }
                   
                   // Store final simplified text data
                   TextSelector.simplifiedTexts.set(matchingTextKey, simplifiedData);
