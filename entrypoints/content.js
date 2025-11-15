@@ -11758,6 +11758,15 @@ const ChatDialog = {
       });
     });
     
+    // Attach reference marker handlers to the summary content
+    const summaryContent = summaryContainer.querySelector('.vocab-chat-page-summary-content');
+    if (summaryContent) {
+      console.log('[ChatDialog] Attaching reference handlers to summary content in renderPageSummaryWithQuestions');
+      this.attachReferenceMarkerHandlers(summaryContent);
+    } else {
+      console.warn('[ChatDialog] Summary content not found in renderPageSummaryWithQuestions');
+    }
+    
     // Trigger animation by forcing a reflow for questions container
     const questionsContainer = summaryContainer.querySelector('.vocab-chat-page-questions-container');
     if (questionsContainer) {
@@ -13279,94 +13288,283 @@ const ChatDialog = {
   },
   
   /**
-   * Find and highlight paragraph containing the substring
+   * Find and highlight HTML element containing the substring using fuzzy matching
+   * Searches all HTML element types: p, h1-h6, div, span, article, section, main, header, footer, aside, nav, etc.
    * @param {string} substring - The substring to find
    */
   scrollToAndHighlightParagraph(substring) {
-    if (!substring) return;
+    console.log('[ChatDialog] scrollToAndHighlightParagraph called with substring:', substring);
+    
+    if (!substring) {
+      console.warn('[ChatDialog] No substring provided to scrollToAndHighlightParagraph');
+      return null;
+    }
     
     // Remove any existing highlights
     this.removeReferenceHighlights();
     
-    // Get the page text content
-    const pageText = document.body.innerText || document.body.textContent || '';
-    
-    // Find the substring in the page (fuzzy match - case insensitive)
     const searchText = substring.trim();
-    const lowerPageText = pageText.toLowerCase();
+    if (!searchText) {
+      console.warn('[ChatDialog] Substring is empty after trimming');
+      return null;
+    }
+    
+    console.log('[ChatDialog] Search text:', searchText);
+    console.log('[ChatDialog] Search text length:', searchText.length);
+    
     const lowerSearchText = searchText.toLowerCase();
+    const searchWords = searchText.split(/\s+/).filter(w => w.length > 2); // Filter out very short words
     
-    // Try to find the substring
-    let foundIndex = -1;
-    if (lowerPageText.includes(lowerSearchText)) {
-      foundIndex = lowerPageText.indexOf(lowerSearchText);
+    console.log('[ChatDialog] Search words:', searchWords);
+    console.log('[ChatDialog] Search words count:', searchWords.length);
+    
+    // Search in all HTML element types
+    const searchableSelectors = 'p, h1, h2, h3, h4, h5, h6, div, span, article, section, main, header, footer, aside, nav, li, td, th, blockquote, pre, code, label, figcaption, summary, details';
+    const allElements = document.body.querySelectorAll(searchableSelectors);
+    
+    console.log('[ChatDialog] Total elements to search:', allElements.length);
+    
+    let bestMatch = null;
+    let bestMatchScore = 0;
+    
+    // Fuzzy matching function - calculates similarity score
+    const calculateSimilarity = (text1, text2) => {
+      const lower1 = text1.toLowerCase();
+      const lower2 = text2.toLowerCase();
+      
+      // Exact match gets highest score
+      if (lower1 === lower2) return 100;
+      
+      // Contains match
+      if (lower2.includes(lower1)) return 90;
+      if (lower1.includes(lower2)) return 85;
+      
+      // Word-based matching
+      const words1 = lower1.split(/\s+/).filter(w => w.length > 0);
+      const words2 = lower2.split(/\s+/).filter(w => w.length > 0);
+      
+      if (words1.length === 0 || words2.length === 0) return 0;
+      
+      // Count matching words
+      let matchingWords = 0;
+      for (const word1 of words1) {
+        if (words2.some(word2 => word2.includes(word1) || word1.includes(word2))) {
+          matchingWords++;
+        }
+      }
+      
+      // Calculate score based on word matches
+      const wordMatchRatio = matchingWords / Math.max(words1.length, words2.length);
+      return wordMatchRatio * 80;
+    };
+    
+    // First, collect all matching elements with their scores
+    const matchingElements = [];
+    
+    // Search through all elements
+    for (const elem of allElements) {
+      // Skip if element is hidden or too small
+      const style = window.getComputedStyle(elem);
+      if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') {
+        continue;
+      }
+      
+      const elemText = elem.innerText || elem.textContent || '';
+      if (!elemText.trim()) continue;
+      
+      const lowerElemText = elemText.toLowerCase();
+      let score = 0;
+      let isMatch = false;
+      
+      // Try exact match first
+      if (lowerElemText.includes(lowerSearchText)) {
+        score = calculateSimilarity(searchText, elemText);
+        isMatch = true;
+      }
+      // Try fuzzy matching with word-based approach
+      else if (searchWords.length > 0) {
+        // Check if all significant words are present
+        const significantWords = searchWords.filter(w => w.length > 3);
+        if (significantWords.length > 0) {
+          const allWordsPresent = significantWords.every(word => 
+            lowerElemText.includes(word.toLowerCase())
+          );
+          
+          if (allWordsPresent) {
+            score = calculateSimilarity(searchText, elemText);
+            isMatch = true;
+          }
+        }
+        
+        // Try matching first few words
+        if (!isMatch && searchWords.length >= 2) {
+          const firstFewWords = searchWords.slice(0, Math.min(3, searchWords.length)).join(' ').toLowerCase();
+          if (lowerElemText.includes(firstFewWords)) {
+            score = calculateSimilarity(searchText, elemText);
+            isMatch = true;
+          }
+        }
+        
+        // Try partial word matching
+        if (!isMatch) {
+          const matchingWords = searchWords.filter(word => {
+            const lowerWord = word.toLowerCase();
+            return lowerElemText.includes(lowerWord) || 
+                   Array.from(lowerElemText.split(/\s+/)).some(elemWord => 
+                     elemWord.includes(lowerWord) || lowerWord.includes(elemWord)
+                   );
+          });
+          
+          if (matchingWords.length >= Math.ceil(searchWords.length * 0.6)) {
+            score = calculateSimilarity(searchText, elemText);
+            isMatch = true;
+          }
+        }
+      }
+      
+      if (isMatch && score > 20) {
+        matchingElements.push({ element: elem, score: score });
+      }
+    }
+    
+    console.log('[ChatDialog] Found', matchingElements.length, 'matching elements');
+    
+    if (matchingElements.length === 0) {
+      console.warn('[ChatDialog] No matching elements found');
+      return null;
+    }
+    
+    // Sort by score (highest first)
+    matchingElements.sort((a, b) => b.score - a.score);
+    
+    // Find the leaf node (most specific element)
+    // A leaf node is one that contains the text but none of its children also contain the text
+    // OR it's the deepest element in the DOM tree among matches
+    let leafMatch = null;
+    let leafMatchScore = 0;
+    
+    for (const match of matchingElements) {
+      const elem = match.element;
+      const score = match.score;
+      
+      // Check if this element is a leaf node (no child elements also match)
+      // Get all child elements that are also in our searchable selectors
+      const childMatches = Array.from(elem.querySelectorAll(searchableSelectors)).filter(child => {
+        // Check if this child is also in our matching elements
+        return matchingElements.some(m => m.element === child);
+      });
+      
+      // If no child elements match, this is a leaf node
+      if (childMatches.length === 0) {
+        // This is a leaf node - use it if it has a better or equal score
+        if (score >= leafMatchScore) {
+          leafMatch = elem;
+          leafMatchScore = score;
+          console.log('[ChatDialog] Found leaf node match:', elem.tagName, 'score:', score);
+        }
+      } else {
+        // This element has children that also match
+        // Check if any of the children are leaf nodes with better scores
+        let hasBetterLeafChild = false;
+        for (const childMatch of childMatches) {
+          const childMatchData = matchingElements.find(m => m.element === childMatch);
+          if (childMatchData) {
+            // Check if this child is a leaf (no matching grandchildren)
+            const grandchildMatches = Array.from(childMatch.querySelectorAll(searchableSelectors)).filter(grandchild => {
+              return matchingElements.some(m => m.element === grandchild);
+            });
+            
+            if (grandchildMatches.length === 0 && childMatchData.score >= leafMatchScore) {
+              hasBetterLeafChild = true;
+              break;
+            }
+          }
+        }
+        
+        // Only use this element if it doesn't have better leaf children
+        if (!hasBetterLeafChild && score > leafMatchScore) {
+          // But prefer elements that are more specific (have fewer children with matches)
+          // Actually, let's skip non-leaf nodes and only use leaf nodes
+          continue;
+        }
+      }
+    }
+    
+    // If we found a leaf match, use it
+    if (leafMatch) {
+      bestMatch = leafMatch;
+      bestMatchScore = leafMatchScore;
     } else {
-      // Try fuzzy matching - find first few words
-      const searchWords = searchText.split(/\s+/).filter(w => w.length > 0);
-      if (searchWords.length > 0) {
-        const firstFewWords = searchWords.slice(0, Math.min(3, searchWords.length)).join(' ').toLowerCase();
-        foundIndex = lowerPageText.indexOf(firstFewWords);
-      }
-    }
-    
-    if (foundIndex === -1) {
-      console.log('[ChatDialog] Could not find substring in page:', substring);
-      return;
-    }
-    
-    // Find the paragraph containing this text
-    // Walk up the DOM tree from the text node to find the paragraph
-    const textNodes = this.getTextNodes(document.body);
-    let targetNode = null;
-    let currentOffset = 0;
-    
-    for (const node of textNodes) {
-      const nodeText = node.textContent || '';
-      const nodeLength = nodeText.length;
+      // Fallback: use the highest scoring element, but try to find the deepest one
+      // among elements with the same highest score
+      const highestScore = matchingElements[0].score;
+      const topMatches = matchingElements.filter(m => m.score === highestScore);
       
-      if (currentOffset <= foundIndex && foundIndex < currentOffset + nodeLength) {
-        targetNode = node;
-        break;
-      }
+      // Find the deepest element (most nested)
+      let deepestElement = null;
+      let maxDepth = -1;
       
-      currentOffset += nodeLength;
-    }
-    
-    if (!targetNode) {
-      // Fallback: try to find by searching all elements
-      const allElements = document.body.querySelectorAll('p, div, span, article, section, main');
-      for (const elem of allElements) {
-        const elemText = (elem.innerText || elem.textContent || '').toLowerCase();
-        if (elemText.includes(lowerSearchText)) {
-          targetNode = elem;
-          break;
+      for (const match of topMatches) {
+        const elem = match.element;
+        // Calculate depth in DOM tree
+        let depth = 0;
+        let current = elem;
+        while (current && current !== document.body) {
+          depth++;
+          current = current.parentElement;
+        }
+        
+        if (depth > maxDepth) {
+          maxDepth = depth;
+          deepestElement = elem;
         }
       }
+      
+      if (deepestElement) {
+        bestMatch = deepestElement;
+        bestMatchScore = highestScore;
+        console.log('[ChatDialog] Using deepest element as fallback:', deepestElement.tagName, 'depth:', maxDepth);
+      } else {
+        // Last resort: use highest scoring element
+        bestMatch = matchingElements[0].element;
+        bestMatchScore = matchingElements[0].score;
+      }
     }
     
-    if (targetNode) {
-      // Find the paragraph or container element
-      let paragraph = targetNode;
-      while (paragraph && paragraph !== document.body) {
-        if (paragraph.tagName === 'P' || 
-            paragraph.tagName === 'DIV' || 
-            paragraph.tagName === 'ARTICLE' || 
-            paragraph.tagName === 'SECTION' ||
-            paragraph.tagName === 'MAIN') {
-          break;
-        }
-        paragraph = paragraph.parentElement;
-      }
+    console.log('[ChatDialog] Search completed. Best match score:', bestMatchScore);
+    
+    if (bestMatch && bestMatchScore > 20) {
+      console.log('[ChatDialog] ===== MATCH FOUND =====');
+      console.log('[ChatDialog] Best match element tag:', bestMatch.tagName);
+      console.log('[ChatDialog] Best match element class:', bestMatch.className);
+      console.log('[ChatDialog] Best match element ID:', bestMatch.id);
+      console.log('[ChatDialog] Best match score:', bestMatchScore);
+      console.log('[ChatDialog] Best match text content:', bestMatch.innerText || bestMatch.textContent || '');
+      console.log('[ChatDialog] Best match text length:', (bestMatch.innerText || bestMatch.textContent || '').length);
+      console.log('[ChatDialog] Best match HTML (first 500 chars):', bestMatch.outerHTML.substring(0, 500));
       
-      if (paragraph && paragraph !== document.body) {
-        // Highlight the paragraph
-        paragraph.classList.add('vocab-reference-highlight');
-        
-        // Scroll to the paragraph
-        paragraph.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        
-        console.log('[ChatDialog] Scrolled to and highlighted paragraph containing:', substring);
+      // Highlight the matched element
+      bestMatch.classList.add('vocab-reference-highlight');
+      console.log('[ChatDialog] Added vocab-reference-highlight class to element');
+      
+      // Always scroll to the element
+      console.log('[ChatDialog] Scrolling to element...');
+      bestMatch.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      console.log('[ChatDialog] Scroll command executed');
+      
+      // Return the matched element so it can be stored for toggle functionality
+      this._lastHighlightedElement = bestMatch;
+      
+      console.log('[ChatDialog] Found and highlighted element:', bestMatch.tagName, 'with score:', bestMatchScore, 'for substring:', substring);
+      return bestMatch;
+    } else {
+      console.warn('[ChatDialog] ===== NO MATCH FOUND =====');
+      console.warn('[ChatDialog] Could not find matching element for substring:', substring);
+      console.warn('[ChatDialog] Best score achieved:', bestMatchScore, '(minimum required: 20)');
+      if (bestMatch) {
+        console.warn('[ChatDialog] Best match element (score too low):', bestMatch.tagName, bestMatch.className);
       }
+      return null;
     }
   },
   
@@ -13409,47 +13607,209 @@ const ChatDialog = {
    * @param {HTMLElement} container - Container element to search for reference markers
    */
   attachReferenceMarkerHandlers(container) {
-    if (!container) return;
+    console.log('[ChatDialog] attachReferenceMarkerHandlers called');
+    console.log('[ChatDialog] Container:', container);
+    console.log('[ChatDialog] Container tag:', container ? container.tagName : 'null');
+    console.log('[ChatDialog] Container class:', container ? container.className : 'null');
+    
+    if (!container) {
+      console.warn('[ChatDialog] No container provided to attachReferenceMarkerHandlers');
+      return;
+    }
     
     // Initialize active reference tracking if not exists
     if (!this._activeReferenceId) {
       this._activeReferenceId = null;
     }
     
+    // Store reference to element for each refId to enable scrolling even when toggling
+    if (!this._referenceElements) {
+      this._referenceElements = new Map();
+    }
+    
     // Query for all reference marker and button classes
     const markers = container.querySelectorAll('.vocab-reference-marker, .vocab-ref-button, .vocab-ref-button-circular');
-    markers.forEach(marker => {
+    console.log('[ChatDialog] Found', markers.length, 'reference markers/buttons in container');
+    
+    if (markers.length === 0) {
+      // Try to find buttons in the entire document to debug
+      const allButtons = document.querySelectorAll('.vocab-ref-button-circular');
+      console.log('[ChatDialog] Total vocab-ref-button-circular buttons in document:', allButtons.length);
+      if (allButtons.length > 0) {
+        console.log('[ChatDialog] First button found:', allButtons[0]);
+        console.log('[ChatDialog] First button classes:', allButtons[0].className);
+        console.log('[ChatDialog] First button parent:', allButtons[0].parentElement);
+        console.log('[ChatDialog] Container contains first button?', container.contains(allButtons[0]));
+      }
+    }
+    
+    markers.forEach((marker, index) => {
+      console.log(`[ChatDialog] Processing marker ${index + 1}/${markers.length}:`, marker);
       // Remove existing listeners by cloning
       const newMarker = marker.cloneNode(true);
       marker.parentNode.replaceChild(newMarker, marker);
       
+      console.log(`[ChatDialog] Attached click handler to marker ${index + 1}`);
+      console.log(`[ChatDialog] Marker classes:`, newMarker.className);
+      console.log(`[ChatDialog] Marker data-ref-id:`, newMarker.getAttribute('data-ref-id'));
+      console.log(`[ChatDialog] Marker data-substring:`, newMarker.getAttribute('data-substring'));
+      
       // Add click handler
       newMarker.addEventListener('click', (e) => {
+        console.log('[ChatDialog] ===== CLICK EVENT FIRED =====');
+        console.log('[ChatDialog] Event target:', e.target);
+        console.log('[ChatDialog] Event currentTarget:', e.currentTarget);
         e.preventDefault();
         e.stopPropagation();
         
         const refId = newMarker.getAttribute('data-ref-id');
         const substring = newMarker.getAttribute('data-substring');
+        const refNumber = newMarker.getAttribute('data-ref-number');
         
-        if (!substring) return;
+        console.log('========================================');
+        console.log('[ChatDialog] ===== REF BUTTON CLICKED =====');
+        console.log('[ChatDialog] Ref Button Number:', refNumber);
+        console.log('[ChatDialog] Ref ID:', refId);
+        console.log('[ChatDialog] Substring from button:', substring);
+        console.log('[ChatDialog] Substring length:', substring ? substring.length : 0);
+        console.log('[ChatDialog] Substring preview:', substring ? substring.substring(0, 100) : 'null');
+        
+        if (!substring) {
+          console.warn('[ChatDialog] No substring found in ref button!');
+          return;
+        }
         
         // Check if this is the same button that's currently active
         const isCurrentlyActive = this._activeReferenceId === refId;
         const hasHighlights = document.querySelectorAll('.vocab-reference-highlight').length > 0;
+        const storedElement = this._referenceElements.get(refId);
+        
+        console.log('[ChatDialog] Is currently active:', isCurrentlyActive);
+        console.log('[ChatDialog] Has existing highlights:', hasHighlights);
+        console.log('[ChatDialog] Stored element exists:', !!storedElement);
         
         // If same button clicked and highlights exist, toggle off (remove highlights)
         if (isCurrentlyActive && hasHighlights) {
+          console.log('[ChatDialog] Toggling OFF highlight...');
+          // Remove highlights
           this.removeReferenceHighlights();
           this._activeReferenceId = null;
+          
+          // Still scroll to the element even when toggling off (if we have it stored)
+          if (storedElement && storedElement.parentNode) {
+            console.log('[ChatDialog] Scrolling to stored element (toggle off):');
+            console.log('[ChatDialog] Element tag:', storedElement.tagName);
+            console.log('[ChatDialog] Element class:', storedElement.className);
+            console.log('[ChatDialog] Element ID:', storedElement.id);
+            console.log('[ChatDialog] Element text preview:', (storedElement.innerText || storedElement.textContent || '').substring(0, 100));
+            console.log('[ChatDialog] Element HTML:', storedElement.outerHTML.substring(0, 200));
+            storedElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          } else {
+            console.warn('[ChatDialog] No stored element found for scrolling (toggle off)');
+          }
+          
           console.log('[ChatDialog] Toggled off highlight for reference:', refId);
         } else {
+          console.log('[ChatDialog] Searching for element to highlight...');
           // Different button or no highlights - do normal highlight flow
-          this.scrollToAndHighlightParagraph(substring);
+          const highlightedElement = this.scrollToAndHighlightParagraph(substring);
           this._activeReferenceId = refId;
+          
+          // Store the highlighted element for this refId so we can scroll to it later
+          if (highlightedElement) {
+            this._referenceElements.set(refId, highlightedElement);
+            console.log('[ChatDialog] ===== ELEMENT FOUND AND HIGHLIGHTED =====');
+            console.log('[ChatDialog] Element tag:', highlightedElement.tagName);
+            console.log('[ChatDialog] Element class:', highlightedElement.className);
+            console.log('[ChatDialog] Element ID:', highlightedElement.id);
+            console.log('[ChatDialog] Element text content:', highlightedElement.innerText || highlightedElement.textContent || '');
+            console.log('[ChatDialog] Element text length:', (highlightedElement.innerText || highlightedElement.textContent || '').length);
+            console.log('[ChatDialog] Element HTML (first 500 chars):', highlightedElement.outerHTML.substring(0, 500));
+            console.log('[ChatDialog] Element will be auto-scrolled to view');
+          } else {
+            console.warn('[ChatDialog] ===== NO ELEMENT FOUND =====');
+            console.warn('[ChatDialog] Could not find matching element for substring:', substring);
+          }
+          
           console.log('[ChatDialog] Highlighted reference:', refId);
         }
+        console.log('========================================');
       });
     });
+    
+    // Add event delegation on document as fallback to catch clicks on buttons
+    // even if they're created dynamically after handlers are attached
+    if (!this._referenceDelegationHandler) {
+      console.log('[ChatDialog] Setting up document-level event delegation for ref buttons');
+      this._referenceDelegationHandler = (e) => {
+        // Check if click is on a reference button
+        const clickedButton = e.target.closest('.vocab-ref-button-circular, .vocab-ref-button, .vocab-reference-marker');
+        if (clickedButton) {
+          console.log('[ChatDialog] ===== DELEGATION: Ref button clicked =====');
+          console.log('[ChatDialog] Clicked button:', clickedButton);
+          console.log('[ChatDialog] Button classes:', clickedButton.className);
+          
+          e.preventDefault();
+          e.stopPropagation();
+          
+          const refId = clickedButton.getAttribute('data-ref-id');
+          const substring = clickedButton.getAttribute('data-substring');
+          const refNumber = clickedButton.getAttribute('data-ref-number');
+          
+          console.log('[ChatDialog] Ref ID:', refId);
+          console.log('[ChatDialog] Substring:', substring);
+          console.log('[ChatDialog] Ref Number:', refNumber);
+          
+          if (!substring) {
+            console.warn('[ChatDialog] No substring found in clicked button');
+            return;
+          }
+          
+          // Check if this is the same button that's currently active
+          const isCurrentlyActive = this._activeReferenceId === refId;
+          const hasHighlights = document.querySelectorAll('.vocab-reference-highlight').length > 0;
+          const storedElement = this._referenceElements ? this._referenceElements.get(refId) : null;
+          
+          console.log('[ChatDialog] Is currently active:', isCurrentlyActive);
+          console.log('[ChatDialog] Has existing highlights:', hasHighlights);
+          console.log('[ChatDialog] Stored element exists:', !!storedElement);
+          
+          // If same button clicked and highlights exist, toggle off (remove highlights)
+          if (isCurrentlyActive && hasHighlights) {
+            console.log('[ChatDialog] Toggling OFF highlight (delegation)...');
+            this.removeReferenceHighlights();
+            this._activeReferenceId = null;
+            
+            // Still scroll to the element even when toggling off
+            if (storedElement && storedElement.parentNode) {
+              console.log('[ChatDialog] Scrolling to stored element (toggle off, delegation)');
+              storedElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+          } else {
+            console.log('[ChatDialog] Searching for element to highlight (delegation)...');
+            const highlightedElement = this.scrollToAndHighlightParagraph(substring);
+            this._activeReferenceId = refId;
+            
+            if (highlightedElement) {
+              if (!this._referenceElements) {
+                this._referenceElements = new Map();
+              }
+              this._referenceElements.set(refId, highlightedElement);
+              console.log('[ChatDialog] Element found and stored (delegation)');
+            }
+          }
+        } else {
+          // Check if click is outside reference markers - remove highlights
+          if (!e.target.closest('.vocab-reference-marker, .vocab-ref-button, .vocab-ref-button-circular')) {
+            this.removeReferenceHighlights();
+          }
+        }
+      };
+      
+      // Use capture phase to catch events early
+      document.addEventListener('click', this._referenceDelegationHandler, true);
+      console.log('[ChatDialog] Document-level event delegation handler attached');
+    }
     
     // Add click handler to document to remove highlights when clicking elsewhere
     const removeHighlightHandler = (e) => {
@@ -20269,13 +20629,13 @@ const ButtonPanel = {
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        width: 24px;
-        height: 24px;
+        width: 18px;
+        height: 18px;
         background-color: #9527F5;
         border: none;
         border-radius: 50%;
         color: white;
-        font-size: 12px;
+        font-size: 10px;
         font-weight: bold;
         cursor: pointer;
         margin: 0 2px;
@@ -20305,10 +20665,11 @@ const ButtonPanel = {
 
       /* Reference Highlight Styles */
       .vocab-reference-highlight {
-        background-color: rgba(149, 39, 245, 0.15) !important;
+        background-color: rgba(149, 39, 245, 0.25) !important;
         transition: background-color 0.3s ease;
         padding: 4px 8px;
         border-radius: 4px;
+        box-shadow: 0 0 0 2px rgba(149, 39, 245, 0.2) !important;
       }
 
       /* ===================================
