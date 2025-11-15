@@ -25,7 +25,7 @@ class ApiService {
    * @param {Function} params.onError - Callback for errors: (error) => void
    * @returns {Function} Abort function to cancel the request
    */
-  static async ask({ initial_context, chat_history = [], question, onChunk, onComplete, onError }) {
+  static async ask({ initial_context, chat_history = [], question, context_type, onChunk, onComplete, onError }) {
     const url = `${this.BASE_URL}${this.ENDPOINTS.ASK}`;
     
     // Validate input parameters
@@ -85,6 +85,11 @@ class ApiService {
     // Only include languageCode if it's not null
     if (languageCode !== null) {
       requestBody.languageCode = languageCode;
+    }
+    
+    // Include context_type if provided
+    if (context_type) {
+      requestBody.context_type = context_type;
     }
     
     try {
