@@ -305,6 +305,10 @@ export default defineContentScript({
     // Make pageTextContent accessible globally for ChatDialog
     window.pageTextContent = pageTextContent;
     
+    // Global variables for page summary (persist across dialog open/close)
+    window.pageSummary = null;
+    window.pageSummaryPossibleQuestions = null;
+    
     // Global language variable - fetched from chrome.storage.local (shared across all tabs and domains)
     // Initialize language variable - will be loaded from global storage
     let language = 'WEBSITE_LANGUAGE';
@@ -9216,12 +9220,16 @@ const ChatDialog = {
     // Set the chat context
     this.chatContext = chatContext;
     
-    // Clear page summary when opening a new page (if textKey starts with 'page-general')
-    // This ensures the button is enabled for a new page
+    // For page-general context, check global variables first
     if (textKey && textKey.startsWith('page-general')) {
-      // Only clear if it's a different page (different textKey)
-      if (this.currentTextKey !== textKey && this.currentTextKey !== null) {
-        console.log('[ChatDialog] Clearing page summary for new page');
+      // Load from global variables if they exist
+      if (window.pageSummary !== null && window.pageSummaryPossibleQuestions !== null) {
+        console.log('[ChatDialog] Loading page summary from global variables');
+        this.pageSummary = window.pageSummary;
+        this.pagePossibleQuestions = window.pageSummaryPossibleQuestions;
+      } else {
+        // If global variables are null, clear instance variables
+        console.log('[ChatDialog] Global page summary variables are null, clearing instance variables');
         this.pageSummary = null;
         this.pagePossibleQuestions = [];
       }
@@ -10624,16 +10632,28 @@ const ChatDialog = {
     
     // Create summary container (above button) for ask-about-page chat
     if (this.chatContext === 'general' && this.currentTextKey && this.currentTextKey.startsWith('page-general')) {
-      const summaryContainer = document.createElement('div');
-      summaryContainer.id = 'vocab-chat-page-summary-container';
-      summaryContainer.className = 'vocab-chat-page-summary-container';
+      // Check global variables first
+      const hasGlobalSummary = window.pageSummary !== null && window.pageSummaryPossibleQuestions !== null;
       
-      // Render summary if it exists
-      if (this.pageSummary) {
-        this.renderPageSummaryWithQuestions(summaryContainer);
+      // Only create and render summary container if global variables are not null
+      if (hasGlobalSummary) {
+        const summaryContainer = document.createElement('div');
+        summaryContainer.id = 'vocab-chat-page-summary-container';
+        summaryContainer.className = 'vocab-chat-page-summary-container';
+        
+        // Load from global variables to instance variables if needed
+        if (!this.pageSummary) {
+          this.pageSummary = window.pageSummary;
+          this.pagePossibleQuestions = window.pageSummaryPossibleQuestions;
+        }
+        
+        // Render summary if it exists
+        if (this.pageSummary) {
+          this.renderPageSummaryWithQuestions(summaryContainer);
+        }
+        
+        scrollableContainer.appendChild(summaryContainer);
       }
-      
-      scrollableContainer.appendChild(summaryContainer);
     }
     
     // Create "Simplify more" button container
@@ -10645,6 +10665,9 @@ const ChatDialog = {
     console.log('[ChatDialog] Creating Simplify more button - chatContext:', this.chatContext, 'mode:', this.mode, 'textKey:', this.currentTextKey);
     // Check for both 'page-general' and 'page-general-generic' (the transformed key)
     if (this.chatContext === 'general' && this.currentTextKey && this.currentTextKey.startsWith('page-general')) {
+      // Check global variables first
+      const hasGlobalSummary = window.pageSummary !== null && window.pageSummaryPossibleQuestions !== null;
+      
       // Show "Summarise the page" button for ask-about-page chat
       console.log('[ChatDialog] Adding Summarise the page button');
       const summariseBtn = document.createElement('button');
@@ -10652,12 +10675,18 @@ const ChatDialog = {
       summariseBtn.innerHTML = `${this.createSparkleIcon()} Summarise this page`;
       summariseBtn.id = 'vocab-chat-summarise-page-btn';
       
-      // If summary already exists, show "Clear summary" button
-      if (this.pageSummary) {
+      // If global summary exists, show "Clear summary" button
+      if (hasGlobalSummary) {
+        // Load from global variables to instance variables if needed
+        if (!this.pageSummary) {
+          this.pageSummary = window.pageSummary;
+          this.pagePossibleQuestions = window.pageSummaryPossibleQuestions;
+        }
+        
         summariseBtn.innerHTML = 'Clear summary';
         summariseBtn.disabled = false;
         summariseBtn.classList.remove('disabled');
-        console.log('[ChatDialog] Summary exists - showing "Clear summary" button');
+        console.log('[ChatDialog] Global summary exists - showing "Clear summary" button');
         
         // Add onclick handler to clear summary
         summariseBtn.addEventListener('click', (e) => {
@@ -11470,6 +11499,9 @@ const ChatDialog = {
               if (eventData.accumulated) {
                 this.pageSummary = eventData.accumulated;
                 
+                // Store accumulated summary in global variable during streaming
+                window.pageSummary = eventData.accumulated;
+                
                 // Show summary container on first chunk
                 if (summaryContainer && !summaryShown) {
                   summaryShown = true;
@@ -11484,6 +11516,12 @@ const ChatDialog = {
                       ${this.renderMarkdown(this.pageSummary)}
                     </div>
                   `;
+                  
+                  // Attach click handlers to reference markers in summary
+                  const summaryContent = summaryContainer.querySelector('.vocab-chat-page-summary-content');
+                  if (summaryContent) {
+                    this.attachReferenceMarkerHandlers(summaryContent);
+                  }
                   
                   // Auto-scroll to bottom as content is being added
                   // Find the scrollable content container - try multiple methods
@@ -11522,9 +11560,14 @@ const ChatDialog = {
               console.log('[ChatDialog] Complete event - summary length:', eventData.summary.length);
               console.log('[ChatDialog] Possible questions:', eventData.possibleQuestions?.length || 0);
               
-              // Store final summary and possible questions
+              // Store final summary and possible questions in instance variables
               this.pageSummary = eventData.summary;
               this.pagePossibleQuestions = eventData.possibleQuestions || [];
+              
+              // Store in global variables for persistence across dialog open/close
+              window.pageSummary = eventData.summary;
+              window.pageSummaryPossibleQuestions = eventData.possibleQuestions || [];
+              console.log('[ChatDialog] Stored summary in global variables');
               
               // Update summary UI with final data including questions
               if (summaryContainer) {
@@ -11840,11 +11883,15 @@ const ChatDialog = {
   clearSummary() {
     console.log('[ChatDialog] Clearing page summary and questions');
     
-    // Clear the summary data and questions
+    // Clear the summary data and questions in instance variables
     this.pageSummary = '';
     this.pagePossibleQuestions = [];
     this.simplifiedPossibleQuestions = []; // Also clear simplified questions
-    console.log('[ChatDialog] Summary and questions data cleared');
+    
+    // Clear global variables
+    window.pageSummary = null;
+    window.pageSummaryPossibleQuestions = null;
+    console.log('[ChatDialog] Summary and questions data cleared (both instance and global)');
     
     // Remove summary container (which includes questions)
     const summaryContainer = document.getElementById('vocab-chat-page-summary-container');
@@ -11890,21 +11937,28 @@ const ChatDialog = {
     
     // Create summary container (above button) for ask-about-page chat
     if (this.chatContext === 'general' && this.currentTextKey && this.currentTextKey.startsWith('page-general')) {
-      const summaryContainer = document.createElement('div');
-      summaryContainer.id = 'vocab-chat-page-summary-container';
-      summaryContainer.className = 'vocab-chat-page-summary-container';
+      // Check global variables first
+      const hasGlobalSummary = window.pageSummary !== null && window.pageSummaryPossibleQuestions !== null;
       
-      // Render summary if it exists
-      if (this.pageSummary) {
-        summaryContainer.innerHTML = `
-          <h3 class="vocab-chat-page-summary-header">Page summary</h3>
-          <div class="vocab-chat-page-summary-content">
-            ${this.renderMarkdown(this.pageSummary)}
-          </div>
-        `;
+      // Only create and render summary container if global variables are not null
+      if (hasGlobalSummary) {
+        const summaryContainer = document.createElement('div');
+        summaryContainer.id = 'vocab-chat-page-summary-container';
+        summaryContainer.className = 'vocab-chat-page-summary-container';
+        
+        // Load from global variables to instance variables if needed
+        if (!this.pageSummary) {
+          this.pageSummary = window.pageSummary;
+          this.pagePossibleQuestions = window.pageSummaryPossibleQuestions;
+        }
+        
+        // Render summary if it exists
+        if (this.pageSummary) {
+          this.renderPageSummaryWithQuestions(summaryContainer);
+        }
+        
+        content.appendChild(summaryContainer);
       }
-      
-      content.appendChild(summaryContainer);
     }
     
     // Create "Summarise the page" button container for ask-about-page chat
@@ -11914,18 +11968,27 @@ const ChatDialog = {
     // Show "Summarise the page" button for ask-about-page chat (page-general)
     // Check for both 'page-general' and 'page-general-generic' (the transformed key)
     if (this.chatContext === 'general' && this.currentTextKey && this.currentTextKey.startsWith('page-general')) {
+      // Check global variables first
+      const hasGlobalSummary = window.pageSummary !== null && window.pageSummaryPossibleQuestions !== null;
+      
       console.log('[ChatDialog] Adding Summarise the page button to ask content');
       const summariseBtn = document.createElement('button');
       summariseBtn.className = 'vocab-chat-simplify-more-btn';
       summariseBtn.innerHTML = `${this.createSparkleIcon()} Summarise this page`;
       summariseBtn.id = 'vocab-chat-summarise-page-btn';
       
-      // If summary already exists, show "Clear summary" button
-      if (this.pageSummary) {
+      // If global summary exists, show "Clear summary" button
+      if (hasGlobalSummary) {
+        // Load from global variables to instance variables if needed
+        if (!this.pageSummary) {
+          this.pageSummary = window.pageSummary;
+          this.pagePossibleQuestions = window.pageSummaryPossibleQuestions;
+        }
+        
         summariseBtn.innerHTML = 'Clear summary';
         summariseBtn.disabled = false;
         summariseBtn.classList.remove('disabled');
-        console.log('[ChatDialog] Summary exists - showing "Clear summary" button');
+        console.log('[ChatDialog] Global summary exists - showing "Clear summary" button');
         
         // Add onclick handler to clear summary
         summariseBtn.addEventListener('click', (e) => {
@@ -12294,6 +12357,17 @@ const ChatDialog = {
       console.log('[ChatDialog] No context in simplifiedData, using requestText as initial_context');
     }
     
+    // Determine context_type based on mode and chatContext
+    // TEXT: for simplified mode (selected text chat)
+    // PAGE: for ask mode with general context (page/summary chat)
+    let contextType = null;
+    if (this.mode === 'simplified') {
+      contextType = 'TEXT';
+    } else if (this.mode === 'ask' && this.chatContext === 'general') {
+      contextType = 'PAGE';
+    }
+    console.log('[ChatDialog] Determined context_type:', contextType, 'for mode:', this.mode, 'chatContext:', this.chatContext);
+    
     // Prepare chat history from chatHistory
     const chat_history = this.chatHistory.map(item => ({
       role: item.type === 'user' ? 'user' : 'assistant',
@@ -12326,6 +12400,7 @@ const ChatDialog = {
         initial_context: initialContext,
         chat_history: chat_history,
         question: message,
+        context_type: contextType,
         onChunk: (chunk, accumulated) => {
           console.log('[ChatDialog] Received chunk:', chunk, 'accumulated:', accumulated);
           
@@ -12937,6 +13012,9 @@ const ChatDialog = {
     // Update the content with markdown rendering
     messageContent.innerHTML = this.renderMarkdown(accumulatedText);
     
+    // Attach click handlers to reference markers
+    this.attachReferenceMarkerHandlers(messageContent);
+    
     // Get the message bubble parent
     const messageBubble = messageContent.closest('.vocab-chat-message');
     let questionsAdded = false;
@@ -13133,6 +13211,268 @@ const ChatDialog = {
   },
   
   /**
+   * Parse and replace reference markers with clickable buttons
+   * Handles two patterns:
+   * 1. [[[(N) example_substring]]] - uses the number from the pattern, renders as rectangular button
+   * 2. [[[ some string ]]] - assigns sequential numbers (1, 2, 3...), renders as circular button
+   * @param {string} text - Text that may contain reference markers
+   * @returns {string} Text with reference markers replaced by HTML buttons
+   */
+  parseReferenceMarkers(text) {
+    if (!text) return text;
+    
+    let result = text;
+    let sequentialNumber = 1;
+    
+    // First, handle patterns with explicit numbers: [[[(N) example_substring]]]
+    // Pattern matches: [[[( followed by a number in parentheses, optionally followed by space, 
+    // then any text, followed by )]]]
+    const numberedPattern = /\[\[\[\((\d+)\)\s*([^\]]+?)\]\]\]/g;
+    result = result.replace(numberedPattern, (match, refNumber, substring) => {
+      // Trim any leading/trailing whitespace from substring
+      substring = substring.trim();
+      
+      // Create a unique ID for this reference marker
+      const refId = `vocab-ref-${refNumber}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      
+      // Return HTML for clickable reference button (small solid purple circular button with white text)
+      return `<button class="vocab-ref-button-circular" data-ref-number="${refNumber}" data-substring="${this.escapeHtml(substring)}" data-ref-id="${refId}" type="button">${refNumber}</button>`;
+    });
+    
+    // Then, handle patterns without numbers: [[[ some string ]]]
+    // Pattern matches: [[[ followed by any text, followed by ]]]
+    // Since numbered patterns are already replaced with HTML, this will only match unnumbered patterns
+    // We use a more robust pattern that handles content with ] characters by looking for the closing ]]]
+    const unnumberedPattern = /\[\[\[((?:(?!\]\]\]).)+?)\]\]\]/g;
+    result = result.replace(unnumberedPattern, (match, substring) => {
+      // Trim any leading/trailing whitespace from substring
+      substring = substring.trim();
+      
+      // Skip empty substrings
+      if (!substring) {
+        return match; // Return as-is if empty
+      }
+      
+      // Assign sequential number
+      const refNumber = sequentialNumber++;
+      
+      // Create a unique ID for this reference marker
+      const refId = `vocab-ref-${refNumber}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      
+      // Return HTML for clickable circular reference button (small solid purple circle with white text)
+      return `<button class="vocab-ref-button-circular" data-ref-number="${refNumber}" data-substring="${this.escapeHtml(substring)}" data-ref-id="${refId}" type="button">${refNumber}</button>`;
+    });
+    
+    return result;
+  },
+  
+  /**
+   * Escape HTML special characters
+   * @param {string} text - Text to escape
+   * @returns {string} Escaped text
+   */
+  escapeHtml(text) {
+    if (!text) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  },
+  
+  /**
+   * Find and highlight paragraph containing the substring
+   * @param {string} substring - The substring to find
+   */
+  scrollToAndHighlightParagraph(substring) {
+    if (!substring) return;
+    
+    // Remove any existing highlights
+    this.removeReferenceHighlights();
+    
+    // Get the page text content
+    const pageText = document.body.innerText || document.body.textContent || '';
+    
+    // Find the substring in the page (fuzzy match - case insensitive)
+    const searchText = substring.trim();
+    const lowerPageText = pageText.toLowerCase();
+    const lowerSearchText = searchText.toLowerCase();
+    
+    // Try to find the substring
+    let foundIndex = -1;
+    if (lowerPageText.includes(lowerSearchText)) {
+      foundIndex = lowerPageText.indexOf(lowerSearchText);
+    } else {
+      // Try fuzzy matching - find first few words
+      const searchWords = searchText.split(/\s+/).filter(w => w.length > 0);
+      if (searchWords.length > 0) {
+        const firstFewWords = searchWords.slice(0, Math.min(3, searchWords.length)).join(' ').toLowerCase();
+        foundIndex = lowerPageText.indexOf(firstFewWords);
+      }
+    }
+    
+    if (foundIndex === -1) {
+      console.log('[ChatDialog] Could not find substring in page:', substring);
+      return;
+    }
+    
+    // Find the paragraph containing this text
+    // Walk up the DOM tree from the text node to find the paragraph
+    const textNodes = this.getTextNodes(document.body);
+    let targetNode = null;
+    let currentOffset = 0;
+    
+    for (const node of textNodes) {
+      const nodeText = node.textContent || '';
+      const nodeLength = nodeText.length;
+      
+      if (currentOffset <= foundIndex && foundIndex < currentOffset + nodeLength) {
+        targetNode = node;
+        break;
+      }
+      
+      currentOffset += nodeLength;
+    }
+    
+    if (!targetNode) {
+      // Fallback: try to find by searching all elements
+      const allElements = document.body.querySelectorAll('p, div, span, article, section, main');
+      for (const elem of allElements) {
+        const elemText = (elem.innerText || elem.textContent || '').toLowerCase();
+        if (elemText.includes(lowerSearchText)) {
+          targetNode = elem;
+          break;
+        }
+      }
+    }
+    
+    if (targetNode) {
+      // Find the paragraph or container element
+      let paragraph = targetNode;
+      while (paragraph && paragraph !== document.body) {
+        if (paragraph.tagName === 'P' || 
+            paragraph.tagName === 'DIV' || 
+            paragraph.tagName === 'ARTICLE' || 
+            paragraph.tagName === 'SECTION' ||
+            paragraph.tagName === 'MAIN') {
+          break;
+        }
+        paragraph = paragraph.parentElement;
+      }
+      
+      if (paragraph && paragraph !== document.body) {
+        // Highlight the paragraph
+        paragraph.classList.add('vocab-reference-highlight');
+        
+        // Scroll to the paragraph
+        paragraph.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        
+        console.log('[ChatDialog] Scrolled to and highlighted paragraph containing:', substring);
+      }
+    }
+  },
+  
+  /**
+   * Get all text nodes in the document
+   * @param {Node} root - Root node to search from
+   * @returns {Array<Node>} Array of text nodes
+   */
+  getTextNodes(root) {
+    const textNodes = [];
+    const walker = document.createTreeWalker(
+      root,
+      NodeFilter.SHOW_TEXT,
+      null,
+      false
+    );
+    
+    let node;
+    while (node = walker.nextNode()) {
+      textNodes.push(node);
+    }
+    
+    return textNodes;
+  },
+  
+  /**
+   * Remove all reference highlights
+   */
+  removeReferenceHighlights() {
+    const highlighted = document.querySelectorAll('.vocab-reference-highlight');
+    highlighted.forEach(elem => {
+      elem.classList.remove('vocab-reference-highlight');
+    });
+    // Clear active reference tracking when highlights are removed
+    this._activeReferenceId = null;
+  },
+  
+  /**
+   * Attach click handlers to reference markers in a container
+   * @param {HTMLElement} container - Container element to search for reference markers
+   */
+  attachReferenceMarkerHandlers(container) {
+    if (!container) return;
+    
+    // Initialize active reference tracking if not exists
+    if (!this._activeReferenceId) {
+      this._activeReferenceId = null;
+    }
+    
+    // Query for all reference marker and button classes
+    const markers = container.querySelectorAll('.vocab-reference-marker, .vocab-ref-button, .vocab-ref-button-circular');
+    markers.forEach(marker => {
+      // Remove existing listeners by cloning
+      const newMarker = marker.cloneNode(true);
+      marker.parentNode.replaceChild(newMarker, marker);
+      
+      // Add click handler
+      newMarker.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        
+        const refId = newMarker.getAttribute('data-ref-id');
+        const substring = newMarker.getAttribute('data-substring');
+        
+        if (!substring) return;
+        
+        // Check if this is the same button that's currently active
+        const isCurrentlyActive = this._activeReferenceId === refId;
+        const hasHighlights = document.querySelectorAll('.vocab-reference-highlight').length > 0;
+        
+        // If same button clicked and highlights exist, toggle off (remove highlights)
+        if (isCurrentlyActive && hasHighlights) {
+          this.removeReferenceHighlights();
+          this._activeReferenceId = null;
+          console.log('[ChatDialog] Toggled off highlight for reference:', refId);
+        } else {
+          // Different button or no highlights - do normal highlight flow
+          this.scrollToAndHighlightParagraph(substring);
+          this._activeReferenceId = refId;
+          console.log('[ChatDialog] Highlighted reference:', refId);
+        }
+      });
+    });
+    
+    // Add click handler to document to remove highlights when clicking elsewhere
+    const removeHighlightHandler = (e) => {
+      // Check if click is on a reference marker or button
+      if (!e.target.closest('.vocab-reference-marker, .vocab-ref-button, .vocab-ref-button-circular')) {
+        this.removeReferenceHighlights();
+        document.removeEventListener('click', removeHighlightHandler);
+      }
+    };
+    
+    // Remove old listener if exists
+    if (this._referenceHighlightHandler) {
+      document.removeEventListener('click', this._referenceHighlightHandler);
+    }
+    
+    this._referenceHighlightHandler = removeHighlightHandler;
+    // Use setTimeout to avoid immediate trigger
+    setTimeout(() => {
+      document.addEventListener('click', removeHighlightHandler);
+    }, 100);
+  },
+  
+  /**
    * Simple markdown renderer
    * @param {string} text - Markdown text
    * @returns {string} HTML string
@@ -13142,10 +13482,37 @@ const ChatDialog = {
     
     let html = text;
     
-    // Escape HTML first
+    // Parse reference markers first (before escaping HTML)
+    html = this.parseReferenceMarkers(html);
+    
+    // Escape HTML (but preserve the reference marker HTML we just added)
+    // We need to escape only the parts that aren't already HTML
+    // This is a bit tricky - we'll escape, then parse references again
+    // Actually, let's parse references after escaping to avoid issues
+    // Let me rethink this...
+    
+    // Better approach: parse references, then escape the remaining text
+    // But we already parsed references above, so we need to protect them
+    // Let's use a placeholder approach
+    
+    // Store reference markers and buttons temporarily
+    const refPlaceholders = [];
+    // Handle old span markers and new button markers (both rectangular and circular)
+    html = html.replace(/<(span|button) class="vocab-(?:reference-marker|ref-button(?:-circular)?)"[^>]*>(\d+)<\/(span|button)>/g, (match, tag1, num, tag2) => {
+      const placeholder = `__REF_PLACEHOLDER_${refPlaceholders.length}__`;
+      refPlaceholders.push(match);
+      return placeholder;
+    });
+    
+    // Escape HTML
     html = html.replace(/&/g, '&amp;')
                .replace(/</g, '&lt;')
                .replace(/>/g, '&gt;');
+    
+    // Restore reference markers
+    refPlaceholders.forEach((placeholder, index) => {
+      html = html.replace(`__REF_PLACEHOLDER_${index}__`, placeholder);
+    });
     
     // Code blocks (```)
     html = html.replace(/```(\w+)?\n([\s\S]*?)```/g, '<pre><code>$2</code></pre>');
@@ -19865,6 +20232,83 @@ const ButtonPanel = {
           font-size: 14px;
           margin: 10px 0 15px 0;
         }
+      }
+
+      /* Reference Marker Styles */
+      .vocab-reference-marker {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 24px;
+        height: 24px;
+        background-color: #9527F5;
+        border-radius: 50%;
+        color: white;
+        font-size: 12px;
+        font-weight: bold;
+        cursor: pointer;
+        margin: 0 2px;
+        vertical-align: middle;
+        transition: all 0.2s ease;
+        user-select: none;
+      }
+
+      .vocab-reference-marker:hover {
+        background-color: #7a1fd9;
+        transform: scale(1.1);
+        box-shadow: 0 2px 8px rgba(149, 39, 245, 0.4);
+      }
+
+      .vocab-reference-marker:active {
+        transform: scale(0.95);
+      }
+
+      /* Reference Button Styles (all buttons are circular) */
+      .vocab-ref-button,
+      .vocab-ref-button-circular {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 24px;
+        height: 24px;
+        background-color: #9527F5;
+        border: none;
+        border-radius: 50%;
+        color: white;
+        font-size: 12px;
+        font-weight: bold;
+        cursor: pointer;
+        margin: 0 2px;
+        vertical-align: middle;
+        transition: all 0.2s ease;
+        user-select: none;
+        font-family: inherit;
+        line-height: 1;
+        padding: 0;
+      }
+
+      .vocab-ref-button-circular:hover {
+        background-color: #7a1fd9;
+        transform: scale(1.1);
+        box-shadow: 0 2px 8px rgba(149, 39, 245, 0.4);
+      }
+
+      .vocab-ref-button-circular:active {
+        transform: scale(0.95);
+        background-color: #6a1ac7;
+      }
+
+      .vocab-ref-button-circular:focus {
+        outline: 2px solid rgba(149, 39, 245, 0.5);
+        outline-offset: 2px;
+      }
+
+      /* Reference Highlight Styles */
+      .vocab-reference-highlight {
+        background-color: rgba(149, 39, 245, 0.15) !important;
+        transition: background-color 0.3s ease;
+        padding: 4px 8px;
+        border-radius: 4px;
       }
 
       /* ===================================
