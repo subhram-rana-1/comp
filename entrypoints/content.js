@@ -6496,6 +6496,12 @@ const TextSelector = {
   // Map to store textKey -> {textStartIndex, textLength, text, range}
   textPositions: new Map(),
   
+  // Map to store ranges for textKeys that haven't been highlighted yet (button shown but no span)
+  pendingRanges: new Map(),
+  
+  // Map to store button wrappers for pending selections (before span is created)
+  buttonWrappers: new Map(),
+  
   // Container for texts that have been asked (moved from selectedTexts)
   askedTexts: new Map(), // Map of textKey -> {text, textKey, highlight, simplifiedText}
   
@@ -6737,14 +6743,17 @@ const TextSelector = {
       const mouseReleaseX = event.clientX;
       const mouseReleaseY = event.clientY;
       
-      // Highlight the text and pass mouse coordinates for button positioning
-      this.highlightRange(range, selectedText, { x: mouseReleaseX, y: mouseReleaseY });
+      // Store the range for later use (when button is clicked)
+      // Don't create span wrapper - just show the magic-meaning button
+      this.showMagicMeaningButton(range, selectedText, textKey, { x: mouseReleaseX, y: mouseReleaseY });
       
-      // Clear the selection
-      selection.removeAllRanges();
+      // IMPORTANT: Preserve Chrome's default selection (yellow background)
+      // Do NOT clear the selection - let users copy the text
+      // The selection will be cleared naturally when user clicks elsewhere (Chrome's default behavior)
       
       console.log('[TextSelector] Text selected:', selectedText.substring(0, 50) + '...');
       console.log('[TextSelector] Total selected texts:', this.selectedTexts.size);
+      console.log('[TextSelector] Selection preserved - yellow background should remain visible');
     }, 10);
   },
   
@@ -6955,6 +6964,236 @@ const TextSelector = {
   },
   
   /**
+   * Show magic-meaning button without wrapping text in a span
+   * @param {Range} range - The range of selected text
+   * @param {string} text - The selected text
+   * @param {string} textKey - The text key
+   * @param {Object} mouseReleaseCoords - Mouse release coordinates {x, y} in viewport coordinates
+   */
+  showMagicMeaningButton(range, text, textKey, mouseReleaseCoords = null) {
+    // Store the range for later use (when button is clicked)
+    this.pendingRanges.set(textKey, range.cloneRange());
+    
+    // Create icons wrapper for the magic meaning button
+    const iconsWrapper = document.createElement('div');
+    iconsWrapper.className = 'vocab-text-icons-wrapper vocab-text-icons-wrapper-magic';
+    iconsWrapper.setAttribute('data-text-key', textKey);
+    iconsWrapper.id = `vocab-button-wrapper-${textKey.replace(/\s+/g, '-').substring(0, 20)}`;
+    
+    // Determine context and set appropriate data attribute
+    const isInModal = range.commonAncestorContainer.nodeType === Node.ELEMENT_NODE 
+      ? range.commonAncestorContainer.closest('.vocab-custom-content-modal')
+      : range.commonAncestorContainer.parentElement?.closest('.vocab-custom-content-modal');
+    iconsWrapper.setAttribute('data-icon-context', isInModal ? 'custom-content-modal' : 'main-webpage');
+    
+    // Create and add magic meaning button
+    const magicBtn = this.createMagicMeaningButton(textKey);
+    iconsWrapper.appendChild(magicBtn);
+    
+    // Position button absolutely relative to document (so it scrolls with page)
+    iconsWrapper.style.setProperty('position', 'absolute', 'important');
+    iconsWrapper.style.setProperty('display', 'flex', 'important');
+    iconsWrapper.style.setProperty('margin', '0', 'important');
+    iconsWrapper.style.setProperty('padding', '0', 'important');
+    iconsWrapper.style.setProperty('z-index', '10000000', 'important');
+    iconsWrapper.style.setProperty('pointer-events', 'auto', 'important');
+    
+    // Helper function to perform cleanup (will be defined after handlers, but declared here for scope)
+    let performCleanup;
+    
+    // Simple click handler: if button is visible, remove it unless click is on the button itself
+    const handleGlobalClick = (event) => {
+      // Don't interfere with selection events - only handle actual clicks
+      if (event.type === 'selectionchange') {
+        return;
+      }
+      
+      // Ignore events that happen during selection (mousedown/mouseup during drag)
+      // Only handle actual clicks (not selection drags)
+      if (event.type === 'mousedown' && event.detail === 0) {
+        // This might be part of a selection drag, ignore it
+        return;
+      }
+      
+      // Check if magic-meaning button is visible
+      if (!iconsWrapper || !iconsWrapper.parentNode) {
+        return; // Button already removed, nothing to do
+      }
+      
+      // Check if click is on the magic-meaning button itself
+      if (event.target && (
+        event.target.closest('.vocab-text-magic-meaning-btn') ||
+        event.target.closest('.vocab-text-icons-wrapper')
+      )) {
+        // Click is on the button - don't remove it, let the button's own click handler handle it
+        return;
+      }
+      
+      // Small delay to ensure selection is preserved and button has time to appear
+      setTimeout(() => {
+        // Check if button still exists (might have been removed by other code)
+        if (!iconsWrapper || !iconsWrapper.parentNode) {
+          return;
+        }
+        
+        // Check if there's still a selection - if yes, don't remove button yet
+        // (user might still be selecting or the selection just completed)
+        const currentSelection = window.getSelection();
+        if (currentSelection.rangeCount > 0) {
+          // There's still a selection, check if it matches our range
+          try {
+            const selectionRange = currentSelection.getRangeAt(0);
+            const selectionText = selectionRange.toString().trim();
+            if (selectionText.length > 0) {
+              // There's still text selected, don't remove button
+              // The button should stay visible as long as there's a selection
+              return;
+            }
+          } catch (e) {
+            // Error checking selection, proceed with cleanup
+          }
+        }
+        
+        // Click is anywhere else and no selection - remove the button
+        performCleanup();
+      }, 50);
+    };
+    
+    // Store initial position based on mouse coordinates or selection rect
+    let initialLeft, initialTop;
+    if (mouseReleaseCoords) {
+      // Use mouse coordinates if available (original logic)
+      const scrollX = window.pageXOffset || document.documentElement.scrollLeft;
+      const scrollY = window.pageYOffset || document.documentElement.scrollTop;
+      initialLeft = mouseReleaseCoords.x + scrollX - 50;
+      initialTop = mouseReleaseCoords.y + scrollY;
+    } else {
+      // Fallback to selection bounding rect
+      const rect = range.getBoundingClientRect();
+      const scrollX = window.pageXOffset || document.documentElement.scrollLeft;
+      const scrollY = window.pageYOffset || document.documentElement.scrollTop;
+      initialLeft = rect.left + scrollX - 50;
+      initialTop = rect.top + scrollY;
+    }
+    
+    // Set initial position
+    iconsWrapper.style.setProperty('left', `${initialLeft}px`, 'important');
+    iconsWrapper.style.setProperty('top', `${initialTop}px`, 'important');
+    iconsWrapper.style.setProperty('right', 'auto', 'important');
+    
+    // Function to update button position on scroll (maintains relative position)
+    const updateButtonPosition = () => {
+      try {
+        // Check if range is still valid
+        if (!range || !range.commonAncestorContainer || 
+            !document.contains(range.commonAncestorContainer)) {
+          // Range is invalid, cleanup button
+          cleanupButton();
+          return;
+        }
+        
+        // Get current scroll offsets
+        const scrollX = window.pageXOffset || document.documentElement.scrollLeft;
+        const scrollY = window.pageYOffset || document.documentElement.scrollTop;
+        
+        // Calculate new position maintaining the same relative offset from initial position
+        // This keeps the button in the same relative position as the page scrolls
+        let newLeft, newTop;
+        if (mouseReleaseCoords) {
+          // Use mouse coordinates with current scroll
+          newLeft = mouseReleaseCoords.x + scrollX - 50;
+          newTop = mouseReleaseCoords.y + scrollY;
+        } else {
+          // Use selection bounding rect with current scroll
+          const rect = range.getBoundingClientRect();
+          newLeft = rect.left + scrollX - 50;
+          newTop = rect.top + scrollY;
+        }
+        
+        iconsWrapper.style.setProperty('left', `${newLeft}px`, 'important');
+        iconsWrapper.style.setProperty('top', `${newTop}px`, 'important');
+        iconsWrapper.style.setProperty('right', 'auto', 'important');
+      } catch (error) {
+        console.warn('[TextSelector] Error updating button position:', error);
+        // If error persists, cleanup button
+        cleanupButton();
+      }
+    };
+    
+    // Append to body (not to the text, since we're not wrapping it)
+    document.body.appendChild(iconsWrapper);
+    
+    // Store reference to the wrapper for cleanup
+    this.buttonWrappers.set(textKey, iconsWrapper);
+    
+    // Store the button's absolute position for later use (when spinner needs to be positioned)
+    iconsWrapper._buttonPosition = {
+      left: initialLeft,
+      top: initialTop,
+      mouseReleaseCoords: mouseReleaseCoords,
+      range: range.cloneRange() // Store range for scroll updates
+    };
+    
+    console.log('[TextSelector] Magic meaning button shown for text (no span wrapper):', textKey);
+    
+    // Update position on scroll and resize
+    const scrollHandler = () => updateButtonPosition();
+    const resizeHandler = () => updateButtonPosition();
+    
+    // Define performCleanup function after handlers are created
+    performCleanup = () => {
+      // Remove button
+      if (iconsWrapper && iconsWrapper.parentNode) {
+        iconsWrapper.remove();
+      }
+      
+      // Clean up event listeners
+      window.removeEventListener('scroll', scrollHandler);
+      window.removeEventListener('resize', resizeHandler);
+      document.removeEventListener('click', handleGlobalClick, true);
+      document.removeEventListener('mousedown', handleGlobalClick, true);
+      document.removeEventListener('touchend', handleGlobalClick, true);
+      
+      // Clean up data - IMPORTANT: Remove from selectedTexts so the same text can be selected again
+      this.buttonWrappers?.delete(textKey);
+      this.pendingRanges.delete(textKey);
+      this.selectedTexts.delete(textKey); // Remove from selectedTexts to allow reselection
+      this.textPositions.delete(textKey); // Also clean up position data
+      
+      // Note: We don't remove from textToHighlights here because:
+      // - If no span was created (just button shown), there's no highlight in textToHighlights
+      // - If span was created (button was clicked), the highlight should remain for the simplified text
+      // The hasOverlap check will handle existing highlights appropriately
+      
+      // Update button states
+      if (typeof ButtonPanel !== 'undefined' && ButtonPanel.updateButtonStatesFromSelections) {
+        ButtonPanel.updateButtonStatesFromSelections();
+      }
+      
+      console.log('[TextSelector] Magic meaning button removed and text cleared from selectedTexts');
+    };
+    
+    window.addEventListener('scroll', scrollHandler, { passive: true });
+    window.addEventListener('resize', resizeHandler, { passive: true });
+    
+    // Listen for all click events globally (use capture phase to catch all clicks)
+    // Use a longer delay to ensure selection is complete and button is visible
+    setTimeout(() => {
+      document.addEventListener('click', handleGlobalClick, true);
+      // Don't listen to mousedown as it might interfere with selection
+      // Only listen to click and touchend
+      document.addEventListener('touchend', handleGlobalClick, true);
+    }, 200);
+    
+    // Store cleanup handlers for later removal
+    iconsWrapper._cleanupHandlers = {
+      scroll: scrollHandler,
+      resize: resizeHandler,
+      cleanup: cleanupButton
+    };
+  },
+  
+  /**
    * Highlight a range with a styled span
    * @param {Range} range - The range to highlight
    * @param {string} text - The text being highlighted
@@ -6967,9 +7206,13 @@ const TextSelector = {
     // DO NOT apply font properties to the highlight span - let child elements preserve their formatting
     // The highlight span should only provide the underline decoration, not override text formatting
     const highlight = document.createElement('span');
-    highlight.className = 'vocab-text-highlight underline-appearing';
+    highlight.className = 'vocab-text-highlight';
     highlight.setAttribute('data-text-key', textKey);
     highlight.setAttribute('data-highlight-id', `text-highlight-${this.highlightIdCounter++}`);
+    
+    // Hide underline initially - only show magic meaning button
+    highlight.style.setProperty('text-decoration', 'none', 'important');
+    highlight.style.setProperty('text-decoration-line', 'none', 'important');
     
     // Ensure the highlight span doesn't interfere with child formatting
     // Set display to inline to preserve text flow (will be adjusted if block elements are detected)
@@ -7173,24 +7416,58 @@ const TextSelector = {
       });
     }, 0);
     
-    // Remove button (purple cross icon) is not shown - removed similar to magic meaning button
-    
-    // Remove the appearing class after animation completes
-    setTimeout(() => {
-      highlight.classList.remove('underline-appearing');
-    }, 300);
-    
     // Store the highlight in our map (O(1) operation)
     this.textToHighlights.set(textKey, highlight);
     
-    // Automatically call simplify API (magic meaning) for this text
+    // Create and add magic meaning button (no underline, no cross icon, no API call)
     // Add a small delay to ensure DOM is ready
     setTimeout(() => {
-      if (typeof ButtonPanel !== 'undefined' && ButtonPanel.handleMagicMeaningForText) {
-        console.log('[TextSelector] Automatically calling magic meaning for text:', textKey);
-        ButtonPanel.handleMagicMeaningForText(textKey);
+      // Check if we're processing magic meaning (spinner is showing) - if so, don't create magic button
+      // The magic button should only appear when text is selected, not when processing
+      if (highlight.hasAttribute('data-processing-magic-meaning')) {
+        console.log('[TextSelector] Skipping magic meaning button creation - processing in progress');
+        return;
       }
+      
+      // Create icons wrapper for the magic meaning button
+      const iconsWrapper = document.createElement('div');
+      iconsWrapper.className = 'vocab-text-icons-wrapper vocab-text-icons-wrapper-magic';
+      iconsWrapper.setAttribute('data-text-key', textKey);
+      
+      // Determine context and set appropriate data attribute
+      const isInModal = highlight.closest('.vocab-custom-content-modal');
+      iconsWrapper.setAttribute('data-icon-context', isInModal ? 'custom-content-modal' : 'main-webpage');
+      
+      // Create and add magic meaning button
+      const magicBtn = this.createMagicMeaningButton(textKey);
+      iconsWrapper.appendChild(magicBtn);
+      
+      // Append wrapper to highlight
+      highlight.appendChild(iconsWrapper);
+      
+      // Position icons relative to highlight - on the left side, outside text content
+      iconsWrapper.style.setProperty('position', 'absolute', 'important');
+      iconsWrapper.style.setProperty('display', 'flex', 'important');
+      iconsWrapper.style.setProperty('margin', '0', 'important');
+      iconsWrapper.style.setProperty('padding', '0', 'important');
+      
+      if (isInModal) {
+        // In modal context: position to the left with sufficient margin to avoid overlap
+        iconsWrapper.style.setProperty('left', '-50px', 'important');
+        iconsWrapper.style.setProperty('right', 'auto', 'important');
+        iconsWrapper.style.setProperty('top', '-2px', 'important');
+      } else {
+        // In main webpage context: position to the left, outside text content
+        iconsWrapper.style.setProperty('left', '-45px', 'important');
+        iconsWrapper.style.setProperty('right', 'auto', 'important');
+        iconsWrapper.style.setProperty('top', '0px', 'important');
+      }
+      
+      console.log('[TextSelector] Magic meaning button added for text:', textKey);
     }, 100);
+    
+    // Return the highlight element so selection can be restored
+    return highlight;
   },
   
   /**
@@ -7906,35 +8183,213 @@ const TextSelector = {
       
       console.log('[TextSelector] Magic-meaning button clicked for:', textKey);
       
-      // Get the highlight element
-      const highlight = this.textToHighlights.get(textKey);
+      // Check if we have a pending range (button shown but no span created yet)
+      let highlight = this.textToHighlights.get(textKey);
+      
+      // Get button position before removing the button wrapper
+      let buttonPosition = null;
+      const buttonWrapper = this.buttonWrappers?.get(textKey);
+      if (buttonWrapper && buttonWrapper._buttonPosition) {
+        buttonPosition = buttonWrapper._buttonPosition;
+      }
+      
+      if (!highlight && this.pendingRanges.has(textKey)) {
+        // Create the span wrapper now
+        const pendingRange = this.pendingRanges.get(textKey);
+        const selectedText = pendingRange.toString();
+        
+        // Remove the button wrapper from body first and clean up event listeners
+        if (buttonWrapper) {
+          // Clean up event listeners if they exist
+          if (buttonWrapper._cleanupHandlers) {
+            window.removeEventListener('scroll', buttonWrapper._cleanupHandlers.scroll);
+            window.removeEventListener('resize', buttonWrapper._cleanupHandlers.resize);
+            document.removeEventListener('mouseup', buttonWrapper._cleanupHandlers.cleanup);
+            document.removeEventListener('mousedown', buttonWrapper._cleanupHandlers.cleanup);
+            document.removeEventListener('selectionchange', buttonWrapper._cleanupHandlers.cleanup);
+            document.removeEventListener('touchend', buttonWrapper._cleanupHandlers.cleanup);
+          }
+          
+          if (buttonWrapper.parentNode) {
+            buttonWrapper.remove();
+          }
+        }
+        
+        // Create the highlight span
+        highlight = this.highlightRange(pendingRange, selectedText);
+        
+        // Clean up pending data
+        this.pendingRanges.delete(textKey);
+        this.buttonWrappers?.delete(textKey);
+      }
+      
       if (!highlight) {
         console.warn('[TextSelector] No highlight found for textKey:', textKey);
         return;
       }
       
-      // Add fast pulsating animation to the text
+      // Show the purple dashed underline
+      highlight.style.removeProperty('text-decoration');
+      highlight.style.removeProperty('text-decoration-line');
+      highlight.classList.add('underline-appearing');
+      
+      // Add fast pulsating animation to the text with purple background
       highlight.classList.add('vocab-text-loading');
       
-      // Show spinner in place of magic-meaning button
+      // Mark highlight as processing to prevent magic button creation in highlightRange setTimeout
+      highlight.setAttribute('data-processing-magic-meaning', 'true');
+      
+      // Remove entire iconsWrapper if it exists (prevents magic button from showing)
       const iconsWrapper = highlight.querySelector('.vocab-text-icons-wrapper');
       if (iconsWrapper) {
+        // Remove any magic button
         const magicBtn = iconsWrapper.querySelector('.vocab-text-magic-meaning-btn');
         if (magicBtn) {
-          // Hide the button and show spinner
-          magicBtn.style.display = 'none';
-          
-          // Create and show spinner
-          const spinnerContainer = document.createElement('div');
-          spinnerContainer.className = 'vocab-magic-meaning-spinner-container';
-          spinnerContainer.setAttribute('data-text-key', textKey);
-          
-          const spinner = document.createElement('div');
-          spinner.className = 'vocab-magic-meaning-spinner';
-          
-          spinnerContainer.appendChild(spinner);
-          iconsWrapper.appendChild(spinnerContainer);
+          magicBtn.remove();
         }
+        // Remove the entire iconsWrapper to prevent it from showing at book icon position
+        iconsWrapper.remove();
+      }
+      
+      // Also set up a watcher to remove any iconsWrapper that might be created by the setTimeout in highlightRange
+      // This handles the case where highlightRange's setTimeout (100ms delay) creates the iconsWrapper
+      const removeIconsWrapperWatcher = setInterval(() => {
+        const newIconsWrapper = highlight.querySelector('.vocab-text-icons-wrapper');
+        if (newIconsWrapper) {
+          const magicBtn = newIconsWrapper.querySelector('.vocab-text-magic-meaning-btn');
+          if (magicBtn) {
+            magicBtn.remove();
+          }
+          newIconsWrapper.remove();
+        }
+      }, 50);
+      
+      // Stop watching after 200ms (enough time for the setTimeout to complete)
+      setTimeout(() => {
+        clearInterval(removeIconsWrapperWatcher);
+      }, 200);
+      
+      // Remove any existing spinner (from previous attempts or elsewhere)
+      const existingSpinnerOnBody = document.querySelector(`.vocab-magic-meaning-spinner-container[data-text-key="${textKey}"]`);
+      if (existingSpinnerOnBody) {
+        existingSpinnerOnBody.remove();
+      }
+      
+      // Create and show spinner at the button's original absolute position
+      const spinnerContainer = document.createElement('div');
+      spinnerContainer.className = 'vocab-magic-meaning-spinner-container';
+      spinnerContainer.setAttribute('data-text-key', textKey);
+      
+      const spinner = document.createElement('div');
+      spinner.className = 'vocab-magic-meaning-spinner';
+      
+      spinnerContainer.appendChild(spinner);
+      
+      // Position spinner absolutely at the button's original position
+      spinnerContainer.style.setProperty('position', 'absolute', 'important');
+      spinnerContainer.style.setProperty('display', 'flex', 'important');
+      spinnerContainer.style.setProperty('align-items', 'center', 'important');
+      spinnerContainer.style.setProperty('justify-content', 'center', 'important');
+      spinnerContainer.style.setProperty('margin', '0', 'important');
+      spinnerContainer.style.setProperty('padding', '0', 'important');
+      spinnerContainer.style.setProperty('z-index', '10000000', 'important');
+      spinnerContainer.style.setProperty('pointer-events', 'none', 'important');
+      
+      // Function to update spinner position on scroll (similar to button position update)
+      const updateSpinnerPosition = () => {
+        if (!buttonPosition || !spinnerContainer.parentNode) {
+          return;
+        }
+        
+        try {
+          const scrollX = window.pageXOffset || document.documentElement.scrollLeft;
+          const scrollY = window.pageYOffset || document.documentElement.scrollTop;
+          
+          let newLeft, newTop;
+          if (buttonPosition.mouseReleaseCoords) {
+            // Use mouse coordinates with current scroll
+            newLeft = buttonPosition.mouseReleaseCoords.x + scrollX - 50;
+            newTop = buttonPosition.mouseReleaseCoords.y + scrollY;
+          } else if (buttonPosition.range) {
+            // Use selection bounding rect with current scroll
+            try {
+              const rect = buttonPosition.range.getBoundingClientRect();
+              newLeft = rect.left + scrollX - 50;
+              newTop = rect.top + scrollY;
+            } catch (e) {
+              // Range might be invalid, use stored position
+              newLeft = buttonPosition.left;
+              newTop = buttonPosition.top;
+            }
+          } else {
+            // Fallback to stored position
+            newLeft = buttonPosition.left;
+            newTop = buttonPosition.top;
+          }
+          
+          spinnerContainer.style.setProperty('left', `${newLeft}px`, 'important');
+          spinnerContainer.style.setProperty('top', `${newTop}px`, 'important');
+          spinnerContainer.style.setProperty('right', 'auto', 'important');
+        } catch (error) {
+          console.warn('[TextSelector] Error updating spinner position:', error);
+        }
+      };
+      
+      // Set initial position
+      if (buttonPosition) {
+        const scrollX = window.pageXOffset || document.documentElement.scrollLeft;
+        const scrollY = window.pageYOffset || document.documentElement.scrollTop;
+        
+        let initialLeft, initialTop;
+        if (buttonPosition.mouseReleaseCoords) {
+          initialLeft = buttonPosition.mouseReleaseCoords.x + scrollX - 50;
+          initialTop = buttonPosition.mouseReleaseCoords.y + scrollY;
+        } else if (buttonPosition.range) {
+          try {
+            const rect = buttonPosition.range.getBoundingClientRect();
+            initialLeft = rect.left + scrollX - 50;
+            initialTop = rect.top + scrollY;
+          } catch (e) {
+            initialLeft = buttonPosition.left;
+            initialTop = buttonPosition.top;
+          }
+        } else {
+          initialLeft = buttonPosition.left;
+          initialTop = buttonPosition.top;
+        }
+        
+        spinnerContainer.style.setProperty('left', `${initialLeft}px`, 'important');
+        spinnerContainer.style.setProperty('top', `${initialTop}px`, 'important');
+        spinnerContainer.style.setProperty('right', 'auto', 'important');
+        
+        // Store position data on spinner for scroll updates
+        spinnerContainer._buttonPosition = buttonPosition;
+        
+        // Add scroll and resize handlers
+        const scrollHandler = () => updateSpinnerPosition();
+        const resizeHandler = () => updateSpinnerPosition();
+        
+        window.addEventListener('scroll', scrollHandler, { passive: true });
+        window.addEventListener('resize', resizeHandler, { passive: true });
+        
+        // Store cleanup handlers
+        spinnerContainer._cleanupHandlers = {
+          scroll: scrollHandler,
+          resize: resizeHandler
+        };
+      } else {
+        // Fallback: if no position stored, position relative to highlight (old behavior)
+        console.warn('[TextSelector] No button position found, positioning spinner relative to highlight');
+        if (iconsWrapper) {
+          iconsWrapper.appendChild(spinnerContainer);
+        } else {
+          highlight.appendChild(spinnerContainer);
+        }
+      }
+      
+      // Append spinner to body at absolute position
+      if (buttonPosition) {
+        document.body.appendChild(spinnerContainer);
       }
       
       // Call handleMagicMeaning for this specific text only
@@ -12532,7 +12987,18 @@ const ChatDialog = {
               // Stop pulsating animation
               highlight.classList.remove('vocab-text-loading', 'vocab-text-pulsate', 'vocab-text-pulsate-green');
               
-              // Remove any loading states
+              // Remove any loading states - check document.body first (new absolute positioning)
+              const spinnerOnBody = document.querySelector(`.vocab-magic-meaning-spinner-container[data-text-key="${requestTextKey}"]`);
+              if (spinnerOnBody) {
+                // Clean up scroll/resize handlers if they exist
+                if (spinnerOnBody._cleanupHandlers) {
+                  window.removeEventListener('scroll', spinnerOnBody._cleanupHandlers.scroll);
+                  window.removeEventListener('resize', spinnerOnBody._cleanupHandlers.resize);
+                }
+                spinnerOnBody.remove();
+              }
+              
+              // Also check in highlight (fallback for old behavior)
               const spinnerContainer = highlight.querySelector('.vocab-magic-meaning-spinner-container');
               if (spinnerContainer) {
                 spinnerContainer.remove();
@@ -12604,7 +13070,18 @@ const ChatDialog = {
             // Stop pulsating animation
             highlight.classList.remove('vocab-text-loading', 'vocab-text-pulsate', 'vocab-text-pulsate-green');
             
-            // Remove any loading states
+            // Remove any loading states - check document.body first (new absolute positioning)
+            const spinnerOnBody = document.querySelector(`.vocab-magic-meaning-spinner-container[data-text-key="${requestTextKey}"]`);
+            if (spinnerOnBody) {
+              // Clean up scroll/resize handlers if they exist
+              if (spinnerOnBody._cleanupHandlers) {
+                window.removeEventListener('scroll', spinnerOnBody._cleanupHandlers.scroll);
+                window.removeEventListener('resize', spinnerOnBody._cleanupHandlers.resize);
+              }
+              spinnerOnBody.remove();
+            }
+            
+            // Also check in highlight (fallback for old behavior)
             const spinnerContainer = highlight.querySelector('.vocab-magic-meaning-spinner-container');
             if (spinnerContainer) {
               spinnerContainer.remove();
@@ -13543,7 +14020,10 @@ const ChatDialog = {
       console.log('[ChatDialog] Best match text length:', (bestMatch.innerText || bestMatch.textContent || '').length);
       console.log('[ChatDialog] Best match HTML (first 500 chars):', bestMatch.outerHTML.substring(0, 500));
       
-      // Highlight the matched element
+      // Remove any existing fade-out animation class first
+      bestMatch.classList.remove('vocab-reference-highlight-removing');
+      
+      // Highlight the matched element with smooth fade-in
       bestMatch.classList.add('vocab-reference-highlight');
       console.log('[ChatDialog] Added vocab-reference-highlight class to element');
       
@@ -13591,12 +14071,18 @@ const ChatDialog = {
   },
   
   /**
-   * Remove all reference highlights
+   * Remove all reference highlights with smooth fade-out animation
    */
   removeReferenceHighlights() {
     const highlighted = document.querySelectorAll('.vocab-reference-highlight');
     highlighted.forEach(elem => {
-      elem.classList.remove('vocab-reference-highlight');
+      // Add fade-out class for smooth transition
+      elem.classList.add('vocab-reference-highlight-removing');
+      
+      // Remove the highlight class after animation completes
+      setTimeout(() => {
+        elem.classList.remove('vocab-reference-highlight', 'vocab-reference-highlight-removing');
+      }, 400); // Match animation duration
     });
     // Clear active reference tracking when highlights are removed
     this._activeReferenceId = null;
@@ -20629,8 +21115,8 @@ const ButtonPanel = {
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        width: 18px;
-        height: 18px;
+        width: 16px;
+        height: 16px;
         background-color: #9527F5;
         border: none;
         border-radius: 50%;
@@ -20666,10 +21152,49 @@ const ButtonPanel = {
       /* Reference Highlight Styles */
       .vocab-reference-highlight {
         background-color: rgba(149, 39, 245, 0.25) !important;
-        transition: background-color 0.3s ease;
+        transition: background-color 0.4s ease-in-out, box-shadow 0.4s ease-in-out, padding 0.3s ease-in-out;
         padding: 4px 8px;
-        border-radius: 4px;
+        border-radius: 15px;
         box-shadow: 0 0 0 2px rgba(149, 39, 245, 0.2) !important;
+        animation: vocab-highlight-fade-in 0.4s ease-in-out;
+        /* Preserve original text styling - don't override font properties */
+        font-size: inherit !important;
+        font-weight: inherit !important;
+        font-style: inherit !important;
+        font-family: inherit !important;
+        line-height: inherit !important;
+        color: inherit !important;
+        text-decoration: inherit !important;
+        letter-spacing: inherit !important;
+        text-transform: inherit !important;
+      }
+      
+      /* Smooth fade-in animation for highlight */
+      @keyframes vocab-highlight-fade-in {
+        from {
+          background-color: rgba(149, 39, 245, 0);
+          box-shadow: 0 0 0 0px rgba(149, 39, 245, 0);
+        }
+        to {
+          background-color: rgba(149, 39, 245, 0.25);
+          box-shadow: 0 0 0 2px rgba(149, 39, 245, 0.2);
+        }
+      }
+      
+      /* Smooth fade-out when highlight is removed */
+      .vocab-reference-highlight-removing {
+        animation: vocab-highlight-fade-out 0.4s ease-in-out forwards;
+      }
+      
+      @keyframes vocab-highlight-fade-out {
+        from {
+          background-color: rgba(149, 39, 245, 0.25);
+          box-shadow: 0 0 0 2px rgba(149, 39, 245, 0.2);
+        }
+        to {
+          background-color: rgba(149, 39, 245, 0);
+          box-shadow: 0 0 0 0px rgba(149, 39, 245, 0);
+        }
       }
 
       /* ===================================
@@ -21436,54 +21961,10 @@ const ButtonPanel = {
     // Add loading animation class (already added in click handler, but ensure it's there)
     highlight.classList.add('vocab-text-loading');
     
-    // Create purple spinner at book icon location during API call
-    const spinnerWrapper = document.createElement('div');
-    spinnerWrapper.className = 'vocab-text-book-spinner-wrapper';
-    spinnerWrapper.setAttribute('data-text-key', textKey);
-    spinnerWrapper.style.setProperty('position', 'absolute', 'important');
-    spinnerWrapper.style.setProperty('display', 'flex', 'important');
-    spinnerWrapper.style.setProperty('align-items', 'center', 'important');
-    spinnerWrapper.style.setProperty('justify-content', 'center', 'important');
-    spinnerWrapper.style.setProperty('margin', '0', 'important');
-    spinnerWrapper.style.setProperty('padding', '0', 'important');
-    spinnerWrapper.style.setProperty('z-index', '10000003', 'important');
-    
-    const isInModal = highlight.closest('.vocab-custom-content-modal');
-    if (isInModal) {
-      spinnerWrapper.style.setProperty('left', '-50px', 'important');
-      spinnerWrapper.style.setProperty('right', 'auto', 'important');
-      spinnerWrapper.style.setProperty('top', '-2px', 'important');
-    } else {
-      spinnerWrapper.style.setProperty('left', '-45px', 'important');
-      spinnerWrapper.style.setProperty('right', 'auto', 'important');
-      spinnerWrapper.style.setProperty('top', '0px', 'important');
-    }
-    
-    // Create white circular background for spinner
-    const spinnerBackground = document.createElement('div');
-    spinnerBackground.style.setProperty('width', '32px', 'important');
-    spinnerBackground.style.setProperty('height', '32px', 'important');
-    spinnerBackground.style.setProperty('background-color', '#FFFFFF', 'important');
-    spinnerBackground.style.setProperty('border-radius', '50%', 'important');
-    spinnerBackground.style.setProperty('box-shadow', '0 2px 4px rgba(149, 39, 245, 0.2)', 'important'); // Purple shadow matching chat container
-    spinnerBackground.style.setProperty('display', 'flex', 'important');
-    spinnerBackground.style.setProperty('align-items', 'center', 'important');
-    spinnerBackground.style.setProperty('justify-content', 'center', 'important');
-    spinnerBackground.style.setProperty('margin', '0', 'important');
-    spinnerBackground.style.setProperty('padding', '0', 'important');
-    
-    const spinner = document.createElement('div');
-    spinner.className = 'vocab-text-book-spinner';
-    spinner.style.setProperty('width', '20px', 'important');
-    spinner.style.setProperty('height', '20px', 'important');
-    spinner.style.setProperty('border', '3px solid rgba(147, 51, 234, 0.3)', 'important'); // Purple with transparency
-    spinner.style.setProperty('border-top-color', '#9333ea', 'important'); // Purple
-    spinner.style.setProperty('border-radius', '50%', 'important');
-    spinner.style.setProperty('animation', 'vocab-spin 0.8s linear infinite', 'important');
-    
-    spinnerBackground.appendChild(spinner);
-    spinnerWrapper.appendChild(spinnerBackground);
-    highlight.appendChild(spinnerWrapper);
+    // NOTE: We no longer create a spinner at the book icon location
+    // The spinner is now positioned at the button's original position (on document.body)
+    // This was created in the button click handler (createMagicMeaningButton)
+    // So we skip creating vocab-text-book-spinner-wrapper here
     
     // Track if dialog has been opened for this text
     let dialogOpened = false;
@@ -21520,24 +22001,47 @@ const ButtonPanel = {
                 bookSpinnerWrapper.remove();
               }
               
-              // Hide spinner if it exists
+              // Remove spinner - it may be on document.body (absolute positioned) or in iconsWrapper
+          // First, try to find and remove spinner from document.body (new absolute positioning)
+          const spinnerOnBody = document.querySelector(`.vocab-magic-meaning-spinner-container[data-text-key="${textKey}"]`);
+          if (spinnerOnBody) {
+            // Clean up scroll/resize handlers if they exist
+            if (spinnerOnBody._cleanupHandlers) {
+              window.removeEventListener('scroll', spinnerOnBody._cleanupHandlers.scroll);
+              window.removeEventListener('resize', spinnerOnBody._cleanupHandlers.resize);
+            }
+            spinnerOnBody.remove();
+          }
+          
+          // Also check in iconsWrapper (fallback for old behavior)
           const iconsWrapper = highlight.querySelector('.vocab-text-icons-wrapper');
           if (iconsWrapper) {
+            // Remove spinner container from iconsWrapper if it exists
             const spinnerContainer = iconsWrapper.querySelector('.vocab-magic-meaning-spinner-container');
             if (spinnerContainer) {
               spinnerContainer.remove();
+            }
+            
+            // Remove any remaining magic-meaning button (should already be removed, but just in case)
+            const magicBtn = iconsWrapper.querySelector('.vocab-text-magic-meaning-btn');
+            if (magicBtn) {
+              magicBtn.remove();
             }
           }
           
           // Change underline to light green
           highlight.classList.add('vocab-text-simplified');
           
-          // Replace purple cross button with green cross button at top-left
+          // Remove any existing cross buttons
           const existingPurpleCross = highlight.querySelector('.vocab-text-remove-btn');
           if (existingPurpleCross) {
             existingPurpleCross.remove();
           }
-          
+          const existingGreenCross = highlight.querySelector('.vocab-text-remove-green-btn');
+          if (existingGreenCross) {
+            existingGreenCross.remove();
+          }
+              
               // Create green cross button at top-left
           const greenCrossBtn = document.createElement('button');
           greenCrossBtn.className = 'vocab-text-remove-green-btn';
@@ -21572,16 +22076,27 @@ const ButtonPanel = {
           });
           highlight.appendChild(greenCrossBtn);
           
-              // Create wrapper for icons (book icon positioned at top-left)
-          const newIconsWrapper = document.createElement('div');
-              newIconsWrapper.className = 'vocab-text-icons-wrapper vocab-text-icons-wrapper-book';
-          newIconsWrapper.setAttribute('data-text-key', textKey);
+              // Reuse or create icons wrapper for book icon (book icon positioned at top-left)
+          let newIconsWrapper = highlight.querySelector('.vocab-text-icons-wrapper');
+          if (!newIconsWrapper) {
+            newIconsWrapper = document.createElement('div');
+            newIconsWrapper.className = 'vocab-text-icons-wrapper vocab-text-icons-wrapper-book';
+            newIconsWrapper.setAttribute('data-text-key', textKey);
+            highlight.appendChild(newIconsWrapper);
+          } else {
+            // Update class to include book wrapper class
+            newIconsWrapper.className = 'vocab-text-icons-wrapper vocab-text-icons-wrapper-book';
+          }
           
-              // Add book icon
+          // Remove any existing book button
+          const existingBookBtn = newIconsWrapper.querySelector('.vocab-text-book-btn');
+          if (existingBookBtn) {
+            existingBookBtn.remove();
+          }
+          
+          // Create and add book button
           const bookBtn = TextSelector.createBookButton(textKey);
           newIconsWrapper.appendChild(bookBtn);
-          
-          highlight.appendChild(newIconsWrapper);
           
               // Position book icon wrapper
               newIconsWrapper.style.setProperty('position', 'absolute', 'important');
@@ -21841,9 +22356,21 @@ const ButtonPanel = {
         }
         
         // Hide spinner and restore button on error
+        // First, try to find and remove spinner from document.body (new absolute positioning)
+        const spinnerOnBody = document.querySelector(`.vocab-magic-meaning-spinner-container[data-text-key="${textKey}"]`);
+        if (spinnerOnBody) {
+          // Clean up scroll/resize handlers if they exist
+          if (spinnerOnBody._cleanupHandlers) {
+            window.removeEventListener('scroll', spinnerOnBody._cleanupHandlers.scroll);
+            window.removeEventListener('resize', spinnerOnBody._cleanupHandlers.resize);
+          }
+          spinnerOnBody.remove();
+        }
+        
+        // Also check in iconsWrapper (fallback for old behavior)
         const iconsWrapper = highlight.querySelector('.vocab-text-icons-wrapper');
         if (iconsWrapper) {
-          // Hide spinner
+          // Hide spinner from iconsWrapper if it exists
           const spinnerContainer = iconsWrapper.querySelector('.vocab-magic-meaning-spinner-container');
           if (spinnerContainer) {
             spinnerContainer.remove();
