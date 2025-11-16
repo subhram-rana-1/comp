@@ -25,7 +25,7 @@ class ApiService {
    * @param {Function} params.onError - Callback for errors: (error) => void
    * @returns {Function} Abort function to cancel the request
    */
-  static async ask({ initial_context, chat_history = [], question, onChunk, onComplete, onError }) {
+  static async ask({ initial_context, chat_history = [], question, context_type, onChunk, onComplete, onError }) {
     const url = `${this.BASE_URL}${this.ENDPOINTS.ASK}`;
     
     // Validate input parameters
@@ -59,17 +59,17 @@ class ApiService {
         // Get language from chrome.storage.local (global)
         const storageKey = 'language';
         const result = await chrome.storage.local.get([storageKey]);
-        const language = result[storageKey] || 'none';
+        const language = result[storageKey] || 'WEBSITE_LANGUAGE';
         
-        // If language is "none" or "dynamic", return "none" (use page language)
-        if (language === 'none' || language === 'dynamic') {
-          return 'none';
+        // If language is "WEBSITE_LANGUAGE", "none", or "dynamic", return null (use page language)
+        if (language === 'WEBSITE_LANGUAGE' || language === 'none' || language === 'dynamic') {
+          return null;
         }
         // Otherwise, convert to uppercase (e.g., "Spanish" -> "SPANISH")
         return language.toUpperCase();
       } catch (error) {
         console.warn('[ApiService] Error getting language from storage:', error);
-        return 'none';
+        return null;
       }
     };
     
@@ -79,9 +79,18 @@ class ApiService {
     const requestBody = {
       initial_context,
       chat_history,
-      question,
-      languageCode: languageCode
+      question
     };
+    
+    // Only include languageCode if it's not null
+    if (languageCode !== null) {
+      requestBody.languageCode = languageCode;
+    }
+    
+    // Include context_type if provided
+    if (context_type) {
+      requestBody.context_type = context_type;
+    }
     
     try {
       console.log('[ApiService] Sending SSE request to:', url);
@@ -89,6 +98,13 @@ class ApiService {
         initial_context_length: initial_context.length,
         chat_history_length: chat_history.length,
         question_length: question.length
+      });
+      console.log('[ApiService] Request payload structure:', {
+        context_type: context_type || 'not provided',
+        initial_context: initial_context.substring(0, 100) + (initial_context.length > 100 ? '...' : ''),
+        chat_history: chat_history,
+        question: question.substring(0, 100) + (question.length > 100 ? '...' : ''),
+        languageCode: languageCode || 'not provided'
       });
       
       // Create abort controller for cancellation
@@ -134,6 +150,8 @@ class ApiService {
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let buffer = '';
+      let completeEventData = null; // Store complete event data to prevent [DONE] from overwriting it
+      let onCompleteCalled = false; // Track if onComplete was already called with complete event data
       
       // Read the stream
       const processStream = async () => {
@@ -143,6 +161,21 @@ class ApiService {
             
             if (done) {
               console.log('[ApiService] Stream complete');
+              // If we have complete event data and haven't called onComplete yet, use it
+              // Otherwise, if we already called onComplete with complete event, don't call it again
+              if (completeEventData && !onCompleteCalled) {
+                console.log('[ApiService] Stream ended, using stored complete event data');
+                if (onComplete) {
+                  onComplete(completeEventData.chat_history || null, completeEventData.possibleQuestions || []);
+                  onCompleteCalled = true;
+                }
+              } else if (!onCompleteCalled && onComplete) {
+                console.log('[ApiService] Stream ended without complete event, calling onComplete(null)');
+                onComplete(null);
+                onCompleteCalled = true;
+              } else {
+                console.log('[ApiService] Stream ended, onComplete already called with complete event data');
+              }
               break;
             }
             
@@ -163,8 +196,9 @@ class ApiService {
                 // Check for completion signal
                 if (dataStr === '[DONE]') {
                   console.log('[ApiService] Received [DONE] signal');
-                  if (onComplete) onComplete(null);
-                  break;
+                  // Don't call onComplete here - let the stream end naturally
+                  // This prevents [DONE] from overwriting complete event data
+                  continue; // Continue processing instead of breaking
                 }
                 
                 // Parse JSON data
@@ -181,10 +215,51 @@ class ApiService {
                   }
                   
                   // Handle complete event
-                  if (data.type === 'complete' && data.chat_history) {
-                    console.log('[ApiService] Complete event - chat_history:', data.chat_history);
-                    if (onComplete) {
-                      onComplete(data.chat_history);
+                  if (data.type === 'complete') {
+                    console.log('[ApiService] ===== COMPLETE EVENT RECEIVED =====');
+                    console.log('[ApiService] Complete event data:', JSON.stringify(data, null, 2));
+                    console.log('[ApiService] chat_history present:', !!data.chat_history);
+                    console.log('[ApiService] chat_history type:', typeof data.chat_history);
+                    console.log('[ApiService] chat_history is array:', Array.isArray(data.chat_history));
+                    console.log('[ApiService] possibleQuestions present:', !!data.possibleQuestions);
+                    console.log('[ApiService] possibleQuestions type:', typeof data.possibleQuestions);
+                    console.log('[ApiService] possibleQuestions is array:', Array.isArray(data.possibleQuestions));
+                    console.log('[ApiService] possibleQuestions value:', data.possibleQuestions);
+                    console.log('[ApiService] possibleQuestions length:', data.possibleQuestions?.length || 0);
+                    console.log('[ApiService] All data keys:', Object.keys(data));
+                    
+                    // Extract possibleQuestions - check multiple possible field names
+                    let questions = data.possibleQuestions;
+                    if (!questions && data.possible_questions) {
+                      console.log('[ApiService] Found possible_questions (snake_case) instead of possibleQuestions');
+                      questions = data.possible_questions;
+                    }
+                    if (!questions && data['possible-questions']) {
+                      console.log('[ApiService] Found possible-questions (kebab-case) instead of possibleQuestions');
+                      questions = data['possible-questions'];
+                    }
+                    
+                    console.log('[ApiService] Final extracted questions:', questions);
+                    console.log('[ApiService] Final extracted questions length:', questions?.length || 0);
+                    
+                    // Store complete event data instead of calling onComplete immediately
+                    // This prevents [DONE] signal from overwriting it
+                    completeEventData = {
+                      chat_history: data.chat_history || null,
+                      possibleQuestions: questions || []
+                    };
+                    
+                    console.log('[ApiService] Stored complete event data:', completeEventData);
+                    console.log('[ApiService] Stored possibleQuestions:', completeEventData.possibleQuestions);
+                    console.log('[ApiService] ===== COMPLETE EVENT HANDLED =====');
+                    
+                    // Call onComplete immediately with the data
+                    if (onComplete && !onCompleteCalled) {
+                      console.log('[ApiService] Calling onComplete with stored data');
+                      onComplete(completeEventData.chat_history, completeEventData.possibleQuestions);
+                      onCompleteCalled = true;
+                    } else if (onCompleteCalled) {
+                      console.log('[ApiService] onComplete already called, skipping duplicate call');
                     }
                   }
                   
