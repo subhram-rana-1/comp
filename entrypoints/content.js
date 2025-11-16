@@ -3059,13 +3059,16 @@ const WordSelector = {
                                    e.target.closest('.vocab-word-popup-close') || 
                                    e.target.closest('.vocab-word-popup-button');
       
+      // Check if clicking inside the ask AI modal - don't close word popup in this case
+      const clickedInsideAskAIModal = e.target.closest('.word-web-search-modal');
+      
       // Check if any sticky popup has mouse inside it
       const hasMouseInsidePopup = Array.from(stickyPopups).some(popup => 
         popup.getAttribute('data-mouse-inside') === 'true'
       );
       
-      // Close popup if clicking outside popup, word, popup buttons, and no mouse is inside any popup
-      if (!clickedInsidePopup && !clickedOnWord && !clickedOnPopupButton && !hasMouseInsidePopup) {
+      // Close popup if clicking outside popup, word, popup buttons, ask AI modal, and no mouse is inside any popup
+      if (!clickedInsidePopup && !clickedOnWord && !clickedOnPopupButton && !clickedInsideAskAIModal && !hasMouseInsidePopup) {
         // Use a longer delay to ensure the click event has fully processed
         setTimeout(() => {
           // Double-check that we still have sticky popups (in case they were closed by other means)
@@ -3074,6 +3077,51 @@ const WordSelector = {
             this.hideAllPopups();
           }
         }, 10);
+      }
+      
+      // CASE: Both word popup and Ask AI modal are open
+      // If clicking outside both, close the Ask AI modal (but keep word popup open)
+      const askAIModals = document.querySelectorAll('.word-web-search-modal');
+      if (stickyPopups.length > 0 && askAIModals.length > 0) {
+        // Check if click is outside both modals
+        const clickedOnAskAIButton = e.target.closest('.vocab-word-popup-ask-button');
+        
+        // If clicking outside both word popup AND Ask AI modal (and not on Ask AI button)
+        if (!clickedInsidePopup && !clickedInsideAskAIModal && !clickedOnAskAIButton) {
+          // Close all Ask AI modals
+          askAIModals.forEach(modal => {
+            // IMPORTANT: Save chat history before closing
+            const modalWord = modal.getAttribute('data-word');
+            const normalizedWord = modalWord ? modalWord.toLowerCase() : '';
+            const chatHistoryJson = modal.getAttribute('data-chat-history') || '[]';
+            const initialContext = modal.getAttribute('data-initial-context') || '';
+            try {
+              const chatHistory = JSON.parse(chatHistoryJson);
+              if (normalizedWord && this.explainedWords.has(normalizedWord)) {
+                const wordData = this.explainedWords.get(normalizedWord);
+                wordData.askAIChatHistory = chatHistory;
+                wordData.askAIInitialContext = initialContext;
+                console.log('[WordSelector] Saved chat history before closing via click-outside');
+              }
+            } catch (e) {
+              console.error('[WordSelector] Error saving chat history on click-outside:', e);
+            }
+            
+            // Find the associated Ask AI button for this modal
+            const wordPopup = document.querySelector(`.vocab-word-popup[data-word="${modalWord}"]`);
+            if (wordPopup) {
+              const askButton = wordPopup.querySelector('.vocab-word-popup-ask-button');
+              if (askButton) {
+                console.log('[WordSelector] Clicking outside both modals - closing Ask AI modal');
+                this.closeAskAIModalWithAnimation(modal, askButton);
+              }
+            } else {
+              // Fallback: if we can't find the button, just remove the modal
+              console.log('[WordSelector] Clicking outside both modals - removing Ask AI modal (no button found)');
+              modal.remove();
+            }
+          });
+        }
       }
     }, false); // Use bubble phase instead of capture phase
     
@@ -3921,7 +3969,7 @@ const WordSelector = {
   },
   
   /**
-   * Extract context around a word (10 words before and after)
+   * Extract context around a word (15 words before and after)
    * @param {string} docText - Full document text
    * @param {number} wordIndex - Starting index of the word in document
    * @param {number} wordLength - Length of the word
@@ -3934,18 +3982,18 @@ const WordSelector = {
     const beforeText = docText.substring(0, wordIndex);
     const afterText = docText.substring(wordIndex + wordLength);
     
-    // Get words before (up to 10)
+    // Get words before (up to 15)
     const wordsBeforeMatch = beforeText.match(/\S+/g) || [];
-    const wordsBefore = wordsBeforeMatch.slice(-10);
+    const wordsBefore = wordsBeforeMatch.slice(-15);
     
-    // Get words after (up to 10)
+    // Get words after (up to 15)
     const wordsAfterMatch = afterText.match(/\S+/g) || [];
-    const wordsAfter = wordsAfterMatch.slice(0, 10);
+    const wordsAfter = wordsAfterMatch.slice(0, 15);
     
     // Calculate the actual start index in document
     let textStartIndex = wordIndex;
     if (wordsBefore.length > 0) {
-      // Find where the first of our 10 words before starts in the document
+      // Find where the first of our 15 words before starts in the document
       // We need to find the actual position of the first word in our context
       const firstWord = wordsBefore[0];
       const lastOccurrence = beforeText.lastIndexOf(firstWord);
@@ -4226,7 +4274,15 @@ const WordSelector = {
     // View more button - bottom-left positioned
     const button = document.createElement('button');
     button.className = 'vocab-word-popup-button';
-    button.textContent = 'Get more examples';
+    // Add sparkle icon prefix
+    const sparkleIconForMoreExamples = `
+      <svg width="18" height="18" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg" style="margin-right: 6px; display: inline-block; vertical-align: middle;">
+        <path d="M14 0L17 8L25 11L17 14L14 22L11 14L3 11L11 8L14 0Z" fill="white"/>
+        <path d="M22 16L23.5 20L27.5 21.5L23.5 23L22 27L20.5 23L16.5 21.5L20.5 20L22 16Z" fill="white"/>
+        <path d="M8 21L9.5 24.5L13 26L9.5 27.5L8 31L6.5 27.5L3 26L6.5 24.5L8 21Z" fill="white"/>
+      </svg>
+    `;
+    button.innerHTML = sparkleIconForMoreExamples + '<span>Get more examples</span>';
     button.setAttribute('data-word', word.toLowerCase());
     button.setAttribute('data-meaning', meaning);
     
@@ -4244,33 +4300,55 @@ const WordSelector = {
       await this.handleViewMoreExamples(word, meaning, examples, button, popup);
     });
     
-    // Search icon button - bottom-right positioned
-    const searchButton = document.createElement('button');
-    searchButton.className = 'vocab-word-popup-search-button';
-    searchButton.setAttribute('aria-label', 'Search');
-    searchButton.innerHTML = `
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M21 21L15 15M17 10C17 13.866 13.866 17 10 17C6.13401 17 3 13.866 3 10C3 6.13401 6.13401 3 10 3C13.866 3 17 6.13401 17 10Z" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+    // Ask button - bottom-right positioned
+    const askButton = document.createElement('button');
+    askButton.className = 'vocab-word-popup-ask-button';
+    askButton.setAttribute('aria-label', 'Ask AI');
+    // Add sparkle icon prefix (same as Get more examples button)
+    const sparkleIconForAskAI = `
+      <svg width="18" height="18" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg" style="margin-right: 6px; display: inline-block; vertical-align: middle;">
+        <path d="M14 0L17 8L25 11L17 14L14 22L11 14L3 11L11 8L14 0Z" fill="white"/>
+        <path d="M22 16L23.5 20L27.5 21.5L23.5 23L22 27L20.5 23L16.5 21.5L20.5 20L22 16Z" fill="white"/>
+        <path d="M8 21L9.5 24.5L13 26L9.5 27.5L8 31L6.5 27.5L3 26L6.5 24.5L8 21Z" fill="white"/>
       </svg>
     `;
+    askButton.innerHTML = sparkleIconForAskAI + '<span>Ask AI</span>';
     
-    // Set initial search button visibility based on shouldAllowFetchMoreExamples
-    if (!shouldAllowFetchMoreExamples) {
-      searchButton.style.display = 'none';
-    } else {
-      searchButton.style.display = 'flex';
-    }
+    // Ask AI button should always be visible, never hide it
+    askButton.style.display = 'flex';
     
-    searchButton.addEventListener('click', async (e) => {
+    askButton.addEventListener('click', async (e) => {
       e.stopPropagation();
-      console.log('[WordSelector] Search clicked for:', word);
-      // Open web search modal - pass search button for positioning
-      this.openWebSearchModal(word, meaning, examples, popup, searchButton);
+      console.log('[WordSelector] Ask AI clicked for:', word);
+      
+      const normalizedWord = word.toLowerCase();
+      
+      // Check if modal is already open for this word (toggle behavior)
+      const existingModal = document.querySelector('.word-web-search-modal');
+      if (existingModal) {
+        const modalWord = existingModal.getAttribute('data-word');
+        if (modalWord === normalizedWord) {
+          // Modal is already open for this word - close it
+          console.log('[WordSelector] Modal already open for this word, closing it');
+          this.closeAskAIModalWithAnimation(existingModal, askButton);
+          return;
+        } else {
+          // Modal is open for a different word - close it first, then open for this word
+          this.closeAskAIModalWithAnimation(existingModal, askButton);
+          setTimeout(() => {
+            this.openWebSearchModal(word, meaning, examples, popup, askButton);
+          }, 400);
+          return;
+        }
+      }
+      
+      // Modal is not open - open it
+      this.openWebSearchModal(word, meaning, examples, popup, askButton);
     });
     
-    // Add button first (left), then search button (right)
+    // Add button first (left), then ask button (right)
     bottomContainer.appendChild(button);
-    bottomContainer.appendChild(searchButton);
+    bottomContainer.appendChild(askButton);
     
     // Append bottom container to popup
     popup.appendChild(bottomContainer);
@@ -4405,20 +4483,19 @@ const WordSelector = {
           console.log('[WordSelector] Updated examples for word:', word);
         }
         
-        // Update button and search button visibility based on shouldAllowFetchMoreExamples
-        const searchButton = popup.querySelector('.vocab-word-popup-search-button');
+        // Update button visibility based on shouldAllowFetchMoreExamples
+        // Ask AI button should always be visible, never hide it
+        const askButton = popup.querySelector('.vocab-word-popup-ask-button');
         if (shouldAllowFetchMoreExamples) {
           button.style.display = 'flex';
           button.disabled = false;
           button.classList.remove('disabled');
-          if (searchButton) {
-            searchButton.style.display = 'flex';
-          }
         } else {
           button.style.display = 'none';
-          if (searchButton) {
-            searchButton.style.display = 'none';
-          }
+        }
+        // Always keep Ask AI button visible
+        if (askButton) {
+          askButton.style.display = 'flex';
         }
         
         // Update stored word data with new examples and shouldAllowFetchMoreExamples value
@@ -4621,7 +4698,7 @@ const WordSelector = {
       
       // Update button visibility: show button when local language tab is active
       const button = popup.querySelector('.vocab-word-popup-button');
-      const searchButton = popup.querySelector('.vocab-word-popup-search-button');
+      const askButton = popup.querySelector('.vocab-word-popup-ask-button');
       if (button) {
         // Get shouldAllowFetchMoreExamples from wordData
         const normalizedWord = word.toLowerCase();
@@ -4636,15 +4713,13 @@ const WordSelector = {
         if (shouldAllowFetchMoreExamples) {
           button.style.display = 'flex';
           popup.classList.remove('no-more-examples-button');
-          if (searchButton) {
-            searchButton.style.display = 'flex';
-          }
         } else {
           button.style.display = 'none';
           popup.classList.add('no-more-examples-button');
-          if (searchButton) {
-            searchButton.style.display = 'none';
-          }
+        }
+        // Always keep Ask AI button visible
+        if (askButton) {
+          askButton.style.display = 'flex';
         }
       }
       
@@ -4737,14 +4812,16 @@ const WordSelector = {
         popup.setAttribute('data-current-tab', 'EN');
         
         // Update button visibility: always hide button when EN tab is active
+        // But Ask AI button should always be visible
         const button = popup.querySelector('.vocab-word-popup-button');
-        const searchButton = popup.querySelector('.vocab-word-popup-search-button');
+        const askButton = popup.querySelector('.vocab-word-popup-ask-button');
         if (button) {
           button.style.display = 'none';
           popup.classList.add('no-more-examples-button');
-          if (searchButton) {
-            searchButton.style.display = 'none';
-          }
+        }
+        // Always keep Ask AI button visible
+        if (askButton) {
+          askButton.style.display = 'flex';
         }
         
       } catch (error) {
@@ -4931,11 +5008,51 @@ const WordSelector = {
   openWebSearchModal(word, meaning, examples, wordPopup, searchButton) {
     console.log('[WordSelector] Opening web search modal for:', word);
     
-    // Close any existing web search modal
-    const existingModal = document.querySelector('.word-web-search-modal');
-    if (existingModal) {
-      existingModal.remove();
+    const normalizedWord = word.toLowerCase();
+    
+    // Check if there's existing chat history for this word
+    let existingChatHistory = [];
+    let existingInitialContext = '';
+    if (this.explainedWords.has(normalizedWord)) {
+      const wordData = this.explainedWords.get(normalizedWord);
+      if (wordData.askAIChatHistory) {
+        existingChatHistory = wordData.askAIChatHistory;
+      }
+      if (wordData.askAIInitialContext) {
+        existingInitialContext = wordData.askAIInitialContext;
+      }
     }
+    
+    // Extract word context (15 words before + word + 15 words after) if not already set
+    if (!existingInitialContext || existingInitialContext.trim() === '') {
+      const docText = this.getDocumentText();
+      const positions = this.findWordPositionsInDocument(normalizedWord);
+      
+      if (positions.length > 0) {
+        // Use the first position
+        const position = positions[0];
+        const context = this.extractWordContext(docText, position, word.length);
+        existingInitialContext = context.text;
+        console.log('[WordSelector] Extracted word context for initial_context:', existingInitialContext.substring(0, 100) + '...');
+      } else {
+        // Fallback if word not found in document
+        existingInitialContext = `Word: ${word}`;
+        console.log('[WordSelector] Word not found in document, using fallback context');
+      }
+    }
+    
+    // Note: Toggle behavior is now handled in the button click handler
+    // This function is called when we want to open the modal (not toggle)
+    this.createAndShowAskAIModal(word, meaning, examples, wordPopup, searchButton, existingChatHistory, existingInitialContext);
+  },
+  
+  /**
+   * Create and show the Ask AI modal with opening animation
+   */
+  createAndShowAskAIModal(word, meaning, examples, wordPopup, searchButton, existingChatHistory = [], existingInitialContext = '') {
+    // Store reference to WordSelector instance for use in nested functions
+    const wordSelector = this;
+    const normalizedWord = word.toLowerCase();
     
     // Get search button position for modal positioning
     // For position: fixed, use viewport coordinates (getBoundingClientRect already gives viewport coords)
@@ -4957,17 +5074,34 @@ const WordSelector = {
     
     // Create modal content container
     const modalContent = document.createElement('div');
-    modalContent.className = 'word-web-search-modal-content';
+    modalContent.className = 'word-ask-ai-modal-content';
     
     // Create header with close button
     const header = document.createElement('div');
     header.className = 'word-web-search-modal-header';
     const closeBtn = document.createElement('button');
     closeBtn.className = 'word-web-search-modal-close';
-    closeBtn.innerHTML = '×';
+    closeBtn.innerHTML = '−';
     closeBtn.setAttribute('aria-label', 'Close');
-    closeBtn.addEventListener('click', () => {
-      modal.remove();
+    closeBtn.addEventListener('click', (e) => {
+      console.log('[WordSelector] ===== MINUS BUTTON CLICKED - TRIGGERING CLOSE ANIMATION =====');
+      e.stopPropagation();
+      // Save chat history before closing
+      const chatHistoryJson = modal.getAttribute('data-chat-history') || '[]';
+      const initialContext = modal.getAttribute('data-initial-context') || '';
+      try {
+        const chatHistory = JSON.parse(chatHistoryJson);
+        if (this.explainedWords.has(normalizedWord)) {
+          const wordData = this.explainedWords.get(normalizedWord);
+          wordData.askAIChatHistory = chatHistory;
+          wordData.askAIInitialContext = initialContext;
+        }
+      } catch (e) {
+        console.error('[WordSelector] Error saving chat history:', e);
+      }
+      // Close with animation
+      console.log('[WordSelector] Calling closeAskAIModalWithAnimation with modal and searchButton...');
+      this.closeAskAIModalWithAnimation(modal, searchButton);
     });
     header.appendChild(closeBtn);
     
@@ -5020,8 +5154,14 @@ const WordSelector = {
     inputField.addEventListener('keydown', (e) => {
       if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
+        e.stopPropagation();
         this.sendWebSearchChatMessage(modal, word, inputField);
       }
+    });
+    
+    // Prevent clicks in input from closing word popup
+    inputField.addEventListener('click', (e) => {
+      e.stopPropagation();
     });
     
     // Create send button (upward arrow)
@@ -5029,7 +5169,8 @@ const WordSelector = {
     sendBtn.className = 'word-web-search-send-btn';
     sendBtn.setAttribute('aria-label', 'Send message');
     sendBtn.innerHTML = this.createSendIcon();
-    sendBtn.addEventListener('click', () => {
+    sendBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
       this.sendWebSearchChatMessage(modal, word, inputField);
     });
     
@@ -5040,13 +5181,19 @@ const WordSelector = {
     deleteBtn.title = 'Clear chat history';
     deleteBtn.innerHTML = this.createTrashIcon();
     deleteBtn.style.display = 'none'; // Hidden by default, show when chat history exists
-    deleteBtn.addEventListener('click', () => {
+    deleteBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
       this.clearWebSearchChatHistory(modal);
     });
     
     inputArea.appendChild(inputField);
     inputArea.appendChild(sendBtn);
     inputArea.appendChild(deleteBtn);
+    
+    // Prevent clicks inside modal from closing word popup
+    modal.addEventListener('click', (e) => {
+      e.stopPropagation();
+    });
     
     // Assemble modal
     modalContent.appendChild(header);
@@ -5059,71 +5206,157 @@ const WordSelector = {
     // Append to body
     document.body.appendChild(modal);
     
-    // Set initial styles to ensure visibility - make it visible immediately
-    modal.style.setProperty('position', 'fixed', 'important');
+    // Make modal draggable/pannable
+    try {
+      // Use the stored wordSelector reference (which is 'this' at function start)
+      // Try multiple ways to access the method to handle minification issues
+      const target = wordSelector || this;
+      let initMethod = null;
+      
+      // Try direct property access
+      if (target && typeof target.initModalDragging === 'function') {
+        initMethod = target.initModalDragging;
+      }
+      // Try bracket notation (in case property name is minified)
+      else if (target && target['initModalDragging'] && typeof target['initModalDragging'] === 'function') {
+        initMethod = target['initModalDragging'];
+      }
+      // Try to find the method by iterating properties (for minified code)
+      else if (target && typeof target === 'object') {
+        for (const key in target) {
+          if (typeof target[key] === 'function' && key.toLowerCase().includes('dragging')) {
+            initMethod = target[key];
+            break;
+          }
+        }
+      }
+      
+      if (initMethod) {
+        initMethod.call(target, modal);
+      } else {
+        console.error('[WordSelector] initModalDragging method not found.', {
+          target: target,
+          hasTarget: !!target,
+          targetType: typeof target,
+          targetKeys: target ? Object.keys(target).filter(k => k.toLowerCase().includes('drag') || k.toLowerCase().includes('modal')).slice(0, 20) : null,
+          wordSelector: wordSelector,
+          hasThis: !!this
+        });
+      }
+    } catch (error) {
+      console.error('[WordSelector] Error initializing modal dragging:', error);
+      // Continue anyway - modal will still work, just won't be draggable
+    }
+    
+    // Set initial styles - start with scale(0) for animation
+    // Use absolute positioning so modal scrolls with page
+    modal.style.setProperty('position', 'absolute', 'important');
     modal.style.setProperty('z-index', '10000020', 'important');
     modal.style.setProperty('display', 'flex', 'important');
     modal.style.setProperty('visibility', 'visible', 'important');
-    modal.style.setProperty('opacity', '1', 'important');
-    modal.style.setProperty('transform', 'scale(1)', 'important');
+    modal.style.setProperty('opacity', '0', 'important'); // Start invisible, will be set to 1 when animation starts
+    // DO NOT set initial transform - let CSS animation handle it via CSS variables
     modal.style.setProperty('background', 'white', 'important');
     modal.style.setProperty('pointer-events', 'all', 'important');
+    // Ensure modal has minimum dimensions for animation to be visible
+    modal.style.setProperty('min-width', '300px', 'important');
+    modal.style.setProperty('min-height', '200px', 'important');
     
     // Position modal relative to search button
-    // Set initial position near search button (using viewport coordinates for position: fixed)
-    modal.style.setProperty('top', `${searchButtonTop}px`, 'important');
-    modal.style.setProperty('left', `${searchButtonRight + 20}px`, 'important');
+    // Convert viewport coordinates to document coordinates (add scroll offset)
+    const scrollX = window.scrollX || window.pageXOffset || 0;
+    const scrollY = window.scrollY || window.pageYOffset || 0;
+    modal.style.setProperty('top', `${searchButtonTop + scrollY}px`, 'important');
+    modal.style.setProperty('left', `${searchButtonRight + scrollX + 20}px`, 'important');
     
-    // Wait for modal to be rendered to get its actual height and adjust positioning
-    setTimeout(() => {
+    // Function to reposition modal intelligently
+    const repositionModal = () => {
+      // Don't reposition if user is currently dragging the modal
+      if (modal.hasAttribute('data-is-dragging') && modal.getAttribute('data-is-dragging') === 'true') {
+        return;
+      }
+      
       const modalRect = modal.getBoundingClientRect();
       const modalHeight = modalRect.height;
       const modalWidth = modalRect.width;
       
-      // Calculate top position - align with word popup top or search button, whichever is higher
-      let modalTop = Math.min(wordPopupTop, searchButtonTop);
+      // Get current scroll position
+      const scrollX = window.scrollX || window.pageXOffset || 0;
+      const scrollY = window.scrollY || window.pageYOffset || 0;
       
-      // Calculate bottom position (using viewport coordinates for position: fixed)
-      const modalBottom = modalTop + modalHeight;
-      
-      // If modal goes below viewport, adjust to align bottom with word popup bottom
+      const viewportWidth = window.innerWidth;
       const viewportHeight = window.innerHeight;
-      const viewportBottom = viewportHeight;
+      const padding = 15; // Increased padding for better visibility
       
-      if (modalBottom > viewportBottom) {
-        // Align bottom with word popup bottom
-        modalTop = wordPopupBottom - modalHeight;
-        
-        // But don't go above the search button or word popup top
-        if (modalTop < Math.min(wordPopupTop, searchButtonTop)) {
-          modalTop = Math.min(wordPopupTop, searchButtonTop);
+      // Get current button positions (viewport coordinates)
+      const currentButtonRect = searchButton.getBoundingClientRect();
+      const currentButtonRight = currentButtonRect.right;
+      const currentButtonLeft = currentButtonRect.left;
+      const currentButtonTop = currentButtonRect.top;
+      const currentButtonBottom = currentButtonRect.bottom;
+      
+      // Get current word popup positions (viewport coordinates)
+      const currentWordPopupRect = wordPopup.getBoundingClientRect();
+      const currentWordPopupTop = currentWordPopupRect.top;
+      const currentWordPopupBottom = currentWordPopupRect.bottom;
+      
+      // ===== HORIZONTAL POSITIONING - Prioritize full visibility =====
+      let modalLeft;
+      
+      // Calculate available space on both sides (viewport coordinates)
+      const spaceOnRight = viewportWidth - currentButtonRight;
+      const spaceOnLeft = currentButtonLeft;
+      
+      // Check if modal can fit on either side
+      const canFitOnRight = spaceOnRight >= modalWidth + padding;
+      const canFitOnLeft = spaceOnLeft >= modalWidth + padding;
+      
+      if (canFitOnRight && canFitOnLeft) {
+        // Both sides have space - prefer right side
+        modalLeft = currentButtonRight + 20;
+      } else if (canFitOnRight) {
+        // Only right side has space
+        modalLeft = currentButtonRight + 20;
+      } else if (canFitOnLeft) {
+        // Only left side has space
+        modalLeft = currentButtonLeft - modalWidth - 20;
+      } else {
+        // Neither side has enough space - center it or position optimally
+        // Position to maximize visibility
+        if (spaceOnRight > spaceOnLeft) {
+          // More space on right, position as far right as possible while staying visible
+          modalLeft = Math.max(padding, viewportWidth - modalWidth - padding);
+        } else {
+          // More space on left, position as far left as possible while staying visible
+          modalLeft = padding;
         }
       }
       
-      // Ensure modal doesn't go above viewport (viewport coordinates start at 0)
-      const minTop = 10;
-      if (modalTop < minTop) {
-        modalTop = minTop;
-      }
+      // Final safety check: ensure modal is fully visible horizontally (viewport coordinates)
+      // Constrain to viewport - modal should never go off left or right side
+      modalLeft = Math.max(padding, Math.min(modalLeft, viewportWidth - modalWidth - padding));
       
-      // Position horizontally - place to the right of search button
-      let modalLeft = searchButtonRight + 20; // 20px gap to the right
+      // Convert to document coordinates (horizontal position stays within viewport)
+      modalLeft = modalLeft + scrollX;
       
-      // If modal goes off-screen to the right, position it to the left of search button
-      const viewportWidth = window.innerWidth;
-      if (modalLeft + modalWidth > viewportWidth) {
-        modalLeft = searchButtonLeft - modalWidth - 20; // 20px gap to the left
-      }
+      // ===== VERTICAL POSITIONING - Allow to go outside viewport =====
+      let modalTop;
       
-      // Ensure modal doesn't go off-screen to the left (viewport coordinates start at 0)
-      if (modalLeft < 10) {
-        modalLeft = 10;
-      }
+      // Position relative to button (viewport coordinates)
+      // Try to position below button first, but allow it to go outside viewport
+      modalTop = Math.min(currentWordPopupTop, currentButtonTop);
+      
+      // Convert to document coordinates for vertical position
+      // Allow modal to go outside viewport vertically (top/bottom) when scrolling
+      modalTop = modalTop + scrollY;
+      
+      // Note: We don't constrain vertical position to viewport - it's OK if it goes
+      // above or below the viewport when scrolling. Only horizontal position is constrained.
       
       modal.style.setProperty('top', `${modalTop}px`, 'important');
       modal.style.setProperty('left', `${modalLeft}px`, 'important');
       
-      console.log('[WordSelector] Modal positioned:', {
+      console.log('[WordSelector] Modal repositioned:', {
         searchButtonTop,
         searchButtonBottom,
         wordPopupTop,
@@ -5133,26 +5366,288 @@ const WordSelector = {
         modalBottom: modalTop + modalHeight,
         modalLeft,
         modalWidth,
-        computedStyle: window.getComputedStyle(modal).display,
-        computedOpacity: window.getComputedStyle(modal).opacity,
-        computedVisibility: window.getComputedStyle(modal).visibility
+        viewportWidth,
+        viewportHeight,
+        spaceOnRight,
+        spaceOnLeft,
+        canFitOnRight,
+        canFitOnLeft
       });
-    }, 50);
+    };
     
-    // Add visible class immediately (no delay needed since we set opacity to 1)
-    modal.classList.add('visible');
+    // Initial positioning after modal is rendered (immediate, no delay)
+    repositionModal();
     
-    // Store initial context (will be set after search completes)
-    modal.setAttribute('data-initial-context', '');
-    modal.setAttribute('data-chat-history', JSON.stringify([]));
+    // Reposition when content changes (using MutationObserver)
+    const observer = new MutationObserver(() => {
+      // Debounce repositioning to avoid excessive calls
+      clearTimeout(modal._repositionTimeout);
+      modal._repositionTimeout = setTimeout(() => {
+        repositionModal();
+      }, 100);
+      
+      // Auto-scroll when content changes (only if user is at bottom)
+      const resultsListForScroll = modal.querySelector('.word-web-search-results-list');
+      if (resultsListForScroll) {
+        // Use immediate scroll during content updates for smooth experience
+        this.scrollToBottom(resultsListForScroll, true, true);
+      }
+    });
     
-    // Start web search automatically
-    this.performWebSearch(modal, word, meaning, examples);
+    // Observe changes in the results list (where chat messages are added)
+    const resultsListForObserver = modal.querySelector('.word-web-search-results-list');
+    if (resultsListForObserver) {
+      observer.observe(resultsListForObserver, {
+        childList: true,
+        subtree: true,
+        characterData: true
+      });
+    }
     
-    // Focus input after a short delay
+    // Also observe window resize and scroll
+    const handleResize = () => {
+      repositionModal();
+    };
+    
+    const handleScroll = () => {
+      // Update modal position when page scrolls
+      repositionModal();
+    };
+    
+    window.addEventListener('resize', handleResize);
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    
+    // Store cleanup function on modal
+    modal._cleanupPositioning = () => {
+      observer.disconnect();
+      window.removeEventListener('resize', handleResize);
+      window.removeEventListener('scroll', handleScroll);
+      if (modal._repositionTimeout) {
+        clearTimeout(modal._repositionTimeout);
+      }
+    };
+    
+    // Store initial context and chat history (ensure initial context is never empty)
+    // initial_context should be: 15 words before + word + 15 words after
+    const safeInitialContext = (existingInitialContext && existingInitialContext.trim() !== '') 
+      ? existingInitialContext 
+      : `Word: ${word}`;
+    modal.setAttribute('data-initial-context', safeInitialContext);
+    modal.setAttribute('data-chat-history', JSON.stringify(existingChatHistory));
+    
+    // Restore chat history if it exists
+    if (existingChatHistory.length > 0) {
+      // Hide loading indicator
+      const loadingIndicatorElement = modal.querySelector('.word-web-search-loading');
+      if (loadingIndicatorElement) {
+        loadingIndicatorElement.style.display = 'none';
+      }
+      
+      // Show delete button
+      deleteBtn.style.display = 'flex';
+      
+      // Restore chat messages
+      existingChatHistory.forEach((msg) => {
+        if (msg.role === 'user') {
+          const userMessageDiv = document.createElement('div');
+          userMessageDiv.className = 'word-web-search-chat-message user-message';
+          // Extract original question from prefixed question
+          const prefixedContent = msg.content;
+          // Match the prefix pattern - use a simpler, more reliable approach
+          // Pattern: "Here the word of interest is 'WORD'. Based on the context given can you answer my question. Here is my question :- USER_QUESTION"
+          // Extract everything after "Here is my question :- " which is more reliable
+          const questionMarker = 'Here is my question :- ';
+          const markerIndex = prefixedContent.indexOf(questionMarker);
+          let originalQuestion;
+          if (markerIndex !== -1) {
+            // Extract the question part after the marker
+            originalQuestion = prefixedContent.substring(markerIndex + questionMarker.length);
+          } else {
+            // Fallback: try regex pattern
+            const prefixMatch = prefixedContent.match(/Here is my question :- (.+)$/);
+            if (prefixMatch && prefixMatch[1]) {
+              originalQuestion = prefixMatch[1];
+            } else {
+              // Last resort: use full content
+              originalQuestion = prefixedContent;
+            }
+          }
+          // Display only the original question (without prefix) in the UI
+          // The full prefixed question is still stored in chat history and sent to API
+          userMessageDiv.textContent = originalQuestion;
+          resultsList.appendChild(userMessageDiv);
+        } else if (msg.role === 'assistant') {
+          const aiMessageDiv = document.createElement('div');
+          aiMessageDiv.className = 'word-web-search-chat-message ai-message';
+          const aiResponseText = document.createElement('div');
+          aiResponseText.className = 'word-web-search-chat-response-text';
+          aiResponseText.innerHTML = this.renderMarkdown(msg.content);
+          aiMessageDiv.appendChild(aiResponseText);
+          resultsList.appendChild(aiMessageDiv);
+        }
+      });
+      
+      // Scroll to bottom when restoring chat history
+      this.scrollToBottom(resultsList, false, false);
+    } else {
+      // Hide loading indicator since we're not searching automatically
+      const loadingIndicatorElement = modal.querySelector('.word-web-search-loading');
+      if (loadingIndicatorElement) {
+        loadingIndicatorElement.style.display = 'none';
+      }
+    }
+    
+    // Animate opening immediately with simple fade + scale (no delay)
+    try {
+      // Calculate final position first
+      repositionModal();
+      
+      // Clean up any previous animation state
+      modal.classList.remove('ask-ai-closing');
+      
+      // Force a reflow to ensure modal is positioned
+      void modal.offsetHeight;
+      
+      // Set initial state for animation (opacity 0, scale 0.8)
+      modal.style.setProperty('opacity', '0', 'important');
+      modal.style.setProperty('transform', 'scale(0.8)', 'important');
+      modal.style.setProperty('transition', 'none', 'important');
+      
+      // Force another reflow
+      void modal.offsetHeight;
+      
+      // Add opening class to trigger smooth fade + scale animation
+      modal.classList.add('ask-ai-opening');
+      modal.classList.add('visible');
+      
+      // Force a reflow to ensure animation starts
+      void modal.offsetHeight;
+      
+      // Remove opening class after animation completes
+      setTimeout(() => {
+        if (!modal) {
+          return;
+        }
+        
+        // Remove opening class after animation
+        modal.classList.remove('ask-ai-opening');
+        // Set final state
+        modal.style.setProperty('opacity', '1', 'important');
+        modal.style.setProperty('transform', 'scale(1)', 'important');
+        modal.style.setProperty('transition', '');
+        // Re-enable pointer events
+        modal.style.setProperty('pointer-events', 'all', 'important');
+        modal.style.setProperty('will-change', '');
+        
+        // Focus input after animation
+        inputField.focus();
+      }, 300); // 0.3s animation duration
+    } catch (error) {
+      console.error('[WordSelector] ✗ Error during Ask AI modal positioning:', error);
+    }
+  },
+  
+  /**
+   * Close all open Ask AI modals
+   * Called when word popup is closed to ensure Ask AI modals are also closed
+   */
+  closeAllAskAIModals() {
+    const askAIModals = document.querySelectorAll('.word-web-search-modal');
+    if (askAIModals.length === 0) {
+      return; // No modals to close
+    }
+    
+    console.log('[WordSelector] Closing all Ask AI modals (', askAIModals.length, 'found)');
+    
+    askAIModals.forEach(modal => {
+      // Save chat history before closing
+      const modalWord = modal.getAttribute('data-word');
+      const normalizedWord = modalWord ? modalWord.toLowerCase() : '';
+      const chatHistoryJson = modal.getAttribute('data-chat-history') || '[]';
+      const initialContext = modal.getAttribute('data-initial-context') || '';
+      try {
+        const chatHistory = JSON.parse(chatHistoryJson);
+        if (normalizedWord && this.explainedWords.has(normalizedWord)) {
+          const wordData = this.explainedWords.get(normalizedWord);
+          wordData.askAIChatHistory = chatHistory;
+          wordData.askAIInitialContext = initialContext;
+          console.log('[WordSelector] Saved chat history before closing Ask AI modal');
+        }
+      } catch (e) {
+        console.error('[WordSelector] Error saving chat history:', e);
+      }
+      
+      // Find the associated Ask AI button for this modal
+      const wordPopup = document.querySelector(`.vocab-word-popup[data-word="${modalWord}"]`);
+      if (wordPopup) {
+        const askButton = wordPopup.querySelector('.vocab-word-popup-ask-button');
+        if (askButton) {
+          console.log('[WordSelector] Closing Ask AI modal with animation');
+          this.closeAskAIModalWithAnimation(modal, askButton);
+        } else {
+          // Fallback: remove modal directly if button not found
+          console.log('[WordSelector] Ask AI button not found, removing modal directly');
+          modal.remove();
+        }
+      } else {
+        // Fallback: remove modal directly if popup not found
+        console.log('[WordSelector] Word popup not found, removing Ask AI modal directly');
+        modal.remove();
+      }
+    });
+  },
+  
+  /**
+   * Animate Ask AI modal closing - simple smooth fade + scale animation (same as opening)
+   */
+  closeAskAIModalWithAnimation(modal, askButton) {
+    console.log('[WordSelector] ===== ASK AI MODAL CLOSING ANIMATION - START =====');
+    
+    // Check if already closing to prevent double-close
+    if (modal.classList.contains('ask-ai-closing')) {
+      console.log('[WordSelector] Modal is already closing, ignoring close request');
+      return;
+    }
+    
+    // Clean up any previous animation state
+    modal.classList.remove('ask-ai-opening');
+    
+    // Force a reflow to ensure modal state is current
+    void modal.offsetHeight;
+    
+    // Set initial state for closing animation (opacity 1, scale 1)
+    modal.style.setProperty('opacity', '1', 'important');
+    modal.style.setProperty('transform', 'scale(1)', 'important');
+    modal.style.setProperty('transition', 'none', 'important');
+    
+    // Force another reflow
+    void modal.offsetHeight;
+    
+    // Add closing class to trigger smooth fade + scale animation
+    modal.classList.add('ask-ai-closing');
+    modal.classList.remove('visible');
+    
+    // Force a reflow to ensure animation starts
+    void modal.offsetHeight;
+    
+    // Wait for animation to complete, then remove modal
     setTimeout(() => {
-      inputField.focus();
-    }, 300);
+      if (!modal) {
+        return;
+      }
+      
+      // Clean up animation class
+      modal.classList.remove('ask-ai-closing');
+      
+      // Cleanup positioning observers
+      if (modal._cleanupPositioning) {
+        modal._cleanupPositioning();
+      }
+      
+      // Remove modal
+      modal.remove();
+      console.log('[WordSelector] ✓✓✓ ASK AI MODAL CLOSING ANIMATION COMPLETED ✓✓✓');
+    }, 300); // 0.3s animation duration
   },
   
   /**
@@ -5272,8 +5767,12 @@ const WordSelector = {
           loadingIndicator.style.display = 'none';
         }
         
-        // Store search context for chat
-        modal.setAttribute('data-initial-context', searchContext);
+        // Store search context for chat (ensure it's never empty)
+        const word = modal.getAttribute('data-word') || '';
+        const finalContext = (searchContext && searchContext.trim() !== '') 
+          ? searchContext 
+          : `Word: ${word}`;
+        modal.setAttribute('data-initial-context', finalContext);
         
         // If no results, show message
         if (resultsList.children.length === 0) {
@@ -5310,6 +5809,8 @@ const WordSelector = {
    * @param {HTMLElement} inputField - The input field element
    */
   async sendWebSearchChatMessage(modal, word, inputField) {
+    // Store reference to WordSelector for use in nested functions
+    const wordSelector = this;
     const question = inputField.value.trim();
     if (!question) return;
     
@@ -5330,15 +5831,19 @@ const WordSelector = {
     }
     
     // Get initial context from search results
-    const initialContext = modal.getAttribute('data-initial-context') || '';
+    let initialContext = modal.getAttribute('data-initial-context') || '';
     
-    // Add user message to chat history
-    chatHistory.push({
-      role: 'user',
-      content: question
-    });
+    // Ensure initialContext is never empty (API requires non-empty string)
+    // If no search results yet, use the word as minimal context
+    if (!initialContext || initialContext.trim() === '') {
+      initialContext = `Word: ${word}`;
+      console.log('[WordSelector] No search context available, using word as fallback context');
+    }
     
-    // Display user message
+    // Add prefix to user question (as per API contract requirement)
+    const prefixedQuestion = `Here the word of interest is '${word}'. Based on the context given can you answer my question. Here is my question :- ${question}`;
+    
+    // Display user message (show original question without prefix for UI)
     const resultsList = modal.querySelector('.word-web-search-results-list');
     const userMessageDiv = document.createElement('div');
     userMessageDiv.className = 'word-web-search-chat-message user-message';
@@ -5353,8 +5858,8 @@ const WordSelector = {
     aiMessageDiv.appendChild(aiResponseText);
     resultsList.appendChild(aiMessageDiv);
     
-    // Scroll to bottom
-    resultsList.scrollTop = resultsList.scrollHeight;
+    // Scroll to bottom when user message is added
+    this.scrollToBottom(resultsList, false, false);
     
     // Disable input and send button
     inputField.disabled = true;
@@ -5368,33 +5873,58 @@ const WordSelector = {
     }
     
     // Call v2/ask API
+    // Note: chat_history should contain previous messages only (not current question)
+    // The current question goes in the 'question' field
     let accumulatedText = '';
     const abortAsk = await ApiService.ask({
       initial_context: initialContext,
-      chat_history: chatHistory,
-      question: question,
-      context_type: 'web_search',
+      chat_history: chatHistory, // Previous messages only
+      question: prefixedQuestion, // Current question with prefix
+      context_type: 'TEXT',
       onChunk: (chunk, accumulated) => {
         accumulatedText = accumulated || accumulatedText + chunk;
-        aiResponseText.textContent = accumulatedText;
+        aiResponseText.innerHTML = this.renderMarkdown(accumulatedText);
         
-        // Auto-scroll
-        resultsList.scrollTop = resultsList.scrollHeight;
+        // Auto-scroll during streaming (only if user is at bottom)
+        this.scrollToBottom(resultsList, true, true);
       },
       onComplete: (updatedChatHistory, possibleQuestions) => {
         console.log('[WordSelector] Chat response completed');
         
         // Update chat history
+        // The API returns the complete chat history including the current question and response
+        let finalChatHistory = chatHistory;
         if (updatedChatHistory && Array.isArray(updatedChatHistory)) {
+          finalChatHistory = updatedChatHistory;
           modal.setAttribute('data-chat-history', JSON.stringify(updatedChatHistory));
         } else {
-          // Fallback: add AI response manually
+          // Fallback: manually add user question and AI response to chat history
+          chatHistory.push({
+            role: 'user',
+            content: prefixedQuestion
+          });
           chatHistory.push({
             role: 'assistant',
             content: accumulatedText
           });
+          finalChatHistory = chatHistory;
           modal.setAttribute('data-chat-history', JSON.stringify(chatHistory));
         }
+        
+        // IMPORTANT: Also save to explainedWords map for persistence
+        const normalizedWord = word.toLowerCase();
+        if (wordSelector.explainedWords.has(normalizedWord)) {
+          const wordData = wordSelector.explainedWords.get(normalizedWord);
+          wordData.askAIChatHistory = finalChatHistory;
+          // Also ensure initial context is saved
+          if (!wordData.askAIInitialContext) {
+            wordData.askAIInitialContext = initialContext;
+          }
+          console.log('[WordSelector] Saved chat history to explainedWords map after message');
+        }
+        
+        // Scroll to bottom when response is complete (always scroll to show full response)
+        this.scrollToBottom(resultsList, false, false);
         
         // Re-enable input and send button
         inputField.disabled = false;
@@ -5414,6 +5944,154 @@ const WordSelector = {
     
     // Store abort function
     modal.setAttribute('data-ask-abort', abortAsk.toString());
+  },
+  
+  /**
+   * Check if user is at or near the bottom of the scrollable content
+   * @param {HTMLElement} scrollableContent - The scrollable content container
+   * @param {number} tolerance - Pixel tolerance for "near bottom" (default: 50px)
+   * @returns {boolean} True if user is at or near the bottom
+   */
+  isAtBottom(scrollableContent, tolerance = 50) {
+    if (!scrollableContent) return false;
+    
+    const currentScroll = scrollableContent.scrollTop;
+    const maxScroll = scrollableContent.scrollHeight - scrollableContent.clientHeight;
+    const distanceFromBottom = maxScroll - currentScroll;
+    
+    // User is at bottom if they're within tolerance pixels of the bottom
+    return distanceFromBottom <= tolerance;
+  },
+  
+  /**
+   * Scroll the scrollable content container to bottom
+   * @param {HTMLElement} element - The element (usually resultsList) to find scrollable container from
+   * @param {boolean} immediate - If true, use immediate scroll (no smooth animation). Default: false
+   * @param {boolean} onlyIfAtBottom - If true, only scroll if user is already at bottom. Default: false
+   */
+  scrollToBottom(element, immediate = false, onlyIfAtBottom = false) {
+    if (!element) return;
+    
+    // Find the actual scrollable container (word-web-search-results)
+    // This is the parent container that has overflow-y: auto
+    let scrollableContent = element.closest('.word-web-search-results');
+    
+    // If not found via closest, try finding it from the parent
+    if (!scrollableContent) {
+      let parent = element.parentElement;
+      while (parent && !scrollableContent) {
+        if (parent.classList && parent.classList.contains('word-web-search-results')) {
+          scrollableContent = parent;
+          break;
+        }
+        parent = parent.parentElement;
+      }
+    }
+    
+    // Fallback: if still not found, use the element itself (for backward compatibility)
+    if (!scrollableContent) {
+      scrollableContent = element;
+      console.warn('[WordSelector] scrollToBottom: Could not find scrollable container, using element directly');
+    }
+    
+    // If onlyIfAtBottom is true, check if user is at bottom before scrolling
+    if (onlyIfAtBottom && !this.isAtBottom(scrollableContent)) {
+      console.log('[WordSelector] scrollToBottom: User has scrolled up, skipping auto-scroll');
+      return;
+    }
+    
+    console.log('[WordSelector] scrollToBottom: Scrolling to bottom, immediate:', immediate);
+    
+    // Function to perform the actual scroll
+    const performScroll = () => {
+      if (immediate) {
+        // For immediate scroll (during streaming), use instant scroll
+        scrollableContent.scrollTop = scrollableContent.scrollHeight;
+      } else {
+        // For normal scroll, use smooth behavior
+        scrollableContent.scrollTo({
+          top: scrollableContent.scrollHeight,
+          behavior: 'smooth'
+        });
+      }
+    };
+    
+    // Use requestAnimationFrame to ensure DOM updates are complete
+    requestAnimationFrame(() => {
+      performScroll();
+      
+      // Multiple scroll attempts to handle async DOM updates and layout recalculation
+      // This is especially important during streaming when content is added word by word
+      setTimeout(() => {
+        performScroll();
+      }, 0);
+      
+      setTimeout(() => {
+        performScroll();
+      }, 10);
+      
+      // Final check with a small delay to ensure we're at the bottom
+      setTimeout(() => {
+        const currentScroll = scrollableContent.scrollTop;
+        const maxScroll = scrollableContent.scrollHeight - scrollableContent.clientHeight;
+        // If we're not at the bottom (within 10px tolerance), scroll again
+        if (Math.abs(currentScroll - maxScroll) > 10) {
+          scrollableContent.scrollTop = scrollableContent.scrollHeight;
+        }
+      }, 50);
+    });
+  },
+  
+  /**
+   * Simple markdown renderer for chat messages
+   * @param {string} text - Markdown text
+   * @returns {string} HTML string
+   */
+  renderMarkdown(text) {
+    if (!text) return '';
+    
+    let html = text;
+    
+    // Escape HTML first
+    html = html.replace(/&/g, '&amp;')
+               .replace(/</g, '&lt;')
+               .replace(/>/g, '&gt;');
+    
+    // Code blocks (```)
+    html = html.replace(/```(\w+)?\n([\s\S]*?)```/g, '<pre><code>$2</code></pre>');
+    
+    // Inline code (`)
+    html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
+    
+    // Bold (**text** or __text__)
+    html = html.replace(/\*\*([^\*]+)\*\*/g, '<strong>$1</strong>');
+    html = html.replace(/__([^_]+)__/g, '<strong>$1</strong>');
+    
+    // Italic (*text* or _text_)
+    html = html.replace(/\*([^\*]+)\*/g, '<em>$1</em>');
+    html = html.replace(/_([^_]+)_/g, '<em>$1</em>');
+    
+    // Links [text](url)
+    html = html.replace(/\[([^\]]+)\]\(([^\)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
+    
+    // Headings
+    html = html.replace(/^### (.+)$/gm, '<h3>$1</h3>');
+    html = html.replace(/^## (.+)$/gm, '<h2>$1</h2>');
+    html = html.replace(/^# (.+)$/gm, '<h1>$1</h1>');
+    
+    // Line breaks
+    html = html.replace(/\n\n/g, '<br><br>');
+    html = html.replace(/\n/g, '<br>');
+    
+    // Lists
+    html = html.replace(/^\* (.+)$/gm, '<li>$1</li>');
+    html = html.replace(/^- (.+)$/gm, '<li>$1</li>');
+    html = html.replace(/^\d+\. (.+)$/gm, '<li>$1</li>');
+    
+    // Wrap consecutive <li> in <ul>
+    html = html.replace(/(<li>.*?<\/li>)/gs, '<ul>$1</ul>');
+    
+    return html;
   },
   
   /**
@@ -6086,6 +6764,8 @@ const WordSelector = {
       if (isPopupOpen) {
         console.log('[WordSelector] Popup is open for this word, closing it');
         this.hideAllPopups();
+        // Also close any open Ask AI modals when closing word popup
+        this.closeAllAskAIModals();
         return;
       }
       
@@ -6101,6 +6781,8 @@ const WordSelector = {
       if (activeStickyPopup) {
         console.log('[WordSelector] Sticky popup already visible for different word, closing it first');
         this.hideAllPopups();
+        // Also close any open Ask AI modals when closing word popup
+        this.closeAllAskAIModals();
         // Small delay to ensure the previous popup is closed before showing the new one
         setTimeout(() => {
           console.log('[WordSelector] ✓ Showing sticky popup on click for new word');
@@ -6979,37 +7661,44 @@ const WordSelector = {
         animation: vocab-spin 0.8s linear infinite;
       }
       
-      /* Search icon button - bottom-right positioned */
-      .vocab-word-popup-search-button {
+      /* Ask button - bottom-right positioned */
+      .vocab-word-popup-ask-button {
+        padding: 10px 18px;
+        border: none;
+        border-radius: 10px;
+        background: #A020F0;
+        color: white;
+        font-weight: 600;
+        font-size: 13px;
+        cursor: pointer;
+        transition: background-color 0.2s ease, opacity 0.2s ease, transform 0.2s ease;
+        text-align: center;
+        min-width: 100px;
+        flex-shrink: 0;
         display: flex;
         align-items: center;
         justify-content: center;
-        width: 40px;
-        height: 40px;
-        border: none;
-        border-radius: 10px;
-        background: transparent;
-        color: #A020F0;
-        cursor: pointer;
-        transition: background-color 0.2s ease, transform 0.2s ease;
-        flex-shrink: 0;
-        padding: 0;
+        margin-left: auto; /* Always push to the right side, even when Get more examples button is hidden */
       }
       
-      .vocab-word-popup-search-button:hover {
-        background: rgba(160, 32, 240, 0.1);
-        transform: scale(1.1);
+      .vocab-word-popup-ask-button:hover:not(.loading) {
+        background: #8B1AC4;
+        transform: translateY(-1px);
       }
       
-      .vocab-word-popup-search-button:active {
-        transform: scale(0.95);
-        background: rgba(160, 32, 240, 0.2);
+      .vocab-word-popup-ask-button:active:not(.loading) {
+        background: #7016A8;
+        transform: translateY(0) scale(0.95);
       }
       
-      .vocab-word-popup-search-button svg {
-        display: block;
-        width: 18px;
-        height: 18px;
+      .vocab-word-popup-ask-button.loading {
+        opacity: 0.6;
+        cursor: not-allowed;
+      }
+      
+      .vocab-word-popup-ask-button:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
       }
       
       /* View more button - bottom-left positioned */
@@ -7053,14 +7742,14 @@ const WordSelector = {
       
       /* Web Search Modal */
       .word-web-search-modal {
-        position: fixed !important;
+        position: absolute !important;
         background: white !important;
         border-radius: 20px;
-        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15), 0 2px 8px rgba(0, 0, 0, 0.1) !important;
+        box-shadow: 0 8px 32px rgba(149, 39, 245, 0.2), 0 2px 8px rgba(149, 39, 245, 0.15) !important;
         z-index: 10000020 !important;
         max-width: 600px !important;
         width: 90vw !important;
-        max-height: 80vh !important;
+        max-height: 70vh !important;
         display: flex !important;
         flex-direction: column !important;
         opacity: 1 !important;
@@ -7072,23 +7761,149 @@ const WordSelector = {
         overflow: hidden !important;
       }
       
+      .word-web-search-modal.dragging {
+        cursor: grabbing !important;
+        user-select: none !important;
+        -webkit-user-select: none !important;
+        -moz-user-select: none !important;
+        -ms-user-select: none !important;
+      }
+      
       .word-web-search-modal.visible {
         opacity: 1 !important;
         transform: scale(1) !important;
       }
       
-      .word-web-search-modal-content {
+      /* Ask AI modal opening animation - smooth fade + scale in */
+      .word-web-search-modal.ask-ai-opening {
+        animation: askAIModalOpen 0.3s cubic-bezier(0.4, 0, 0.2, 1) forwards !important;
+        transition: none !important;
+        pointer-events: none !important;
+        will-change: transform, opacity !important;
+        z-index: 10000020 !important;
+      }
+      
+      .word-web-search-modal.ask-ai-opening.visible {
+        animation: askAIModalOpen 0.3s cubic-bezier(0.4, 0, 0.2, 1) forwards !important;
+        transition: none !important;
+      }
+      
+      @keyframes askAIModalOpen {
+        0% {
+          transform: scale(0.8) !important;
+          opacity: 0 !important;
+        }
+        100% {
+          transform: scale(1) !important;
+          opacity: 1 !important;
+        }
+      }
+      
+      /* Ask AI modal closing animation - smooth fade + scale out */
+      .word-web-search-modal.ask-ai-closing {
+        animation: askAIModalClose 0.3s cubic-bezier(0.4, 0, 0.2, 1) forwards !important;
+        transition: none !important;
+        pointer-events: none !important;
+        will-change: transform, opacity !important;
+        z-index: 10000020 !important;
+      }
+      
+      @keyframes askAIModalClose {
+        0% {
+          transform: scale(1) !important;
+          opacity: 1 !important;
+        }
+        100% {
+          transform: scale(0.8) !important;
+          opacity: 0 !important;
+        }
+      }
+      
+      .word-ask-ai-modal-content {
         display: flex;
         flex-direction: column;
         height: 100%;
-        max-height: 80vh;
+        max-height: 70vh;
+        border-radius: 30px;
+        /* Disable text selection in the modal */
+        user-select: none !important;
+        -webkit-user-select: none !important;
+        -moz-user-select: none !important;
+        -ms-user-select: none !important;
+      }
+      
+      /* Disable text selection for all elements inside the modal */
+      .word-web-search-modal * {
+        user-select: none !important;
+        -webkit-user-select: none !important;
+        -moz-user-select: none !important;
+        -ms-user-select: none !important;
+      }
+      
+      /* Re-enable text selection for input and textarea */
+      .word-web-search-modal input,
+      .word-web-search-modal textarea {
+        user-select: text !important;
+        -webkit-user-select: text !important;
+        -moz-user-select: text !important;
+        -ms-user-select: text !important;
+      }
+      
+      /* Prevent double-click text selection */
+      .word-web-search-modal {
+        -webkit-touch-callout: none !important;
+        -webkit-user-select: none !important;
+        -khtml-user-select: none !important;
+        -moz-user-select: none !important;
+        -ms-user-select: none !important;
+        user-select: none !important;
+      }
+      
+      /* Re-enable for input fields */
+      .word-web-search-modal .word-web-search-input {
+        user-select: text !important;
+        -webkit-user-select: text !important;
+        -moz-user-select: text !important;
+        -ms-user-select: text !important;
       }
       
       .word-web-search-modal-header {
         display: flex;
-        justify-content: flex-end;
+        justify-content: flex-start;
         padding: 12px 16px;
-        border-bottom: 1px solid #e5e7eb;
+        border-bottom: none;
+        cursor: move;
+      }
+      
+      /* Header area should show move cursor, but close button should show pointer */
+      .word-web-search-modal-header .word-web-search-modal-close {
+        cursor: pointer !important;
+      }
+      
+      /* Chat content areas should NOT show move cursor */
+      .word-web-search-results,
+      .word-web-search-results-list,
+      .word-web-search-input-area,
+      .word-web-search-chat-message,
+      .word-web-search-chat-response-text {
+        cursor: default !important;
+      }
+      
+      /* Reset cursor for interactive elements */
+      .word-web-search-modal input,
+      .word-web-search-modal textarea {
+        cursor: text !important;
+      }
+      
+      .word-web-search-modal button,
+      .word-web-search-modal a {
+        cursor: pointer !important;
+      }
+      
+      .word-web-search-modal .word-web-search-send-btn,
+      .word-web-search-modal .word-web-search-delete-btn,
+      .word-web-search-modal .word-web-search-modal-close {
+        cursor: pointer !important;
       }
       
       .word-web-search-modal-close {
@@ -7097,7 +7912,7 @@ const WordSelector = {
         border: none;
         background: transparent;
         font-size: 24px;
-        color: #6b7280;
+        color: #A020F0;
         cursor: pointer;
         display: flex;
         align-items: center;
@@ -7107,7 +7922,7 @@ const WordSelector = {
       }
       
       .word-web-search-modal-close:hover {
-        background: #f3f4f6;
+        background: rgba(160, 32, 240, 0.1);
       }
       
       .word-web-search-results {
@@ -7149,7 +7964,7 @@ const WordSelector = {
         margin-bottom: 16px;
         color: #6b7280;
         font-size: 14px;
-        border-bottom: 1px solid #e5e7eb;
+        border-bottom: none;
       }
       
       .word-web-search-metadata-text {
@@ -7228,30 +8043,125 @@ const WordSelector = {
         color: #ef4444;
       }
       
-      /* Chat messages in web search modal */
+      /* Chat messages in web search modal - matching vocab-chat-message-content styles */
       .word-web-search-chat-message {
         padding: 12px 16px;
-        margin-bottom: 12px;
         border-radius: 12px;
+        font-size: 14px;
+        line-height: 1.5;
         max-width: 85%;
         word-wrap: break-word;
+        white-space: pre-wrap;
+        margin-bottom: 12px;
       }
       
       .word-web-search-chat-message.user-message {
-        background: #f3f4f6;
-        color: #1f2937;
+        background: #f3e8ff;
+        color: #374151;
         align-self: flex-end;
         margin-left: auto;
       }
       
       .word-web-search-chat-message.ai-message {
-        background: #f0e6ff;
-        color: #1f2937;
+        padding: 16px;
+        background: #ffffff;
+        border: none;
+        border-radius: 8px;
+        font-size: 14px;
+        line-height: 1.6;
+        color: #374151;
+        word-wrap: break-word;
+        overflow-wrap: break-word;
+        box-shadow: none;
+        max-width: none;
+        width: auto;
         align-self: flex-start;
       }
       
       .word-web-search-chat-response-text {
         line-height: 1.6;
+        word-wrap: break-word;
+        overflow-wrap: break-word;
+      }
+      
+      /* Markdown Styling in AI Messages - matching vocab-chat styles */
+      .word-web-search-chat-message.ai-message code {
+        background: #f3f4f6;
+        color: #9527F5;
+        padding: 2px 6px;
+        border-radius: 4px;
+        font-family: 'Courier New', Courier, monospace;
+        font-size: 13px;
+      }
+      
+      .word-web-search-chat-message.ai-message pre {
+        background: #f3f4f6;
+        padding: 12px;
+        border-radius: 8px;
+        overflow-x: auto;
+        margin: 8px 0;
+      }
+      
+      .word-web-search-chat-message.ai-message pre code {
+        background: transparent;
+        padding: 0;
+        font-size: 12px;
+        line-height: 1.5;
+      }
+      
+      .word-web-search-chat-message.ai-message p {
+        margin: 0 0 12px 0;
+      }
+      
+      .word-web-search-chat-message.ai-message p:last-child {
+        margin-bottom: 0;
+      }
+      
+      .word-web-search-chat-message.ai-message strong {
+        font-weight: 600;
+        color: #1f2937;
+      }
+      
+      .word-web-search-chat-message.ai-message em {
+        font-style: italic;
+      }
+      
+      .word-web-search-chat-message.ai-message a {
+        color: #9527F5;
+        text-decoration: underline;
+      }
+      
+      .word-web-search-chat-message.ai-message a:hover {
+        color: #7a1fd9;
+      }
+      
+      .word-web-search-chat-message.ai-message h1,
+      .word-web-search-chat-message.ai-message h2,
+      .word-web-search-chat-message.ai-message h3 {
+        font-weight: 600;
+        margin: 8px 0;
+        color: #1f2937;
+      }
+      
+      .word-web-search-chat-message.ai-message h1 {
+        font-size: 18px;
+      }
+      
+      .word-web-search-chat-message.ai-message h2 {
+        font-size: 16px;
+      }
+      
+      .word-web-search-chat-message.ai-message h3 {
+        font-size: 15px;
+      }
+      
+      .word-web-search-chat-message.ai-message ul {
+        margin: 8px 0;
+        padding-left: 20px;
+      }
+      
+      .word-web-search-chat-message.ai-message li {
+        margin: 4px 0;
       }
       
       /* Input area */
@@ -11770,49 +12680,29 @@ const ChatDialog = {
             block: 'center'
           });
           
-          // Determine pulsate color based on text type
-          let isGreenPulsate = false;
+          // Always use green pulsate for focus button
+          const isGreenPulsate = true;
+          const pulsateClassName = 'vocab-text-pulsate-green';
+          console.log('[Focus Button] Using green pulsate for focus button');
           
-          // Check if it's asked text (has green chat icon)
-          const hasChatBtn = highlight.querySelector('.vocab-text-chat-btn');
-          const hasGreenChatBtn = highlight.querySelector('.vocab-text-chat-btn-green');
-          console.log('[Focus Button] Checking for chat button:', hasChatBtn, 'Green:', hasGreenChatBtn);
-          if (hasChatBtn || hasGreenChatBtn) {
-            isGreenPulsate = true; // Green pulsate for asked text
-            console.log('[Focus Button] Detected asked text - using green pulsate');
-          }
-          
-          // Check if it's explained text (has green dashed underline or book icon)
-          const isSimplified = highlight.classList.contains('vocab-text-simplified');
-          const hasBookBtn = highlight.querySelector('.vocab-text-book-btn');
-          console.log('[Focus Button] Checking for simplified class:', isSimplified, 'Book button:', hasBookBtn);
-          if (isSimplified || hasBookBtn) {
-            isGreenPulsate = true; // Green pulsate for explained text
-            console.log('[Focus Button] Detected explained text - using green pulsate');
-          }
-          
-          // Additional check: look for asked text in the askedTexts map using matchedKey
-          const isInAskedTexts = TextSelector.askedTexts.has(matchedKey) || TextSelector.askedTexts.has(originalTextKey);
-          console.log('[Focus Button] Checking if text is in askedTexts (matchedKey:', matchedKey, 'originalTextKey:', originalTextKey, '):', isInAskedTexts);
-          if (isInAskedTexts) {
-            isGreenPulsate = true; // Green pulsate for asked text
-            console.log('[Focus Button] Detected asked text via askedTexts map - using green pulsate');
-          }
-          
-          // Additional check: look for simplified text in simplifiedTexts map using matchedKey
-          const isInSimplifiedTexts = TextSelector.simplifiedTexts.has(matchedKey) || TextSelector.simplifiedTexts.has(originalTextKey);
-          console.log('[Focus Button] Checking if text is in simplifiedTexts (matchedKey:', matchedKey, 'originalTextKey:', originalTextKey, '):', isInSimplifiedTexts);
-          if (isInSimplifiedTexts) {
-            isGreenPulsate = true; // Green pulsate for simplified text
-            console.log('[Focus Button] Detected simplified text via simplifiedTexts map - using green pulsate');
-          }
-          
-          console.log('[Focus Button] Using green pulsate:', isGreenPulsate);
-          
-          // Then pulsate with appropriate color
+          // Pulsate with green color twice
           setTimeout(() => {
+            // First pulsate - ensure class is removed first to restart animation
+            highlight.classList.remove(pulsateClassName);
+            // Force reflow to ensure class removal is processed
+            void highlight.offsetWidth;
             TextSelector.pulsateText(highlight, isGreenPulsate);
-            console.log('[Focus Button] Pulsate animation triggered');
+            console.log('[Focus Button] First green pulsate animation triggered');
+            
+            // Second pulsate after the first animation completes (1.2s for green)
+            setTimeout(() => {
+              // Remove class first to restart animation
+              highlight.classList.remove(pulsateClassName);
+              // Force reflow to ensure class removal is processed
+              void highlight.offsetWidth;
+              TextSelector.pulsateText(highlight, isGreenPulsate);
+              console.log('[Focus Button] Second green pulsate animation triggered');
+            }, 1200); // 1.2s duration for green pulsate animation
           }, 300); // Small delay to let scroll complete
         } else {
           console.log('[Focus Button] No highlight found for textKey:', originalTextKey);
@@ -30703,23 +31593,70 @@ const ButtonPanel = {
     
     // Function to check if the clicked element should allow dragging
     const isDraggableElement = (element) => {
+      // Explicitly allow dragging on the header (but not on its interactive children)
+      if (element.classList && element.classList.contains('word-web-search-modal-header')) {
+        return true;
+      }
+      
+      // Check if the element is a child of the header (but not an interactive element)
+      let currentElement = element;
+      while (currentElement && currentElement !== modal) {
+        if (currentElement.classList && currentElement.classList.contains('word-web-search-modal-header')) {
+          // We're inside the header, check if the clicked element itself is interactive
+          const tagName = element.tagName?.toLowerCase();
+          if (tagName && ['input', 'button', 'textarea', 'a', 'select'].includes(tagName)) {
+            return false;
+          }
+          // If it's the close button or other interactive elements, don't drag
+          if (element.classList && (
+            element.classList.contains('word-web-search-modal-close') ||
+            element.classList.contains('word-web-search-send-btn') ||
+            element.classList.contains('word-web-search-delete-btn')
+          )) {
+            return false;
+          }
+          // Otherwise, allow dragging from header
+          return true;
+        }
+        currentElement = currentElement.parentElement;
+      }
+      
       // Don't drag if clicking on interactive elements
       const nonDraggableSelectors = [
         'input',
         'button',
         'textarea',
+        'a',
+        'select',
         '.vocab-custom-content-tab-arrow',
         '.vocab-custom-content-add-tab',
         '.vocab-custom-content-minimize',
         '.vocab-custom-content-chat-icon',
         '.vocab-custom-content-resize-handle',
         '.vocab-custom-content-editor-content',
-        '.vocab-custom-content-tab'
+        '.vocab-custom-content-tab',
+        // Word ask AI modal specific non-draggable elements
+        '.word-web-search-input',
+        '.word-web-search-send-btn',
+        '.word-web-search-delete-btn',
+        '.word-web-search-modal-close',
+        '.word-web-search-results', // Chat container - not draggable
+        '.word-web-search-results-list', // Chat messages list - not draggable
+        '.word-web-search-input-area', // Input area - not draggable
+        '.word-web-search-chat-message', // Chat messages - not draggable
+        '.word-web-search-chat-response-text' // Chat response text - not draggable
       ];
       
       // Check if the element or any of its parents match non-draggable selectors
-      let currentElement = element;
+      currentElement = element;
       while (currentElement && currentElement !== modal) {
+        // Check if it's an interactive element by tag name
+        const tagName = currentElement.tagName?.toLowerCase();
+        if (tagName && ['input', 'button', 'textarea', 'a', 'select'].includes(tagName)) {
+          return false;
+        }
+        
+        // Check if it matches any non-draggable selectors
         for (const selector of nonDraggableSelectors) {
           if (currentElement.matches && currentElement.matches(selector)) {
             return false;
@@ -30733,7 +31670,10 @@ const ButtonPanel = {
     
     // Mouse down event
     modal.addEventListener('mousedown', (e) => {
+      console.log('[WordSelector] Mouse down on modal, target:', e.target, 'isDraggable:', isDraggableElement(e.target));
+      
       if (!isDraggableElement(e.target)) {
+        console.log('[WordSelector] Element is not draggable, returning');
         return;
       }
       
@@ -30743,27 +31683,46 @@ const ButtonPanel = {
       
       // Get current modal position - always use getBoundingClientRect for accuracy
       const rect = modal.getBoundingClientRect();
+      // Convert viewport coordinates to document coordinates
+      const scrollX = window.scrollX || window.pageXOffset || 0;
+      const scrollY = window.scrollY || window.pageYOffset || 0;
       initialX = rect.left;
       initialY = rect.top;
       
-      // If this is the first drag, ensure we have proper positioning
-      const computedStyle = window.getComputedStyle(modal);
-      const isCentered = computedStyle.left === '50%' || 
-                        computedStyle.left === 'auto' || 
-                        computedStyle.transform.includes('translate(-50%');
+      console.log('[WordSelector] Drag started:', {
+        startX,
+        startY,
+        initialX,
+        initialY,
+        scrollX,
+        scrollY,
+        rectLeft: rect.left,
+        rectTop: rect.top
+      });
       
-      if (isCentered) {
-        // Modal is centered, set absolute positioning immediately
-        modal.style.left = initialX + 'px';
-        modal.style.top = initialY + 'px';
-        modal.style.transform = 'none';
-      }
+      // Clear any transform and ensure we're using absolute positioning
+      // Remove transition during drag for smooth movement
+      modal.style.setProperty('transition', 'none', 'important');
+      modal.style.setProperty('transform', 'none', 'important');
+      
+      // Ensure we have absolute positioning with document coordinates
+      modal.style.setProperty('position', 'absolute', 'important');
+      const docLeft = initialX + scrollX;
+      const docTop = initialY + scrollY;
+      modal.style.setProperty('left', `${docLeft}px`, 'important');
+      modal.style.setProperty('top', `${docTop}px`, 'important');
+      
+      console.log('[WordSelector] Set initial position:', { docLeft, docTop });
+      
+      // Mark modal as being dragged to prevent repositionModal from interfering
+      modal.setAttribute('data-is-dragging', 'true');
       
       // Add dragging class for visual feedback
       modal.classList.add('dragging');
       
       // Prevent text selection during drag
       e.preventDefault();
+      e.stopPropagation();
     });
     
     // Mouse move event
@@ -30776,17 +31735,46 @@ const ButtonPanel = {
       const newX = initialX + deltaX;
       const newY = initialY + deltaY;
       
-      // Constrain to viewport bounds
+      // Constrain horizontal position to viewport, but allow vertical to go outside
+      const scrollX = window.scrollX || window.pageXOffset || 0;
+      const scrollY = window.scrollY || window.pageYOffset || 0;
+      
+      // Constrain horizontal position to viewport bounds (viewport coordinates)
       const maxX = window.innerWidth - modal.offsetWidth;
-      const maxY = window.innerHeight - modal.offsetHeight;
-      
       const constrainedX = Math.max(0, Math.min(newX, maxX));
-      const constrainedY = Math.max(0, Math.min(newY, maxY));
       
-      // Remove transform and set absolute positioning
-      modal.style.transform = 'none';
-      modal.style.left = constrainedX + 'px';
-      modal.style.top = constrainedY + 'px';
+      // Allow vertical position to go outside viewport (no constraint)
+      const constrainedY = newY;
+      
+      // Convert to document coordinates
+      const finalX = constrainedX + scrollX;
+      const finalY = constrainedY + scrollY;
+      
+      console.log('[WordSelector] Dragging:', {
+        deltaX,
+        deltaY,
+        newX,
+        newY,
+        constrainedX,
+        constrainedY,
+        finalX,
+        finalY,
+        scrollX,
+        scrollY
+      });
+      
+      // Remove transform and set absolute positioning (document coordinates)
+      // Disable transition during drag for smooth movement
+      modal.style.setProperty('transition', 'none', 'important');
+      modal.style.setProperty('transform', 'none', 'important');
+      modal.style.setProperty('position', 'absolute', 'important');
+      modal.style.setProperty('left', `${finalX}px`, 'important');
+      modal.style.setProperty('top', `${finalY}px`, 'important');
+      
+      // Verify the position was set
+      const computedLeft = window.getComputedStyle(modal).left;
+      const computedTop = window.getComputedStyle(modal).top;
+      console.log('[WordSelector] Position set, computed:', { computedLeft, computedTop });
     });
     
     // Mouse up event
@@ -30794,6 +31782,10 @@ const ButtonPanel = {
       if (isDragging) {
         isDragging = false;
         modal.classList.remove('dragging');
+        // Clear dragging flag to allow repositionModal to work again
+        modal.removeAttribute('data-is-dragging');
+        // Re-enable transition after dragging
+        modal.style.setProperty('transition', 'opacity 0.2s ease, transform 0.2s ease', 'important');
       }
     });
     
@@ -30810,24 +31802,28 @@ const ButtonPanel = {
       
       // Get current modal position - always use getBoundingClientRect for accuracy
       const rect = modal.getBoundingClientRect();
+      // Convert viewport coordinates to document coordinates
+      const scrollX = window.scrollX || window.pageXOffset || 0;
+      const scrollY = window.scrollY || window.pageYOffset || 0;
       initialX = rect.left;
       initialY = rect.top;
       
-      // If this is the first drag, ensure we have proper positioning
-      const computedStyle = window.getComputedStyle(modal);
-      const isCentered = computedStyle.left === '50%' || 
-                        computedStyle.left === 'auto' || 
-                        computedStyle.transform.includes('translate(-50%');
+      // Clear any transform and ensure we're using absolute positioning
+      // Remove transition during drag for smooth movement
+      modal.style.setProperty('transition', 'none', 'important');
+      modal.style.setProperty('transform', 'none', 'important');
       
-      if (isCentered) {
-        // Modal is centered, set absolute positioning immediately
-        modal.style.left = initialX + 'px';
-        modal.style.top = initialY + 'px';
-        modal.style.transform = 'none';
-      }
+      // Ensure we have absolute positioning with document coordinates
+      modal.style.setProperty('position', 'absolute', 'important');
+      modal.style.setProperty('left', `${initialX + scrollX}px`, 'important');
+      modal.style.setProperty('top', `${initialY + scrollY}px`, 'important');
+      
+      // Mark modal as being dragged to prevent repositionModal from interfering
+      modal.setAttribute('data-is-dragging', 'true');
       
       modal.classList.add('dragging');
       e.preventDefault();
+      e.stopPropagation();
     });
     
     document.addEventListener('touchmove', (e) => {
@@ -30840,16 +31836,27 @@ const ButtonPanel = {
       const newX = initialX + deltaX;
       const newY = initialY + deltaY;
       
+      // Constrain horizontal position to viewport, but allow vertical to go outside
+      const scrollX = window.scrollX || window.pageXOffset || 0;
+      const scrollY = window.scrollY || window.pageYOffset || 0;
+      
+      // Constrain horizontal position to viewport bounds (viewport coordinates)
       const maxX = window.innerWidth - modal.offsetWidth;
-      const maxY = window.innerHeight - modal.offsetHeight;
-      
       const constrainedX = Math.max(0, Math.min(newX, maxX));
-      const constrainedY = Math.max(0, Math.min(newY, maxY));
       
-      // Remove transform and set absolute positioning
-      modal.style.transform = 'none';
-      modal.style.left = constrainedX + 'px';
-      modal.style.top = constrainedY + 'px';
+      // Allow vertical position to go outside viewport (no constraint)
+      const constrainedY = newY;
+      
+      // Convert to document coordinates
+      const finalX = constrainedX + scrollX;
+      const finalY = constrainedY + scrollY;
+      
+      // Disable transition during drag for smooth movement
+      modal.style.setProperty('transition', 'none', 'important');
+      modal.style.setProperty('transform', 'none', 'important');
+      modal.style.setProperty('position', 'absolute', 'important');
+      modal.style.setProperty('left', `${finalX}px`, 'important');
+      modal.style.setProperty('top', `${finalY}px`, 'important');
       
       e.preventDefault();
     });
@@ -30858,6 +31865,10 @@ const ButtonPanel = {
       if (isDragging) {
         isDragging = false;
         modal.classList.remove('dragging');
+        // Clear dragging flag to allow repositionModal to work again
+        modal.removeAttribute('data-is-dragging');
+        // Re-enable transition after dragging
+        modal.style.setProperty('transition', 'opacity 0.2s ease, transform 0.2s ease', 'important');
       }
     });
   },
