@@ -99,6 +99,13 @@ class ApiService {
         chat_history_length: chat_history.length,
         question_length: question.length
       });
+      console.log('[ApiService] Request payload structure:', {
+        context_type: context_type || 'not provided',
+        initial_context: initial_context.substring(0, 100) + (initial_context.length > 100 ? '...' : ''),
+        chat_history: chat_history,
+        question: question.substring(0, 100) + (question.length > 100 ? '...' : ''),
+        languageCode: languageCode || 'not provided'
+      });
       
       // Create abort controller for cancellation
       const abortController = new AbortController();
