@@ -3775,6 +3775,132 @@ const WordSelector = {
   },
   
   /**
+   * Get all CSS properties from a range's start container to preserve them
+   * @param {Range} range - The range to get styles from
+   * @returns {Object} Object containing all relevant CSS properties
+   */
+  getRangeCSSProperties(range) {
+    const startContainer = range.startContainer;
+    let element = startContainer;
+    
+    // If startContainer is a text node, get its parent element
+    if (startContainer.nodeType === Node.TEXT_NODE) {
+      element = startContainer.parentElement;
+    } else if (startContainer.nodeType === Node.ELEMENT_NODE) {
+      element = startContainer;
+    }
+    
+    if (!element) {
+      console.warn('[WordSelector] Could not find element for CSS properties');
+      return {};
+    }
+    
+    // Get computed styles
+    const computedStyles = window.getComputedStyle(element);
+    
+    // Extract all font and text-related properties
+    const cssProperties = {
+      // Font properties
+      fontSize: computedStyles.fontSize,
+      fontFamily: computedStyles.fontFamily,
+      fontStyle: computedStyles.fontStyle,
+      fontWeight: computedStyles.fontWeight,
+      fontVariant: computedStyles.fontVariant,
+      fontStretch: computedStyles.fontStretch,
+      lineHeight: computedStyles.lineHeight,
+      letterSpacing: computedStyles.letterSpacing,
+      wordSpacing: computedStyles.wordSpacing,
+      
+      // Text properties
+      color: computedStyles.color,
+      textDecoration: computedStyles.textDecoration,
+      textDecorationLine: computedStyles.textDecorationLine,
+      textDecorationColor: computedStyles.textDecorationColor,
+      textDecorationStyle: computedStyles.textDecorationStyle,
+      textTransform: computedStyles.textTransform,
+      textShadow: computedStyles.textShadow,
+      
+      // Other important properties
+      verticalAlign: computedStyles.verticalAlign,
+      textAlign: computedStyles.textAlign,
+      direction: computedStyles.direction,
+      unicodeBidi: computedStyles.unicodeBidi,
+      
+      // Theme-related properties (if any)
+      backgroundColor: computedStyles.backgroundColor,
+    };
+    
+    console.log('[WordSelector] Captured CSS properties:', cssProperties);
+    return cssProperties;
+  },
+  
+  /**
+   * Apply CSS properties to preserve them in the highlight
+   * @param {HTMLElement} element - The element to apply styles to
+   * @param {Object} cssProperties - The CSS properties to apply
+   */
+  applyCSSProperties(element, cssProperties) {
+    // List of critical properties that must be preserved to prevent font size/style changes
+    const criticalProperties = [
+      'fontSize', 'fontFamily', 'fontStyle', 'fontWeight', 'fontVariant',
+      'fontStretch', 'lineHeight', 'letterSpacing', 'wordSpacing',
+      'color', 'textDecoration', 'textDecorationLine', 'textDecorationColor',
+      'textDecorationStyle', 'textTransform', 'textShadow',
+      'verticalAlign', 'direction'
+    ];
+    
+    // Apply critical properties with !important to ensure they override any conflicting styles
+    criticalProperties.forEach(property => {
+      const value = cssProperties[property];
+      if (value && value.trim() !== '' && value !== 'auto') {
+        // Convert camelCase to kebab-case for CSS properties
+        const cssProperty = property.replace(/([A-Z])/g, '-$1').toLowerCase();
+        // Apply with !important to override website CSS that might affect child elements
+        element.style.setProperty(cssProperty, value, 'important');
+      }
+    });
+  },
+  
+  /**
+   * Preserve CSS properties for all text nodes within an element
+   * @param {HTMLElement} container - The container element
+   * @param {Object} cssProperties - The CSS properties to preserve
+   */
+  preserveTextNodeStyles(container, cssProperties) {
+    // Only process direct children to avoid interfering with nested formatting elements
+    const children = Array.from(container.childNodes);
+    
+    children.forEach(child => {
+      if (child.nodeType === Node.TEXT_NODE) {
+        // For direct text nodes, wrap them in a span to preserve styles
+        // This ensures the text maintains its original font size, style, and color
+        const span = document.createElement('span');
+        span.style.setProperty('display', 'inline', 'important');
+        // Apply all captured CSS properties to preserve the original appearance
+        this.applyCSSProperties(span, cssProperties);
+        container.insertBefore(span, child);
+        span.appendChild(child);
+      } else if (child.nodeType === Node.ELEMENT_NODE) {
+        // For element nodes that are not the remove button
+        // Only apply font-size preservation to prevent size changes from website CSS
+        // Don't override other properties that the element might have (like font-weight for <b>)
+        if (!child.classList.contains('vocab-word-remove-btn') && 
+            !child.classList.contains('vocab-word-remove-explained-btn')) {
+          // Only preserve fontSize to prevent size changes, other properties are preserved by the element itself
+          if (cssProperties.fontSize) {
+            child.style.setProperty('font-size', cssProperties.fontSize, 'important');
+          }
+          // Also preserve color if it's a text-level element
+          if (cssProperties.color && 
+              ['SPAN', 'B', 'STRONG', 'EM', 'I', 'U', 'CODE', 'MARK'].includes(child.tagName)) {
+            child.style.setProperty('color', cssProperties.color, 'important');
+          }
+        }
+      }
+    });
+  },
+  
+  /**
    * Highlight a range with a styled span
    * @param {Range} range - The range to highlight
    * @param {string} word - The word being highlighted
@@ -3785,6 +3911,10 @@ const WordSelector = {
     console.log('[WordSelector] ===== CREATING HIGHLIGHT =====');
     console.log('[WordSelector] Original word:', word);
     console.log('[WordSelector] Normalized word for data-word:', normalizedWord);
+    
+    // CRITICAL: Capture CSS properties BEFORE wrapping to preserve them
+    const cssProperties = this.getRangeCSSProperties(range);
+    console.log('[WordSelector] Captured CSS properties before wrapping:', cssProperties);
     
     // Create highlight wrapper
     // DO NOT apply font properties to the highlight span - let child elements preserve their formatting
@@ -3833,6 +3963,11 @@ const WordSelector = {
       range.insertNode(highlight);
       console.log('[WordSelector] Used extractContents (fallback) - formatting preserved');
     }
+    
+    // CRITICAL: After wrapping, preserve CSS properties to prevent font size/style changes
+    // Apply properties to all text nodes and child elements within the highlight
+    this.preserveTextNodeStyles(highlight, cssProperties);
+    console.log('[WordSelector] Applied CSS properties to preserve font size, style, and color');
     
     // Create and append remove button AFTER wrapping the content
     const removeBtn = this.createRemoveButton(word);
@@ -4540,18 +4675,23 @@ const WordSelector = {
         const normalizedWord = word.toLowerCase();
         if (this.explainedWords.has(normalizedWord)) {
           const wordData = this.explainedWords.get(normalizedWord);
-          // If local language tab is active, update original examples
-          if (!isEnTabActive && popup) {
-            wordData.examples = newExamples; // Update with all examples from API response
-            // Also update the data-original-examples attribute
+          
+          // IMPORTANT: Always update wordData.examples with all examples (old + new) for persistence
+          // This ensures that when the popup is reopened, all examples (including newly fetched ones) are shown
+          wordData.examples = newExamples; // Update with all examples from API response
+          
+          // Also update the data-original-examples attribute if popup exists
+          if (popup) {
             popup.setAttribute('data-original-examples', JSON.stringify(newExamples));
           }
+          
           wordData.shouldAllowFetchMoreExamples = shouldAllowFetchMoreExamples;
           wordData.hasCalledGetMoreExamples = true; // Mark that API has been called
           console.log('[WordSelector] Updated examples and shouldAllowFetchMoreExamples for word:', word);
           console.log('[WordSelector] New examples count:', newExamples.length);
           console.log('[WordSelector] shouldAllowFetchMoreExamples:', shouldAllowFetchMoreExamples);
           console.log('[WordSelector] hasCalledGetMoreExamples set to true');
+          console.log('[WordSelector] Examples saved to wordData.examples for persistence');
         }
       } else {
         console.error('[WordSelector] Failed to get more examples:', response.error);
@@ -6139,8 +6279,19 @@ const WordSelector = {
   clearWebSearchChatHistory(modal) {
     console.log('[WordSelector] Clearing web search chat history');
     
-    // Reset chat history
+    // Get word from modal to clear from persisted storage
+    const word = modal.getAttribute('data-word') || '';
+    const normalizedWord = word.toLowerCase();
+    
+    // Reset chat history in modal
     modal.setAttribute('data-chat-history', JSON.stringify([]));
+    
+    // Also clear from persisted storage (explainedWords map)
+    if (this.explainedWords.has(normalizedWord)) {
+      const wordData = this.explainedWords.get(normalizedWord);
+      wordData.askAIChatHistory = [];
+      console.log('[WordSelector] Cleared chat history from persisted storage for word:', word);
+    }
     
     // Remove chat messages from results list
     const resultsList = modal.querySelector('.word-web-search-results-list');
@@ -9359,65 +9510,9 @@ const TextSelector = {
   highlightRange(range, text, mouseReleaseCoords = null) {
     const textKey = this.getContextualTextKey(text);
     
-    // Helper function to get the element that contains the text (for style computation)
-    const getStyleSourceElement = (range) => {
-      // Get the start container (where selection begins)
-      const startContainer = range.startContainer;
-      
-      // If it's a text node, get its parent element
-      if (startContainer.nodeType === Node.TEXT_NODE) {
-        return startContainer.parentElement;
-      }
-      
-      // If it's an element node, use it directly
-      if (startContainer.nodeType === Node.ELEMENT_NODE) {
-        return startContainer;
-      }
-      
-      // Fallback: try to get the first element in the range
-      const firstElement = range.commonAncestorContainer;
-      if (firstElement && firstElement.nodeType === Node.ELEMENT_NODE) {
-        return firstElement;
-      }
-      
-      return null;
-    };
-    
-    // Capture computed styles from the original text before wrapping
-    const styleSourceElement = getStyleSourceElement(range);
-    let originalStyles = {};
-    
-    if (styleSourceElement) {
-      const computedStyle = window.getComputedStyle(styleSourceElement);
-      
-      // Capture all important text formatting properties
-      originalStyles = {
-        fontSize: computedStyle.fontSize,
-        fontFamily: computedStyle.fontFamily,
-        fontWeight: computedStyle.fontWeight,
-        fontStyle: computedStyle.fontStyle,
-        color: computedStyle.color,
-        lineHeight: computedStyle.lineHeight,
-        letterSpacing: computedStyle.letterSpacing,
-        textTransform: computedStyle.textTransform,
-        fontVariant: computedStyle.fontVariant,
-        textDecoration: computedStyle.textDecoration,
-        textDecorationLine: computedStyle.textDecorationLine,
-        textDecorationStyle: computedStyle.textDecorationStyle,
-        textDecorationColor: computedStyle.textDecorationColor
-      };
-      
-      console.log('[TextSelector] Captured original styles:', {
-        fontSize: originalStyles.fontSize,
-        fontFamily: originalStyles.fontFamily,
-        fontWeight: originalStyles.fontWeight,
-        fontStyle: originalStyles.fontStyle,
-        color: originalStyles.color
-      });
-    }
-    
     // Create highlight wrapper
-    // Apply captured styles to preserve original formatting
+    // DO NOT apply any font/text styles to the wrapper - let child elements preserve their own formatting
+    // The highlight span should only provide the underline decoration, not override text formatting
     const highlight = document.createElement('span');
     highlight.className = 'vocab-text-highlight';
     highlight.setAttribute('data-text-key', textKey);
@@ -9431,33 +9526,10 @@ const TextSelector = {
     // Set display to inline to preserve text flow (will be adjusted if block elements are detected)
     highlight.style.setProperty('display', 'inline', 'important');
     highlight.style.setProperty('position', 'relative', 'important');
-    
-    // Apply captured original styles to preserve formatting
-    // Note: We don't apply 'color' to the span - let child elements maintain their own colors
-    if (Object.keys(originalStyles).length > 0) {
-      highlight.style.setProperty('font-size', originalStyles.fontSize, 'important');
-      highlight.style.setProperty('font-family', originalStyles.fontFamily, 'important');
-      highlight.style.setProperty('font-weight', originalStyles.fontWeight, 'important');
-      highlight.style.setProperty('font-style', originalStyles.fontStyle, 'important');
-      // Don't set color - let child elements and text nodes inherit naturally
-      highlight.style.setProperty('line-height', originalStyles.lineHeight, 'important');
-      highlight.style.setProperty('letter-spacing', originalStyles.letterSpacing, 'important');
-      
-      // Only apply text-transform if it's not 'none'
-      if (originalStyles.textTransform && originalStyles.textTransform !== 'none') {
-        highlight.style.setProperty('text-transform', originalStyles.textTransform, 'important');
-      }
-      
-      // Only apply font-variant if it's not 'normal'
-      if (originalStyles.fontVariant && originalStyles.fontVariant !== 'normal') {
-        highlight.style.setProperty('font-variant', originalStyles.fontVariant, 'important');
-      }
-      
-      console.log('[TextSelector] Applied original styles to highlight span to preserve formatting');
-    }
+    // DO NOT set any font properties - let children inherit or use their own styles
     
     console.log('[TextSelector] Highlight element created with data-text-key:', textKey);
-    console.log('[TextSelector] Preserving all formatting from selected range - original styles applied');
+    console.log('[TextSelector] Preserving all formatting from selected range - no font overrides applied');
     
     // Wrap the selected range FIRST
     // This preserves all formatting (bold, italic, font sizes, colors, etc.) from the original content
@@ -10766,6 +10838,22 @@ const TextSelector = {
       .vocab-text-highlight em,
       .vocab-text-highlight i {
         font-style: italic !important; /* Force italic for em and i tags */
+      }
+      
+      /* Ensure heading tags (h1-h6) maintain their original properties and remain as headings */
+      /* Headings should keep their default font-weight (typically bold), font-size, and all other properties */
+      /* The block-level CSS rule above already ensures display: block, but we want to be explicit here */
+      .vocab-text-highlight h1,
+      .vocab-text-highlight h2,
+      .vocab-text-highlight h3,
+      .vocab-text-highlight h4,
+      .vocab-text-highlight h5,
+      .vocab-text-highlight h6 {
+        /* DO NOT override any font properties - let headings use their original website CSS */
+        /* Headings will naturally maintain their font-weight, font-size, line-height, etc. from the website */
+        /* The underline decoration is already inherited from the parent highlight span */
+        display: block !important; /* Ensure headings remain block-level */
+        /* All other properties (font-weight, font-size, color, etc.) come from the website's CSS */
       }
       
       /* Preserve colors on child elements - don't force inherit */
@@ -13447,21 +13535,26 @@ const ChatDialog = {
       }
     }
     
-    // Prefer this.simplifiedData if it has possibleQuestions (more recent complete event data)
-    // Otherwise use TextSelector data if available
-    if (this.simplifiedData && this.simplifiedData.possibleQuestions && this.simplifiedData.possibleQuestions.length > 0) {
+    // Priority order:
+    // 1. this.simplifiedData if it has simplifiedText (most recent, might have questions)
+    // 2. textSelectorData if it has simplifiedText (streaming data)
+    // 3. this.simplifiedData as fallback
+    
+    if (this.simplifiedData && (this.simplifiedData.simplifiedText || (Array.isArray(this.simplifiedData.previousSimplifiedTexts) && this.simplifiedData.previousSimplifiedTexts.length > 0))) {
       dataToRender = this.simplifiedData;
-      console.log('[ChatDialog] Using simplifiedData from ChatDialog (has possibleQuestions)');
-      console.log('[ChatDialog] ChatDialog simplifiedData.possibleQuestions:', dataToRender.possibleQuestions);
-      console.log('[ChatDialog] ChatDialog simplifiedData.possibleQuestions length:', dataToRender.possibleQuestions?.length || 0);
-    } else if (textSelectorData) {
+      console.log('[ChatDialog] Using simplifiedData from ChatDialog');
+      console.log('[ChatDialog] Has simplifiedText:', !!this.simplifiedData.simplifiedText);
+      console.log('[ChatDialog] Has previousSimplifiedTexts:', Array.isArray(this.simplifiedData.previousSimplifiedTexts) && this.simplifiedData.previousSimplifiedTexts.length > 0);
+      console.log('[ChatDialog] Has possibleQuestions:', !!this.simplifiedData.possibleQuestions && this.simplifiedData.possibleQuestions.length > 0);
+      console.log('[ChatDialog] Has explanationQuestions:', !!this.simplifiedData.explanationQuestions && this.simplifiedData.explanationQuestions.length > 0);
+    } else if (textSelectorData && (textSelectorData.simplifiedText || (Array.isArray(textSelectorData.previousSimplifiedTexts) && textSelectorData.previousSimplifiedTexts.length > 0))) {
       dataToRender = textSelectorData;
       console.log('[ChatDialog] Using simplifiedData from TextSelector');
+      console.log('[ChatDialog] Has simplifiedText:', !!textSelectorData.simplifiedText);
+      console.log('[ChatDialog] Has previousSimplifiedTexts:', Array.isArray(textSelectorData.previousSimplifiedTexts) && textSelectorData.previousSimplifiedTexts.length > 0);
     } else if (this.simplifiedData) {
       dataToRender = this.simplifiedData;
-      console.log('[ChatDialog] Using simplifiedData from ChatDialog (fallback)');
-      console.log('[ChatDialog] ChatDialog simplifiedData.possibleQuestions:', dataToRender.possibleQuestions);
-      console.log('[ChatDialog] ChatDialog simplifiedData.possibleQuestions length:', dataToRender.possibleQuestions?.length || 0);
+      console.log('[ChatDialog] Using simplifiedData from ChatDialog (fallback - no text found)');
     }
     
     if (!dataToRender) {
@@ -13474,18 +13567,114 @@ const ChatDialog = {
     console.log('[ChatDialog] renderSimplifiedExplanations - dataToRender.possibleQuestions is array:', Array.isArray(dataToRender.possibleQuestions));
     console.log('[ChatDialog] renderSimplifiedExplanations - dataToRender.possibleQuestions length:', dataToRender.possibleQuestions?.length || 0);
     
-    container.innerHTML = '';
-    
     // Ensure previousSimplifiedTexts is an array
-    const previousSimplifiedTextsArray = Array.isArray(dataToRender.previousSimplifiedTexts)
+    let previousSimplifiedTextsArray = Array.isArray(dataToRender.previousSimplifiedTexts)
       ? dataToRender.previousSimplifiedTexts
       : (dataToRender.previousSimplifiedTexts ? [dataToRender.previousSimplifiedTexts] : []);
     
     // Get all explanations (previous + current)
-    const allExplanations = [
+    let allExplanations = [
       ...previousSimplifiedTextsArray,
       ...(dataToRender.simplifiedText ? [dataToRender.simplifiedText] : [])
     ].filter(Boolean); // Remove any null/undefined values
+    
+    // Ensure we have at least one explanation to render
+    // If we don't have explanations but have questions, try to get data from TextSelector
+    if (allExplanations.length === 0) {
+      console.warn('[ChatDialog] No explanations found in dataToRender, trying to get from TextSelector');
+      console.log('[ChatDialog] Current textKey:', this.currentTextKey);
+      console.log('[ChatDialog] dataToRender keys:', dataToRender ? Object.keys(dataToRender) : 'null');
+      console.log('[ChatDialog] dataToRender.simplifiedText:', dataToRender?.simplifiedText?.substring(0, 50) || 'empty');
+      console.log('[ChatDialog] dataToRender.previousSimplifiedTexts:', dataToRender?.previousSimplifiedTexts);
+      
+      if (this.currentTextKey) {
+        // Try multiple key variations to find the data
+        const keyVariations = [
+          this.currentTextKey,
+          this.currentTextKey.replace(/-selected$/, '').replace(/-generic$/, ''),
+          `${this.currentTextKey.replace(/-selected$/, '').replace(/-generic$/, '')}-selected`,
+          `${this.currentTextKey.replace(/-selected$/, '').replace(/-generic$/, '')}-generic`
+        ];
+        
+        let textSelectorData = null;
+        let foundKey = null;
+        
+        // Try each key variation
+        for (const key of keyVariations) {
+          const data = TextSelector.simplifiedTexts.get(key);
+          if (data && (data.simplifiedText || (Array.isArray(data.previousSimplifiedTexts) && data.previousSimplifiedTexts.length > 0))) {
+            textSelectorData = data;
+            foundKey = key;
+            console.log('[ChatDialog] Found data in TextSelector with key:', key);
+            break;
+          }
+        }
+        
+        // Also try iterating through all entries if key-based lookup fails
+        if (!textSelectorData) {
+          console.log('[ChatDialog] Key-based lookup failed, trying to find by matching textStartIndex/textLength');
+          const dataToRenderTextStartIndex = dataToRender?.textStartIndex;
+          const dataToRenderTextLength = dataToRender?.textLength;
+          
+          if (dataToRenderTextStartIndex !== undefined && dataToRenderTextLength !== undefined) {
+            for (const [key, data] of TextSelector.simplifiedTexts.entries()) {
+              if (data.textStartIndex === dataToRenderTextStartIndex && 
+                  data.textLength === dataToRenderTextLength &&
+                  (data.simplifiedText || (Array.isArray(data.previousSimplifiedTexts) && data.previousSimplifiedTexts.length > 0))) {
+                textSelectorData = data;
+                foundKey = key;
+                console.log('[ChatDialog] Found data in TextSelector by matching position, key:', key);
+                break;
+              }
+            }
+          }
+        }
+        
+        if (textSelectorData) {
+          const fallbackPrevious = Array.isArray(textSelectorData.previousSimplifiedTexts)
+            ? textSelectorData.previousSimplifiedTexts
+            : (textSelectorData.previousSimplifiedTexts ? [textSelectorData.previousSimplifiedTexts] : []);
+          const fallbackExplanations = [
+            ...fallbackPrevious,
+            ...(textSelectorData.simplifiedText ? [textSelectorData.simplifiedText] : [])
+          ].filter(Boolean);
+          
+          console.log('[ChatDialog] Fallback explanations found:', fallbackExplanations.length);
+          console.log('[ChatDialog] Fallback previous count:', fallbackPrevious.length);
+          console.log('[ChatDialog] Fallback simplifiedText exists:', !!textSelectorData.simplifiedText);
+          
+          if (fallbackExplanations.length > 0) {
+            // Merge the data - use questions from dataToRender if available, otherwise from textSelectorData
+            const mergedData = {
+              ...textSelectorData,
+              explanationQuestions: dataToRender?.explanationQuestions || textSelectorData.explanationQuestions || [],
+              possibleQuestions: dataToRender?.possibleQuestions || textSelectorData.possibleQuestions || []
+            };
+            
+            // Use merged data
+            dataToRender = mergedData;
+            previousSimplifiedTextsArray = fallbackPrevious;
+            allExplanations = fallbackExplanations;
+            
+            console.log('[ChatDialog] Successfully merged data from TextSelector');
+            console.log('[ChatDialog] Merged explanationQuestions:', mergedData.explanationQuestions);
+            console.log('[ChatDialog] Merged possibleQuestions:', mergedData.possibleQuestions);
+          }
+        } else {
+          console.warn('[ChatDialog] No data found in TextSelector with any key variation');
+          console.log('[ChatDialog] Available keys in TextSelector:', Array.from(TextSelector.simplifiedTexts.keys()));
+        }
+      }
+      
+      // If still no explanations, don't render
+      if (allExplanations.length === 0) {
+        console.warn('[ChatDialog] No explanations available to render after all fallback attempts');
+        console.warn('[ChatDialog] This might mean the simplified text was not streamed or stored properly');
+        return;
+      }
+    }
+    
+    container.innerHTML = '';
     
     console.log('[ChatDialog] Rendering', allExplanations.length, 'simplified explanations');
     console.log('[ChatDialog] Previous explanations count:', previousSimplifiedTextsArray.length);
@@ -13915,16 +14104,22 @@ const ChatDialog = {
           console.log('[ChatDialog] explanationQuestions array length:', explanationQuestions.length);
           console.log('[ChatDialog] Questions for this explanation:', questionsForThisExplanation);
           
+        // Preserve existing simplifiedText if eventData doesn't have it (e.g., when only possibleQuestions arrive)
+        const preservedSimplifiedText = eventData.simplifiedText || this.simplifiedData?.simplifiedText || '';
+        const preservedText = eventData.text || this.simplifiedData?.text || '';
+        const preservedTextStartIndex = eventData.textStartIndex !== undefined ? eventData.textStartIndex : (this.simplifiedData?.textStartIndex || 0);
+        const preservedTextLength = eventData.textLength !== undefined ? eventData.textLength : (this.simplifiedData?.textLength || 0);
+        
         this.simplifiedData = {
-          textStartIndex: eventData.textStartIndex,
-          textLength: eventData.textLength,
-          text: eventData.text,
-          simplifiedText: eventData.simplifiedText,
+          textStartIndex: preservedTextStartIndex,
+          textLength: preservedTextLength,
+          text: preservedText,
+          simplifiedText: preservedSimplifiedText,
             previousSimplifiedTexts: previousSimplifiedTexts, // Use the array we sent to API (includes all previous + old current)
-          shouldAllowSimplifyMore: eventData.shouldAllowSimplifyMore || false,
+          shouldAllowSimplifyMore: eventData.shouldAllowSimplifyMore !== undefined ? eventData.shouldAllowSimplifyMore : (this.simplifiedData?.shouldAllowSimplifyMore || false),
           explanationQuestions: explanationQuestions, // Store questions per explanation version
           possibleQuestions: this.simplifiedPossibleQuestions, // Keep for backward compatibility, but use explanationQuestions instead
-          context: context // Store context for ask API (from closure)
+          context: context || this.simplifiedData?.context // Store context for ask API (from closure)
         };
         
         console.log('[ChatDialog] Updated simplifiedData.possibleQuestions:', this.simplifiedData.possibleQuestions);
@@ -14001,16 +14196,23 @@ const ChatDialog = {
             explanationQuestions[explanationIndex] = possibleQuestionsArray;
           }
           
+          // Preserve existing data if eventData doesn't have it
+          const preservedSimplifiedText = eventData.simplifiedText || this.simplifiedData?.simplifiedText || '';
+          const preservedText = eventData.text || this.simplifiedData?.text || '';
+          const preservedTextStartIndex = eventData.textStartIndex !== undefined ? eventData.textStartIndex : (this.simplifiedData?.textStartIndex || 0);
+          const preservedTextLength = eventData.textLength !== undefined ? eventData.textLength : (this.simplifiedData?.textLength || 0);
+          
           // Update simplified data
           this.simplifiedData = {
-            textStartIndex: eventData.textStartIndex,
-            textLength: eventData.textLength,
-            text: eventData.text,
-            simplifiedText: eventData.simplifiedText,
-            previousSimplifiedTexts: previousSimplifiedTexts,
-            shouldAllowSimplifyMore: eventData.shouldAllowSimplifyMore || false,
+            textStartIndex: preservedTextStartIndex,
+            textLength: preservedTextLength,
+            text: preservedText,
+            simplifiedText: preservedSimplifiedText,
+            previousSimplifiedTexts: previousSimplifiedTexts || this.simplifiedData?.previousSimplifiedTexts || [],
+            shouldAllowSimplifyMore: eventData.shouldAllowSimplifyMore !== undefined ? eventData.shouldAllowSimplifyMore : (this.simplifiedData?.shouldAllowSimplifyMore || false),
             explanationQuestions: explanationQuestions,
-            possibleQuestions: possibleQuestionsArray // Keep for backward compatibility
+            possibleQuestions: possibleQuestionsArray, // Keep for backward compatibility
+            context: this.simplifiedData?.context // Preserve context
           };
           
           // Update stored data
@@ -24385,8 +24587,11 @@ const ButtonPanel = {
           }
           
           // Handle complete event (final data)
-          else if (eventData.type === 'complete' || eventData.simplifiedText) {
-            console.log('[ButtonPanel] Complete event - simplifiedText:', eventData.simplifiedText, 'shouldAllowSimplifyMore:', eventData.shouldAllowSimplifyMore);
+          // Check for type === 'complete' OR simplifiedText OR possibleQuestions (complete event might only have questions)
+          else if (eventData.type === 'complete' || eventData.simplifiedText || (eventData.possibleQuestions && Array.isArray(eventData.possibleQuestions) && eventData.possibleQuestions.length > 0)) {
+            console.log('[ButtonPanel] Complete event detected - type:', eventData.type, 'simplifiedText:', eventData.simplifiedText, 'shouldAllowSimplifyMore:', eventData.shouldAllowSimplifyMore);
+            console.log('[ButtonPanel] Complete event - possibleQuestions:', eventData.possibleQuestions);
+            console.log('[ButtonPanel] Complete event - possibleQuestions length:', eventData.possibleQuestions?.length || 0);
             
             // Remove loading animation
             highlight.classList.remove('vocab-text-loading');
@@ -24417,17 +24622,50 @@ const ButtonPanel = {
             console.log('[ButtonPanel] Storing questions for first explanation (index 0)');
             console.log('[ButtonPanel] explanationQuestions array:', explanationQuestions);
             
+            // Preserve existing simplifiedText if eventData doesn't have it (e.g., when only possibleQuestions arrive)
+            // Get the existing data to preserve the streamed text
+            // Try to get from TextSelector first (most recent streaming data)
+            let existingSimplifiedData = TextSelector.simplifiedTexts.get(textKey) || {};
+            
+            // If not found, try key variations
+            if (!existingSimplifiedData.simplifiedText) {
+              const keyVariations = [
+                `${textKey}-selected`,
+                `${textKey}-generic`,
+                textKey.replace(/-selected$/, '').replace(/-generic$/, '')
+              ];
+              
+              for (const key of keyVariations) {
+                const data = TextSelector.simplifiedTexts.get(key);
+                if (data && data.simplifiedText) {
+                  existingSimplifiedData = data;
+                  console.log('[ButtonPanel] Found existing data with key variation:', key);
+                  break;
+                }
+              }
+            }
+            
+            // Preserve the streamed text - prioritize existing data from streaming
+            const preservedSimplifiedText = eventData.simplifiedText || existingSimplifiedData.simplifiedText || '';
+            const preservedText = eventData.text || existingSimplifiedData.text || positionData.text || '';
+            const preservedTextStartIndex = eventData.textStartIndex !== undefined ? eventData.textStartIndex : (existingSimplifiedData.textStartIndex !== undefined ? existingSimplifiedData.textStartIndex : positionData.textStartIndex);
+            const preservedTextLength = eventData.textLength !== undefined ? eventData.textLength : (existingSimplifiedData.textLength !== undefined ? existingSimplifiedData.textLength : positionData.textLength);
+            
+            console.log('[ButtonPanel] Preserving data - simplifiedText length:', preservedSimplifiedText.length);
+            console.log('[ButtonPanel] Preserving data - text length:', preservedText.length);
+            console.log('[ButtonPanel] existingSimplifiedData.simplifiedText length:', existingSimplifiedData.simplifiedText?.length || 0);
+            
             // Final simplified data
             const simplifiedData = {
-              text: eventData.text,
-              simplifiedText: eventData.simplifiedText,
-              textStartIndex: eventData.textStartIndex,
-              textLength: eventData.textLength,
-              previousSimplifiedTexts: eventData.previousSimplifiedTexts || [],
-              shouldAllowSimplifyMore: eventData.shouldAllowSimplifyMore || false,
+              text: preservedText,
+              simplifiedText: preservedSimplifiedText,
+              textStartIndex: preservedTextStartIndex,
+              textLength: preservedTextLength,
+              previousSimplifiedTexts: eventData.previousSimplifiedTexts || existingSimplifiedData.previousSimplifiedTexts || [],
+              shouldAllowSimplifyMore: eventData.shouldAllowSimplifyMore !== undefined ? eventData.shouldAllowSimplifyMore : (existingSimplifiedData.shouldAllowSimplifyMore || false),
               explanationQuestions: explanationQuestions, // Store questions per explanation version
               possibleQuestions: possibleQuestionsArray, // Keep for backward compatibility
-              context: extractedContext, // Store context for ask API (from closure)
+              context: extractedContext || existingSimplifiedData.context, // Store context for ask API (from closure)
               highlight: highlight
             };
             
@@ -24459,9 +24697,19 @@ const ButtonPanel = {
                 // Find and update the container
                 const container = ChatDialog.dialogContainer?.querySelector('#vocab-chat-simplified-container');
                 if (container) {
-                  console.log('[ButtonPanel] Re-rendering explanations with complete data including questions');
-                  console.log('[ButtonPanel] explanationQuestions:', simplifiedData.explanationQuestions);
+                  console.log('[ButtonPanel] ===== RE-RENDERING WITH COMPLETE DATA =====');
+                  console.log('[ButtonPanel] simplifiedData.simplifiedText:', simplifiedData.simplifiedText?.substring(0, 100) + '...');
+                  console.log('[ButtonPanel] simplifiedData.explanationQuestions:', simplifiedData.explanationQuestions);
                   console.log('[ButtonPanel] explanationQuestions length:', simplifiedData.explanationQuestions?.length || 0);
+                  console.log('[ButtonPanel] explanationQuestions[0]:', simplifiedData.explanationQuestions?.[0]);
+                  console.log('[ButtonPanel] explanationQuestions[0] length:', simplifiedData.explanationQuestions?.[0]?.length || 0);
+                  console.log('[ButtonPanel] simplifiedData.possibleQuestions:', simplifiedData.possibleQuestions);
+                  console.log('[ButtonPanel] possibleQuestions length:', simplifiedData.possibleQuestions?.length || 0);
+                  console.log('[ButtonPanel] ChatDialog.simplifiedData will be updated to:', {
+                    simplifiedText: simplifiedData.simplifiedText?.substring(0, 50) + '...',
+                    explanationQuestionsLength: simplifiedData.explanationQuestions?.length || 0,
+                    possibleQuestionsLength: simplifiedData.possibleQuestions?.length || 0
+                  });
                   ChatDialog.renderSimplifiedExplanations(container);
                 } else {
                   console.warn('[ButtonPanel] Container not found for re-rendering with questions');
