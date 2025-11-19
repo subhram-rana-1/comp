@@ -10,10 +10,11 @@ class ApiConfig {
     if (typeof process !== 'undefined' && process.env.NODE_ENV === 'development') {
       return 'http://localhost:8000';
     }
-    
+
     // Default to production URL
     // TODO: Change to production URL
-    return 'http://localhost:8000';
+    // return 'http://localhost:8000';
+    return 'https://caten-production.up.railway.app';
   }
   
   // API Endpoints
