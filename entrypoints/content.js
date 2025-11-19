@@ -681,7 +681,7 @@ export default defineContentScript({
         visibility: visible !important;
       `;
       brandingHeading.innerHTML = `
-        <span style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif !important; color: #9527F5 !important; font-size: 28px !important; font-weight: 600 !important; text-shadow: none !important; background: transparent !important; opacity: 1 !important; visibility: visible !important;">Explain AI</span>
+        <span style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif !important; color: #9527F5 !important; font-size: 28px !important; font-weight: 600 !important; text-shadow: none !important; background: transparent !important; opacity: 1 !important; visibility: visible !important;">Explainzo</span>
         <span class="brand-icon" style="display: inline-flex; align-items: center; opacity: 1 !important; visibility: visible !important;">
           <svg width="24" height="24" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg" style="opacity: 1 !important; visibility: visible !important;">
             <path d="M14 0L17 8L25 11L17 14L14 22L11 14L3 11L11 8L14 0Z" fill="#9527F5"/>
@@ -2074,7 +2074,7 @@ export default defineContentScript({
         
         const heading = document.createElement('h2');
         heading.className = 'banner-heading';
-        heading.textContent = 'Explain AI';
+        heading.textContent = 'Explainzo';
         
         // Add magic-meaning icon SVG to the right of the heading
         const iconWrapper = document.createElement('span');
@@ -16893,10 +16893,93 @@ const ChatDialog = {
       bestMatch.classList.add('vocab-reference-highlight');
       console.log('[ChatDialog] Added vocab-reference-highlight class to element');
       
-      // Always scroll to the element
-      console.log('[ChatDialog] Scrolling to element...');
-      bestMatch.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      console.log('[ChatDialog] Scroll command executed');
+      // Ensure inline elements can display background properly
+      const computedStyle = window.getComputedStyle(bestMatch);
+      if (computedStyle.display === 'inline') {
+        bestMatch.style.setProperty('display', 'inline-block', 'important');
+        console.log('[ChatDialog] Changed display to inline-block for inline element');
+      }
+      
+      // Force a reflow to ensure styles are applied
+      void bestMatch.offsetHeight;
+      
+      // Verify the highlight class is applied
+      requestAnimationFrame(() => {
+        const hasClass = bestMatch.classList.contains('vocab-reference-highlight');
+        const computedBg = window.getComputedStyle(bestMatch).backgroundColor;
+        console.log('[ChatDialog] Highlight class applied:', hasClass);
+        console.log('[ChatDialog] Computed background color:', computedBg);
+      });
+      
+      // Function to scroll to element with multiple fallback methods
+      const scrollToElement = (element) => {
+        console.log('[ChatDialog] Scrolling to element...');
+        
+        // Method 1: Try scrollIntoView with smooth behavior
+        try {
+          element.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
+          console.log('[ChatDialog] Scroll command executed (scrollIntoView)');
+        } catch (e) {
+          console.warn('[ChatDialog] scrollIntoView failed:', e);
+        }
+        
+        // Method 2: Also try scrolling the window directly as fallback
+        requestAnimationFrame(() => {
+          try {
+            const rect = element.getBoundingClientRect();
+            const elementTop = rect.top + window.pageYOffset;
+            const elementCenter = elementTop - (window.innerHeight / 2) + (rect.height / 2);
+            
+            // Check if element is already in view
+            const isInView = rect.top >= 0 && rect.bottom <= window.innerHeight;
+            
+            if (!isInView) {
+              window.scrollTo({
+                top: elementCenter,
+                behavior: 'smooth'
+              });
+              console.log('[ChatDialog] Window scroll executed as fallback');
+            }
+          } catch (e) {
+            console.warn('[ChatDialog] Window scroll failed:', e);
+          }
+        });
+        
+        // Method 3: Handle scrollable containers
+        requestAnimationFrame(() => {
+          try {
+            let parent = element.parentElement;
+            while (parent && parent !== document.body) {
+              const parentStyle = window.getComputedStyle(parent);
+              const overflowY = parentStyle.overflowY;
+              
+              if (overflowY === 'auto' || overflowY === 'scroll' || overflowY === 'overlay') {
+                const parentRect = parent.getBoundingClientRect();
+                const elementRect = element.getBoundingClientRect();
+                
+                const elementTopRelative = elementRect.top - parentRect.top + parent.scrollTop;
+                const scrollTarget = elementTopRelative - (parentRect.height / 2) + (elementRect.height / 2);
+                
+                parent.scrollTo({
+                  top: scrollTarget,
+                  behavior: 'smooth'
+                });
+                console.log('[ChatDialog] Scrolled scrollable container');
+                break;
+              }
+              
+              parent = parent.parentElement;
+            }
+          } catch (e) {
+            console.warn('[ChatDialog] Container scroll failed:', e);
+          }
+        });
+      };
+      
+      // Wait a frame to ensure styles are applied, then scroll
+      requestAnimationFrame(() => {
+        scrollToElement(bestMatch);
+      });
       
       // Return the matched element so it can be stored for toggle functionality
       this._lastHighlightedElement = bestMatch;
