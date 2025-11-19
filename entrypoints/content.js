@@ -3150,8 +3150,38 @@ const WordSelector = {
             if (wordPopup) {
               const askButton = wordPopup.querySelector('.vocab-word-popup-ask-button');
               if (askButton) {
-                console.log('[WordSelector] Clicking outside both modals - closing Ask AI modal');
-                this.closeAskAIModalWithAnimation(modal, askButton);
+                // Find the word element to animate to word center (same as word-meaning modal)
+                let wordElement = null;
+                if (normalizedWord) {
+                  // First try to find by data-popup-id="active"
+                  const activeWordElements = document.querySelectorAll('[data-popup-id="active"]');
+                  for (const element of activeWordElements) {
+                    const elementWord = element.getAttribute('data-word') || element.textContent.trim().toLowerCase();
+                    if (elementWord === normalizedWord) {
+                      wordElement = element;
+                      break;
+                    }
+                  }
+                  
+                  // If not found, try to find any vocab-word-explained element with matching data-word
+                  if (!wordElement) {
+                    const allExplainedWords = document.querySelectorAll('.vocab-word-explained[data-word]');
+                    for (const element of allExplainedWords) {
+                      const elementWord = element.getAttribute('data-word');
+                      if (elementWord && elementWord.toLowerCase() === normalizedWord) {
+                        wordElement = element;
+                        break;
+                      }
+                    }
+                  }
+                }
+                
+                console.log('[WordSelector] Clicking outside both modals - closing Ask AI modal', {
+                  hasWordElement: !!wordElement,
+                  willAnimateToWordCenter: !!wordElement
+                });
+                // Pass wordElement so modal animates to word center instead of button center
+                this.closeAskAIModalWithAnimation(modal, askButton, wordElement);
               }
             } else {
               // Fallback: if we can't find the button, just remove the modal
@@ -5986,8 +6016,11 @@ const WordSelector = {
   
   /**
    * Animate Ask AI modal closing - simple smooth fade + scale animation (same as opening)
+   * @param {HTMLElement} modal - The modal element
+   * @param {HTMLElement} askButton - The Ask AI button element
+   * @param {HTMLElement} wordElement - Optional word element. If provided, animate to word center instead of button center
    */
-  closeAskAIModalWithAnimation(modal, askButton) {
+  closeAskAIModalWithAnimation(modal, askButton, wordElement = null) {
     console.log('[WordSelector] ===== ASK AI MODAL CLOSING ANIMATION - START =====');
     
     // Remove purple outline from Ask AI button when modal is closed
@@ -6051,36 +6084,64 @@ const WordSelector = {
       scrollY
     });
     
-    // Get current button position (viewport coordinates) - get fresh position
-    const buttonRect = askButton.getBoundingClientRect();
-    const buttonLeft = buttonRect.left;
-    const buttonRight = buttonRect.right;
-    const buttonTop = buttonRect.top;
-    const buttonBottom = buttonRect.bottom;
+    // Determine final destination: word center if wordElement provided, otherwise button center
+    let finalLeft, finalTop;
     
-    // Calculate button center correctly (same calculation as opening animation)
-    // Center X = left + (right - left) / 2 = left + width/2
-    const buttonCenterX = buttonLeft + (buttonRight - buttonLeft) / 2;
-    // Center Y = top + (bottom - top) / 2 = top + height/2
-    const buttonCenterY = buttonTop + (buttonBottom - buttonTop) / 2;
-    
-    // Convert button center to document coordinates (for absolute positioning)
-    // scrollX and scrollY are already defined above
-    const finalLeft = buttonCenterX + scrollX;
-    const finalTop = buttonCenterY + scrollY;
-    
-    console.log('[WordSelector] Closing animation - Button center calculation:', {
-      buttonLeft,
-      buttonRight,
-      buttonTop,
-      buttonBottom,
-      buttonCenterX,
-      buttonCenterY,
-      scrollX,
-      scrollY,
-      finalLeft,
-      finalTop
-    });
+    if (wordElement && document.body.contains(wordElement)) {
+      // Animate to word center (same as word-meaning modal)
+      const wordRect = wordElement.getBoundingClientRect();
+      const wordCenterX = wordRect.left + wordRect.width / 2;
+      const wordCenterY = wordRect.top + wordRect.height / 2;
+      
+      // Convert word center to document coordinates (for absolute positioning)
+      finalLeft = wordCenterX + scrollX;
+      finalTop = wordCenterY + scrollY;
+      
+      console.log('[WordSelector] Closing animation - Word center calculation:', {
+        wordLeft: wordRect.left,
+        wordRight: wordRect.right,
+        wordTop: wordRect.top,
+        wordBottom: wordRect.bottom,
+        wordCenterX,
+        wordCenterY,
+        scrollX,
+        scrollY,
+        finalLeft,
+        finalTop
+      });
+    } else {
+      // Default: animate to button center
+      // Get current button position (viewport coordinates) - get fresh position
+      const buttonRect = askButton.getBoundingClientRect();
+      const buttonLeft = buttonRect.left;
+      const buttonRight = buttonRect.right;
+      const buttonTop = buttonRect.top;
+      const buttonBottom = buttonRect.bottom;
+      
+      // Calculate button center correctly (same calculation as opening animation)
+      // Center X = left + (right - left) / 2 = left + width/2
+      const buttonCenterX = buttonLeft + (buttonRight - buttonLeft) / 2;
+      // Center Y = top + (bottom - top) / 2 = top + height/2
+      const buttonCenterY = buttonTop + (buttonBottom - buttonTop) / 2;
+      
+      // Convert button center to document coordinates (for absolute positioning)
+      // scrollX and scrollY are already defined above
+      finalLeft = buttonCenterX + scrollX;
+      finalTop = buttonCenterY + scrollY;
+      
+      console.log('[WordSelector] Closing animation - Button center calculation:', {
+        buttonLeft,
+        buttonRight,
+        buttonTop,
+        buttonBottom,
+        buttonCenterX,
+        buttonCenterY,
+        scrollX,
+        scrollY,
+        finalLeft,
+        finalTop
+      });
+    }
     
     // Set initial state for closing animation (current position and size)
     // CRITICAL: Set explicit width/height FIRST before removing min-width/min-height
