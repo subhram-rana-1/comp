@@ -4392,7 +4392,7 @@ const WordSelector = {
       examplesHeading.textContent = 'Examples';
       examplesHeading.style.setProperty('color', 'rgba(147, 51, 234, 0.7)', 'important'); // Light purple
       examplesHeading.style.setProperty('text-align', 'center', 'important');
-      examplesHeading.style.setProperty('font-size', '14px', 'important'); // Bigger font size
+      examplesHeading.style.setProperty('font-size', '18px', 'important'); // Increased font size
       examplesHeading.style.setProperty('font-weight', '600', 'important'); // Thicker/bolder
       examplesHeading.style.setProperty('margin-bottom', '10px', 'important');
       examplesHeading.style.setProperty('margin-top', '8px', 'important'); // Space below separator
@@ -4541,8 +4541,19 @@ const WordSelector = {
     // Show loading state
     button.disabled = true;
     button.classList.add('loading');
-    const originalText = button.textContent;
-    button.textContent = 'Loading...';
+    const originalHTML = button.innerHTML; // Store original HTML to restore later
+    
+    // Create white spinner icon for loading state
+    const whiteSpinnerIcon = `
+      <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg" style="margin-right: 6px; display: inline-block; vertical-align: middle;">
+        <circle cx="9" cy="9" r="7" stroke="white" stroke-width="0.8" stroke-linecap="round" stroke-dasharray="14 30" opacity="0.3"/>
+        <circle cx="9" cy="9" r="7" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-dasharray="14 30" stroke-dashoffset="6" opacity="1">
+          <animateTransform attributeName="transform" type="rotate" from="0 9 9" to="360 9 9" dur="1s" repeatCount="indefinite"/>
+        </circle>
+      </svg>
+    `;
+    
+    button.innerHTML = whiteSpinnerIcon + '<span>Loading...</span>';
     
     try {
       // Extract all currently displayed examples from the popup
@@ -4703,7 +4714,7 @@ const WordSelector = {
     } finally {
       // Reset button state
       button.classList.remove('loading');
-      button.textContent = originalText;
+      button.innerHTML = originalHTML; // Restore original HTML (including icon)
     }
   },
   
@@ -5037,7 +5048,7 @@ const WordSelector = {
         examplesHeading.textContent = 'Examples';
         examplesHeading.style.setProperty('color', 'rgba(147, 51, 234, 0.7)', 'important'); // Light purple
         examplesHeading.style.setProperty('text-align', 'center', 'important');
-        examplesHeading.style.setProperty('font-size', '14px', 'important'); // Bigger font size
+        examplesHeading.style.setProperty('font-size', '18px', 'important'); // Increased font size
         examplesHeading.style.setProperty('font-weight', '600', 'important'); // Thicker/bolder
         examplesHeading.style.setProperty('margin-bottom', '10px', 'important');
         examplesHeading.style.setProperty('margin-top', '8px', 'important'); // Space below separator
@@ -5050,7 +5061,7 @@ const WordSelector = {
         }
       } else if (examplesHeading) {
         // Update existing heading styles
-        examplesHeading.style.setProperty('font-size', '14px', 'important');
+        examplesHeading.style.setProperty('font-size', '18px', 'important'); // Increased font size
         examplesHeading.style.setProperty('font-weight', '600', 'important');
       }
     } else {
@@ -5254,34 +5265,7 @@ const WordSelector = {
     const modalContent = document.createElement('div');
     modalContent.className = 'word-ask-ai-modal-content';
     
-    // Create header with close button
-    const header = document.createElement('div');
-    header.className = 'word-web-search-modal-header';
-    const closeBtn = document.createElement('button');
-    closeBtn.className = 'word-web-search-modal-close';
-    closeBtn.innerHTML = '−';
-    closeBtn.setAttribute('aria-label', 'Close');
-    closeBtn.addEventListener('click', (e) => {
-      console.log('[WordSelector] ===== MINUS BUTTON CLICKED - TRIGGERING CLOSE ANIMATION =====');
-      e.stopPropagation();
-      // Save chat history before closing
-      const chatHistoryJson = modal.getAttribute('data-chat-history') || '[]';
-      const initialContext = modal.getAttribute('data-initial-context') || '';
-      try {
-        const chatHistory = JSON.parse(chatHistoryJson);
-        if (this.explainedWords.has(normalizedWord)) {
-          const wordData = this.explainedWords.get(normalizedWord);
-          wordData.askAIChatHistory = chatHistory;
-          wordData.askAIInitialContext = initialContext;
-        }
-      } catch (e) {
-        console.error('[WordSelector] Error saving chat history:', e);
-      }
-      // Close with animation
-      console.log('[WordSelector] Calling closeAskAIModalWithAnimation with modal and searchButton...');
-      this.closeAskAIModalWithAnimation(modal, searchButton);
-    });
-    header.appendChild(closeBtn);
+    // Header removed - no minimization icon needed
     
     // Create search results container
     const resultsContainer = document.createElement('div');
@@ -5311,7 +5295,7 @@ const WordSelector = {
     
     const inputField = document.createElement('textarea');
     inputField.className = 'word-web-search-input';
-    inputField.placeholder = 'ask AI anything ...';
+    inputField.placeholder = 'Ask AI anything about the word';
     inputField.rows = 1;
     
     // Auto-resize textarea
@@ -5364,17 +5348,60 @@ const WordSelector = {
       this.clearWebSearchChatHistory(modal);
     });
     
+    // Create "Explain" button - shown when there's no content in results
+    const explainBtn = document.createElement('button');
+    explainBtn.className = 'word-web-search-explain-btn';
+    explainBtn.textContent = 'Explain';
+    explainBtn.setAttribute('aria-label', 'Explain word');
+    explainBtn.style.display = 'none'; // Hidden by default, shown when no content
+    explainBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      // Simulate asking "Please explain the selected word in detail"
+      inputField.value = 'Please explain the selected word in detail';
+      // Trigger the send action
+      this.sendWebSearchChatMessage(modal, word, inputField);
+      // Hide the explain button after clicking
+      explainBtn.style.display = 'none';
+    });
+    
+    // Add padding to input field to make room for explain button on the right
+    inputField.style.paddingRight = '90px';
+    
     inputArea.appendChild(inputField);
+    inputArea.appendChild(explainBtn); // Explain button positioned absolutely inside inputArea
     inputArea.appendChild(sendBtn);
     inputArea.appendChild(deleteBtn);
+    
+    // Function to check if results container should be visible
+    const updateResultsVisibility = () => {
+      const resultsList = modal.querySelector('.word-web-search-results-list');
+      const loadingIndicator = modal.querySelector('.word-web-search-loading');
+      const hasContent = resultsList && resultsList.children.length > 0;
+      const isLoading = loadingIndicator && loadingIndicator.style.display !== 'none';
+      
+      if (hasContent || isLoading) {
+        // Show results container if there's content or loading
+        resultsContainer.style.display = '';
+        explainBtn.style.display = 'none';
+      } else {
+        // Hide results container if no content
+        resultsContainer.style.display = 'none';
+        explainBtn.style.display = 'flex'; // Show explain button
+      }
+    };
+    
+    // Initial visibility check
+    updateResultsVisibility();
+    
+    // Store the update function on the modal for later use
+    modal._updateResultsVisibility = updateResultsVisibility;
     
     // Prevent clicks inside modal from closing word popup
     modal.addEventListener('click', (e) => {
       e.stopPropagation();
     });
     
-    // Assemble modal
-    modalContent.appendChild(header);
+    // Assemble modal (header removed)
     modalContent.appendChild(resultsContainer);
     resultsContainer.appendChild(metadataDiv);
     resultsContainer.appendChild(resultsList);
@@ -5451,6 +5478,11 @@ const WordSelector = {
     const repositionModal = () => {
       // Don't reposition if user is currently dragging the modal
       if (modal.hasAttribute('data-is-dragging') && modal.getAttribute('data-is-dragging') === 'true') {
+        return;
+      }
+      
+      // Don't reposition if animation just completed (prevent glitch)
+      if (modal.getAttribute('data-animation-complete') === 'false') {
         return;
       }
       
@@ -5553,8 +5585,8 @@ const WordSelector = {
       });
     };
     
-    // Initial positioning after modal is rendered (immediate, no delay)
-    repositionModal();
+    // Initial positioning is handled in the animation code below
+    // Don't call repositionModal() here as it would interfere with the animation
     
     // Reposition when content changes (using MutationObserver)
     const observer = new MutationObserver(() => {
@@ -5667,59 +5699,236 @@ const WordSelector = {
       
       // Scroll to bottom when restoring chat history
       this.scrollToBottom(resultsList, false, false);
+      
+      // Update results visibility after restoring chat history
+      if (modal._updateResultsVisibility) {
+        modal._updateResultsVisibility();
+      }
     } else {
       // Hide loading indicator since we're not searching automatically
       const loadingIndicatorElement = modal.querySelector('.word-web-search-loading');
       if (loadingIndicatorElement) {
         loadingIndicatorElement.style.display = 'none';
       }
+      
+      // Update results visibility - should show explain button when no content
+      if (modal._updateResultsVisibility) {
+        modal._updateResultsVisibility();
+      }
     }
     
-    // Animate opening immediately with simple fade + scale (no delay)
+    // Animate opening from button center to final position (no smooth fade/scale)
     try {
-      // Calculate final position first
-      repositionModal();
+      // Get current button position (viewport coordinates) right before animation
+      const buttonRectForCenter = searchButton.getBoundingClientRect();
+      const buttonLeft = buttonRectForCenter.left;
+      const buttonRight = buttonRectForCenter.right;
+      const buttonTop = buttonRectForCenter.top;
+      const buttonBottom = buttonRectForCenter.bottom;
+      
+      // Calculate button center position correctly
+      // Center X = left + (right - left) / 2 = left + width/2
+      const buttonCenterX = buttonLeft + (buttonRight - buttonLeft) / 2;
+      // Center Y = top + (bottom - top) / 2 = top + height/2
+      const buttonCenterY = buttonTop + (buttonBottom - buttonTop) / 2;
       
       // Clean up any previous animation state
       modal.classList.remove('ask-ai-closing');
       
-      // Force a reflow to ensure modal is positioned
+      // Force a reflow to ensure modal is rendered and we can get its dimensions
       void modal.offsetHeight;
       
-      // Set initial state for animation (opacity 0, scale 0.8)
-      modal.style.setProperty('opacity', '0', 'important');
-      modal.style.setProperty('transform', 'scale(0.8)', 'important');
-      modal.style.setProperty('transition', 'none', 'important');
+      // Get modal dimensions
+      // The modal CSS has: width: 90vw !important; max-width: 600px !important;
+      // So the final width should be: min(90vw, 600px)
+      const modalMaxWidth = 600; // From CSS: max-width: 600px !important
+      const vwWidth = window.innerWidth;
+      const viewportBasedWidth = vwWidth * 0.9; // 90vw
       
-      // Force another reflow
+      // Calculate final width respecting max-width constraint
+      const modalWidth = Math.min(viewportBasedWidth, modalMaxWidth);
+      
+      // CRITICAL: Calculate final height BEFORE setting dimensions to 0x0
+      // Temporarily set the modal to its final width to get accurate height
+      // Save current state
+      const originalMinWidth = modal.style.minWidth;
+      const originalMinHeight = modal.style.minHeight;
+      const originalMaxWidth = modal.style.maxWidth;
+      const originalMaxHeight = modal.style.maxHeight;
+      const originalWidth = modal.style.width;
+      const originalHeight = modal.style.height;
+      
+      // Temporarily set modal to final width to measure its natural height
+      modal.style.setProperty('min-width', '0px', 'important');
+      modal.style.setProperty('min-height', '0px', 'important');
+      modal.style.setProperty('max-width', `${modalMaxWidth}px`, 'important');
+      modal.style.setProperty('width', `${modalWidth}px`, 'important');
+      modal.style.setProperty('height', 'auto', 'important');
+      
+      // Force reflow to get accurate height measurement
+      void modal.offsetHeight;
+      const modalRect = modal.getBoundingClientRect();
+      const modalHeight = modalRect.height || 300; // Get actual rendered height
+      
+      // Restore original state (will be overridden below, but ensures clean state)
+      if (originalMinWidth) modal.style.minWidth = originalMinWidth;
+      if (originalMinHeight) modal.style.minHeight = originalMinHeight;
+      if (originalMaxWidth) modal.style.maxWidth = originalMaxWidth;
+      if (originalMaxHeight) modal.style.maxHeight = originalMaxHeight;
+      if (originalWidth) modal.style.width = originalWidth;
+      if (originalHeight) modal.style.height = originalHeight;
+      
+      // Calculate final position using same logic as repositionModal
+      // CRITICAL: Get fresh button/popup positions right before calculation to ensure accuracy
+      const scrollX = window.scrollX || window.pageXOffset || 0;
+      const scrollY = window.scrollY || window.pageYOffset || 0;
+      const viewportWidth = window.innerWidth;
+      const padding = 15;
+      
+      // Force a reflow to ensure we get the most current positions
+      void searchButton.offsetHeight;
+      void wordPopup.offsetHeight;
+      
+      // Get current button and popup positions (viewport coordinates) - get fresh positions
+      const currentButtonRect = searchButton.getBoundingClientRect();
+      const currentButtonRight = currentButtonRect.right;
+      const currentButtonLeft = currentButtonRect.left;
+      const currentButtonTop = currentButtonRect.top;
+      const currentWordPopupRect = wordPopup.getBoundingClientRect();
+      const currentWordPopupTop = currentWordPopupRect.top;
+      
+      // Calculate horizontal final position using EXACT same logic as repositionModal
+      const spaceOnRight = viewportWidth - currentButtonRight;
+      const spaceOnLeft = currentButtonLeft;
+      const canFitOnRight = spaceOnRight >= modalWidth + padding;
+      const canFitOnLeft = spaceOnLeft >= modalWidth + padding;
+      
+      let finalLeft;
+      if (canFitOnRight && canFitOnLeft) {
+        // Both sides have space - prefer right side
+        finalLeft = currentButtonRight + 20;
+      } else if (canFitOnRight) {
+        // Only right side has space
+        finalLeft = currentButtonRight + 20;
+      } else if (canFitOnLeft) {
+        // Only left side has space
+        finalLeft = currentButtonLeft - modalWidth - 20;
+      } else {
+        // Neither side has enough space - position optimally
+        if (spaceOnRight > spaceOnLeft) {
+          // More space on right, position as far right as possible while staying visible
+          finalLeft = Math.max(padding, viewportWidth - modalWidth - padding);
+        } else {
+          // More space on left, position as far left as possible while staying visible
+          finalLeft = padding;
+        }
+      }
+      // Final safety check: ensure modal is fully visible horizontally (viewport coordinates)
+      finalLeft = Math.max(padding, Math.min(finalLeft, viewportWidth - modalWidth - padding));
+      // Convert to document coordinates
+      finalLeft = finalLeft + scrollX;
+      
+      // Calculate vertical final position using EXACT same logic as repositionModal
+      const finalTop = Math.min(currentWordPopupTop, currentButtonTop) + scrollY;
+      
+      console.log('[WordSelector] Opening animation - Final position calculated:', {
+        modalWidth,
+        modalHeight,
+        finalLeft,
+        finalTop,
+        currentButtonRight,
+        currentButtonLeft,
+        spaceOnRight,
+        spaceOnLeft,
+        canFitOnRight,
+        canFitOnLeft
+      });
+      
+      // Set initial position at button center (convert viewport to document coordinates)
+      // Start from button center with 0x0 dimensions - same position as closing animation destination
+      const initialLeft = buttonCenterX + scrollX;
+      const initialTop = buttonCenterY + scrollY;
+      
+      // CRITICAL: Override min-width and min-height to allow starting from 0x0
+      // Do this BEFORE setting width/height to 0px
+      // Temporarily remove max-width to allow 0x0, but we'll restore it after animation
+      modal.style.setProperty('min-width', '0px', 'important');
+      modal.style.setProperty('min-height', '0px', 'important');
+      modal.style.setProperty('max-width', 'none', 'important'); // Temporarily remove for animation
+      modal.style.setProperty('max-height', 'none', 'important'); // Temporarily remove for animation
+      
+      // Set initial state: positioned at button center, starting from 0x0 dimensions
+      modal.style.setProperty('opacity', '1', 'important');
+      modal.style.setProperty('transform', 'none', 'important');
+      modal.style.setProperty('top', `${initialTop}px`, 'important');
+      modal.style.setProperty('left', `${initialLeft}px`, 'important');
+      modal.style.setProperty('width', '0px', 'important');
+      modal.style.setProperty('height', '0px', 'important');
+      modal.style.setProperty('overflow', 'hidden', 'important');
+      
+      // Force a reflow to ensure 0x0 dimensions are applied
       void modal.offsetHeight;
       
-      // Add opening class to trigger smooth fade + scale animation
-      modal.classList.add('ask-ai-opening');
-      modal.classList.add('visible');
+      // Set transition AFTER initial state is set
+      // Reduced animation time from 0.3s to 0.2s for faster animation
+      modal.style.setProperty('transition', 'top 0.2s ease-out, left 0.2s ease-out, width 0.2s ease-out, height 0.2s ease-out', 'important');
       
-      // Force a reflow to ensure animation starts
+      // Add purple outline to Ask AI button when modal is opened
+      if (searchButton) {
+        searchButton.style.setProperty('outline', '3px solid #9527F5', 'important');
+        searchButton.style.setProperty('outline-offset', '4px', 'important');
+        searchButton.style.setProperty('border-radius', '10px', 'important');
+      }
+      
+      // Force a reflow to ensure initial position is set
       void modal.offsetHeight;
       
-      // Remove opening class after animation completes
+      // Animate to final position and dimensions
+      // The modal expands from button center (0x0) to final position and size
+      modal.style.setProperty('top', `${finalTop}px`, 'important');
+      modal.style.setProperty('left', `${finalLeft}px`, 'important');
+      modal.style.setProperty('width', `${modalWidth}px`, 'important');
+      modal.style.setProperty('height', `${modalHeight}px`, 'important');
+      
+      // Set up repositionModal for future updates (after initial animation)
+      // Don't call it immediately as it would override our animation
+      // Add a flag to prevent immediate repositioning that could cause glitches
+      modal.setAttribute('data-animation-complete', 'false');
+      setTimeout(() => {
+        if (modal) {
+          // Mark animation as complete
+          modal.setAttribute('data-animation-complete', 'true');
+          // Lock the final position to prevent glitches
+          // The position is already set correctly from our calculation above
+          // Only set up repositioning for future content changes, not immediately
+          // Use a small delay to ensure animation has fully settled
+          setTimeout(() => {
+            if (modal) {
+              repositionModal();
+            }
+          }, 50); // Small delay to ensure animation is fully complete
+        }
+      }, 200); // Updated to match new animation duration
+      
+      // After animation completes, remove transition, restore overflow, and focus input
       setTimeout(() => {
         if (!modal) {
           return;
         }
         
-        // Remove opening class after animation
-        modal.classList.remove('ask-ai-opening');
-        // Set final state
-        modal.style.setProperty('opacity', '1', 'important');
-        modal.style.setProperty('transform', 'scale(1)', 'important');
-        modal.style.setProperty('transition', '');
-        // Re-enable pointer events
-        modal.style.setProperty('pointer-events', 'all', 'important');
-        modal.style.setProperty('will-change', '');
+        // Remove transition after animation completes
+        modal.style.setProperty('transition', '', 'important');
+        modal.style.setProperty('overflow', '', 'important');
+        // Restore max-width and max-height to their CSS values
+        modal.style.removeProperty('max-width'); // Remove inline override, let CSS take over
+        modal.style.removeProperty('max-height'); // Remove inline override, let CSS take over
+        modal.style.removeProperty('width'); // Remove explicit width, let CSS (90vw with max-width: 600px) take over
+        modal.style.removeProperty('height'); // Remove explicit height
+        modal.classList.add('visible');
         
         // Focus input after animation
         inputField.focus();
-      }, 300); // 0.3s animation duration
+      }, 200); // 0.2s animation duration
     } catch (error) {
       console.error('[WordSelector] ✗ Error during Ask AI modal positioning:', error);
     }
@@ -5781,6 +5990,13 @@ const WordSelector = {
   closeAskAIModalWithAnimation(modal, askButton) {
     console.log('[WordSelector] ===== ASK AI MODAL CLOSING ANIMATION - START =====');
     
+    // Remove purple outline from Ask AI button when modal is closed
+    if (askButton) {
+      askButton.style.removeProperty('outline');
+      askButton.style.removeProperty('outline-offset');
+      askButton.style.removeProperty('border-radius');
+    }
+    
     // Check if already closing to prevent double-close
     if (modal.classList.contains('ask-ai-closing')) {
       console.log('[WordSelector] Modal is already closing, ignoring close request');
@@ -5793,20 +6009,119 @@ const WordSelector = {
     // Force a reflow to ensure modal state is current
     void modal.offsetHeight;
     
-    // Set initial state for closing animation (opacity 1, scale 1)
-    modal.style.setProperty('opacity', '1', 'important');
-    modal.style.setProperty('transform', 'scale(1)', 'important');
-    modal.style.setProperty('transition', 'none', 'important');
-    
-    // Force another reflow
+    // Get current modal position and dimensions
+    // Force a reflow to ensure we get accurate dimensions from the rendered state
     void modal.offsetHeight;
     
-    // Add closing class to trigger smooth fade + scale animation
+    // Get the actual rendered dimensions and position
+    const currentModalRect = modal.getBoundingClientRect();
+    
+    // Get scroll offsets for converting viewport coordinates to document coordinates
+    const scrollX = window.scrollX || window.pageXOffset || 0;
+    const scrollY = window.scrollY || window.pageYOffset || 0;
+    
+    // Always use getBoundingClientRect() for dimensions - this gives us the actual rendered size
+    // This is reliable even if width/height were removed after opening animation
+    const currentWidth = currentModalRect.width;
+    const currentHeight = currentModalRect.height;
+    
+    // Get position - prefer style values if explicitly set, otherwise use getBoundingClientRect
+    // This handles cases where modal might have been repositioned
+    let currentTop = parseFloat(modal.style.top);
+    let currentLeft = parseFloat(modal.style.left);
+    
+    // If position not in style, calculate from getBoundingClientRect (viewport) + scroll offset
+    if (isNaN(currentTop)) {
+      currentTop = currentModalRect.top + scrollY;
+    }
+    if (isNaN(currentLeft)) {
+      currentLeft = currentModalRect.left + scrollX;
+    }
+    
+    console.log('[WordSelector] Closing animation - Modal dimensions (from rendered state):', {
+      rectWidth: currentWidth,
+      rectHeight: currentHeight,
+      rectTop: currentModalRect.top,
+      rectLeft: currentModalRect.left,
+      styleTop: modal.style.top,
+      styleLeft: modal.style.left,
+      finalTop: currentTop,
+      finalLeft: currentLeft,
+      scrollX,
+      scrollY
+    });
+    
+    // Get current button position (viewport coordinates) - get fresh position
+    const buttonRect = askButton.getBoundingClientRect();
+    const buttonLeft = buttonRect.left;
+    const buttonRight = buttonRect.right;
+    const buttonTop = buttonRect.top;
+    const buttonBottom = buttonRect.bottom;
+    
+    // Calculate button center correctly (same calculation as opening animation)
+    // Center X = left + (right - left) / 2 = left + width/2
+    const buttonCenterX = buttonLeft + (buttonRight - buttonLeft) / 2;
+    // Center Y = top + (bottom - top) / 2 = top + height/2
+    const buttonCenterY = buttonTop + (buttonBottom - buttonTop) / 2;
+    
+    // Convert button center to document coordinates (for absolute positioning)
+    // scrollX and scrollY are already defined above
+    const finalLeft = buttonCenterX + scrollX;
+    const finalTop = buttonCenterY + scrollY;
+    
+    console.log('[WordSelector] Closing animation - Button center calculation:', {
+      buttonLeft,
+      buttonRight,
+      buttonTop,
+      buttonBottom,
+      buttonCenterX,
+      buttonCenterY,
+      scrollX,
+      scrollY,
+      finalLeft,
+      finalTop
+    });
+    
+    // Set initial state for closing animation (current position and size)
+    // CRITICAL: Set explicit width/height FIRST before removing min-width/min-height
+    // This prevents the modal from expanding when constraints are removed
+    modal.style.setProperty('opacity', '1', 'important');
+    modal.style.setProperty('transform', 'none', 'important');
+    modal.style.setProperty('top', `${currentTop}px`, 'important');
+    modal.style.setProperty('left', `${currentLeft}px`, 'important');
+    modal.style.setProperty('width', `${currentWidth}px`, 'important');
+    modal.style.setProperty('height', `${currentHeight}px`, 'important');
+    modal.style.setProperty('overflow', 'hidden', 'important');
+    
+    // Force a reflow to ensure width/height are applied before removing constraints
+    void modal.offsetHeight;
+    
+    // NOW remove min-width/min-height constraints (after explicit dimensions are set)
+    // This allows shrinking to 0px without causing expansion
+    modal.style.setProperty('min-width', '0px', 'important');
+    modal.style.setProperty('min-height', '0px', 'important');
+    modal.style.setProperty('max-width', 'none', 'important');
+    modal.style.setProperty('max-height', 'none', 'important');
+    
+    // Set transition AFTER all initial styles are set
+    // Make width/height animation complete at the same time as position reaches center
+    // Using same duration ensures dimensions are 0x0 when position reaches button center
+    // Reduced animation time from 0.3s to 0.2s for faster animation
+    modal.style.setProperty('transition', 'top 0.2s ease-out, left 0.2s ease-out, width 0.2s ease-out, height 0.2s ease-out', 'important');
+    
+    // Add closing class
     modal.classList.add('ask-ai-closing');
     modal.classList.remove('visible');
     
     // Force a reflow to ensure animation starts
     void modal.offsetHeight;
+    
+    // Animate to button center with 0x0 dimensions
+    // All animations complete together - dimensions reach 0x0 exactly when position reaches button center
+    modal.style.setProperty('top', `${finalTop}px`, 'important');
+    modal.style.setProperty('left', `${finalLeft}px`, 'important');
+    modal.style.setProperty('width', '0px', 'important');
+    modal.style.setProperty('height', '0px', 'important');
     
     // Wait for animation to complete, then remove modal
     setTimeout(() => {
@@ -5825,7 +6140,7 @@ const WordSelector = {
       // Remove modal
       modal.remove();
       console.log('[WordSelector] ✓✓✓ ASK AI MODAL CLOSING ANIMATION COMPLETED ✓✓✓');
-    }, 300); // 0.3s animation duration
+    }, 200); // 0.2s animation duration
   },
   
   /**
@@ -6023,10 +6338,28 @@ const WordSelector = {
     
     // Display user message (show original question without prefix for UI)
     const resultsList = modal.querySelector('.word-web-search-results-list');
+    
+    // Show results container when first message is added
+    const resultsContainer = modal.querySelector('.word-web-search-results');
+    if (resultsContainer) {
+      resultsContainer.style.display = '';
+    }
+    
     const userMessageDiv = document.createElement('div');
     userMessageDiv.className = 'word-web-search-chat-message user-message';
     userMessageDiv.textContent = question;
     resultsList.appendChild(userMessageDiv);
+    
+    // Hide explain button after first message
+    const explainBtn = modal.querySelector('.word-web-search-explain-btn');
+    if (explainBtn) {
+      explainBtn.style.display = 'none';
+    }
+    
+    // Update results visibility
+    if (modal._updateResultsVisibility) {
+      modal._updateResultsVisibility();
+    }
     
     // Create AI response container
     const aiMessageDiv = document.createElement('div');
@@ -6107,6 +6440,12 @@ const WordSelector = {
         // Re-enable input and send button
         inputField.disabled = false;
         sendBtn.disabled = false;
+        
+        // Update results visibility after AI response completes
+        if (modal._updateResultsVisibility) {
+          modal._updateResultsVisibility();
+        }
+        
         inputField.focus();
       },
       onError: (error) => {
@@ -6659,7 +6998,7 @@ const WordSelector = {
           popup.style.setProperty('will-change', '');
           
           console.log('[WordSelector] ✓ Popup animation completed');
-        }, 400); // Match animation duration (0.4s)
+        }, 200); // Match animation duration (0.2s)
         
         // Verify popup is actually visible
         setTimeout(() => {
@@ -6836,7 +7175,7 @@ const WordSelector = {
       document.querySelectorAll('[data-closing="true"]').forEach(el => {
         el.removeAttribute('data-closing');
       });
-    }, 400); // Match animation duration
+    }, 200); // Match animation duration (0.2s)
   },
   
   /**
@@ -6892,7 +7231,7 @@ const WordSelector = {
     setTimeout(() => {
       popup.remove();
       console.log('[WordSelector] ✓ Popup closing animation completed');
-    }, 400); // Match animation duration
+    }, 200); // Match animation duration (0.2s)
   },
   
   /**
@@ -7623,7 +7962,7 @@ const WordSelector = {
       
       /* Expanding animation - scale up from word element position */
       .vocab-word-popup.expanding {
-        animation: expandWordPopupFromWord 0.4s cubic-bezier(0.4, 0, 0.2, 1) forwards !important;
+        animation: expandWordPopupFromWord 0.2s cubic-bezier(0.4, 0, 0.2, 1) forwards !important;
         transition: none !important; /* Disable transition during animation */
         pointer-events: none !important;
         will-change: transform !important; /* Optimize for animation */
@@ -7631,7 +7970,7 @@ const WordSelector = {
       }
       
       .vocab-word-popup.expanding.visible {
-        animation: expandWordPopupFromWord 0.4s cubic-bezier(0.4, 0, 0.2, 1) forwards !important;
+        animation: expandWordPopupFromWord 0.2s cubic-bezier(0.4, 0, 0.2, 1) forwards !important;
         transition: none !important;
       }
       
@@ -7648,7 +7987,7 @@ const WordSelector = {
       
       /* Closing animation - move to word position while scaling down */
       .vocab-word-popup.closing {
-        animation: closeWordPopupToWord 0.4s cubic-bezier(0.4, 0, 0.2, 1) forwards !important;
+        animation: closeWordPopupToWord 0.2s cubic-bezier(0.4, 0, 0.2, 1) forwards !important;
         transition: none !important;
         pointer-events: none !important;
         will-change: transform !important;
@@ -7878,6 +8217,7 @@ const WordSelector = {
       .vocab-word-popup-ask-button:active:not(.loading) {
         background: #7016A8;
         transform: translateY(0) scale(0.95);
+        border-radius: 10px !important; /* Preserve border radius on click */
       }
       
       .vocab-word-popup-ask-button.loading {
@@ -7933,12 +8273,12 @@ const WordSelector = {
       .word-web-search-modal {
         position: absolute !important;
         background: white !important;
-        border-radius: 20px;
+        border-radius: 30px;
         box-shadow: 0 8px 32px rgba(149, 39, 245, 0.2), 0 2px 8px rgba(149, 39, 245, 0.15) !important;
         z-index: 10000020 !important;
         max-width: 600px !important;
         width: 90vw !important;
-        max-height: 70vh !important;
+        max-height: 49vh !important; /* Reduced to 70% of original 70vh */
         display: flex !important;
         flex-direction: column !important;
         opacity: 1 !important;
@@ -8012,7 +8352,7 @@ const WordSelector = {
         display: flex;
         flex-direction: column;
         height: 100%;
-        max-height: 70vh;
+        max-height: 49vh; /* Reduced to 70% of original 70vh */
         border-radius: 30px;
         /* Disable text selection in the modal */
         user-select: none !important;
@@ -8361,6 +8701,7 @@ const WordSelector = {
         border-top: 1px solid #e5e7eb;
         background: white;
         align-items: center;
+        position: relative; /* Enable absolute positioning for explain button */
       }
       
       .word-web-search-input {
@@ -8388,6 +8729,33 @@ const WordSelector = {
       
       .word-web-search-input::placeholder {
         color: #9ca3af !important;
+      }
+      
+      .word-web-search-explain-btn {
+        padding: 8px 16px;
+        background: #9527F5;
+        color: white;
+        border: none;
+        border-radius: 8px;
+        font-size: 14px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: transform 0.2s ease;
+        flex-shrink: 0;
+        font-family: inherit;
+        position: absolute;
+        right: 65px; /* Shifted left to avoid overlapping text area border */
+        top: 50%;
+        transform: translateY(-50%);
+        z-index: 10;
+      }
+      
+      .word-web-search-explain-btn:hover {
+        transform: translateY(-50%) scale(1.05);
+      }
+      
+      .word-web-search-explain-btn:active {
+        transform: translateY(-50%) scale(0.98);
       }
       
       .word-web-search-send-btn {
