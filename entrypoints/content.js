@@ -8354,6 +8354,7 @@ const WordSelector = {
         height: 100%;
         max-height: 49vh; /* Reduced to 70% of original 70vh */
         border-radius: 30px;
+        position: relative;
         /* Disable text selection in the modal */
         user-select: none !important;
         -webkit-user-select: none !important;
@@ -8459,6 +8460,31 @@ const WordSelector = {
         overflow-y: auto;
         padding: 16px;
         min-height: 0;
+        position: relative;
+      }
+      
+      /* Fade-out effect at top and bottom using pseudo-elements */
+      .word-ask-ai-modal-content::before,
+      .word-ask-ai-modal-content::after {
+        content: '';
+        position: absolute;
+        left: 0;
+        right: 0;
+        height: 40px;
+        pointer-events: none;
+        z-index: 10;
+      }
+      
+      .word-ask-ai-modal-content::before {
+        top: 0;
+        background: linear-gradient(to bottom, white, rgba(255, 255, 255, 0));
+        border-radius: 30px 30px 0 0;
+      }
+      
+      .word-ask-ai-modal-content::after {
+        bottom: 0;
+        background: linear-gradient(to top, white, rgba(255, 255, 255, 0));
+        border-radius: 0 0 30px 30px;
       }
       
       .word-web-search-loading {
@@ -13853,8 +13879,8 @@ const ChatDialog = {
     } else {
       // Show appropriate message based on chat context
       const promptText = this.chatContext === 'selected' 
-        ? 'Anything to ask on the selected content ?' 
-        : 'Ask me anything about the page';
+        ? 'Ask anything on the selected content' 
+        : 'Ask anything about the page';
       
       const noChatsMsg = document.createElement('div');
       noChatsMsg.className = 'vocab-chat-no-messages';
@@ -15233,8 +15259,8 @@ const ChatDialog = {
     } else {
       // Show appropriate message based on chat context
       const promptText = this.chatContext === 'selected' 
-        ? 'Anything to ask on the selected content ?' 
-        : 'Ask me anything about the page';
+        ? 'Ask anything on the selected content' 
+        : 'Ask anything about the page';
       
       const noChatsMsg = document.createElement('div');
       noChatsMsg.className = 'vocab-chat-no-messages';
@@ -15282,8 +15308,8 @@ const ChatDialog = {
     } else {
       // Show appropriate message based on chat context
       const promptText = this.chatContext === 'selected' 
-        ? 'Anything to ask on the selected content ?' 
-        : 'Ask me anything about the page';
+        ? 'Ask anything on the selected content' 
+        : 'Ask anything about the page';
       
       const noChatsMsg = document.createElement('div');
       noChatsMsg.className = 'vocab-chat-no-messages';
@@ -15345,7 +15371,15 @@ const ChatDialog = {
     const inputField = document.createElement('textarea');
     inputField.className = 'vocab-chat-input';
     inputField.id = 'vocab-chat-input';
-    inputField.placeholder = 'Ask AI about the selected content';
+    // Set placeholder based on chat context
+    // If opened from ask-about-page button (general context with page-general textKey), show "Ask AI anything about the page"
+    // Otherwise, show the default placeholder for selected text
+    if (this.chatContext === 'general' && this.currentTextKey && 
+        (this.currentTextKey === 'page-general' || this.currentTextKey.startsWith('page-general'))) {
+      inputField.placeholder = 'Ask AI anything about the page';
+    } else {
+      inputField.placeholder = 'Ask AI about the selected content';
+    }
     inputField.rows = 1;
     
     // Apply inline styles as a fallback to ensure visibility even if CSS is overridden
@@ -17102,8 +17136,8 @@ const ChatDialog = {
     
     // Show appropriate message based on chat context
     const promptText = this.chatContext === 'selected' 
-      ? 'Anything to ask on the selected content ?' 
-      : 'Ask me anything about the page';
+      ? 'Ask anything on the selected content' 
+      : 'Ask anything about the page';
     
     const noChatsMsg = document.createElement('div');
     noChatsMsg.className = 'vocab-chat-no-messages';
@@ -17673,9 +17707,8 @@ const ChatDialog = {
    * Create chat empty icon (professional purple)
    */
   createChatEmptyIcon() {
-    // Use the actual logo PNG file
-    const iconUrl = chrome.runtime.getURL('logo_1-removebg.png');
-    return `<img src="${iconUrl}" alt="Cat with glasses" class="vocab-chat-empty-cat-icon">`;
+    // Cat icon removed - return empty string
+    return '';
   },
   
   /**
