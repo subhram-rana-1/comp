@@ -1724,11 +1724,12 @@ export default defineContentScript({
       button.className = 'vocab-ask-about-page-btn vocab-ask-about-page-btn-hidden';
       button.setAttribute('aria-label', 'Ask anything about this page');
       
-      // Use white wireframe book icon
+      // Use white sparkle icon (matching magic-meaning button)
       button.innerHTML = `
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path d="M4 19.5C4 18.837 4.526 18 5.5 18H11M20 19.5C20 18.837 19.474 18 18.5 18H13" stroke="white" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/>
-          <path d="M12 18V6M12 6C12 6 10 4 6.5 4C4.5 4 4 5 4 6V18C4 18 4.5 18 6.5 18C10 18 12 18 12 18M12 6C12 6 14 4 17.5 4C19.5 4 20 5 20 6V18C20 18 19.5 18 17.5 18C14 18 12 18 12 18" stroke="white" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/>
+        <svg width="24" height="24" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M14 0L17 8L25 11L17 14L14 22L11 14L3 11L11 8L14 0Z" fill="white"/>
+          <path d="M22 16L23.5 20L27.5 21.5L23.5 23L22 27L20.5 23L16.5 21.5L20.5 20L22 16Z" fill="white"/>
+          <path d="M8 21L9.5 24.5L13 26L9.5 27.5L8 31L6.5 27.5L3 26L6.5 24.5L8 21Z" fill="white"/>
         </svg>
       `;
       
@@ -2099,7 +2100,7 @@ export default defineContentScript({
         
         const instruction2 = document.createElement('p');
         instruction2.className = 'banner-instruction-item';
-        instruction2.innerHTML = 'Select a <span class="banner-highlight">passage containing multiple words</span> or sentences';
+        instruction2.innerHTML = 'Select one or more sentences';
         
         instructions.appendChild(instruction1);
         instructions.appendChild(instruction2);
@@ -3434,6 +3435,40 @@ const WordSelector = {
   },
   
   /**
+   * Create and show loading spinner above a word highlight
+   * @param {HTMLElement} highlight - The highlight element
+   */
+  showLoadingSpinner(highlight) {
+    // Remove any existing spinner first
+    this.hideLoadingSpinner(highlight);
+    
+    // Create spinner container with white circular background
+    const spinnerContainer = document.createElement('div');
+    spinnerContainer.className = 'vocab-word-loading-spinner-container';
+    
+    // Create spinner element
+    const spinner = document.createElement('div');
+    spinner.className = 'vocab-word-loading-spinner';
+    
+    spinnerContainer.appendChild(spinner);
+    highlight.appendChild(spinnerContainer);
+    
+    console.log('[WordSelector] Loading spinner shown');
+  },
+  
+  /**
+   * Hide and remove loading spinner from a word highlight
+   * @param {HTMLElement} highlight - The highlight element
+   */
+  hideLoadingSpinner(highlight) {
+    const existingSpinner = highlight.querySelector('.vocab-word-loading-spinner-container');
+    if (existingSpinner) {
+      existingSpinner.remove();
+      console.log('[WordSelector] Loading spinner removed');
+    }
+  },
+  
+  /**
    * Process word explanation API call for a single word
    * This is called automatically when a word is double-clicked
    * @param {string} word - The original word (with case)
@@ -3510,6 +3545,9 @@ const WordSelector = {
     highlight.classList.add('vocab-word-loading');
     console.log('[WordSelector] Added loading animation to highlight');
     
+    // Show loading spinner above the word
+    this.showLoadingSpinner(highlight);
+    
     // Prepare API payload (remove internal tracking property)
     const apiPayload = [{
       textStartIndex: payloadSegment.textStartIndex,
@@ -3555,6 +3593,9 @@ const WordSelector = {
           
           // Remove pulsating animation
           wordHighlight.classList.remove('vocab-word-loading');
+          
+          // Hide loading spinner
+          this.hideLoadingSpinner(wordHighlight);
           
           // Remove old purple cross button if exists
           const oldBtn = wordHighlight.querySelector('.vocab-word-remove-btn');
@@ -3707,6 +3748,9 @@ const WordSelector = {
         
         // Remove pulsating animation on error
         highlight.classList.remove('vocab-word-loading');
+        
+        // Hide loading spinner on error
+        this.hideLoadingSpinner(highlight);
         
         // Check if it's a 429 rate limit error
         if (error.status === 429 || error.message.includes('429') || error.message.includes('Rate limit')) {
@@ -7818,6 +7862,42 @@ const WordSelector = {
       
       .vocab-word-loading {
         animation: vocab-word-loading-breathe 0.75s ease-in-out infinite;
+      }
+      
+      /* Loading spinner container - positioned above the word */
+      .vocab-word-loading-spinner-container {
+        position: absolute;
+        top: -28px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 24px;
+        height: 24px;
+        background-color: #FFFFFF;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 1000000;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+      }
+      
+      /* Purple spinner animation */
+      @keyframes vocab-spinner-rotate {
+        0% {
+          transform: rotate(0deg);
+        }
+        100% {
+          transform: rotate(360deg);
+        }
+      }
+      
+      .vocab-word-loading-spinner {
+        width: 16px;
+        height: 16px;
+        border: 2px solid rgba(149, 39, 245, 0.2);
+        border-top-color: #9527F5;
+        border-radius: 50%;
+        animation: vocab-spinner-rotate 0.8s linear infinite;
       }
       
       /* Green background for explained words */
@@ -30178,7 +30258,7 @@ const ButtonPanel = {
     item1.innerHTML = 'Double click a <span class="vocab-custom-content-info-banner-highlight">word</span> to select';
     
     const item2 = document.createElement('li');
-    item2.innerHTML = 'Select a <span class="vocab-custom-content-info-banner-highlight">passage containing multiple words</span> or sentences';
+    item2.innerHTML = 'Select one or more sentences';
     
     list.appendChild(item1);
     list.appendChild(item2);
