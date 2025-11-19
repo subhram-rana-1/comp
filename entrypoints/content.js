@@ -681,7 +681,7 @@ export default defineContentScript({
         visibility: visible !important;
       `;
       brandingHeading.innerHTML = `
-        <span style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif !important; color: #9527F5 !important; font-size: 28px !important; font-weight: 600 !important; text-shadow: none !important; background: transparent !important; opacity: 1 !important; visibility: visible !important;">Explain AI</span>
+        <span style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif !important; color: #9527F5 !important; font-size: 28px !important; font-weight: 600 !important; text-shadow: none !important; background: transparent !important; opacity: 1 !important; visibility: visible !important;">Explainzo</span>
         <span class="brand-icon" style="display: inline-flex; align-items: center; opacity: 1 !important; visibility: visible !important;">
           <svg width="24" height="24" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg" style="opacity: 1 !important; visibility: visible !important;">
             <path d="M14 0L17 8L25 11L17 14L14 22L11 14L3 11L11 8L14 0Z" fill="#9527F5"/>
@@ -1724,11 +1724,12 @@ export default defineContentScript({
       button.className = 'vocab-ask-about-page-btn vocab-ask-about-page-btn-hidden';
       button.setAttribute('aria-label', 'Ask anything about this page');
       
-      // Use white wireframe book icon
+      // Use white sparkle icon (matching magic-meaning button)
       button.innerHTML = `
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path d="M4 19.5C4 18.837 4.526 18 5.5 18H11M20 19.5C20 18.837 19.474 18 18.5 18H13" stroke="white" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/>
-          <path d="M12 18V6M12 6C12 6 10 4 6.5 4C4.5 4 4 5 4 6V18C4 18 4.5 18 6.5 18C10 18 12 18 12 18M12 6C12 6 14 4 17.5 4C19.5 4 20 5 20 6V18C20 18 19.5 18 17.5 18C14 18 12 18 12 18" stroke="white" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/>
+        <svg width="24" height="24" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M14 0L17 8L25 11L17 14L14 22L11 14L3 11L11 8L14 0Z" fill="white"/>
+          <path d="M22 16L23.5 20L27.5 21.5L23.5 23L22 27L20.5 23L16.5 21.5L20.5 20L22 16Z" fill="white"/>
+          <path d="M8 21L9.5 24.5L13 26L9.5 27.5L8 31L6.5 27.5L3 26L6.5 24.5L8 21Z" fill="white"/>
         </svg>
       `;
       
@@ -2073,7 +2074,7 @@ export default defineContentScript({
         
         const heading = document.createElement('h2');
         heading.className = 'banner-heading';
-        heading.textContent = 'Explain AI';
+        heading.textContent = 'Explainzo';
         
         // Add magic-meaning icon SVG to the right of the heading
         const iconWrapper = document.createElement('span');
@@ -2099,7 +2100,7 @@ export default defineContentScript({
         
         const instruction2 = document.createElement('p');
         instruction2.className = 'banner-instruction-item';
-        instruction2.innerHTML = 'Select a <span class="banner-highlight">passage containing multiple words</span> or sentences';
+        instruction2.innerHTML = 'Select one or more sentences';
         
         instructions.appendChild(instruction1);
         instructions.appendChild(instruction2);
@@ -3150,8 +3151,38 @@ const WordSelector = {
             if (wordPopup) {
               const askButton = wordPopup.querySelector('.vocab-word-popup-ask-button');
               if (askButton) {
-                console.log('[WordSelector] Clicking outside both modals - closing Ask AI modal');
-                this.closeAskAIModalWithAnimation(modal, askButton);
+                // Find the word element to animate to word center (same as word-meaning modal)
+                let wordElement = null;
+                if (normalizedWord) {
+                  // First try to find by data-popup-id="active"
+                  const activeWordElements = document.querySelectorAll('[data-popup-id="active"]');
+                  for (const element of activeWordElements) {
+                    const elementWord = element.getAttribute('data-word') || element.textContent.trim().toLowerCase();
+                    if (elementWord === normalizedWord) {
+                      wordElement = element;
+                      break;
+                    }
+                  }
+                  
+                  // If not found, try to find any vocab-word-explained element with matching data-word
+                  if (!wordElement) {
+                    const allExplainedWords = document.querySelectorAll('.vocab-word-explained[data-word]');
+                    for (const element of allExplainedWords) {
+                      const elementWord = element.getAttribute('data-word');
+                      if (elementWord && elementWord.toLowerCase() === normalizedWord) {
+                        wordElement = element;
+                        break;
+                      }
+                    }
+                  }
+                }
+                
+                console.log('[WordSelector] Clicking outside both modals - closing Ask AI modal', {
+                  hasWordElement: !!wordElement,
+                  willAnimateToWordCenter: !!wordElement
+                });
+                // Pass wordElement so modal animates to word center instead of button center
+                this.closeAskAIModalWithAnimation(modal, askButton, wordElement);
               }
             } else {
               // Fallback: if we can't find the button, just remove the modal
@@ -3404,6 +3435,40 @@ const WordSelector = {
   },
   
   /**
+   * Create and show loading spinner above a word highlight
+   * @param {HTMLElement} highlight - The highlight element
+   */
+  showLoadingSpinner(highlight) {
+    // Remove any existing spinner first
+    this.hideLoadingSpinner(highlight);
+    
+    // Create spinner container with white circular background
+    const spinnerContainer = document.createElement('div');
+    spinnerContainer.className = 'vocab-word-loading-spinner-container';
+    
+    // Create spinner element
+    const spinner = document.createElement('div');
+    spinner.className = 'vocab-word-loading-spinner';
+    
+    spinnerContainer.appendChild(spinner);
+    highlight.appendChild(spinnerContainer);
+    
+    console.log('[WordSelector] Loading spinner shown');
+  },
+  
+  /**
+   * Hide and remove loading spinner from a word highlight
+   * @param {HTMLElement} highlight - The highlight element
+   */
+  hideLoadingSpinner(highlight) {
+    const existingSpinner = highlight.querySelector('.vocab-word-loading-spinner-container');
+    if (existingSpinner) {
+      existingSpinner.remove();
+      console.log('[WordSelector] Loading spinner removed');
+    }
+  },
+  
+  /**
    * Process word explanation API call for a single word
    * This is called automatically when a word is double-clicked
    * @param {string} word - The original word (with case)
@@ -3480,6 +3545,9 @@ const WordSelector = {
     highlight.classList.add('vocab-word-loading');
     console.log('[WordSelector] Added loading animation to highlight');
     
+    // Show loading spinner above the word
+    this.showLoadingSpinner(highlight);
+    
     // Prepare API payload (remove internal tracking property)
     const apiPayload = [{
       textStartIndex: payloadSegment.textStartIndex,
@@ -3525,6 +3593,9 @@ const WordSelector = {
           
           // Remove pulsating animation
           wordHighlight.classList.remove('vocab-word-loading');
+          
+          // Hide loading spinner
+          this.hideLoadingSpinner(wordHighlight);
           
           // Remove old purple cross button if exists
           const oldBtn = wordHighlight.querySelector('.vocab-word-remove-btn');
@@ -3677,6 +3748,9 @@ const WordSelector = {
         
         // Remove pulsating animation on error
         highlight.classList.remove('vocab-word-loading');
+        
+        // Hide loading spinner on error
+        this.hideLoadingSpinner(highlight);
         
         // Check if it's a 429 rate limit error
         if (error.status === 429 || error.message.includes('429') || error.message.includes('Rate limit')) {
@@ -4392,7 +4466,7 @@ const WordSelector = {
       examplesHeading.textContent = 'Examples';
       examplesHeading.style.setProperty('color', 'rgba(147, 51, 234, 0.7)', 'important'); // Light purple
       examplesHeading.style.setProperty('text-align', 'center', 'important');
-      examplesHeading.style.setProperty('font-size', '14px', 'important'); // Bigger font size
+      examplesHeading.style.setProperty('font-size', '18px', 'important'); // Increased font size
       examplesHeading.style.setProperty('font-weight', '600', 'important'); // Thicker/bolder
       examplesHeading.style.setProperty('margin-bottom', '10px', 'important');
       examplesHeading.style.setProperty('margin-top', '8px', 'important'); // Space below separator
@@ -4541,8 +4615,19 @@ const WordSelector = {
     // Show loading state
     button.disabled = true;
     button.classList.add('loading');
-    const originalText = button.textContent;
-    button.textContent = 'Loading...';
+    const originalHTML = button.innerHTML; // Store original HTML to restore later
+    
+    // Create white spinner icon for loading state
+    const whiteSpinnerIcon = `
+      <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg" style="margin-right: 6px; display: inline-block; vertical-align: middle;">
+        <circle cx="9" cy="9" r="7" stroke="white" stroke-width="0.8" stroke-linecap="round" stroke-dasharray="14 30" opacity="0.3"/>
+        <circle cx="9" cy="9" r="7" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-dasharray="14 30" stroke-dashoffset="6" opacity="1">
+          <animateTransform attributeName="transform" type="rotate" from="0 9 9" to="360 9 9" dur="1s" repeatCount="indefinite"/>
+        </circle>
+      </svg>
+    `;
+    
+    button.innerHTML = whiteSpinnerIcon + '<span>Loading...</span>';
     
     try {
       // Extract all currently displayed examples from the popup
@@ -4703,7 +4788,7 @@ const WordSelector = {
     } finally {
       // Reset button state
       button.classList.remove('loading');
-      button.textContent = originalText;
+      button.innerHTML = originalHTML; // Restore original HTML (including icon)
     }
   },
   
@@ -5037,7 +5122,7 @@ const WordSelector = {
         examplesHeading.textContent = 'Examples';
         examplesHeading.style.setProperty('color', 'rgba(147, 51, 234, 0.7)', 'important'); // Light purple
         examplesHeading.style.setProperty('text-align', 'center', 'important');
-        examplesHeading.style.setProperty('font-size', '14px', 'important'); // Bigger font size
+        examplesHeading.style.setProperty('font-size', '18px', 'important'); // Increased font size
         examplesHeading.style.setProperty('font-weight', '600', 'important'); // Thicker/bolder
         examplesHeading.style.setProperty('margin-bottom', '10px', 'important');
         examplesHeading.style.setProperty('margin-top', '8px', 'important'); // Space below separator
@@ -5050,7 +5135,7 @@ const WordSelector = {
         }
       } else if (examplesHeading) {
         // Update existing heading styles
-        examplesHeading.style.setProperty('font-size', '14px', 'important');
+        examplesHeading.style.setProperty('font-size', '18px', 'important'); // Increased font size
         examplesHeading.style.setProperty('font-weight', '600', 'important');
       }
     } else {
@@ -5254,34 +5339,7 @@ const WordSelector = {
     const modalContent = document.createElement('div');
     modalContent.className = 'word-ask-ai-modal-content';
     
-    // Create header with close button
-    const header = document.createElement('div');
-    header.className = 'word-web-search-modal-header';
-    const closeBtn = document.createElement('button');
-    closeBtn.className = 'word-web-search-modal-close';
-    closeBtn.innerHTML = '−';
-    closeBtn.setAttribute('aria-label', 'Close');
-    closeBtn.addEventListener('click', (e) => {
-      console.log('[WordSelector] ===== MINUS BUTTON CLICKED - TRIGGERING CLOSE ANIMATION =====');
-      e.stopPropagation();
-      // Save chat history before closing
-      const chatHistoryJson = modal.getAttribute('data-chat-history') || '[]';
-      const initialContext = modal.getAttribute('data-initial-context') || '';
-      try {
-        const chatHistory = JSON.parse(chatHistoryJson);
-        if (this.explainedWords.has(normalizedWord)) {
-          const wordData = this.explainedWords.get(normalizedWord);
-          wordData.askAIChatHistory = chatHistory;
-          wordData.askAIInitialContext = initialContext;
-        }
-      } catch (e) {
-        console.error('[WordSelector] Error saving chat history:', e);
-      }
-      // Close with animation
-      console.log('[WordSelector] Calling closeAskAIModalWithAnimation with modal and searchButton...');
-      this.closeAskAIModalWithAnimation(modal, searchButton);
-    });
-    header.appendChild(closeBtn);
+    // Header removed - no minimization icon needed
     
     // Create search results container
     const resultsContainer = document.createElement('div');
@@ -5311,7 +5369,7 @@ const WordSelector = {
     
     const inputField = document.createElement('textarea');
     inputField.className = 'word-web-search-input';
-    inputField.placeholder = 'ask AI anything ...';
+    inputField.placeholder = 'Ask AI anything about the word';
     inputField.rows = 1;
     
     // Auto-resize textarea
@@ -5364,17 +5422,60 @@ const WordSelector = {
       this.clearWebSearchChatHistory(modal);
     });
     
+    // Create "Explain" button - shown when there's no content in results
+    const explainBtn = document.createElement('button');
+    explainBtn.className = 'word-web-search-explain-btn';
+    explainBtn.textContent = 'Explain';
+    explainBtn.setAttribute('aria-label', 'Explain word');
+    explainBtn.style.display = 'none'; // Hidden by default, shown when no content
+    explainBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      // Simulate asking "Please explain the selected word in detail"
+      inputField.value = 'Please explain the selected word in detail';
+      // Trigger the send action
+      this.sendWebSearchChatMessage(modal, word, inputField);
+      // Hide the explain button after clicking
+      explainBtn.style.display = 'none';
+    });
+    
+    // Add padding to input field to make room for explain button on the right
+    inputField.style.paddingRight = '90px';
+    
     inputArea.appendChild(inputField);
+    inputArea.appendChild(explainBtn); // Explain button positioned absolutely inside inputArea
     inputArea.appendChild(sendBtn);
     inputArea.appendChild(deleteBtn);
+    
+    // Function to check if results container should be visible
+    const updateResultsVisibility = () => {
+      const resultsList = modal.querySelector('.word-web-search-results-list');
+      const loadingIndicator = modal.querySelector('.word-web-search-loading');
+      const hasContent = resultsList && resultsList.children.length > 0;
+      const isLoading = loadingIndicator && loadingIndicator.style.display !== 'none';
+      
+      if (hasContent || isLoading) {
+        // Show results container if there's content or loading
+        resultsContainer.style.display = '';
+        explainBtn.style.display = 'none';
+      } else {
+        // Hide results container if no content
+        resultsContainer.style.display = 'none';
+        explainBtn.style.display = 'flex'; // Show explain button
+      }
+    };
+    
+    // Initial visibility check
+    updateResultsVisibility();
+    
+    // Store the update function on the modal for later use
+    modal._updateResultsVisibility = updateResultsVisibility;
     
     // Prevent clicks inside modal from closing word popup
     modal.addEventListener('click', (e) => {
       e.stopPropagation();
     });
     
-    // Assemble modal
-    modalContent.appendChild(header);
+    // Assemble modal (header removed)
     modalContent.appendChild(resultsContainer);
     resultsContainer.appendChild(metadataDiv);
     resultsContainer.appendChild(resultsList);
@@ -5451,6 +5552,11 @@ const WordSelector = {
     const repositionModal = () => {
       // Don't reposition if user is currently dragging the modal
       if (modal.hasAttribute('data-is-dragging') && modal.getAttribute('data-is-dragging') === 'true') {
+        return;
+      }
+      
+      // Don't reposition if animation just completed (prevent glitch)
+      if (modal.getAttribute('data-animation-complete') === 'false') {
         return;
       }
       
@@ -5553,8 +5659,8 @@ const WordSelector = {
       });
     };
     
-    // Initial positioning after modal is rendered (immediate, no delay)
-    repositionModal();
+    // Initial positioning is handled in the animation code below
+    // Don't call repositionModal() here as it would interfere with the animation
     
     // Reposition when content changes (using MutationObserver)
     const observer = new MutationObserver(() => {
@@ -5667,59 +5773,236 @@ const WordSelector = {
       
       // Scroll to bottom when restoring chat history
       this.scrollToBottom(resultsList, false, false);
+      
+      // Update results visibility after restoring chat history
+      if (modal._updateResultsVisibility) {
+        modal._updateResultsVisibility();
+      }
     } else {
       // Hide loading indicator since we're not searching automatically
       const loadingIndicatorElement = modal.querySelector('.word-web-search-loading');
       if (loadingIndicatorElement) {
         loadingIndicatorElement.style.display = 'none';
       }
+      
+      // Update results visibility - should show explain button when no content
+      if (modal._updateResultsVisibility) {
+        modal._updateResultsVisibility();
+      }
     }
     
-    // Animate opening immediately with simple fade + scale (no delay)
+    // Animate opening from button center to final position (no smooth fade/scale)
     try {
-      // Calculate final position first
-      repositionModal();
+      // Get current button position (viewport coordinates) right before animation
+      const buttonRectForCenter = searchButton.getBoundingClientRect();
+      const buttonLeft = buttonRectForCenter.left;
+      const buttonRight = buttonRectForCenter.right;
+      const buttonTop = buttonRectForCenter.top;
+      const buttonBottom = buttonRectForCenter.bottom;
+      
+      // Calculate button center position correctly
+      // Center X = left + (right - left) / 2 = left + width/2
+      const buttonCenterX = buttonLeft + (buttonRight - buttonLeft) / 2;
+      // Center Y = top + (bottom - top) / 2 = top + height/2
+      const buttonCenterY = buttonTop + (buttonBottom - buttonTop) / 2;
       
       // Clean up any previous animation state
       modal.classList.remove('ask-ai-closing');
       
-      // Force a reflow to ensure modal is positioned
+      // Force a reflow to ensure modal is rendered and we can get its dimensions
       void modal.offsetHeight;
       
-      // Set initial state for animation (opacity 0, scale 0.8)
-      modal.style.setProperty('opacity', '0', 'important');
-      modal.style.setProperty('transform', 'scale(0.8)', 'important');
-      modal.style.setProperty('transition', 'none', 'important');
+      // Get modal dimensions
+      // The modal CSS has: width: 90vw !important; max-width: 600px !important;
+      // So the final width should be: min(90vw, 600px)
+      const modalMaxWidth = 600; // From CSS: max-width: 600px !important
+      const vwWidth = window.innerWidth;
+      const viewportBasedWidth = vwWidth * 0.9; // 90vw
       
-      // Force another reflow
+      // Calculate final width respecting max-width constraint
+      const modalWidth = Math.min(viewportBasedWidth, modalMaxWidth);
+      
+      // CRITICAL: Calculate final height BEFORE setting dimensions to 0x0
+      // Temporarily set the modal to its final width to get accurate height
+      // Save current state
+      const originalMinWidth = modal.style.minWidth;
+      const originalMinHeight = modal.style.minHeight;
+      const originalMaxWidth = modal.style.maxWidth;
+      const originalMaxHeight = modal.style.maxHeight;
+      const originalWidth = modal.style.width;
+      const originalHeight = modal.style.height;
+      
+      // Temporarily set modal to final width to measure its natural height
+      modal.style.setProperty('min-width', '0px', 'important');
+      modal.style.setProperty('min-height', '0px', 'important');
+      modal.style.setProperty('max-width', `${modalMaxWidth}px`, 'important');
+      modal.style.setProperty('width', `${modalWidth}px`, 'important');
+      modal.style.setProperty('height', 'auto', 'important');
+      
+      // Force reflow to get accurate height measurement
+      void modal.offsetHeight;
+      const modalRect = modal.getBoundingClientRect();
+      const modalHeight = modalRect.height || 300; // Get actual rendered height
+      
+      // Restore original state (will be overridden below, but ensures clean state)
+      if (originalMinWidth) modal.style.minWidth = originalMinWidth;
+      if (originalMinHeight) modal.style.minHeight = originalMinHeight;
+      if (originalMaxWidth) modal.style.maxWidth = originalMaxWidth;
+      if (originalMaxHeight) modal.style.maxHeight = originalMaxHeight;
+      if (originalWidth) modal.style.width = originalWidth;
+      if (originalHeight) modal.style.height = originalHeight;
+      
+      // Calculate final position using same logic as repositionModal
+      // CRITICAL: Get fresh button/popup positions right before calculation to ensure accuracy
+      const scrollX = window.scrollX || window.pageXOffset || 0;
+      const scrollY = window.scrollY || window.pageYOffset || 0;
+      const viewportWidth = window.innerWidth;
+      const padding = 15;
+      
+      // Force a reflow to ensure we get the most current positions
+      void searchButton.offsetHeight;
+      void wordPopup.offsetHeight;
+      
+      // Get current button and popup positions (viewport coordinates) - get fresh positions
+      const currentButtonRect = searchButton.getBoundingClientRect();
+      const currentButtonRight = currentButtonRect.right;
+      const currentButtonLeft = currentButtonRect.left;
+      const currentButtonTop = currentButtonRect.top;
+      const currentWordPopupRect = wordPopup.getBoundingClientRect();
+      const currentWordPopupTop = currentWordPopupRect.top;
+      
+      // Calculate horizontal final position using EXACT same logic as repositionModal
+      const spaceOnRight = viewportWidth - currentButtonRight;
+      const spaceOnLeft = currentButtonLeft;
+      const canFitOnRight = spaceOnRight >= modalWidth + padding;
+      const canFitOnLeft = spaceOnLeft >= modalWidth + padding;
+      
+      let finalLeft;
+      if (canFitOnRight && canFitOnLeft) {
+        // Both sides have space - prefer right side
+        finalLeft = currentButtonRight + 20;
+      } else if (canFitOnRight) {
+        // Only right side has space
+        finalLeft = currentButtonRight + 20;
+      } else if (canFitOnLeft) {
+        // Only left side has space
+        finalLeft = currentButtonLeft - modalWidth - 20;
+      } else {
+        // Neither side has enough space - position optimally
+        if (spaceOnRight > spaceOnLeft) {
+          // More space on right, position as far right as possible while staying visible
+          finalLeft = Math.max(padding, viewportWidth - modalWidth - padding);
+        } else {
+          // More space on left, position as far left as possible while staying visible
+          finalLeft = padding;
+        }
+      }
+      // Final safety check: ensure modal is fully visible horizontally (viewport coordinates)
+      finalLeft = Math.max(padding, Math.min(finalLeft, viewportWidth - modalWidth - padding));
+      // Convert to document coordinates
+      finalLeft = finalLeft + scrollX;
+      
+      // Calculate vertical final position using EXACT same logic as repositionModal
+      const finalTop = Math.min(currentWordPopupTop, currentButtonTop) + scrollY;
+      
+      console.log('[WordSelector] Opening animation - Final position calculated:', {
+        modalWidth,
+        modalHeight,
+        finalLeft,
+        finalTop,
+        currentButtonRight,
+        currentButtonLeft,
+        spaceOnRight,
+        spaceOnLeft,
+        canFitOnRight,
+        canFitOnLeft
+      });
+      
+      // Set initial position at button center (convert viewport to document coordinates)
+      // Start from button center with 0x0 dimensions - same position as closing animation destination
+      const initialLeft = buttonCenterX + scrollX;
+      const initialTop = buttonCenterY + scrollY;
+      
+      // CRITICAL: Override min-width and min-height to allow starting from 0x0
+      // Do this BEFORE setting width/height to 0px
+      // Temporarily remove max-width to allow 0x0, but we'll restore it after animation
+      modal.style.setProperty('min-width', '0px', 'important');
+      modal.style.setProperty('min-height', '0px', 'important');
+      modal.style.setProperty('max-width', 'none', 'important'); // Temporarily remove for animation
+      modal.style.setProperty('max-height', 'none', 'important'); // Temporarily remove for animation
+      
+      // Set initial state: positioned at button center, starting from 0x0 dimensions
+      modal.style.setProperty('opacity', '1', 'important');
+      modal.style.setProperty('transform', 'none', 'important');
+      modal.style.setProperty('top', `${initialTop}px`, 'important');
+      modal.style.setProperty('left', `${initialLeft}px`, 'important');
+      modal.style.setProperty('width', '0px', 'important');
+      modal.style.setProperty('height', '0px', 'important');
+      modal.style.setProperty('overflow', 'hidden', 'important');
+      
+      // Force a reflow to ensure 0x0 dimensions are applied
       void modal.offsetHeight;
       
-      // Add opening class to trigger smooth fade + scale animation
-      modal.classList.add('ask-ai-opening');
-      modal.classList.add('visible');
+      // Set transition AFTER initial state is set
+      // Reduced animation time from 0.3s to 0.2s for faster animation
+      modal.style.setProperty('transition', 'top 0.2s ease-out, left 0.2s ease-out, width 0.2s ease-out, height 0.2s ease-out', 'important');
       
-      // Force a reflow to ensure animation starts
+      // Add purple outline to Ask AI button when modal is opened
+      if (searchButton) {
+        searchButton.style.setProperty('outline', '3px solid #9527F5', 'important');
+        searchButton.style.setProperty('outline-offset', '4px', 'important');
+        searchButton.style.setProperty('border-radius', '10px', 'important');
+      }
+      
+      // Force a reflow to ensure initial position is set
       void modal.offsetHeight;
       
-      // Remove opening class after animation completes
+      // Animate to final position and dimensions
+      // The modal expands from button center (0x0) to final position and size
+      modal.style.setProperty('top', `${finalTop}px`, 'important');
+      modal.style.setProperty('left', `${finalLeft}px`, 'important');
+      modal.style.setProperty('width', `${modalWidth}px`, 'important');
+      modal.style.setProperty('height', `${modalHeight}px`, 'important');
+      
+      // Set up repositionModal for future updates (after initial animation)
+      // Don't call it immediately as it would override our animation
+      // Add a flag to prevent immediate repositioning that could cause glitches
+      modal.setAttribute('data-animation-complete', 'false');
+      setTimeout(() => {
+        if (modal) {
+          // Mark animation as complete
+          modal.setAttribute('data-animation-complete', 'true');
+          // Lock the final position to prevent glitches
+          // The position is already set correctly from our calculation above
+          // Only set up repositioning for future content changes, not immediately
+          // Use a small delay to ensure animation has fully settled
+          setTimeout(() => {
+            if (modal) {
+              repositionModal();
+            }
+          }, 50); // Small delay to ensure animation is fully complete
+        }
+      }, 200); // Updated to match new animation duration
+      
+      // After animation completes, remove transition, restore overflow, and focus input
       setTimeout(() => {
         if (!modal) {
           return;
         }
         
-        // Remove opening class after animation
-        modal.classList.remove('ask-ai-opening');
-        // Set final state
-        modal.style.setProperty('opacity', '1', 'important');
-        modal.style.setProperty('transform', 'scale(1)', 'important');
-        modal.style.setProperty('transition', '');
-        // Re-enable pointer events
-        modal.style.setProperty('pointer-events', 'all', 'important');
-        modal.style.setProperty('will-change', '');
+        // Remove transition after animation completes
+        modal.style.setProperty('transition', '', 'important');
+        modal.style.setProperty('overflow', '', 'important');
+        // Restore max-width and max-height to their CSS values
+        modal.style.removeProperty('max-width'); // Remove inline override, let CSS take over
+        modal.style.removeProperty('max-height'); // Remove inline override, let CSS take over
+        modal.style.removeProperty('width'); // Remove explicit width, let CSS (90vw with max-width: 600px) take over
+        modal.style.removeProperty('height'); // Remove explicit height
+        modal.classList.add('visible');
         
         // Focus input after animation
         inputField.focus();
-      }, 300); // 0.3s animation duration
+      }, 200); // 0.2s animation duration
     } catch (error) {
       console.error('[WordSelector] ✗ Error during Ask AI modal positioning:', error);
     }
@@ -5777,9 +6060,19 @@ const WordSelector = {
   
   /**
    * Animate Ask AI modal closing - simple smooth fade + scale animation (same as opening)
+   * @param {HTMLElement} modal - The modal element
+   * @param {HTMLElement} askButton - The Ask AI button element
+   * @param {HTMLElement} wordElement - Optional word element. If provided, animate to word center instead of button center
    */
-  closeAskAIModalWithAnimation(modal, askButton) {
+  closeAskAIModalWithAnimation(modal, askButton, wordElement = null) {
     console.log('[WordSelector] ===== ASK AI MODAL CLOSING ANIMATION - START =====');
+    
+    // Remove purple outline from Ask AI button when modal is closed
+    if (askButton) {
+      askButton.style.removeProperty('outline');
+      askButton.style.removeProperty('outline-offset');
+      askButton.style.removeProperty('border-radius');
+    }
     
     // Check if already closing to prevent double-close
     if (modal.classList.contains('ask-ai-closing')) {
@@ -5793,20 +6086,147 @@ const WordSelector = {
     // Force a reflow to ensure modal state is current
     void modal.offsetHeight;
     
-    // Set initial state for closing animation (opacity 1, scale 1)
-    modal.style.setProperty('opacity', '1', 'important');
-    modal.style.setProperty('transform', 'scale(1)', 'important');
-    modal.style.setProperty('transition', 'none', 'important');
-    
-    // Force another reflow
+    // Get current modal position and dimensions
+    // Force a reflow to ensure we get accurate dimensions from the rendered state
     void modal.offsetHeight;
     
-    // Add closing class to trigger smooth fade + scale animation
+    // Get the actual rendered dimensions and position
+    const currentModalRect = modal.getBoundingClientRect();
+    
+    // Get scroll offsets for converting viewport coordinates to document coordinates
+    const scrollX = window.scrollX || window.pageXOffset || 0;
+    const scrollY = window.scrollY || window.pageYOffset || 0;
+    
+    // Always use getBoundingClientRect() for dimensions - this gives us the actual rendered size
+    // This is reliable even if width/height were removed after opening animation
+    const currentWidth = currentModalRect.width;
+    const currentHeight = currentModalRect.height;
+    
+    // Get position - prefer style values if explicitly set, otherwise use getBoundingClientRect
+    // This handles cases where modal might have been repositioned
+    let currentTop = parseFloat(modal.style.top);
+    let currentLeft = parseFloat(modal.style.left);
+    
+    // If position not in style, calculate from getBoundingClientRect (viewport) + scroll offset
+    if (isNaN(currentTop)) {
+      currentTop = currentModalRect.top + scrollY;
+    }
+    if (isNaN(currentLeft)) {
+      currentLeft = currentModalRect.left + scrollX;
+    }
+    
+    console.log('[WordSelector] Closing animation - Modal dimensions (from rendered state):', {
+      rectWidth: currentWidth,
+      rectHeight: currentHeight,
+      rectTop: currentModalRect.top,
+      rectLeft: currentModalRect.left,
+      styleTop: modal.style.top,
+      styleLeft: modal.style.left,
+      finalTop: currentTop,
+      finalLeft: currentLeft,
+      scrollX,
+      scrollY
+    });
+    
+    // Determine final destination: word center if wordElement provided, otherwise button center
+    let finalLeft, finalTop;
+    
+    if (wordElement && document.body.contains(wordElement)) {
+      // Animate to word center (same as word-meaning modal)
+      const wordRect = wordElement.getBoundingClientRect();
+      const wordCenterX = wordRect.left + wordRect.width / 2;
+      const wordCenterY = wordRect.top + wordRect.height / 2;
+      
+      // Convert word center to document coordinates (for absolute positioning)
+      finalLeft = wordCenterX + scrollX;
+      finalTop = wordCenterY + scrollY;
+      
+      console.log('[WordSelector] Closing animation - Word center calculation:', {
+        wordLeft: wordRect.left,
+        wordRight: wordRect.right,
+        wordTop: wordRect.top,
+        wordBottom: wordRect.bottom,
+        wordCenterX,
+        wordCenterY,
+        scrollX,
+        scrollY,
+        finalLeft,
+        finalTop
+      });
+    } else {
+      // Default: animate to button center
+      // Get current button position (viewport coordinates) - get fresh position
+      const buttonRect = askButton.getBoundingClientRect();
+      const buttonLeft = buttonRect.left;
+      const buttonRight = buttonRect.right;
+      const buttonTop = buttonRect.top;
+      const buttonBottom = buttonRect.bottom;
+      
+      // Calculate button center correctly (same calculation as opening animation)
+      // Center X = left + (right - left) / 2 = left + width/2
+      const buttonCenterX = buttonLeft + (buttonRight - buttonLeft) / 2;
+      // Center Y = top + (bottom - top) / 2 = top + height/2
+      const buttonCenterY = buttonTop + (buttonBottom - buttonTop) / 2;
+      
+      // Convert button center to document coordinates (for absolute positioning)
+      // scrollX and scrollY are already defined above
+      finalLeft = buttonCenterX + scrollX;
+      finalTop = buttonCenterY + scrollY;
+      
+      console.log('[WordSelector] Closing animation - Button center calculation:', {
+        buttonLeft,
+        buttonRight,
+        buttonTop,
+        buttonBottom,
+        buttonCenterX,
+        buttonCenterY,
+        scrollX,
+        scrollY,
+        finalLeft,
+        finalTop
+      });
+    }
+    
+    // Set initial state for closing animation (current position and size)
+    // CRITICAL: Set explicit width/height FIRST before removing min-width/min-height
+    // This prevents the modal from expanding when constraints are removed
+    modal.style.setProperty('opacity', '1', 'important');
+    modal.style.setProperty('transform', 'none', 'important');
+    modal.style.setProperty('top', `${currentTop}px`, 'important');
+    modal.style.setProperty('left', `${currentLeft}px`, 'important');
+    modal.style.setProperty('width', `${currentWidth}px`, 'important');
+    modal.style.setProperty('height', `${currentHeight}px`, 'important');
+    modal.style.setProperty('overflow', 'hidden', 'important');
+    
+    // Force a reflow to ensure width/height are applied before removing constraints
+    void modal.offsetHeight;
+    
+    // NOW remove min-width/min-height constraints (after explicit dimensions are set)
+    // This allows shrinking to 0px without causing expansion
+    modal.style.setProperty('min-width', '0px', 'important');
+    modal.style.setProperty('min-height', '0px', 'important');
+    modal.style.setProperty('max-width', 'none', 'important');
+    modal.style.setProperty('max-height', 'none', 'important');
+    
+    // Set transition AFTER all initial styles are set
+    // Make width/height animation complete at the same time as position reaches center
+    // Using same duration ensures dimensions are 0x0 when position reaches button center
+    // Reduced animation time from 0.3s to 0.2s for faster animation
+    modal.style.setProperty('transition', 'top 0.2s ease-out, left 0.2s ease-out, width 0.2s ease-out, height 0.2s ease-out', 'important');
+    
+    // Add closing class
     modal.classList.add('ask-ai-closing');
     modal.classList.remove('visible');
     
     // Force a reflow to ensure animation starts
     void modal.offsetHeight;
+    
+    // Animate to button center with 0x0 dimensions
+    // All animations complete together - dimensions reach 0x0 exactly when position reaches button center
+    modal.style.setProperty('top', `${finalTop}px`, 'important');
+    modal.style.setProperty('left', `${finalLeft}px`, 'important');
+    modal.style.setProperty('width', '0px', 'important');
+    modal.style.setProperty('height', '0px', 'important');
     
     // Wait for animation to complete, then remove modal
     setTimeout(() => {
@@ -5825,7 +6245,7 @@ const WordSelector = {
       // Remove modal
       modal.remove();
       console.log('[WordSelector] ✓✓✓ ASK AI MODAL CLOSING ANIMATION COMPLETED ✓✓✓');
-    }, 300); // 0.3s animation duration
+    }, 200); // 0.2s animation duration
   },
   
   /**
@@ -6023,10 +6443,28 @@ const WordSelector = {
     
     // Display user message (show original question without prefix for UI)
     const resultsList = modal.querySelector('.word-web-search-results-list');
+    
+    // Show results container when first message is added
+    const resultsContainer = modal.querySelector('.word-web-search-results');
+    if (resultsContainer) {
+      resultsContainer.style.display = '';
+    }
+    
     const userMessageDiv = document.createElement('div');
     userMessageDiv.className = 'word-web-search-chat-message user-message';
     userMessageDiv.textContent = question;
     resultsList.appendChild(userMessageDiv);
+    
+    // Hide explain button after first message
+    const explainBtn = modal.querySelector('.word-web-search-explain-btn');
+    if (explainBtn) {
+      explainBtn.style.display = 'none';
+    }
+    
+    // Update results visibility
+    if (modal._updateResultsVisibility) {
+      modal._updateResultsVisibility();
+    }
     
     // Create AI response container
     const aiMessageDiv = document.createElement('div');
@@ -6107,6 +6545,12 @@ const WordSelector = {
         // Re-enable input and send button
         inputField.disabled = false;
         sendBtn.disabled = false;
+        
+        // Update results visibility after AI response completes
+        if (modal._updateResultsVisibility) {
+          modal._updateResultsVisibility();
+        }
+        
         inputField.focus();
       },
       onError: (error) => {
@@ -6659,7 +7103,7 @@ const WordSelector = {
           popup.style.setProperty('will-change', '');
           
           console.log('[WordSelector] ✓ Popup animation completed');
-        }, 400); // Match animation duration (0.4s)
+        }, 200); // Match animation duration (0.2s)
         
         // Verify popup is actually visible
         setTimeout(() => {
@@ -6836,7 +7280,7 @@ const WordSelector = {
       document.querySelectorAll('[data-closing="true"]').forEach(el => {
         el.removeAttribute('data-closing');
       });
-    }, 400); // Match animation duration
+    }, 200); // Match animation duration (0.2s)
   },
   
   /**
@@ -6892,7 +7336,7 @@ const WordSelector = {
     setTimeout(() => {
       popup.remove();
       console.log('[WordSelector] ✓ Popup closing animation completed');
-    }, 400); // Match animation duration
+    }, 200); // Match animation duration (0.2s)
   },
   
   /**
@@ -7420,6 +7864,42 @@ const WordSelector = {
         animation: vocab-word-loading-breathe 0.75s ease-in-out infinite;
       }
       
+      /* Loading spinner container - positioned above the word */
+      .vocab-word-loading-spinner-container {
+        position: absolute;
+        top: -28px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 24px;
+        height: 24px;
+        background-color: #FFFFFF;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 1000000;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+      }
+      
+      /* Purple spinner animation */
+      @keyframes vocab-spinner-rotate {
+        0% {
+          transform: rotate(0deg);
+        }
+        100% {
+          transform: rotate(360deg);
+        }
+      }
+      
+      .vocab-word-loading-spinner {
+        width: 16px;
+        height: 16px;
+        border: 2px solid rgba(149, 39, 245, 0.2);
+        border-top-color: #9527F5;
+        border-radius: 50%;
+        animation: vocab-spinner-rotate 0.8s linear infinite;
+      }
+      
       /* Green background for explained words */
       .vocab-word-explained {
         background-color: rgba(240, 253, 244, 0.5) !important; /* Very light green, semi-transparent */
@@ -7623,7 +8103,7 @@ const WordSelector = {
       
       /* Expanding animation - scale up from word element position */
       .vocab-word-popup.expanding {
-        animation: expandWordPopupFromWord 0.4s cubic-bezier(0.4, 0, 0.2, 1) forwards !important;
+        animation: expandWordPopupFromWord 0.2s cubic-bezier(0.4, 0, 0.2, 1) forwards !important;
         transition: none !important; /* Disable transition during animation */
         pointer-events: none !important;
         will-change: transform !important; /* Optimize for animation */
@@ -7631,7 +8111,7 @@ const WordSelector = {
       }
       
       .vocab-word-popup.expanding.visible {
-        animation: expandWordPopupFromWord 0.4s cubic-bezier(0.4, 0, 0.2, 1) forwards !important;
+        animation: expandWordPopupFromWord 0.2s cubic-bezier(0.4, 0, 0.2, 1) forwards !important;
         transition: none !important;
       }
       
@@ -7648,7 +8128,7 @@ const WordSelector = {
       
       /* Closing animation - move to word position while scaling down */
       .vocab-word-popup.closing {
-        animation: closeWordPopupToWord 0.4s cubic-bezier(0.4, 0, 0.2, 1) forwards !important;
+        animation: closeWordPopupToWord 0.2s cubic-bezier(0.4, 0, 0.2, 1) forwards !important;
         transition: none !important;
         pointer-events: none !important;
         will-change: transform !important;
@@ -7878,6 +8358,7 @@ const WordSelector = {
       .vocab-word-popup-ask-button:active:not(.loading) {
         background: #7016A8;
         transform: translateY(0) scale(0.95);
+        border-radius: 10px !important; /* Preserve border radius on click */
       }
       
       .vocab-word-popup-ask-button.loading {
@@ -7933,12 +8414,12 @@ const WordSelector = {
       .word-web-search-modal {
         position: absolute !important;
         background: white !important;
-        border-radius: 20px;
+        border-radius: 30px;
         box-shadow: 0 8px 32px rgba(149, 39, 245, 0.2), 0 2px 8px rgba(149, 39, 245, 0.15) !important;
         z-index: 10000020 !important;
         max-width: 600px !important;
         width: 90vw !important;
-        max-height: 70vh !important;
+        max-height: 49vh !important; /* Reduced to 70% of original 70vh */
         display: flex !important;
         flex-direction: column !important;
         opacity: 1 !important;
@@ -8012,8 +8493,9 @@ const WordSelector = {
         display: flex;
         flex-direction: column;
         height: 100%;
-        max-height: 70vh;
+        max-height: 49vh; /* Reduced to 70% of original 70vh */
         border-radius: 30px;
+        position: relative;
         /* Disable text selection in the modal */
         user-select: none !important;
         -webkit-user-select: none !important;
@@ -8119,6 +8601,31 @@ const WordSelector = {
         overflow-y: auto;
         padding: 16px;
         min-height: 0;
+        position: relative;
+      }
+      
+      /* Fade-out effect at top and bottom using pseudo-elements */
+      .word-ask-ai-modal-content::before,
+      .word-ask-ai-modal-content::after {
+        content: '';
+        position: absolute;
+        left: 0;
+        right: 0;
+        height: 40px;
+        pointer-events: none;
+        z-index: 10;
+      }
+      
+      .word-ask-ai-modal-content::before {
+        top: 0;
+        background: linear-gradient(to bottom, white, rgba(255, 255, 255, 0));
+        border-radius: 30px 30px 0 0;
+      }
+      
+      .word-ask-ai-modal-content::after {
+        bottom: 0;
+        background: linear-gradient(to top, white, rgba(255, 255, 255, 0));
+        border-radius: 0 0 30px 30px;
       }
       
       .word-web-search-loading {
@@ -8361,6 +8868,7 @@ const WordSelector = {
         border-top: 1px solid #e5e7eb;
         background: white;
         align-items: center;
+        position: relative; /* Enable absolute positioning for explain button */
       }
       
       .word-web-search-input {
@@ -8388,6 +8896,33 @@ const WordSelector = {
       
       .word-web-search-input::placeholder {
         color: #9ca3af !important;
+      }
+      
+      .word-web-search-explain-btn {
+        padding: 8px 16px;
+        background: #9527F5;
+        color: white;
+        border: none;
+        border-radius: 8px;
+        font-size: 14px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: transform 0.2s ease;
+        flex-shrink: 0;
+        font-family: inherit;
+        position: absolute;
+        right: 65px; /* Shifted left to avoid overlapping text area border */
+        top: 50%;
+        transform: translateY(-50%);
+        z-index: 10;
+      }
+      
+      .word-web-search-explain-btn:hover {
+        transform: translateY(-50%) scale(1.05);
+      }
+      
+      .word-web-search-explain-btn:active {
+        transform: translateY(-50%) scale(0.98);
       }
       
       .word-web-search-send-btn {
@@ -13485,8 +14020,8 @@ const ChatDialog = {
     } else {
       // Show appropriate message based on chat context
       const promptText = this.chatContext === 'selected' 
-        ? 'Anything to ask on the selected content ?' 
-        : 'Ask me anything about the page';
+        ? 'Ask anything on the selected content' 
+        : 'Ask anything about the page';
       
       const noChatsMsg = document.createElement('div');
       noChatsMsg.className = 'vocab-chat-no-messages';
@@ -13525,33 +14060,70 @@ const ChatDialog = {
     let dataToRender = null;
     let textSelectorData = null;
     if (this.currentTextKey) {
-      // Try to get data from TextSelector using the original textKey
+      // Try to get data from TextSelector using the original textKey and key variations
       const originalTextKey = this.currentTextKey.replace(/-selected$/, '').replace(/-generic$/, '');
-      textSelectorData = TextSelector.simplifiedTexts.get(originalTextKey);
-      if (textSelectorData) {
-        console.log('[ChatDialog] Retrieved simplified data from TextSelector for key:', originalTextKey);
-        console.log('[ChatDialog] TextSelector data.possibleQuestions:', textSelectorData.possibleQuestions);
-        console.log('[ChatDialog] TextSelector data.possibleQuestions length:', textSelectorData.possibleQuestions?.length || 0);
+      
+      // Try multiple key variations to find the data
+      const keyVariations = [
+        originalTextKey,
+        `${originalTextKey}-selected`,
+        `${originalTextKey}-generic`,
+        this.currentTextKey
+      ];
+      
+      for (const key of keyVariations) {
+        const data = TextSelector.simplifiedTexts.get(key);
+        if (data && (data.simplifiedText || data.accumulatedSimplifiedText || (Array.isArray(data.previousSimplifiedTexts) && data.previousSimplifiedTexts.length > 0))) {
+          textSelectorData = data;
+          console.log('[ChatDialog] Retrieved simplified data from TextSelector for key:', key);
+          console.log('[ChatDialog] TextSelector data.possibleQuestions:', textSelectorData.possibleQuestions);
+          console.log('[ChatDialog] TextSelector data.possibleQuestions length:', textSelectorData.possibleQuestions?.length || 0);
+          break;
+        }
       }
     }
     
     // Priority order:
-    // 1. this.simplifiedData if it has simplifiedText (most recent, might have questions)
-    // 2. textSelectorData if it has simplifiedText (streaming data)
+    // 1. this.simplifiedData if it has simplifiedText or accumulatedSimplifiedText (most recent, might have questions)
+    // 2. textSelectorData if it has simplifiedText or accumulatedSimplifiedText (streaming data)
     // 3. this.simplifiedData as fallback
     
-    if (this.simplifiedData && (this.simplifiedData.simplifiedText || (Array.isArray(this.simplifiedData.previousSimplifiedTexts) && this.simplifiedData.previousSimplifiedTexts.length > 0))) {
+    // Check if this.simplifiedData has text (either simplifiedText or accumulatedSimplifiedText from streaming)
+    const hasSimplifiedDataText = this.simplifiedData && (
+      this.simplifiedData.simplifiedText || 
+      this.simplifiedData.accumulatedSimplifiedText ||
+      (Array.isArray(this.simplifiedData.previousSimplifiedTexts) && this.simplifiedData.previousSimplifiedTexts.length > 0)
+    );
+    
+    // Check if textSelectorData has text
+    const hasTextSelectorDataText = textSelectorData && (
+      textSelectorData.simplifiedText || 
+      textSelectorData.accumulatedSimplifiedText ||
+      (Array.isArray(textSelectorData.previousSimplifiedTexts) && textSelectorData.previousSimplifiedTexts.length > 0)
+    );
+    
+    if (hasSimplifiedDataText) {
       dataToRender = this.simplifiedData;
+      // If simplifiedText is empty but accumulatedSimplifiedText exists, use it
+      if (!dataToRender.simplifiedText && dataToRender.accumulatedSimplifiedText) {
+        dataToRender = { ...dataToRender, simplifiedText: dataToRender.accumulatedSimplifiedText };
+      }
       console.log('[ChatDialog] Using simplifiedData from ChatDialog');
-      console.log('[ChatDialog] Has simplifiedText:', !!this.simplifiedData.simplifiedText);
-      console.log('[ChatDialog] Has previousSimplifiedTexts:', Array.isArray(this.simplifiedData.previousSimplifiedTexts) && this.simplifiedData.previousSimplifiedTexts.length > 0);
-      console.log('[ChatDialog] Has possibleQuestions:', !!this.simplifiedData.possibleQuestions && this.simplifiedData.possibleQuestions.length > 0);
-      console.log('[ChatDialog] Has explanationQuestions:', !!this.simplifiedData.explanationQuestions && this.simplifiedData.explanationQuestions.length > 0);
-    } else if (textSelectorData && (textSelectorData.simplifiedText || (Array.isArray(textSelectorData.previousSimplifiedTexts) && textSelectorData.previousSimplifiedTexts.length > 0))) {
+      console.log('[ChatDialog] Has simplifiedText:', !!dataToRender.simplifiedText);
+      console.log('[ChatDialog] Has previousSimplifiedTexts:', Array.isArray(dataToRender.previousSimplifiedTexts) && dataToRender.previousSimplifiedTexts.length > 0);
+      console.log('[ChatDialog] Has possibleQuestions:', !!dataToRender.possibleQuestions && dataToRender.possibleQuestions.length > 0);
+      console.log('[ChatDialog] Has explanationQuestions:', !!dataToRender.explanationQuestions && dataToRender.explanationQuestions.length > 0);
+    } else if (hasTextSelectorDataText) {
       dataToRender = textSelectorData;
+      // If simplifiedText is empty but accumulatedSimplifiedText exists, use it
+      if (!dataToRender.simplifiedText && dataToRender.accumulatedSimplifiedText) {
+        dataToRender = { ...dataToRender, simplifiedText: dataToRender.accumulatedSimplifiedText };
+      }
       console.log('[ChatDialog] Using simplifiedData from TextSelector');
-      console.log('[ChatDialog] Has simplifiedText:', !!textSelectorData.simplifiedText);
-      console.log('[ChatDialog] Has previousSimplifiedTexts:', Array.isArray(textSelectorData.previousSimplifiedTexts) && textSelectorData.previousSimplifiedTexts.length > 0);
+      console.log('[ChatDialog] Has simplifiedText:', !!dataToRender.simplifiedText);
+      console.log('[ChatDialog] Has previousSimplifiedTexts:', Array.isArray(dataToRender.previousSimplifiedTexts) && dataToRender.previousSimplifiedTexts.length > 0);
+      console.log('[ChatDialog] Has possibleQuestions:', !!dataToRender.possibleQuestions && dataToRender.possibleQuestions.length > 0);
+      console.log('[ChatDialog] Has explanationQuestions:', !!dataToRender.explanationQuestions && dataToRender.explanationQuestions.length > 0);
     } else if (this.simplifiedData) {
       dataToRender = this.simplifiedData;
       console.log('[ChatDialog] Using simplifiedData from ChatDialog (fallback - no text found)');
@@ -13792,85 +14364,10 @@ const ChatDialog = {
     const finalQuestionsContainer = container.querySelector('.vocab-chat-message-questions-container');
     console.log('[SUBHRAM] Final verification - questionsContainer found in main container:', !!finalQuestionsContainer);
     
-    // Check if we need to show brain icon (explanation complete but questions not yet received)
-    // Show brain icon if:
-    // 1. We have at least one explanation rendered
-    // 2. The last explanation doesn't have questions yet
-    // 3. We're still waiting for possibleQuestions from the backend
-    const lastExplanationIndex = allExplanations.length - 1;
-    const lastExplanationQuestions = explanationQuestions[lastExplanationIndex] || [];
-    const hasQuestionsForLastExplanation = Array.isArray(lastExplanationQuestions) && lastExplanationQuestions.length > 0;
-    
-    // Check if we're still waiting for questions (explanation is complete but questions haven't arrived)
-    // This happens when the explanation streaming is done but the complete event with questions hasn't arrived yet
-    const isWaitingForQuestions = allExplanations.length > 0 && !hasQuestionsForLastExplanation;
-    
-    if (isWaitingForQuestions) {
-      console.log('[ChatDialog] Showing brain icon - waiting for possibleQuestions');
-      this.showSimplifiedBrainIcon(container);
-    } else {
-      console.log('[ChatDialog] Hiding brain icon - questions received or no explanations');
-      this.hideSimplifiedBrainIcon(container);
-    }
+    // Brain icon removed - no longer showing pulsating icon below simplified explanations
   },
   
-  /**
-   * Show brain icon below simplified explanations while waiting for possibleQuestions
-   * @param {HTMLElement} container - The simplified explanations container
-   */
-  showSimplifiedBrainIcon(container) {
-    if (!container) return;
-    
-    // Remove existing brain icon if any
-    this.hideSimplifiedBrainIcon(container);
-    
-    // Create brain icon container
-    const brainIconContainer = document.createElement('div');
-    brainIconContainer.id = 'vocab-chat-simplified-brain-icon-container';
-    brainIconContainer.className = 'vocab-chat-simplified-brain-icon-container';
-    
-    // Create brain icon SVG with AI text in center (based on reference image)
-    brainIconContainer.innerHTML = `
-      <svg width="48" height="48" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" class="vocab-chat-simplified-brain-icon">
-        <!-- Brain outline (two hemispheres) -->
-        <path d="M12 8C8 8 5 11 5 15C5 17 5.5 18.5 6.5 20C5.5 20.2 5 20.8 5 21.5C5 22.3 5.6 23 6.5 23H7C7 23.6 7.4 24 8 24H9C9.6 24 10 23.6 10 23V22C10 21.4 10.4 21 11 21C11.6 21 12 21.4 12 22V23C12 23.6 12.4 24 13 24H14C14.6 24 15 23.6 15 23H15.5C16.3 23 17 22.3 17 21.5C17 20.8 16.5 20.2 15.5 20C16.5 18.5 17 17 17 15C17 11 14 8 10 8C14 8 17 11 17 15C17 17 16.5 18.5 15.5 20C16.5 20.2 17 20.8 17 21.5C17 22.3 16.3 23 15.5 23H15C15 23.6 14.6 24 14 24H13C12.4 24 12 23.6 12 23V22C12 21.4 11.6 21 11 21C10.4 21 10 21.4 10 22V23C10 23.6 9.6 24 9 24H8C7.4 24 7 23.6 7 23H6.5C5.6 23 5 22.3 5 21.5C5 20.8 5.5 20.2 6.5 20C5.5 18.5 5 17 5 15C5 11 8 8 12 8Z" stroke="#9527F5" stroke-width="2" fill="none"/>
-        <!-- Brain folds (gyri and sulci) -->
-        <path d="M8 12C8.5 11 9.5 10.5 10.5 11" stroke="#9527F5" stroke-width="1.5" fill="none" stroke-linecap="round"/>
-        <path d="M15 12C14.5 11 13.5 10.5 12.5 11" stroke="#9527F5" stroke-width="1.5" fill="none" stroke-linecap="round"/>
-        <path d="M9 15C9.5 14 10.5 13.5 11.5 14" stroke="#9527F5" stroke-width="1.5" fill="none" stroke-linecap="round"/>
-        <path d="M14 15C13.5 14 12.5 13.5 11.5 14" stroke="#9527F5" stroke-width="1.5" fill="none" stroke-linecap="round"/>
-        <path d="M10 18C10.5 17 11.5 16.5 12.5 17" stroke="#9527F5" stroke-width="1.5" fill="none" stroke-linecap="round"/>
-        <!-- Central square with rounded corners for AI text -->
-        <rect x="16" y="16" width="16" height="16" rx="2" stroke="#9527F5" stroke-width="2" fill="#9527F5"/>
-        <!-- AI text inside square -->
-        <text x="24" y="28" font-family="Arial, sans-serif" font-size="10" font-weight="bold" fill="#FFFFFF" text-anchor="middle" dominant-baseline="middle">AI</text>
-      </svg>
-    `;
-    
-    // Append to container
-    container.appendChild(brainIconContainer);
-  },
-  
-  /**
-   * Hide brain icon below simplified explanations
-   * @param {HTMLElement} container - The simplified explanations container
-   */
-  hideSimplifiedBrainIcon(container) {
-    if (!container) {
-      // Try to find container if not provided
-      const defaultContainer = document.getElementById('vocab-chat-simplified-container');
-      if (defaultContainer) {
-        const brainIcon = defaultContainer.querySelector('#vocab-chat-simplified-brain-icon-container');
-        if (brainIcon) brainIcon.remove();
-      }
-      return;
-    }
-    
-    const brainIcon = container.querySelector('#vocab-chat-simplified-brain-icon-container');
-    if (brainIcon) {
-      brainIcon.remove();
-    }
-  },
+  // Brain icon functionality removed - no longer needed
   
   /**
    * Handle "Simplify more" button click
@@ -14104,7 +14601,9 @@ const ChatDialog = {
           console.log('[ChatDialog] explanationQuestions array length:', explanationQuestions.length);
           console.log('[ChatDialog] Questions for this explanation:', questionsForThisExplanation);
           
-        // Preserve existing simplifiedText if eventData doesn't have it (e.g., when only possibleQuestions arrive)
+        // IMPORTANT: Prioritize eventData.simplifiedText from API complete event
+        // The API always sends simplifiedText in the complete event, so use it if available
+        // Fall back to this.simplifiedData.simplifiedText (which might have accumulatedSimplifiedText from streaming)
         const preservedSimplifiedText = eventData.simplifiedText || this.simplifiedData?.simplifiedText || '';
         const preservedText = eventData.text || this.simplifiedData?.text || '';
         const preservedTextStartIndex = eventData.textStartIndex !== undefined ? eventData.textStartIndex : (this.simplifiedData?.textStartIndex || 0);
@@ -14124,6 +14623,7 @@ const ChatDialog = {
         
         console.log('[ChatDialog] Updated simplifiedData.possibleQuestions:', this.simplifiedData.possibleQuestions);
         console.log('[ChatDialog] Updated simplifiedData.possibleQuestions length:', this.simplifiedData.possibleQuestions.length);
+        console.log('[ChatDialog] Updated simplifiedData.simplifiedText length:', this.simplifiedData.simplifiedText?.length || 0);
           
           console.log('[ChatDialog] Updated simplifiedData after complete event:', {
             previousSimplifiedTextsCount: previousSimplifiedTexts.length,
@@ -14131,8 +14631,15 @@ const ChatDialog = {
             previousSimplifiedTexts: previousSimplifiedTexts
           });
         
-        // Update stored data - use original text key for storage (already defined above)
+        // Update stored data with all key variations to ensure it can be found
+        // Use original text key for storage (already defined above)
         TextSelector.simplifiedTexts.set(originalTextKey, this.simplifiedData);
+        // Also store with key variations for compatibility
+        TextSelector.simplifiedTexts.set(`${originalTextKey}-selected`, this.simplifiedData);
+        TextSelector.simplifiedTexts.set(`${originalTextKey}-generic`, this.simplifiedData);
+        
+        console.log('[ChatDialog] Stored simplified data with key:', originalTextKey);
+        console.log('[ChatDialog] Stored simplified data with key variations');
         
         console.log('[ChatDialog] Updated simplified data in TextSelector:', {
           textKey: originalTextKey,
@@ -14893,8 +15400,8 @@ const ChatDialog = {
     } else {
       // Show appropriate message based on chat context
       const promptText = this.chatContext === 'selected' 
-        ? 'Anything to ask on the selected content ?' 
-        : 'Ask me anything about the page';
+        ? 'Ask anything on the selected content' 
+        : 'Ask anything about the page';
       
       const noChatsMsg = document.createElement('div');
       noChatsMsg.className = 'vocab-chat-no-messages';
@@ -14942,8 +15449,8 @@ const ChatDialog = {
     } else {
       // Show appropriate message based on chat context
       const promptText = this.chatContext === 'selected' 
-        ? 'Anything to ask on the selected content ?' 
-        : 'Ask me anything about the page';
+        ? 'Ask anything on the selected content' 
+        : 'Ask anything about the page';
       
       const noChatsMsg = document.createElement('div');
       noChatsMsg.className = 'vocab-chat-no-messages';
@@ -15005,7 +15512,15 @@ const ChatDialog = {
     const inputField = document.createElement('textarea');
     inputField.className = 'vocab-chat-input';
     inputField.id = 'vocab-chat-input';
-    inputField.placeholder = 'Ask AI ...';
+    // Set placeholder based on chat context
+    // If opened from ask-about-page button (general context with page-general textKey), show "Ask AI anything about the page"
+    // Otherwise, show the default placeholder for selected text
+    if (this.chatContext === 'general' && this.currentTextKey && 
+        (this.currentTextKey === 'page-general' || this.currentTextKey.startsWith('page-general'))) {
+      inputField.placeholder = 'Ask AI anything about the page';
+    } else {
+      inputField.placeholder = 'Ask AI about the selected content';
+    }
     inputField.rows = 1;
     
     // Apply inline styles as a fallback to ensure visibility even if CSS is overridden
@@ -16378,10 +16893,93 @@ const ChatDialog = {
       bestMatch.classList.add('vocab-reference-highlight');
       console.log('[ChatDialog] Added vocab-reference-highlight class to element');
       
-      // Always scroll to the element
-      console.log('[ChatDialog] Scrolling to element...');
-      bestMatch.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      console.log('[ChatDialog] Scroll command executed');
+      // Ensure inline elements can display background properly
+      const computedStyle = window.getComputedStyle(bestMatch);
+      if (computedStyle.display === 'inline') {
+        bestMatch.style.setProperty('display', 'inline-block', 'important');
+        console.log('[ChatDialog] Changed display to inline-block for inline element');
+      }
+      
+      // Force a reflow to ensure styles are applied
+      void bestMatch.offsetHeight;
+      
+      // Verify the highlight class is applied
+      requestAnimationFrame(() => {
+        const hasClass = bestMatch.classList.contains('vocab-reference-highlight');
+        const computedBg = window.getComputedStyle(bestMatch).backgroundColor;
+        console.log('[ChatDialog] Highlight class applied:', hasClass);
+        console.log('[ChatDialog] Computed background color:', computedBg);
+      });
+      
+      // Function to scroll to element with multiple fallback methods
+      const scrollToElement = (element) => {
+        console.log('[ChatDialog] Scrolling to element...');
+        
+        // Method 1: Try scrollIntoView with smooth behavior
+        try {
+          element.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
+          console.log('[ChatDialog] Scroll command executed (scrollIntoView)');
+        } catch (e) {
+          console.warn('[ChatDialog] scrollIntoView failed:', e);
+        }
+        
+        // Method 2: Also try scrolling the window directly as fallback
+        requestAnimationFrame(() => {
+          try {
+            const rect = element.getBoundingClientRect();
+            const elementTop = rect.top + window.pageYOffset;
+            const elementCenter = elementTop - (window.innerHeight / 2) + (rect.height / 2);
+            
+            // Check if element is already in view
+            const isInView = rect.top >= 0 && rect.bottom <= window.innerHeight;
+            
+            if (!isInView) {
+              window.scrollTo({
+                top: elementCenter,
+                behavior: 'smooth'
+              });
+              console.log('[ChatDialog] Window scroll executed as fallback');
+            }
+          } catch (e) {
+            console.warn('[ChatDialog] Window scroll failed:', e);
+          }
+        });
+        
+        // Method 3: Handle scrollable containers
+        requestAnimationFrame(() => {
+          try {
+            let parent = element.parentElement;
+            while (parent && parent !== document.body) {
+              const parentStyle = window.getComputedStyle(parent);
+              const overflowY = parentStyle.overflowY;
+              
+              if (overflowY === 'auto' || overflowY === 'scroll' || overflowY === 'overlay') {
+                const parentRect = parent.getBoundingClientRect();
+                const elementRect = element.getBoundingClientRect();
+                
+                const elementTopRelative = elementRect.top - parentRect.top + parent.scrollTop;
+                const scrollTarget = elementTopRelative - (parentRect.height / 2) + (elementRect.height / 2);
+                
+                parent.scrollTo({
+                  top: scrollTarget,
+                  behavior: 'smooth'
+                });
+                console.log('[ChatDialog] Scrolled scrollable container');
+                break;
+              }
+              
+              parent = parent.parentElement;
+            }
+          } catch (e) {
+            console.warn('[ChatDialog] Container scroll failed:', e);
+          }
+        });
+      };
+      
+      // Wait a frame to ensure styles are applied, then scroll
+      requestAnimationFrame(() => {
+        scrollToElement(bestMatch);
+      });
       
       // Return the matched element so it can be stored for toggle functionality
       this._lastHighlightedElement = bestMatch;
@@ -16762,8 +17360,8 @@ const ChatDialog = {
     
     // Show appropriate message based on chat context
     const promptText = this.chatContext === 'selected' 
-      ? 'Anything to ask on the selected content ?' 
-      : 'Ask me anything about the page';
+      ? 'Ask anything on the selected content' 
+      : 'Ask anything about the page';
     
     const noChatsMsg = document.createElement('div');
     noChatsMsg.className = 'vocab-chat-no-messages';
@@ -17333,9 +17931,8 @@ const ChatDialog = {
    * Create chat empty icon (professional purple)
    */
   createChatEmptyIcon() {
-    // Use the actual logo PNG file
-    const iconUrl = chrome.runtime.getURL('logo_1-removebg.png');
-    return `<img src="${iconUrl}" alt="Cat with glasses" class="vocab-chat-empty-cat-icon">`;
+    // Cat icon removed - return empty string
+    return '';
   },
   
   /**
@@ -17820,31 +18417,7 @@ const ChatDialog = {
         margin-bottom: 0;
       }
       
-      /* Brain Icon Container - Shows while waiting for possibleQuestions */
-      .vocab-chat-simplified-brain-icon-container {
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        width: 100%;
-        padding: 20px 0;
-        margin-top: 16px;
-      }
-      
-      .vocab-chat-simplified-brain-icon {
-        display: block;
-        width: 48px;
-        height: 48px;
-        animation: brainBreathing 2s ease-in-out infinite;
-      }
-      
-      @keyframes brainBreathing {
-        0%, 100% {
-          transform: scale(1);
-        }
-        50% {
-          transform: scale(1.2);
-        }
-      }
+      /* Brain icon CSS removed - no longer needed */
       
       /* Page Summary Container - Above "Summarise the page" button */
       .vocab-chat-page-summary-container {
@@ -24375,7 +24948,188 @@ const ButtonPanel = {
         if (positionData.textStartIndex === eventData.textStartIndex &&
             positionData.textLength === eventData.textLength) {
           
-          // Handle chunk events (streaming)
+          // CRITICAL: Handle complete event FIRST (before chunk events)
+          // The complete event has type === 'complete' and includes simplifiedText and possibleQuestions
+          if (eventData.type === 'complete') {
+            console.log('[ButtonPanel] ===== COMPLETE EVENT HANDLER TRIGGERED (single text) =====');
+            console.log('[ButtonPanel] Complete event - simplifiedText:', eventData.simplifiedText, 'shouldAllowSimplifyMore:', eventData.shouldAllowSimplifyMore);
+            console.log('[ButtonPanel] Complete event - possibleQuestions received:', eventData.possibleQuestions);
+            
+            // Remove loading animation
+            highlight.classList.remove('vocab-text-loading');
+            
+            // Ensure possibleQuestions is an array and store directly in ChatDialog property
+            ChatDialog.simplifiedPossibleQuestions = Array.isArray(eventData.possibleQuestions) 
+              ? eventData.possibleQuestions 
+              : (eventData.possibleQuestions ? [eventData.possibleQuestions] : []);
+            
+            console.log('[ButtonPanel] Stored simplifiedPossibleQuestions:', ChatDialog.simplifiedPossibleQuestions);
+            console.log('[ButtonPanel] Stored simplifiedPossibleQuestions length:', ChatDialog.simplifiedPossibleQuestions.length);
+            
+            // Get existing data to preserve explanationQuestions structure
+            const existingData = TextSelector.simplifiedTexts.get(textKey) || {};
+            
+            // Initialize explanationQuestions array if it doesn't exist
+            let explanationQuestions = existingData.explanationQuestions || [];
+            if (!Array.isArray(explanationQuestions)) {
+              explanationQuestions = [];
+            }
+            
+            // Store possibleQuestions for this specific explanation version
+            const questionsForThisExplanation = Array.isArray(ChatDialog.simplifiedPossibleQuestions) 
+              ? ChatDialog.simplifiedPossibleQuestions 
+              : (ChatDialog.simplifiedPossibleQuestions ? [ChatDialog.simplifiedPossibleQuestions] : []);
+            
+            // This is the first explanation, so it should be at index 0
+            const explanationIndex = 0;
+            if (explanationIndex >= explanationQuestions.length) {
+              explanationQuestions.push(questionsForThisExplanation);
+            } else {
+              explanationQuestions[explanationIndex] = questionsForThisExplanation;
+            }
+            
+            console.log('[ButtonPanel] Storing questions for explanation index:', explanationIndex);
+            console.log('[ButtonPanel] explanationQuestions array length:', explanationQuestions.length);
+            console.log('[ButtonPanel] Questions for this explanation:', questionsForThisExplanation);
+            
+            // Get existing streaming data to preserve accumulated text
+            const existingSimplifiedData = TextSelector.simplifiedTexts.get(textKey) || {};
+            
+            // IMPORTANT: Prioritize eventData.simplifiedText from API complete event
+            const preservedSimplifiedText = eventData.simplifiedText || existingSimplifiedData.accumulatedSimplifiedText || existingSimplifiedData.simplifiedText || '';
+            const preservedText = eventData.text || existingSimplifiedData.text || positionData.text || '';
+            const preservedTextStartIndex = eventData.textStartIndex !== undefined ? eventData.textStartIndex : (existingSimplifiedData.textStartIndex !== undefined ? existingSimplifiedData.textStartIndex : positionData.textStartIndex);
+            const preservedTextLength = eventData.textLength !== undefined ? eventData.textLength : (existingSimplifiedData.textLength !== undefined ? existingSimplifiedData.textLength : positionData.textLength);
+            
+            // Final simplified data
+            const simplifiedData = {
+              text: preservedText,
+              simplifiedText: preservedSimplifiedText,
+              textStartIndex: preservedTextStartIndex,
+              textLength: preservedTextLength,
+              previousSimplifiedTexts: eventData.previousSimplifiedTexts || existingSimplifiedData.previousSimplifiedTexts || [],
+              shouldAllowSimplifyMore: eventData.shouldAllowSimplifyMore !== undefined ? eventData.shouldAllowSimplifyMore : (existingSimplifiedData.shouldAllowSimplifyMore || false),
+              explanationQuestions: explanationQuestions,
+              possibleQuestions: ChatDialog.simplifiedPossibleQuestions,
+              context: extractedContext || existingSimplifiedData.context,
+              highlight: highlight
+            };
+            
+            console.log('[ButtonPanel] Updated simplifiedData.possibleQuestions:', simplifiedData.possibleQuestions);
+            console.log('[ButtonPanel] Updated simplifiedData.possibleQuestions length:', simplifiedData.possibleQuestions.length);
+            console.log('[ButtonPanel] Updated simplifiedData.explanationQuestions length:', simplifiedData.explanationQuestions.length);
+            
+            // CRITICAL: Always update ChatDialog.simplifiedData with complete data FIRST
+            ChatDialog.simplifiedData = {
+              text: simplifiedData.text,
+              simplifiedText: simplifiedData.simplifiedText,
+              textStartIndex: simplifiedData.textStartIndex,
+              textLength: simplifiedData.textLength,
+              previousSimplifiedTexts: simplifiedData.previousSimplifiedTexts,
+              shouldAllowSimplifyMore: simplifiedData.shouldAllowSimplifyMore,
+              explanationQuestions: simplifiedData.explanationQuestions,
+              possibleQuestions: simplifiedData.possibleQuestions,
+              context: simplifiedData.context,
+              highlight: simplifiedData.highlight
+            };
+            
+            console.log('[ButtonPanel] ===== COMPLETE EVENT PROCESSED (single text) =====');
+            console.log('[ButtonPanel] Updated ChatDialog.simplifiedData with:', {
+              simplifiedTextLength: ChatDialog.simplifiedData.simplifiedText?.length || 0,
+              possibleQuestionsLength: ChatDialog.simplifiedData.possibleQuestions?.length || 0,
+              explanationQuestionsLength: ChatDialog.simplifiedData.explanationQuestions?.length || 0,
+              explanationQuestions0Length: ChatDialog.simplifiedData.explanationQuestions?.[0]?.length || 0
+            });
+            
+            // Store data BEFORE rendering to ensure it's available during rendering
+            console.log('[ButtonPanel] Storing simplified data BEFORE rendering with questions');
+            TextSelector.simplifiedTexts.set(textKey, ChatDialog.simplifiedData);
+            TextSelector.simplifiedTexts.set(`${textKey}-selected`, ChatDialog.simplifiedData);
+            TextSelector.simplifiedTexts.set(`${textKey}-generic`, ChatDialog.simplifiedData);
+            console.log('[ButtonPanel] Stored data BEFORE rendering - explanationQuestions[0] length:', ChatDialog.simplifiedData.explanationQuestions?.[0]?.length || 0);
+            
+            // Update UI - re-render all explanations with final text and questions
+            requestAnimationFrame(() => {
+              const container = ChatDialog.dialogContainer?.querySelector('#vocab-chat-simplified-container');
+              if (container) {
+                console.log('[ButtonPanel] About to call renderSimplifiedExplanations (complete event) - ChatDialog.simplifiedData.explanationQuestions:', ChatDialog.simplifiedData.explanationQuestions);
+                console.log('[ButtonPanel] About to call renderSimplifiedExplanations (complete event) - ChatDialog.simplifiedData.explanationQuestions[0]:', ChatDialog.simplifiedData.explanationQuestions?.[0]);
+                ChatDialog.renderSimplifiedExplanations(container);
+                
+                // CRITICAL: Store data AFTER rendering to ensure questions are persisted in memory
+                // This ensures the rendered data matches what's stored
+                console.log('[ButtonPanel] Storing simplified data AFTER rendering with questions');
+                console.log('[ButtonPanel] Storing - ChatDialog.simplifiedData.explanationQuestions:', ChatDialog.simplifiedData.explanationQuestions);
+                console.log('[ButtonPanel] Storing - ChatDialog.simplifiedData.explanationQuestions[0]:', ChatDialog.simplifiedData.explanationQuestions?.[0]);
+                console.log('[ButtonPanel] Storing - ChatDialog.simplifiedData.explanationQuestions[0] length:', ChatDialog.simplifiedData.explanationQuestions?.[0]?.length || 0);
+                
+                // Store final simplified text data with all key variations AFTER rendering
+                TextSelector.simplifiedTexts.set(textKey, ChatDialog.simplifiedData);
+                TextSelector.simplifiedTexts.set(`${textKey}-selected`, ChatDialog.simplifiedData);
+                TextSelector.simplifiedTexts.set(`${textKey}-generic`, ChatDialog.simplifiedData);
+                
+                // Verify the data was stored correctly
+                const storedData = TextSelector.simplifiedTexts.get(textKey);
+                console.log('[ButtonPanel] Verification AFTER storage - stored data.explanationQuestions:', storedData?.explanationQuestions);
+                console.log('[ButtonPanel] Verification AFTER storage - stored data.explanationQuestions[0]:', storedData?.explanationQuestions?.[0]);
+                console.log('[ButtonPanel] Verification AFTER storage - stored data.explanationQuestions[0] length:', storedData?.explanationQuestions?.[0]?.length || 0);
+                console.log('[ButtonPanel] Verification AFTER storage - stored data.possibleQuestions:', storedData?.possibleQuestions);
+                console.log('[ButtonPanel] Verification AFTER storage - stored data.possibleQuestions length:', storedData?.possibleQuestions?.length || 0);
+                
+                // Store simplified text in analysis data for persistence
+                if (this.topicsModal && this.topicsModal.customContentModal && this.topicsModal.customContentModal.activeTabId) {
+                  const activeContent = this.topicsModal.customContentModal.getContentByTabId(parseInt(this.topicsModal.customContentModal.activeTabId));
+                  if (activeContent && activeContent.analysis) {
+                    const simplifiedTextData = {
+                      textKey: textKey,
+                      textStartIndex: eventData.textStartIndex,
+                      textLength: eventData.textLength,
+                      originalText: eventData.text,
+                      simplifiedText: eventData.simplifiedText,
+                      previousSimplifiedTexts: eventData.previousSimplifiedTexts || [],
+                      shouldAllowSimplifyMore: eventData.shouldAllowSimplifyMore || false,
+                      explanationQuestions: ChatDialog.simplifiedData.explanationQuestions, // Store questions
+                      possibleQuestions: ChatDialog.simplifiedData.possibleQuestions, // Store questions
+                      timestamp: new Date().toISOString()
+                    };
+                    
+                    const existingTextIndex = activeContent.analysis.simplifiedMeanings.findIndex(s => 
+                      s.textKey === textKey
+                    );
+                    
+                    if (existingTextIndex !== -1) {
+                      activeContent.analysis.simplifiedMeanings[existingTextIndex] = simplifiedTextData;
+                      console.log(`[ButtonPanel] Updated existing simplified text for textKey "${textKey}" in analysis data with questions`);
+                    } else {
+                      activeContent.analysis.simplifiedMeanings.push(simplifiedTextData);
+                      console.log(`[ButtonPanel] Added new simplified text for textKey "${textKey}" to analysis data with questions`);
+                    }
+                  }
+                }
+              } else {
+                console.log('[ButtonPanel] Container not found for rendering questions, will retry');
+                setTimeout(() => {
+                  const retryContainer = ChatDialog.dialogContainer?.querySelector('#vocab-chat-simplified-container');
+                  if (retryContainer) {
+                    console.log('[ButtonPanel] Retry - calling renderSimplifiedExplanations');
+                    ChatDialog.renderSimplifiedExplanations(retryContainer);
+                    
+                    // Store data after retry rendering as well
+                    TextSelector.simplifiedTexts.set(textKey, ChatDialog.simplifiedData);
+                    TextSelector.simplifiedTexts.set(`${textKey}-selected`, ChatDialog.simplifiedData);
+                    TextSelector.simplifiedTexts.set(`${textKey}-generic`, ChatDialog.simplifiedData);
+                    
+                    console.log('[ButtonPanel] Stored data after retry rendering');
+                  }
+                }, 100);
+              }
+            });
+            
+            // Return early to prevent chunk handler from running
+            return;
+          }
+          
+          // Handle chunk events (streaming) - only if not a complete event
           if (eventData.chunk !== undefined) {
             console.log('[ButtonPanel] Chunk event - chunk:', eventData.chunk, 'accumulatedSimplifiedText:', eventData.accumulatedSimplifiedText);
             
@@ -24420,120 +25174,119 @@ const ButtonPanel = {
                 }
                 // If iconsWrapper is now empty, we'll reuse it for the book icon below
               }
-          }
-          
-          // Change underline to light green
-          highlight.classList.add('vocab-text-simplified');
-          
-          // Remove any existing cross buttons
-          const existingPurpleCross = highlight.querySelector('.vocab-text-remove-btn');
-          if (existingPurpleCross) {
-            existingPurpleCross.remove();
-          }
-          const existingGreenCross = highlight.querySelector('.vocab-text-remove-green-btn');
-          if (existingGreenCross) {
-            existingGreenCross.remove();
-          }
-              
-              // Create green cross button at top-left
-          const greenCrossBtn = document.createElement('button');
-          greenCrossBtn.className = 'vocab-text-remove-green-btn';
-          greenCrossBtn.setAttribute('aria-label', 'Remove simplified text');
-          greenCrossBtn.style.position = 'absolute';
-          greenCrossBtn.style.top = '-10px';
-          greenCrossBtn.style.left = '-10px';
-          greenCrossBtn.style.width = '18px';
-          greenCrossBtn.style.height = '18px';
-          greenCrossBtn.style.background = '#FFFFFF';
-          greenCrossBtn.style.borderRadius = '50%';
-          greenCrossBtn.style.zIndex = '10000003';
-          greenCrossBtn.style.boxShadow = '0 2px 4px rgba(34, 197, 94, 0.4)';
-          greenCrossBtn.style.display = 'flex';
-          greenCrossBtn.style.alignItems = 'center';
-          greenCrossBtn.style.justifyContent = 'center';
-          greenCrossBtn.style.cursor = 'pointer';
-          greenCrossBtn.style.opacity = '1';
-          greenCrossBtn.style.border = '1px solid #22c55e';
-          greenCrossBtn.style.padding = '0';
-          greenCrossBtn.style.boxSizing = 'border-box';
-          greenCrossBtn.innerHTML = `
-            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg" style="width: 10px; height: 10px;">
-              <path d="M2 2L10 10M10 2L2 10" stroke="#22c55e" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-          `;
-          greenCrossBtn.addEventListener('click', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            console.log('[TextSelector] Green cross button clicked for simplified text:', textKey);
-            TextSelector.removeFromSimplifiedTexts(textKey);
-          });
-          highlight.appendChild(greenCrossBtn);
-              
-              // Reuse or create icons wrapper for book icon (book icon positioned at top-left)
-          let newIconsWrapper = highlight.querySelector('.vocab-text-icons-wrapper');
-          if (!newIconsWrapper) {
-            newIconsWrapper = document.createElement('div');
-            newIconsWrapper.className = 'vocab-text-icons-wrapper vocab-text-icons-wrapper-book';
-            newIconsWrapper.setAttribute('data-text-key', textKey);
-            highlight.appendChild(newIconsWrapper);
-          } else {
-            // Update class to include book wrapper class (magic button already removed above)
-            newIconsWrapper.className = 'vocab-text-icons-wrapper vocab-text-icons-wrapper-book';
-          }
-          
-          // Remove any existing book button
-          const existingBookBtn = newIconsWrapper.querySelector('.vocab-text-book-btn');
-          if (existingBookBtn) {
-            existingBookBtn.remove();
-          }
-          
-          // Create and add book button
-          const bookBtn = TextSelector.createBookButton(textKey);
-          newIconsWrapper.appendChild(bookBtn);
-          
-              // Position book icon wrapper
-              newIconsWrapper.style.setProperty('position', 'absolute', 'important');
-              newIconsWrapper.style.setProperty('display', 'flex', 'important');
-              newIconsWrapper.style.setProperty('margin', '0', 'important');
-              newIconsWrapper.style.setProperty('padding', '0', 'important');
-              
-              // Force reflow to ensure animation starts immediately
-              void newIconsWrapper.offsetHeight;
-              void bookBtn.offsetHeight;
-              
-              const isInModal = highlight.closest('.vocab-custom-content-modal');
-              if (isInModal) {
-                newIconsWrapper.style.setProperty('left', '-50px', 'important');
-                newIconsWrapper.style.setProperty('right', 'auto', 'important');
-                newIconsWrapper.style.setProperty('top', '-2px', 'important');
-              } else {
-                newIconsWrapper.style.setProperty('left', '-45px', 'important');
-                newIconsWrapper.style.setProperty('right', 'auto', 'important');
-                newIconsWrapper.style.setProperty('top', '0px', 'important');
-              }
-              
-              // Force a reflow
-          newIconsWrapper.offsetHeight;
             }
-          
+            
+            // Change underline to light green
+            highlight.classList.add('vocab-text-simplified');
+            
+            // Remove any existing cross buttons
+            const existingPurpleCross = highlight.querySelector('.vocab-text-remove-btn');
+            if (existingPurpleCross) {
+              existingPurpleCross.remove();
+            }
+            const existingGreenCross = highlight.querySelector('.vocab-text-remove-green-btn');
+            if (existingGreenCross) {
+              existingGreenCross.remove();
+            }
+                
+            // Create green cross button at top-left
+            const greenCrossBtn = document.createElement('button');
+            greenCrossBtn.className = 'vocab-text-remove-green-btn';
+            greenCrossBtn.setAttribute('aria-label', 'Remove simplified text');
+            greenCrossBtn.style.position = 'absolute';
+            greenCrossBtn.style.top = '-10px';
+            greenCrossBtn.style.left = '-10px';
+            greenCrossBtn.style.width = '18px';
+            greenCrossBtn.style.height = '18px';
+            greenCrossBtn.style.background = '#FFFFFF';
+            greenCrossBtn.style.borderRadius = '50%';
+            greenCrossBtn.style.zIndex = '10000003';
+            greenCrossBtn.style.boxShadow = '0 2px 4px rgba(34, 197, 94, 0.4)';
+            greenCrossBtn.style.display = 'flex';
+            greenCrossBtn.style.alignItems = 'center';
+            greenCrossBtn.style.justifyContent = 'center';
+            greenCrossBtn.style.cursor = 'pointer';
+            greenCrossBtn.style.opacity = '1';
+            greenCrossBtn.style.border = '1px solid #22c55e';
+            greenCrossBtn.style.padding = '0';
+            greenCrossBtn.style.boxSizing = 'border-box';
+            greenCrossBtn.innerHTML = `
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg" style="width: 10px; height: 10px;">
+                <path d="M2 2L10 10M10 2L2 10" stroke="#22c55e" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            `;
+            greenCrossBtn.addEventListener('click', (e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              console.log('[TextSelector] Green cross button clicked for simplified text:', textKey);
+              TextSelector.removeFromSimplifiedTexts(textKey);
+            });
+            highlight.appendChild(greenCrossBtn);
+                
+            // Reuse or create icons wrapper for book icon (book icon positioned at top-left)
+            let newIconsWrapper = highlight.querySelector('.vocab-text-icons-wrapper');
+            if (!newIconsWrapper) {
+              newIconsWrapper = document.createElement('div');
+              newIconsWrapper.className = 'vocab-text-icons-wrapper vocab-text-icons-wrapper-book';
+              newIconsWrapper.setAttribute('data-text-key', textKey);
+              highlight.appendChild(newIconsWrapper);
+            } else {
+              // Update class to include book wrapper class (magic button already removed above)
+              newIconsWrapper.className = 'vocab-text-icons-wrapper vocab-text-icons-wrapper-book';
+            }
+            
+            // Remove any existing book button
+            const existingBookBtn = newIconsWrapper.querySelector('.vocab-text-book-btn');
+            if (existingBookBtn) {
+              existingBookBtn.remove();
+            }
+            
+            // Create and add book button
+            const bookBtn = TextSelector.createBookButton(textKey);
+            newIconsWrapper.appendChild(bookBtn);
+            
+            // Position book icon wrapper
+            newIconsWrapper.style.setProperty('position', 'absolute', 'important');
+            newIconsWrapper.style.setProperty('display', 'flex', 'important');
+            newIconsWrapper.style.setProperty('margin', '0', 'important');
+            newIconsWrapper.style.setProperty('padding', '0', 'important');
+            
+            // Force reflow to ensure animation starts immediately
+            void newIconsWrapper.offsetHeight;
+            void bookBtn.offsetHeight;
+            
+            const isInModal = highlight.closest('.vocab-custom-content-modal');
+            if (isInModal) {
+              newIconsWrapper.style.setProperty('left', '-50px', 'important');
+              newIconsWrapper.style.setProperty('right', 'auto', 'important');
+              newIconsWrapper.style.setProperty('top', '-2px', 'important');
+            } else {
+              newIconsWrapper.style.setProperty('left', '-45px', 'important');
+              newIconsWrapper.style.setProperty('right', 'auto', 'important');
+              newIconsWrapper.style.setProperty('top', '0px', 'important');
+            }
+            
+            // Force a reflow
+            newIconsWrapper.offsetHeight;
+            
             // Store streaming data with accumulated text
             // Initialize explanationQuestions array for streaming (will be populated on complete)
             const existingData = TextSelector.simplifiedTexts.get(textKey) || {};
             const streamingExplanationQuestions = existingData.explanationQuestions || [];
             
             const streamingSimplifiedData = {
-            text: eventData.text,
+              text: eventData.text,
               simplifiedText: eventData.accumulatedSimplifiedText || '', // Use accumulated text for streaming
-            textStartIndex: eventData.textStartIndex,
-            textLength: eventData.textLength,
-            previousSimplifiedTexts: eventData.previousSimplifiedTexts || [],
+              textStartIndex: eventData.textStartIndex,
+              textLength: eventData.textLength,
+              previousSimplifiedTexts: eventData.previousSimplifiedTexts || [],
               shouldAllowSimplifyMore: false, // Will be set on complete
-            explanationQuestions: streamingExplanationQuestions, // Preserve existing, will be updated on complete
-            possibleQuestions: [], // Will be set on complete
-            context: extractedContext, // Store context for ask API (from closure)
-            highlight: highlight
-          };
-          
+              explanationQuestions: streamingExplanationQuestions, // Preserve existing, will be updated on complete
+              possibleQuestions: [], // Will be set on complete
+              context: extractedContext, // Store context for ask API (from closure)
+              highlight: highlight
+            };
+            
             // Store in TextSelector for real-time updates
             TextSelector.simplifiedTexts.set(textKey, streamingSimplifiedData);
             
@@ -24575,7 +25328,7 @@ const ButtonPanel = {
                   }, 50); // Small delay to ensure dialog is fully rendered
                 });
               });
-          } else {
+            } else {
               // Update existing dialog with streaming text on every chunk
               if (ChatDialog.isOpen && ChatDialog.currentTextKey === textKey) {
                 updateUIWithStreamingData();
@@ -24585,193 +25338,6 @@ const ButtonPanel = {
               }
             }
           }
-          
-          // Handle complete event (final data)
-          // Check for type === 'complete' OR simplifiedText OR possibleQuestions (complete event might only have questions)
-          else if (eventData.type === 'complete' || eventData.simplifiedText || (eventData.possibleQuestions && Array.isArray(eventData.possibleQuestions) && eventData.possibleQuestions.length > 0)) {
-            console.log('[ButtonPanel] Complete event detected - type:', eventData.type, 'simplifiedText:', eventData.simplifiedText, 'shouldAllowSimplifyMore:', eventData.shouldAllowSimplifyMore);
-            console.log('[ButtonPanel] Complete event - possibleQuestions:', eventData.possibleQuestions);
-            console.log('[ButtonPanel] Complete event - possibleQuestions length:', eventData.possibleQuestions?.length || 0);
-            
-            // Remove loading animation
-            highlight.classList.remove('vocab-text-loading');
-            
-            // Get existing data to preserve explanationQuestions structure
-            const existingData = TextSelector.simplifiedTexts.get(textKey) || {};
-            
-            // Initialize explanationQuestions array if it doesn't exist
-            // This is the first explanation, so it should be at index 0
-            let explanationQuestions = existingData.explanationQuestions || [];
-            if (!Array.isArray(explanationQuestions)) {
-              explanationQuestions = [];
-            }
-            
-            // Ensure possibleQuestions is an array
-            const possibleQuestionsArray = Array.isArray(eventData.possibleQuestions) 
-              ? eventData.possibleQuestions 
-              : (eventData.possibleQuestions ? [eventData.possibleQuestions] : []);
-            
-            // Store questions for the first explanation (index 0)
-            const explanationIndex = 0;
-            if (explanationIndex >= explanationQuestions.length) {
-              explanationQuestions.push(possibleQuestionsArray);
-            } else {
-              explanationQuestions[explanationIndex] = possibleQuestionsArray;
-            }
-            
-            console.log('[ButtonPanel] Storing questions for first explanation (index 0)');
-            console.log('[ButtonPanel] explanationQuestions array:', explanationQuestions);
-            
-            // Preserve existing simplifiedText if eventData doesn't have it (e.g., when only possibleQuestions arrive)
-            // Get the existing data to preserve the streamed text
-            // Try to get from TextSelector first (most recent streaming data)
-            let existingSimplifiedData = TextSelector.simplifiedTexts.get(textKey) || {};
-            
-            // If not found, try key variations
-            if (!existingSimplifiedData.simplifiedText) {
-              const keyVariations = [
-                `${textKey}-selected`,
-                `${textKey}-generic`,
-                textKey.replace(/-selected$/, '').replace(/-generic$/, '')
-              ];
-              
-              for (const key of keyVariations) {
-                const data = TextSelector.simplifiedTexts.get(key);
-                if (data && data.simplifiedText) {
-                  existingSimplifiedData = data;
-                  console.log('[ButtonPanel] Found existing data with key variation:', key);
-                  break;
-                }
-              }
-            }
-            
-            // Preserve the streamed text - prioritize existing data from streaming
-            const preservedSimplifiedText = eventData.simplifiedText || existingSimplifiedData.simplifiedText || '';
-            const preservedText = eventData.text || existingSimplifiedData.text || positionData.text || '';
-            const preservedTextStartIndex = eventData.textStartIndex !== undefined ? eventData.textStartIndex : (existingSimplifiedData.textStartIndex !== undefined ? existingSimplifiedData.textStartIndex : positionData.textStartIndex);
-            const preservedTextLength = eventData.textLength !== undefined ? eventData.textLength : (existingSimplifiedData.textLength !== undefined ? existingSimplifiedData.textLength : positionData.textLength);
-            
-            console.log('[ButtonPanel] Preserving data - simplifiedText length:', preservedSimplifiedText.length);
-            console.log('[ButtonPanel] Preserving data - text length:', preservedText.length);
-            console.log('[ButtonPanel] existingSimplifiedData.simplifiedText length:', existingSimplifiedData.simplifiedText?.length || 0);
-            
-            // Final simplified data
-            const simplifiedData = {
-              text: preservedText,
-              simplifiedText: preservedSimplifiedText,
-              textStartIndex: preservedTextStartIndex,
-              textLength: preservedTextLength,
-              previousSimplifiedTexts: eventData.previousSimplifiedTexts || existingSimplifiedData.previousSimplifiedTexts || [],
-              shouldAllowSimplifyMore: eventData.shouldAllowSimplifyMore !== undefined ? eventData.shouldAllowSimplifyMore : (existingSimplifiedData.shouldAllowSimplifyMore || false),
-              explanationQuestions: explanationQuestions, // Store questions per explanation version
-              possibleQuestions: possibleQuestionsArray, // Keep for backward compatibility
-              context: extractedContext || existingSimplifiedData.context, // Store context for ask API (from closure)
-              highlight: highlight
-            };
-            
-            // Store possibleQuestions in ChatDialog (like pagePossibleQuestions for summarise)
-            if (possibleQuestionsArray.length > 0) {
-              ChatDialog.simplifiedPossibleQuestions = possibleQuestionsArray;
-              console.log('[ButtonPanel] Stored simplifiedPossibleQuestions in ChatDialog:', ChatDialog.simplifiedPossibleQuestions);
-              console.log('[ButtonPanel] Stored simplifiedPossibleQuestions length:', ChatDialog.simplifiedPossibleQuestions.length);
-            }
-            
-            // Store final simplified text data
-            TextSelector.simplifiedTexts.set(textKey, simplifiedData);
-            
-            // Always update ChatDialog.simplifiedData with complete data when dialog is open
-            // This ensures questions are available even if key matching is ambiguous
-            if (ChatDialog.isOpen) {
-              // Update simplifiedData in ChatDialog with the complete data including explanationQuestions
-              ChatDialog.simplifiedData = simplifiedData;
-              
-              // Check if this is the correct dialog by comparing keys (original and transformed)
-              const isDialogOpenForThisText = (
-                ChatDialog.currentTextKey === textKey ||
-                ChatDialog.currentTextKey === `${textKey}-selected` ||
-                ChatDialog.currentTextKey === `${textKey}-generic` ||
-                ChatDialog.currentTextKey?.replace(/-selected$/, '').replace(/-generic$/, '') === textKey
-              );
-              
-              if (isDialogOpenForThisText) {
-                // Find and update the container
-                const container = ChatDialog.dialogContainer?.querySelector('#vocab-chat-simplified-container');
-                if (container) {
-                  console.log('[ButtonPanel] ===== RE-RENDERING WITH COMPLETE DATA =====');
-                  console.log('[ButtonPanel] simplifiedData.simplifiedText:', simplifiedData.simplifiedText?.substring(0, 100) + '...');
-                  console.log('[ButtonPanel] simplifiedData.explanationQuestions:', simplifiedData.explanationQuestions);
-                  console.log('[ButtonPanel] explanationQuestions length:', simplifiedData.explanationQuestions?.length || 0);
-                  console.log('[ButtonPanel] explanationQuestions[0]:', simplifiedData.explanationQuestions?.[0]);
-                  console.log('[ButtonPanel] explanationQuestions[0] length:', simplifiedData.explanationQuestions?.[0]?.length || 0);
-                  console.log('[ButtonPanel] simplifiedData.possibleQuestions:', simplifiedData.possibleQuestions);
-                  console.log('[ButtonPanel] possibleQuestions length:', simplifiedData.possibleQuestions?.length || 0);
-                  console.log('[ButtonPanel] ChatDialog.simplifiedData will be updated to:', {
-                    simplifiedText: simplifiedData.simplifiedText?.substring(0, 50) + '...',
-                    explanationQuestionsLength: simplifiedData.explanationQuestions?.length || 0,
-                    possibleQuestionsLength: simplifiedData.possibleQuestions?.length || 0
-                  });
-                  ChatDialog.renderSimplifiedExplanations(container);
-                } else {
-                  console.warn('[ButtonPanel] Container not found for re-rendering with questions');
-                  // Try alternative ways to find container
-                  setTimeout(() => {
-                    const altContainer = ChatDialog.dialogContainer?.querySelector('#vocab-chat-simplified-container') ||
-                                       document.getElementById('vocab-chat-simplified-container');
-                    if (altContainer) {
-                      console.log('[ButtonPanel] Found container on retry, re-rendering');
-                      ChatDialog.renderSimplifiedExplanations(altContainer);
-                    }
-                  }, 100);
-                }
-              } else {
-                // Dialog is open but for different text - still try to update if it was opened during streaming
-                // This handles edge cases where the key transformation might have happened
-                console.log('[ButtonPanel] Dialog is open but key mismatch, attempting to update anyway');
-                const container = ChatDialog.dialogContainer?.querySelector('#vocab-chat-simplified-container');
-                if (container) {
-                  console.log('[ButtonPanel] Re-rendering explanations (key mismatch case)');
-                  ChatDialog.renderSimplifiedExplanations(container);
-                }
-              }
-            } else if (!dialogOpened) {
-              // If dialog wasn't opened during streaming, open it now with complete data
-              dialogOpened = true;
-              ChatDialog.open(eventData.text, textKey, 'simplified', simplifiedData, 'selected');
-            }
-          
-          // Store simplified text in analysis data for persistence
-          if (this.topicsModal && this.topicsModal.customContentModal && this.topicsModal.customContentModal.activeTabId) {
-            const activeContent = this.topicsModal.customContentModal.getContentByTabId(parseInt(this.topicsModal.customContentModal.activeTabId));
-            if (activeContent && activeContent.analysis) {
-              const simplifiedTextData = {
-                textKey: textKey,
-                textStartIndex: eventData.textStartIndex,
-                textLength: eventData.textLength,
-                originalText: eventData.text,
-                simplifiedText: eventData.simplifiedText,
-                previousSimplifiedTexts: eventData.previousSimplifiedTexts || [],
-                shouldAllowSimplifyMore: eventData.shouldAllowSimplifyMore || false,
-                timestamp: new Date().toISOString()
-              };
-              
-              const existingTextIndex = activeContent.analysis.simplifiedMeanings.findIndex(s => 
-                s.textKey === textKey
-              );
-              
-              if (existingTextIndex !== -1) {
-                activeContent.analysis.simplifiedMeanings[existingTextIndex] = simplifiedTextData;
-                console.log(`[ButtonPanel] Updated existing simplified text for textKey "${textKey}" in analysis data`);
-              } else {
-                activeContent.analysis.simplifiedMeanings.push(simplifiedTextData);
-                console.log(`[ButtonPanel] Added new simplified text for textKey "${textKey}" to analysis data`);
-              }
-            }
-          }
-          
-            // Update button states
-          this.updateButtonStatesFromSelections();
-          
-          console.log('[ButtonPanel] Text simplified successfully for:', textKey);
         }
       },
       // onComplete callback
@@ -25134,50 +25700,158 @@ const ButtonPanel = {
                 }
                 
                 // Handle complete event (final data)
-                else if (eventData.type === 'complete' || eventData.simplifiedText) {
+                // IMPORTANT: Check for type === 'complete' FIRST to ensure we properly handle the complete event
+                else if (eventData.type === 'complete') {
+                  console.log('[ButtonPanel] ===== COMPLETE EVENT HANDLER TRIGGERED (batch) =====');
                   console.log('[ButtonPanel] Complete event for', matchingTextKey, '- simplifiedText:', eventData.simplifiedText, 'shouldAllowSimplifyMore:', eventData.shouldAllowSimplifyMore);
+                  console.log('[ButtonPanel] Complete event - possibleQuestions:', eventData.possibleQuestions);
+                  console.log('[ButtonPanel] Complete event - possibleQuestions length:', eventData.possibleQuestions?.length || 0);
                   
                   // Remove loading animation
                   highlight.classList.remove('vocab-text-loading');
                   
-                  // Final simplified data
-                  const simplifiedData = {
-                  text: eventData.text,
-                  simplifiedText: eventData.simplifiedText,
-                    textStartIndex: eventData.textStartIndex,
-                    textLength: eventData.textLength,
-                  previousSimplifiedTexts: eventData.previousSimplifiedTexts || [],
-                  shouldAllowSimplifyMore: eventData.shouldAllowSimplifyMore || false,
-                  possibleQuestions: eventData.possibleQuestions || [],
-                  context: contextMap.get(matchingTextKey) || '', // Store context for ask API
-                  highlight: highlight
-                  };
+                  // Ensure possibleQuestions is an array and store directly in ChatDialog property
+                  // This matches the pattern used in "Simplify more" handler
+                  ChatDialog.simplifiedPossibleQuestions = Array.isArray(eventData.possibleQuestions) 
+                    ? eventData.possibleQuestions 
+                    : (eventData.possibleQuestions ? [eventData.possibleQuestions] : []);
                   
-                  // Store possibleQuestions in ChatDialog (like pagePossibleQuestions for summarise)
-                  if (eventData.possibleQuestions && Array.isArray(eventData.possibleQuestions) && eventData.possibleQuestions.length > 0) {
-                    ChatDialog.simplifiedPossibleQuestions = eventData.possibleQuestions;
-                    console.log('[ButtonPanel] Stored simplifiedPossibleQuestions in ChatDialog:', ChatDialog.simplifiedPossibleQuestions);
-                    console.log('[ButtonPanel] Stored simplifiedPossibleQuestions length:', ChatDialog.simplifiedPossibleQuestions.length);
+                  console.log('[ButtonPanel] Stored simplifiedPossibleQuestions:', ChatDialog.simplifiedPossibleQuestions);
+                  console.log('[ButtonPanel] Stored simplifiedPossibleQuestions length:', ChatDialog.simplifiedPossibleQuestions.length);
+                  
+                  // Get existing data to preserve explanationQuestions structure
+                  const existingData = TextSelector.simplifiedTexts.get(matchingTextKey) || {};
+                  
+                  // Initialize explanationQuestions array if it doesn't exist
+                  // This array stores possibleQuestions for each explanation version
+                  let explanationQuestions = existingData.explanationQuestions || [];
+                  if (!Array.isArray(explanationQuestions)) {
+                    explanationQuestions = [];
                   }
                   
-                  // Store final simplified text data
-                  TextSelector.simplifiedTexts.set(matchingTextKey, simplifiedData);
+                  // Store possibleQuestions for this specific explanation version
+                  // Ensure it's an array
+                  const questionsForThisExplanation = Array.isArray(ChatDialog.simplifiedPossibleQuestions) 
+                    ? ChatDialog.simplifiedPossibleQuestions 
+                    : (ChatDialog.simplifiedPossibleQuestions ? [ChatDialog.simplifiedPossibleQuestions] : []);
+                  
+                  // This is the first explanation, so it should be at index 0
+                  const explanationIndex = 0;
+                  if (explanationIndex >= explanationQuestions.length) {
+                    explanationQuestions.push(questionsForThisExplanation);
+                  } else {
+                    explanationQuestions[explanationIndex] = questionsForThisExplanation;
+                  }
+                  
+                  console.log('[ButtonPanel] Storing questions for explanation index:', explanationIndex);
+                  console.log('[ButtonPanel] explanationQuestions array length:', explanationQuestions.length);
+                  
+                  // Get existing streaming data to preserve accumulated text
+                  const existingSimplifiedData = TextSelector.simplifiedTexts.get(matchingTextKey) || {};
+                  
+                  // IMPORTANT: Prioritize eventData.simplifiedText from API complete event
+                  const preservedSimplifiedText = eventData.simplifiedText || existingSimplifiedData.accumulatedSimplifiedText || existingSimplifiedData.simplifiedText || '';
+                  const preservedText = eventData.text || existingSimplifiedData.text || '';
+                  const preservedTextStartIndex = eventData.textStartIndex !== undefined ? eventData.textStartIndex : (existingSimplifiedData.textStartIndex !== undefined ? existingSimplifiedData.textStartIndex : 0);
+                  const preservedTextLength = eventData.textLength !== undefined ? eventData.textLength : (existingSimplifiedData.textLength !== undefined ? existingSimplifiedData.textLength : 0);
+                  
+                  // Final simplified data - matching the pattern from "Simplify more"
+                  const simplifiedData = {
+                    text: preservedText,
+                    simplifiedText: preservedSimplifiedText,
+                    textStartIndex: preservedTextStartIndex,
+                    textLength: preservedTextLength,
+                    previousSimplifiedTexts: eventData.previousSimplifiedTexts || existingSimplifiedData.previousSimplifiedTexts || [],
+                    shouldAllowSimplifyMore: eventData.shouldAllowSimplifyMore !== undefined ? eventData.shouldAllowSimplifyMore : (existingSimplifiedData.shouldAllowSimplifyMore || false),
+                    explanationQuestions: explanationQuestions, // Store questions per explanation version
+                    possibleQuestions: ChatDialog.simplifiedPossibleQuestions, // Keep for backward compatibility
+                    context: contextMap.get(matchingTextKey) || existingSimplifiedData.context || '', // Store context for ask API
+                    highlight: highlight
+                  };
+                  
+                  console.log('[ButtonPanel] Updated simplifiedData.possibleQuestions:', simplifiedData.possibleQuestions);
+                  console.log('[ButtonPanel] Updated simplifiedData.possibleQuestions length:', simplifiedData.possibleQuestions.length);
+                  console.log('[ButtonPanel] Updated simplifiedData.explanationQuestions length:', simplifiedData.explanationQuestions.length);
+                  
+                  // CRITICAL: Always update ChatDialog.simplifiedData with complete data FIRST
+                  // This ensures questions are available when renderSimplifiedExplanations() is called
+                  // Use a fresh object to ensure the reference is updated
+                  ChatDialog.simplifiedData = {
+                    text: simplifiedData.text,
+                    simplifiedText: simplifiedData.simplifiedText,
+                    textStartIndex: simplifiedData.textStartIndex,
+                    textLength: simplifiedData.textLength,
+                    previousSimplifiedTexts: simplifiedData.previousSimplifiedTexts,
+                    shouldAllowSimplifyMore: simplifiedData.shouldAllowSimplifyMore,
+                    explanationQuestions: simplifiedData.explanationQuestions, // CRITICAL: Must include questions
+                    possibleQuestions: simplifiedData.possibleQuestions, // CRITICAL: Must include questions
+                    context: simplifiedData.context,
+                    highlight: simplifiedData.highlight
+                  };
+                  
+                  console.log('[ButtonPanel] Updated ChatDialog.simplifiedData (batch) with explanationQuestions:', ChatDialog.simplifiedData.explanationQuestions);
+                  console.log('[ButtonPanel] Updated ChatDialog.simplifiedData (batch) explanationQuestions[0]:', ChatDialog.simplifiedData.explanationQuestions?.[0]);
+                  
+                  // Store data BEFORE rendering to ensure it's available during rendering
+                  console.log('[ButtonPanel] Storing simplified data BEFORE rendering (batch) with questions');
+                  TextSelector.simplifiedTexts.set(matchingTextKey, ChatDialog.simplifiedData);
+                  TextSelector.simplifiedTexts.set(`${matchingTextKey}-selected`, ChatDialog.simplifiedData);
+                  TextSelector.simplifiedTexts.set(`${matchingTextKey}-generic`, ChatDialog.simplifiedData);
+                  console.log('[ButtonPanel] Stored data BEFORE rendering (batch) - explanationQuestions[0] length:', ChatDialog.simplifiedData.explanationQuestions?.[0]?.length || 0);
                   
                   // Update dialog if it's open
                   if (ChatDialog.isOpen && ChatDialog.currentTextKey === matchingTextKey) {
-                    ChatDialog.simplifiedData = simplifiedData;
-                    const container = ChatDialog.dialogContainer?.querySelector('#vocab-chat-simplified-container');
-                    if (container) {
-                      ChatDialog.renderSimplifiedExplanations(container);
-                    }
+                    // Use requestAnimationFrame to ensure ChatDialog.simplifiedData is fully updated
+                    requestAnimationFrame(() => {
+                      const container = ChatDialog.dialogContainer?.querySelector('#vocab-chat-simplified-container');
+                      if (container) {
+                        console.log('[ButtonPanel] About to call renderSimplifiedExplanations (batch) - ChatDialog.simplifiedData.explanationQuestions:', ChatDialog.simplifiedData.explanationQuestions);
+                        console.log('[ButtonPanel] About to call renderSimplifiedExplanations (batch) - ChatDialog.simplifiedData.explanationQuestions[0]:', ChatDialog.simplifiedData.explanationQuestions?.[0]);
+                        ChatDialog.renderSimplifiedExplanations(container);
+                        
+                        // CRITICAL: Store data AFTER rendering to ensure questions are persisted in memory
+                        console.log('[ButtonPanel] Storing simplified data AFTER rendering (batch) with questions');
+                        TextSelector.simplifiedTexts.set(matchingTextKey, ChatDialog.simplifiedData);
+                        TextSelector.simplifiedTexts.set(`${matchingTextKey}-selected`, ChatDialog.simplifiedData);
+                        TextSelector.simplifiedTexts.set(`${matchingTextKey}-generic`, ChatDialog.simplifiedData);
+                        
+                        // Verify the data was stored correctly
+                        const storedData = TextSelector.simplifiedTexts.get(matchingTextKey);
+                        console.log('[ButtonPanel] Verification AFTER storage (batch) - stored data.explanationQuestions[0] length:', storedData?.explanationQuestions?.[0]?.length || 0);
+                        console.log('[ButtonPanel] Verification AFTER storage (batch) - stored data.possibleQuestions length:', storedData?.possibleQuestions?.length || 0);
+                      } else {
+                        // Retry if container not found
+                        setTimeout(() => {
+                          const retryContainer = ChatDialog.dialogContainer?.querySelector('#vocab-chat-simplified-container');
+                          if (retryContainer) {
+                            ChatDialog.renderSimplifiedExplanations(retryContainer);
+                            
+                            // Store data after retry rendering as well
+                            TextSelector.simplifiedTexts.set(matchingTextKey, ChatDialog.simplifiedData);
+                            TextSelector.simplifiedTexts.set(`${matchingTextKey}-selected`, ChatDialog.simplifiedData);
+                            TextSelector.simplifiedTexts.set(`${matchingTextKey}-generic`, ChatDialog.simplifiedData);
+                            
+                            console.log('[ButtonPanel] Stored data after retry rendering (batch)');
+                          }
+                        }, 100);
+                      }
+                    });
                   } else if (!dialogOpenedMap.get(matchingTextKey)) {
                     // If dialog wasn't opened during streaming, open it now
                     dialogOpenedMap.set(matchingTextKey, true);
                     ChatDialog.open(eventData.text, matchingTextKey, 'simplified', simplifiedData, 'selected');
+                    
+                    // Store data after opening dialog
+                    setTimeout(() => {
+                      TextSelector.simplifiedTexts.set(matchingTextKey, ChatDialog.simplifiedData);
+                      TextSelector.simplifiedTexts.set(`${matchingTextKey}-selected`, ChatDialog.simplifiedData);
+                      TextSelector.simplifiedTexts.set(`${matchingTextKey}-generic`, ChatDialog.simplifiedData);
+                      console.log('[ButtonPanel] Stored data after opening dialog (batch)');
+                    }, 100);
                   }
                 
-                // Store simplified text in analysis data for persistence
-                  if (this.topicsModal && this.topicsModal.customContentModal && this.topicsModal.customContentModal.activeTabId) {
+                // Store simplified text in analysis data for persistence (with questions)
+                if (this.topicsModal && this.topicsModal.customContentModal && this.topicsModal.customContentModal.activeTabId) {
                   const activeContent = this.topicsModal.customContentModal.getContentByTabId(parseInt(this.topicsModal.customContentModal.activeTabId));
                   if (activeContent && activeContent.analysis) {
                     const simplifiedTextData = {
@@ -25188,6 +25862,8 @@ const ButtonPanel = {
                       simplifiedText: eventData.simplifiedText,
                       previousSimplifiedTexts: eventData.previousSimplifiedTexts || [],
                       shouldAllowSimplifyMore: eventData.shouldAllowSimplifyMore || false,
+                      explanationQuestions: ChatDialog.simplifiedData.explanationQuestions, // Store questions
+                      possibleQuestions: ChatDialog.simplifiedData.possibleQuestions, // Store questions
                       timestamp: new Date().toISOString()
                     };
                     
@@ -25199,11 +25875,11 @@ const ButtonPanel = {
                     if (existingTextIndex !== -1) {
                       // Update existing simplified text
                       activeContent.analysis.simplifiedMeanings[existingTextIndex] = simplifiedTextData;
-                      console.log(`[ButtonPanel] Updated existing simplified text for textKey "${matchingTextKey}" in analysis data`);
+                      console.log(`[ButtonPanel] Updated existing simplified text for textKey "${matchingTextKey}" in analysis data with questions`);
                     } else {
                       // Add new simplified text
                       activeContent.analysis.simplifiedMeanings.push(simplifiedTextData);
-                      console.log(`[ButtonPanel] Added new simplified text for textKey "${matchingTextKey}" to analysis data`);
+                      console.log(`[ButtonPanel] Added new simplified text for textKey "${matchingTextKey}" to analysis data with questions`);
                     }
                   }
                 }
@@ -29665,7 +30341,7 @@ const ButtonPanel = {
     item1.innerHTML = 'Double click a <span class="vocab-custom-content-info-banner-highlight">word</span> to select';
     
     const item2 = document.createElement('li');
-    item2.innerHTML = 'Select a <span class="vocab-custom-content-info-banner-highlight">passage containing multiple words</span> or sentences';
+    item2.innerHTML = 'Select one or more sentences';
     
     list.appendChild(item1);
     list.appendChild(item2);
