@@ -14838,17 +14838,98 @@ const ChatDialog = {
       return;
     }
     
-    // Disable button and show loading state with white spinner
-    summariseBtn.disabled = true;
-    summariseBtn.classList.add('disabled', 'loading');
-    
     // Store original content (with icon)
     const originalContent = summariseBtn.innerHTML;
     
-    // Show white spinner inside button
-    summariseBtn.innerHTML = `
-      <div class="vocab-summarise-spinner" style="width: 16px; height: 16px; border: 2px solid white; border-top-color: transparent; border-radius: 50%; animation: vocab-spin 0.8s linear infinite; margin: 0 auto;"></div>
-    `;
+    // Change button to "Stop" instead of showing spinner
+    summariseBtn.disabled = false;
+    summariseBtn.classList.remove('disabled', 'loading');
+    summariseBtn.innerHTML = 'Stop';
+    
+    // Store abort function reference
+    let abortFunction = null;
+    
+    // Add click handler for Stop button
+    const stopHandler = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      e.stopImmediatePropagation();
+      console.log('[ChatDialog] Stop button clicked - cancelling summarise request');
+      
+      // Cancel the API call
+      if (abortFunction) {
+        abortFunction();
+        abortFunction = null;
+      }
+      
+      // Get the current button and replace it
+      const currentBtn = document.getElementById('vocab-chat-summarise-page-btn');
+      if (!currentBtn) return;
+      
+      currentBtn.replaceWith(currentBtn.cloneNode(true));
+      const newBtn = document.getElementById('vocab-chat-summarise-page-btn');
+      if (!newBtn) return;
+      
+      // Check if we have accumulated summary to save
+      if (this.pageSummary && this.pageSummary.trim().length > 0) {
+        // Save accumulated summary to global variables
+        window.pageSummary = this.pageSummary;
+        window.pageSummaryPossibleQuestions = this.pagePossibleQuestions || [];
+        console.log('[ChatDialog] Saved accumulated summary to memory:', this.pageSummary.length, 'characters');
+        
+        // Update summary container if it exists to show the accumulated summary
+        const summaryContainer = document.getElementById('vocab-chat-page-summary-container');
+        if (summaryContainer) {
+          summaryContainer.innerHTML = `
+            <h3 class="vocab-chat-page-summary-header">Page summary</h3>
+            <div class="vocab-chat-page-summary-content">
+              ${this.renderMarkdown(this.pageSummary)}
+            </div>
+          `;
+          
+          // Attach click handlers to reference markers in summary
+          const summaryContent = summaryContainer.querySelector('.vocab-chat-page-summary-content');
+          if (summaryContent) {
+            this.attachReferenceMarkerHandlers(summaryContent);
+          }
+        }
+        
+        // Change button to "Clear summary"
+        newBtn.disabled = false;
+        newBtn.classList.remove('disabled', 'loading');
+        newBtn.innerHTML = 'Clear summary';
+        newBtn.style.display = 'block';
+        
+        // Update click handler to clear summary
+        newBtn.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          e.stopImmediatePropagation();
+          console.log('[ChatDialog] Clear summary button clicked!');
+          this.clearSummary();
+        }, true);
+      } else {
+        // No accumulated summary, reset to original state
+        newBtn.disabled = false;
+        newBtn.classList.remove('disabled', 'loading');
+        newBtn.innerHTML = originalContent;
+        newBtn.style.display = 'block';
+        
+        // Update click handler back to handleSummarisePage
+        newBtn.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          e.stopImmediatePropagation();
+          console.log('[ChatDialog] Summarise button clicked!');
+          this.handleSummarisePage();
+        }, true);
+      }
+    };
+    
+    // Replace button to add new click handler
+    summariseBtn.replaceWith(summariseBtn.cloneNode(true));
+    const stopBtn = document.getElementById('vocab-chat-summarise-page-btn');
+    stopBtn.addEventListener('click', stopHandler, true);
     
     try {
       // Parse pageTextContent to get the text
@@ -14892,7 +14973,7 @@ const ChatDialog = {
         }
         
         // Call SummariseService with SSE callbacks
-        SummariseService.summarise(
+        abortFunction = await SummariseService.summarise(
           pageText,
           // onEvent callback - handle chunk and complete events
           (eventData) => {
@@ -14982,14 +15063,18 @@ const ChatDialog = {
               }
               
               // Change button to "Clear summary" after completion
-        if (summariseBtn) {
-                summariseBtn.disabled = false;
-                summariseBtn.classList.remove('loading', 'disabled');
-                summariseBtn.innerHTML = 'Clear summary';
-                summariseBtn.style.display = 'block';
+              const summariseBtnAfterComplete = document.getElementById('vocab-chat-summarise-page-btn');
+              if (summariseBtnAfterComplete) {
+                // Clear abort function reference
+                abortFunction = null;
+                
+                summariseBtnAfterComplete.disabled = false;
+                summariseBtnAfterComplete.classList.remove('loading', 'disabled');
+                summariseBtnAfterComplete.innerHTML = 'Clear summary';
+                summariseBtnAfterComplete.style.display = 'block';
                 
                 // Update click handler to clear summary
-                summariseBtn.replaceWith(summariseBtn.cloneNode(true));
+                summariseBtnAfterComplete.replaceWith(summariseBtnAfterComplete.cloneNode(true));
                 const newBtn = document.getElementById('vocab-chat-summarise-page-btn');
                 newBtn.addEventListener('click', (e) => {
                   e.preventDefault();
@@ -15006,9 +15091,20 @@ const ChatDialog = {
           // onComplete callback
           () => {
             console.log('[ChatDialog] Summarise stream complete');
+            // Clear abort function reference on completion
+            abortFunction = null;
           },
           // onError callback
           (error) => {
+            // Check if it's an abort error (user cancelled)
+            if (error.name === 'AbortError' || error.message.includes('aborted')) {
+              console.log('[ChatDialog] Summarise request was aborted by user');
+              // Don't show error message for user-initiated cancellation
+              // The stop handler already handles button state and saving accumulated summary
+              abortFunction = null;
+              return;
+            }
+            
             console.error('[ChatDialog] Error during summarisation:', error);
             console.error('[ChatDialog] Error details:', {
               message: error.message,
@@ -15030,12 +15126,27 @@ const ChatDialog = {
             const errorMessage = error.message || 'Please try again.';
             this.addMessageToChat('ai', `⚠️ **Error:**\n\nFailed to summarise the page. ${errorMessage}`);
             
+            // Clear abort function reference
+            abortFunction = null;
+            
             // Reset button
-            if (summariseBtn) {
-              summariseBtn.disabled = false;
-              summariseBtn.classList.remove('disabled', 'loading');
-              summariseBtn.innerHTML = originalContent;
-        }
+            const summariseBtnOnError = document.getElementById('vocab-chat-summarise-page-btn');
+            if (summariseBtnOnError) {
+              summariseBtnOnError.disabled = false;
+              summariseBtnOnError.classList.remove('disabled', 'loading');
+              summariseBtnOnError.innerHTML = originalContent;
+              
+              // Update click handler back to handleSummarisePage
+              summariseBtnOnError.replaceWith(summariseBtnOnError.cloneNode(true));
+              const newBtn = document.getElementById('vocab-chat-summarise-page-btn');
+              newBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                e.stopImmediatePropagation();
+                console.log('[ChatDialog] Summarise button clicked!');
+                this.handleSummarisePage();
+              }, true);
+            }
           }
         );
       } catch (error) {
@@ -15060,24 +15171,54 @@ const ChatDialog = {
         const errorMessage = error.message || 'Please try again.';
         this.addMessageToChat('ai', `⚠️ **Error:**\n\nFailed to summarise the page. ${errorMessage}`);
         
+        // Clear abort function reference
+        abortFunction = null;
+        
         // Reset button
-        if (summariseBtn) {
-          summariseBtn.disabled = false;
-          summariseBtn.classList.remove('disabled', 'loading');
-          summariseBtn.innerHTML = originalContent;
+        const summariseBtnOnCatchError = document.getElementById('vocab-chat-summarise-page-btn');
+        if (summariseBtnOnCatchError) {
+          summariseBtnOnCatchError.disabled = false;
+          summariseBtnOnCatchError.classList.remove('disabled', 'loading');
+          summariseBtnOnCatchError.innerHTML = originalContent;
+          
+          // Update click handler back to handleSummarisePage
+          summariseBtnOnCatchError.replaceWith(summariseBtnOnCatchError.cloneNode(true));
+          const newBtn = document.getElementById('vocab-chat-summarise-page-btn');
+          newBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            e.stopImmediatePropagation();
+            console.log('[ChatDialog] Summarise button clicked!');
+            this.handleSummarisePage();
+          }, true);
         }
       }
     } catch (error) {
       console.error('[ChatDialog] Error parsing pageTextContent:', error);
       
+      // Clear abort function reference
+      abortFunction = null;
+      
       // Show error message in chat
       this.addMessageToChat('ai', `⚠️ **Error:**\n\nFailed to parse page content. ${error.message || 'Please try again.'}`);
       
       // Reset button
-      if (summariseBtn) {
-        summariseBtn.disabled = false;
-        summariseBtn.classList.remove('disabled', 'loading');
-        summariseBtn.innerHTML = originalContent;
+      const summariseBtnOnParseError = document.getElementById('vocab-chat-summarise-page-btn');
+      if (summariseBtnOnParseError) {
+        summariseBtnOnParseError.disabled = false;
+        summariseBtnOnParseError.classList.remove('disabled', 'loading');
+        summariseBtnOnParseError.innerHTML = originalContent;
+        
+        // Update click handler back to handleSummarisePage
+        summariseBtnOnParseError.replaceWith(summariseBtnOnParseError.cloneNode(true));
+        const newBtn = document.getElementById('vocab-chat-summarise-page-btn');
+        newBtn.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          e.stopImmediatePropagation();
+          console.log('[ChatDialog] Summarise button clicked!');
+          this.handleSummarisePage();
+        }, true);
       }
     }
   },
@@ -24124,11 +24265,11 @@ const ButtonPanel = {
       /* Reference Highlight Styles */
       /* Only modify background and visual effects - preserve all text styling */
       .vocab-reference-highlight {
-        background-color: rgba(149, 39, 245, 0.25) !important;
-        transition: background-color 0.4s ease-in-out, box-shadow 0.4s ease-in-out, padding 0.3s ease-in-out;
+        background-color: rgba(144, 238, 144, 0.3) !important;
+        border: 1px solid #4ade80 !important;
+        transition: background-color 0.4s ease-in-out, border-color 0.4s ease-in-out, padding 0.3s ease-in-out;
         padding: 4px 8px;
         border-radius: 15px;
-        box-shadow: 0 0 0 2px rgba(149, 39, 245, 0.2) !important;
         animation: vocab-highlight-fade-in 0.4s ease-in-out;
         box-sizing: border-box !important;
         /* DO NOT set any font/text properties - let them remain as computed */
@@ -24159,12 +24300,12 @@ const ButtonPanel = {
       /* Smooth fade-in animation for highlight */
       @keyframes vocab-highlight-fade-in {
         from {
-          background-color: rgba(149, 39, 245, 0);
-          box-shadow: 0 0 0 0px rgba(149, 39, 245, 0);
+          background-color: rgba(144, 238, 144, 0);
+          border-color: rgba(74, 222, 128, 0);
         }
         to {
-          background-color: rgba(149, 39, 245, 0.25);
-          box-shadow: 0 0 0 2px rgba(149, 39, 245, 0.2);
+          background-color: rgba(144, 238, 144, 0.3);
+          border-color: #4ade80;
         }
       }
       
@@ -24175,12 +24316,12 @@ const ButtonPanel = {
       
       @keyframes vocab-highlight-fade-out {
         from {
-          background-color: rgba(149, 39, 245, 0.25);
-          box-shadow: 0 0 0 2px rgba(149, 39, 245, 0.2);
+          background-color: rgba(144, 238, 144, 0.3);
+          border-color: #4ade80;
         }
         to {
-          background-color: rgba(149, 39, 245, 0);
-          box-shadow: 0 0 0 0px rgba(149, 39, 245, 0);
+          background-color: rgba(144, 238, 144, 0);
+          border-color: rgba(74, 222, 128, 0);
         }
       }
 
