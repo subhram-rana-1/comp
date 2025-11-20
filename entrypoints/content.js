@@ -5384,6 +5384,11 @@ const WordSelector = {
       } else {
         e.target.style.overflowY = 'hidden';
       }
+      
+      // Update explain button visibility when input changes
+      if (modal._updateExplainButtonVisibility) {
+        modal._updateExplainButtonVisibility();
+      }
     });
     
     // Handle Enter key
@@ -5446,6 +5451,20 @@ const WordSelector = {
     inputArea.appendChild(sendBtn);
     inputArea.appendChild(deleteBtn);
     
+    // Function to update explain button visibility based on input and conversation state
+    const updateExplainButtonVisibility = () => {
+      const inputValue = inputField.value.trim();
+      const resultsList = modal.querySelector('.word-web-search-results-list');
+      const hasChatMessages = resultsList && resultsList.querySelectorAll('.word-web-search-chat-message').length > 0;
+      
+      // Show explain button only if input is empty AND there are no chat messages
+      if (!inputValue && !hasChatMessages) {
+        explainBtn.style.display = 'flex';
+      } else {
+        explainBtn.style.display = 'none';
+      }
+    };
+    
     // Function to check if results container should be visible
     const updateResultsVisibility = () => {
       const resultsList = modal.querySelector('.word-web-search-results-list');
@@ -5456,12 +5475,13 @@ const WordSelector = {
       if (hasContent || isLoading) {
         // Show results container if there's content or loading
         resultsContainer.style.display = '';
-        explainBtn.style.display = 'none';
       } else {
         // Hide results container if no content
         resultsContainer.style.display = 'none';
-        explainBtn.style.display = 'flex'; // Show explain button
       }
+      
+      // Update explain button visibility
+      updateExplainButtonVisibility();
     };
     
     // Initial visibility check
@@ -5469,6 +5489,7 @@ const WordSelector = {
     
     // Store the update function on the modal for later use
     modal._updateResultsVisibility = updateResultsVisibility;
+    modal._updateExplainButtonVisibility = updateExplainButtonVisibility;
     
     // Prevent clicks inside modal from closing word popup
     modal.addEventListener('click', (e) => {
@@ -6746,6 +6767,16 @@ const WordSelector = {
     const deleteBtn = modal.querySelector('.word-web-search-delete-btn');
     if (deleteBtn) {
       deleteBtn.style.display = 'none';
+    }
+    
+    // Update explain button visibility after clearing chat
+    if (modal._updateExplainButtonVisibility) {
+      modal._updateExplainButtonVisibility();
+    }
+    
+    // Update results visibility
+    if (modal._updateResultsVisibility) {
+      modal._updateResultsVisibility();
     }
   },
   
@@ -8371,6 +8402,11 @@ const WordSelector = {
         cursor: not-allowed;
       }
       
+      .vocab-word-popup-ask-button:focus,
+      .vocab-word-popup-ask-button:focus-visible {
+        outline-offset: 2px;
+      }
+      
       /* View more button - bottom-left positioned */
       .vocab-word-popup-button {
         padding: 10px 18px;
@@ -8492,6 +8528,7 @@ const WordSelector = {
       .word-ask-ai-modal-content {
         display: flex;
         flex-direction: column;
+        padding-top: 20px;
         height: 100%;
         max-height: 49vh; /* Reduced to 70% of original 70vh */
         border-radius: 30px;
@@ -8604,28 +8641,10 @@ const WordSelector = {
         position: relative;
       }
       
-      /* Fade-out effect at top and bottom using pseudo-elements */
+      /* Fade-out effect at top and bottom using pseudo-elements - REMOVED */
       .word-ask-ai-modal-content::before,
       .word-ask-ai-modal-content::after {
-        content: '';
-        position: absolute;
-        left: 0;
-        right: 0;
-        height: 40px;
-        pointer-events: none;
-        z-index: 10;
-      }
-      
-      .word-ask-ai-modal-content::before {
-        top: 0;
-        background: linear-gradient(to bottom, white, rgba(255, 255, 255, 0));
-        border-radius: 30px 30px 0 0;
-      }
-      
-      .word-ask-ai-modal-content::after {
-        bottom: 0;
-        background: linear-gradient(to top, white, rgba(255, 255, 255, 0));
-        border-radius: 0 0 30px 30px;
+        display: none !important;
       }
       
       .word-web-search-loading {
@@ -8865,7 +8884,7 @@ const WordSelector = {
         display: flex;
         gap: 8px;
         padding: 16px;
-        border-top: 1px solid #e5e7eb;
+        // border-top: 1px solid #e5e7eb;
         background: white;
         align-items: center;
         position: relative; /* Enable absolute positioning for explain button */
@@ -8900,7 +8919,7 @@ const WordSelector = {
       
       .word-web-search-explain-btn {
         padding: 8px 16px;
-        background: #9527F5;
+        background: #9527F5 !important;
         color: white;
         border: none;
         border-radius: 8px;
@@ -9662,11 +9681,26 @@ const TextSelector = {
         return;
       }
       
+      // IMPORTANT: Don't remove button if it's in loading state (spinner is showing)
+      // The spinner should only disappear when the first API event is received
+      const magicBtn = iconsWrapper.querySelector('.vocab-text-magic-meaning-btn');
+      if (magicBtn && magicBtn.classList.contains('magic-meaning-loading')) {
+        // Button is in loading state - don't remove it
+        return;
+      }
+      
       // Click is anywhere else (not on button) - remove the button
       // Use a small delay to ensure the button's click handler can execute first if needed
       setTimeout(() => {
         // Double-check button still exists (might have been removed by button's own handler)
         if (!iconsWrapper || !iconsWrapper.parentNode) {
+          return;
+        }
+        
+        // Double-check button is not in loading state before removing
+        const checkMagicBtn = iconsWrapper.querySelector('.vocab-text-magic-meaning-btn');
+        if (checkMagicBtn && checkMagicBtn.classList.contains('magic-meaning-loading')) {
+          // Button is in loading state - don't remove it
           return;
         }
         
@@ -13806,25 +13840,39 @@ const ChatDialog = {
   loadSavedDimensions() {
     console.log('[ChatDialog] DEBUG: Attempting to load saved dimensions...');
     
+    if (!this.dialogContainer) {
+      console.log('[ChatDialog] DEBUG: No dialog container available');
+      return;
+    }
+    
     try {
       const savedDimensions = localStorage.getItem('chatDialogDimensions');
       console.log('[ChatDialog] DEBUG: localStorage result:', savedDimensions);
       
-      if (savedDimensions && this.dialogContainer) {
+      let width, height;
+      
+      if (savedDimensions) {
         const dimensions = JSON.parse(savedDimensions);
-        const { width, height } = dimensions;
+        width = dimensions.width;
+        height = dimensions.height;
         console.log('[ChatDialog] DEBUG: Found saved dimensions:', { width, height });
-        
-        // Apply dimensions with !important to override CSS
-        this.dialogContainer.style.setProperty('width', width, 'important');
-        this.dialogContainer.style.setProperty('height', height, 'important');
-        
-        console.log('[ChatDialog] SUCCESS: Applied dimensions:', { width, height });
       } else {
-        console.log('[ChatDialog] DEBUG: No saved dimensions found or no dialog container');
+        // Set default dimensions if none are saved
+        width = '600px';
+        height = '800px';
+        console.log('[ChatDialog] DEBUG: No saved dimensions found, using defaults:', { width, height });
       }
+      
+      // Apply dimensions with !important to override CSS and site-specific styles
+      this.dialogContainer.style.setProperty('width', width, 'important');
+      this.dialogContainer.style.setProperty('height', height, 'important');
+      
+      console.log('[ChatDialog] SUCCESS: Applied dimensions:', { width, height });
     } catch (error) {
       console.log('[ChatDialog] ERROR loading dimensions:', error);
+      // Fallback to default dimensions on error
+      this.dialogContainer.style.setProperty('width', '600px', 'important');
+      this.dialogContainer.style.setProperty('height', '800px', 'important');
     }
   },
   
@@ -14790,17 +14838,98 @@ const ChatDialog = {
       return;
     }
     
-    // Disable button and show loading state with white spinner
-    summariseBtn.disabled = true;
-    summariseBtn.classList.add('disabled', 'loading');
-    
     // Store original content (with icon)
     const originalContent = summariseBtn.innerHTML;
     
-    // Show white spinner inside button
-    summariseBtn.innerHTML = `
-      <div class="vocab-summarise-spinner" style="width: 16px; height: 16px; border: 2px solid white; border-top-color: transparent; border-radius: 50%; animation: vocab-spin 0.8s linear infinite; margin: 0 auto;"></div>
-    `;
+    // Change button to "Stop" instead of showing spinner
+    summariseBtn.disabled = false;
+    summariseBtn.classList.remove('disabled', 'loading');
+    summariseBtn.innerHTML = 'Stop';
+    
+    // Store abort function reference
+    let abortFunction = null;
+    
+    // Add click handler for Stop button
+    const stopHandler = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      e.stopImmediatePropagation();
+      console.log('[ChatDialog] Stop button clicked - cancelling summarise request');
+      
+      // Cancel the API call
+      if (abortFunction) {
+        abortFunction();
+        abortFunction = null;
+      }
+      
+      // Get the current button and replace it
+      const currentBtn = document.getElementById('vocab-chat-summarise-page-btn');
+      if (!currentBtn) return;
+      
+      currentBtn.replaceWith(currentBtn.cloneNode(true));
+      const newBtn = document.getElementById('vocab-chat-summarise-page-btn');
+      if (!newBtn) return;
+      
+      // Check if we have accumulated summary to save
+      if (this.pageSummary && this.pageSummary.trim().length > 0) {
+        // Save accumulated summary to global variables
+        window.pageSummary = this.pageSummary;
+        window.pageSummaryPossibleQuestions = this.pagePossibleQuestions || [];
+        console.log('[ChatDialog] Saved accumulated summary to memory:', this.pageSummary.length, 'characters');
+        
+        // Update summary container if it exists to show the accumulated summary
+        const summaryContainer = document.getElementById('vocab-chat-page-summary-container');
+        if (summaryContainer) {
+          summaryContainer.innerHTML = `
+            <h3 class="vocab-chat-page-summary-header">Page summary</h3>
+            <div class="vocab-chat-page-summary-content">
+              ${this.renderMarkdown(this.pageSummary)}
+            </div>
+          `;
+          
+          // Attach click handlers to reference markers in summary
+          const summaryContent = summaryContainer.querySelector('.vocab-chat-page-summary-content');
+          if (summaryContent) {
+            this.attachReferenceMarkerHandlers(summaryContent);
+          }
+        }
+        
+        // Change button to "Clear summary"
+        newBtn.disabled = false;
+        newBtn.classList.remove('disabled', 'loading');
+        newBtn.innerHTML = 'Clear summary';
+        newBtn.style.display = 'block';
+        
+        // Update click handler to clear summary
+        newBtn.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          e.stopImmediatePropagation();
+          console.log('[ChatDialog] Clear summary button clicked!');
+          this.clearSummary();
+        }, true);
+      } else {
+        // No accumulated summary, reset to original state
+        newBtn.disabled = false;
+        newBtn.classList.remove('disabled', 'loading');
+        newBtn.innerHTML = originalContent;
+        newBtn.style.display = 'block';
+        
+        // Update click handler back to handleSummarisePage
+        newBtn.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          e.stopImmediatePropagation();
+          console.log('[ChatDialog] Summarise button clicked!');
+          this.handleSummarisePage();
+        }, true);
+      }
+    };
+    
+    // Replace button to add new click handler
+    summariseBtn.replaceWith(summariseBtn.cloneNode(true));
+    const stopBtn = document.getElementById('vocab-chat-summarise-page-btn');
+    stopBtn.addEventListener('click', stopHandler, true);
     
     try {
       // Parse pageTextContent to get the text
@@ -14844,7 +14973,7 @@ const ChatDialog = {
         }
         
         // Call SummariseService with SSE callbacks
-        SummariseService.summarise(
+        abortFunction = await SummariseService.summarise(
           pageText,
           // onEvent callback - handle chunk and complete events
           (eventData) => {
@@ -14934,14 +15063,18 @@ const ChatDialog = {
               }
               
               // Change button to "Clear summary" after completion
-        if (summariseBtn) {
-                summariseBtn.disabled = false;
-                summariseBtn.classList.remove('loading', 'disabled');
-                summariseBtn.innerHTML = 'Clear summary';
-                summariseBtn.style.display = 'block';
+              const summariseBtnAfterComplete = document.getElementById('vocab-chat-summarise-page-btn');
+              if (summariseBtnAfterComplete) {
+                // Clear abort function reference
+                abortFunction = null;
+                
+                summariseBtnAfterComplete.disabled = false;
+                summariseBtnAfterComplete.classList.remove('loading', 'disabled');
+                summariseBtnAfterComplete.innerHTML = 'Clear summary';
+                summariseBtnAfterComplete.style.display = 'block';
                 
                 // Update click handler to clear summary
-                summariseBtn.replaceWith(summariseBtn.cloneNode(true));
+                summariseBtnAfterComplete.replaceWith(summariseBtnAfterComplete.cloneNode(true));
                 const newBtn = document.getElementById('vocab-chat-summarise-page-btn');
                 newBtn.addEventListener('click', (e) => {
                   e.preventDefault();
@@ -14958,9 +15091,20 @@ const ChatDialog = {
           // onComplete callback
           () => {
             console.log('[ChatDialog] Summarise stream complete');
+            // Clear abort function reference on completion
+            abortFunction = null;
           },
           // onError callback
           (error) => {
+            // Check if it's an abort error (user cancelled)
+            if (error.name === 'AbortError' || error.message.includes('aborted')) {
+              console.log('[ChatDialog] Summarise request was aborted by user');
+              // Don't show error message for user-initiated cancellation
+              // The stop handler already handles button state and saving accumulated summary
+              abortFunction = null;
+              return;
+            }
+            
             console.error('[ChatDialog] Error during summarisation:', error);
             console.error('[ChatDialog] Error details:', {
               message: error.message,
@@ -14982,12 +15126,27 @@ const ChatDialog = {
             const errorMessage = error.message || 'Please try again.';
             this.addMessageToChat('ai', `⚠️ **Error:**\n\nFailed to summarise the page. ${errorMessage}`);
             
+            // Clear abort function reference
+            abortFunction = null;
+            
             // Reset button
-            if (summariseBtn) {
-              summariseBtn.disabled = false;
-              summariseBtn.classList.remove('disabled', 'loading');
-              summariseBtn.innerHTML = originalContent;
-        }
+            const summariseBtnOnError = document.getElementById('vocab-chat-summarise-page-btn');
+            if (summariseBtnOnError) {
+              summariseBtnOnError.disabled = false;
+              summariseBtnOnError.classList.remove('disabled', 'loading');
+              summariseBtnOnError.innerHTML = originalContent;
+              
+              // Update click handler back to handleSummarisePage
+              summariseBtnOnError.replaceWith(summariseBtnOnError.cloneNode(true));
+              const newBtn = document.getElementById('vocab-chat-summarise-page-btn');
+              newBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                e.stopImmediatePropagation();
+                console.log('[ChatDialog] Summarise button clicked!');
+                this.handleSummarisePage();
+              }, true);
+            }
           }
         );
       } catch (error) {
@@ -15012,24 +15171,54 @@ const ChatDialog = {
         const errorMessage = error.message || 'Please try again.';
         this.addMessageToChat('ai', `⚠️ **Error:**\n\nFailed to summarise the page. ${errorMessage}`);
         
+        // Clear abort function reference
+        abortFunction = null;
+        
         // Reset button
-        if (summariseBtn) {
-          summariseBtn.disabled = false;
-          summariseBtn.classList.remove('disabled', 'loading');
-          summariseBtn.innerHTML = originalContent;
+        const summariseBtnOnCatchError = document.getElementById('vocab-chat-summarise-page-btn');
+        if (summariseBtnOnCatchError) {
+          summariseBtnOnCatchError.disabled = false;
+          summariseBtnOnCatchError.classList.remove('disabled', 'loading');
+          summariseBtnOnCatchError.innerHTML = originalContent;
+          
+          // Update click handler back to handleSummarisePage
+          summariseBtnOnCatchError.replaceWith(summariseBtnOnCatchError.cloneNode(true));
+          const newBtn = document.getElementById('vocab-chat-summarise-page-btn');
+          newBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            e.stopImmediatePropagation();
+            console.log('[ChatDialog] Summarise button clicked!');
+            this.handleSummarisePage();
+          }, true);
         }
       }
     } catch (error) {
       console.error('[ChatDialog] Error parsing pageTextContent:', error);
       
+      // Clear abort function reference
+      abortFunction = null;
+      
       // Show error message in chat
       this.addMessageToChat('ai', `⚠️ **Error:**\n\nFailed to parse page content. ${error.message || 'Please try again.'}`);
       
       // Reset button
-      if (summariseBtn) {
-        summariseBtn.disabled = false;
-        summariseBtn.classList.remove('disabled', 'loading');
-        summariseBtn.innerHTML = originalContent;
+      const summariseBtnOnParseError = document.getElementById('vocab-chat-summarise-page-btn');
+      if (summariseBtnOnParseError) {
+        summariseBtnOnParseError.disabled = false;
+        summariseBtnOnParseError.classList.remove('disabled', 'loading');
+        summariseBtnOnParseError.innerHTML = originalContent;
+        
+        // Update click handler back to handleSummarisePage
+        summariseBtnOnParseError.replaceWith(summariseBtnOnParseError.cloneNode(true));
+        const newBtn = document.getElementById('vocab-chat-summarise-page-btn');
+        newBtn.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          e.stopImmediatePropagation();
+          console.log('[ChatDialog] Summarise button clicked!');
+          this.handleSummarisePage();
+        }, true);
       }
     }
   },
@@ -17963,9 +18152,9 @@ const ChatDialog = {
         right: 0;
         top: 50%;
         transform: translateY(-50%) translateX(100%);
-        width: 480px;
+        width: 600px !important;
         max-width: 90vw;
-        height: 600px;
+        height: 800px !important;
         max-height: 80vh;
         z-index: 2147483647 !important; /* Maximum z-index to ensure chat dialog is always on top of ads and other elements */
         transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
@@ -24076,11 +24265,11 @@ const ButtonPanel = {
       /* Reference Highlight Styles */
       /* Only modify background and visual effects - preserve all text styling */
       .vocab-reference-highlight {
-        background-color: rgba(149, 39, 245, 0.25) !important;
-        transition: background-color 0.4s ease-in-out, box-shadow 0.4s ease-in-out, padding 0.3s ease-in-out;
+        background-color: rgba(144, 238, 144, 0.3) !important;
+        border: 1px solid #4ade80 !important;
+        transition: background-color 0.4s ease-in-out, border-color 0.4s ease-in-out, padding 0.3s ease-in-out;
         padding: 4px 8px;
         border-radius: 15px;
-        box-shadow: 0 0 0 2px rgba(149, 39, 245, 0.2) !important;
         animation: vocab-highlight-fade-in 0.4s ease-in-out;
         box-sizing: border-box !important;
         /* DO NOT set any font/text properties - let them remain as computed */
@@ -24111,12 +24300,12 @@ const ButtonPanel = {
       /* Smooth fade-in animation for highlight */
       @keyframes vocab-highlight-fade-in {
         from {
-          background-color: rgba(149, 39, 245, 0);
-          box-shadow: 0 0 0 0px rgba(149, 39, 245, 0);
+          background-color: rgba(144, 238, 144, 0);
+          border-color: rgba(74, 222, 128, 0);
         }
         to {
-          background-color: rgba(149, 39, 245, 0.25);
-          box-shadow: 0 0 0 2px rgba(149, 39, 245, 0.2);
+          background-color: rgba(144, 238, 144, 0.3);
+          border-color: #4ade80;
         }
       }
       
@@ -24127,12 +24316,12 @@ const ButtonPanel = {
       
       @keyframes vocab-highlight-fade-out {
         from {
-          background-color: rgba(149, 39, 245, 0.25);
-          box-shadow: 0 0 0 2px rgba(149, 39, 245, 0.2);
+          background-color: rgba(144, 238, 144, 0.3);
+          border-color: #4ade80;
         }
         to {
-          background-color: rgba(149, 39, 245, 0);
-          box-shadow: 0 0 0 0px rgba(149, 39, 245, 0);
+          background-color: rgba(144, 238, 144, 0);
+          border-color: rgba(74, 222, 128, 0);
         }
       }
 
