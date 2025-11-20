@@ -13840,25 +13840,39 @@ const ChatDialog = {
   loadSavedDimensions() {
     console.log('[ChatDialog] DEBUG: Attempting to load saved dimensions...');
     
+    if (!this.dialogContainer) {
+      console.log('[ChatDialog] DEBUG: No dialog container available');
+      return;
+    }
+    
     try {
       const savedDimensions = localStorage.getItem('chatDialogDimensions');
       console.log('[ChatDialog] DEBUG: localStorage result:', savedDimensions);
       
-      if (savedDimensions && this.dialogContainer) {
+      let width, height;
+      
+      if (savedDimensions) {
         const dimensions = JSON.parse(savedDimensions);
-        const { width, height } = dimensions;
+        width = dimensions.width;
+        height = dimensions.height;
         console.log('[ChatDialog] DEBUG: Found saved dimensions:', { width, height });
-        
-        // Apply dimensions with !important to override CSS
-        this.dialogContainer.style.setProperty('width', width, 'important');
-        this.dialogContainer.style.setProperty('height', height, 'important');
-        
-        console.log('[ChatDialog] SUCCESS: Applied dimensions:', { width, height });
       } else {
-        console.log('[ChatDialog] DEBUG: No saved dimensions found or no dialog container');
+        // Set default dimensions if none are saved
+        width = '600px';
+        height = '800px';
+        console.log('[ChatDialog] DEBUG: No saved dimensions found, using defaults:', { width, height });
       }
+      
+      // Apply dimensions with !important to override CSS and site-specific styles
+      this.dialogContainer.style.setProperty('width', width, 'important');
+      this.dialogContainer.style.setProperty('height', height, 'important');
+      
+      console.log('[ChatDialog] SUCCESS: Applied dimensions:', { width, height });
     } catch (error) {
       console.log('[ChatDialog] ERROR loading dimensions:', error);
+      // Fallback to default dimensions on error
+      this.dialogContainer.style.setProperty('width', '600px', 'important');
+      this.dialogContainer.style.setProperty('height', '800px', 'important');
     }
   },
   
@@ -17997,9 +18011,9 @@ const ChatDialog = {
         right: 0;
         top: 50%;
         transform: translateY(-50%) translateX(100%);
-        width: 480px;
+        width: 600px !important;
         max-width: 90vw;
-        height: 600px;
+        height: 800px !important;
         max-height: 80vh;
         z-index: 2147483647 !important; /* Maximum z-index to ensure chat dialog is always on top of ads and other elements */
         transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
