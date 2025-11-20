@@ -1573,7 +1573,10 @@ export default defineContentScript({
       const container = button.closest('.home-options-container');
       if (container) {
         container.style.display = 'flex';
-        button.style.opacity = '0.95';
+        // Force a reflow to ensure display is set before adding visible class
+        void container.offsetHeight;
+        container.classList.add('home-options-container-visible');
+      button.style.opacity = '0.95';
       }
       
       console.log('[Content Script] Home options button shown');
@@ -1590,7 +1593,13 @@ export default defineContentScript({
       
       const container = button.closest('.home-options-container');
       if (container) {
-        container.style.display = 'none';
+        container.classList.remove('home-options-container-visible');
+        // Wait for animation to complete before hiding
+        setTimeout(() => {
+          if (container && !container.classList.contains('home-options-container-visible')) {
+            container.style.display = 'none';
+          }
+        }, 400); // Match animation duration
       }
       
       console.log('[Content Script] Home options button hidden');
@@ -1771,41 +1780,41 @@ export default defineContentScript({
           </svg>
         `;
         summariseBtn.addEventListener('click', (e) => {
-          e.preventDefault();
-          e.stopPropagation();
+        e.preventDefault();
+        e.stopPropagation();
           
           // Close the menu
           menu.classList.remove('home-options-menu-visible');
-          
-          // Check if dialog is already open for page-general context
-          // Check for both 'page-general' and 'page-general-generic' (the transformed key)
-          const isPageGeneralOpen = ChatDialog.isOpen && ChatDialog.currentTextKey && 
-            (ChatDialog.currentTextKey === 'page-general' || ChatDialog.currentTextKey.startsWith('page-general'));
-          
-          if (isPageGeneralOpen) {
-            // Toggle off - close the dialog
+        
+        // Check if dialog is already open for page-general context
+        // Check for both 'page-general' and 'page-general-generic' (the transformed key)
+        const isPageGeneralOpen = ChatDialog.isOpen && ChatDialog.currentTextKey && 
+          (ChatDialog.currentTextKey === 'page-general' || ChatDialog.currentTextKey.startsWith('page-general'));
+        
+        if (isPageGeneralOpen) {
+          // Toggle off - close the dialog
             console.log('[HomeOptions] Dialog already open for page-general, closing it. currentTextKey:', ChatDialog.currentTextKey);
-            ChatDialog.close();
-            return;
-          }
-          
-          // Open chat dialog for general page chat
-          // Use 'page-general' as textKey for general page chat
-          // Use pageTextContent if available, otherwise fallback to current page text
-          let pageText = '';
-          if (pageTextContent) {
-            try {
-              const contentData = JSON.parse(pageTextContent);
-              pageText = contentData.text || '';
-            } catch (e) {
+          ChatDialog.close();
+          return;
+        }
+        
+        // Open chat dialog for general page chat
+        // Use 'page-general' as textKey for general page chat
+        // Use pageTextContent if available, otherwise fallback to current page text
+        let pageText = '';
+        if (pageTextContent) {
+          try {
+            const contentData = JSON.parse(pageTextContent);
+            pageText = contentData.text || '';
+          } catch (e) {
               console.warn('[HomeOptions] Error parsing pageTextContent, using fallback');
-              pageText = document.body.innerText || document.body.textContent || '';
-            }
-          } else {
             pageText = document.body.innerText || document.body.textContent || '';
           }
-          ChatDialog.open(pageText.substring(0, 1000), 'page-general', 'ask', null, 'general');
-        });
+        } else {
+          pageText = document.body.innerText || document.body.textContent || '';
+        }
+        ChatDialog.open(pageText.substring(0, 1000), 'page-general', 'ask', null, 'general');
+      });
         
         // Add tooltip to Summarise button
         const summariseTooltip = document.createElement('div');
@@ -12169,6 +12178,14 @@ const TextSelector = {
         flex-direction: row-reverse; /* Reverse order so menu appears on left */
         align-items: center;
         gap: 8px;
+        opacity: 0;
+        transform: translateX(100px);
+        transition: opacity 0.4s cubic-bezier(0.34, 1.56, 0.64, 1), transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+      }
+      
+      .home-options-container.home-options-container-visible {
+        opacity: 1;
+        transform: translateX(0);
       }
       
       /* Semi-circular home options button - attached to right edge */
@@ -13450,11 +13467,11 @@ const ChatDialog = {
         }
         
         // Clean up animation class and CSS properties
-        this.dialogContainer.classList.remove('minimizing');
+          this.dialogContainer.classList.remove('minimizing');
         this.dialogContainer.style.removeProperty('--minimize-target-x');
         this.dialogContainer.style.removeProperty('--minimize-target-y');
-        this.dialogContainer.style.removeProperty('--minimize-start-transform');
-        this.dialogContainer.style.removeProperty('--minimize-end-transform');
+          this.dialogContainer.style.removeProperty('--minimize-start-transform');
+          this.dialogContainer.style.removeProperty('--minimize-end-transform');
         
         // Remove dialog container immediately (no need for hide() since animation is done)
         console.log('[ChatDialog] Removing dialog container...');
@@ -13464,9 +13481,9 @@ const ChatDialog = {
           console.log('[ChatDialog] Dialog container removed');
         }
         // Reset state
-        this.isOpen = false;
-        this.currentText = null;
-        this.currentTextKey = null;
+          this.isOpen = false;
+          this.currentText = null;
+          this.currentTextKey = null;
         console.log('[ChatDialog] Dialog state reset');
       }, 300); // 0.3s animation duration (same as appearing animation)
       
