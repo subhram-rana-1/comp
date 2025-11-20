@@ -9681,11 +9681,26 @@ const TextSelector = {
         return;
       }
       
+      // IMPORTANT: Don't remove button if it's in loading state (spinner is showing)
+      // The spinner should only disappear when the first API event is received
+      const magicBtn = iconsWrapper.querySelector('.vocab-text-magic-meaning-btn');
+      if (magicBtn && magicBtn.classList.contains('magic-meaning-loading')) {
+        // Button is in loading state - don't remove it
+        return;
+      }
+      
       // Click is anywhere else (not on button) - remove the button
       // Use a small delay to ensure the button's click handler can execute first if needed
       setTimeout(() => {
         // Double-check button still exists (might have been removed by button's own handler)
         if (!iconsWrapper || !iconsWrapper.parentNode) {
+          return;
+        }
+        
+        // Double-check button is not in loading state before removing
+        const checkMagicBtn = iconsWrapper.querySelector('.vocab-text-magic-meaning-btn');
+        if (checkMagicBtn && checkMagicBtn.classList.contains('magic-meaning-loading')) {
+          // Button is in loading state - don't remove it
           return;
         }
         
