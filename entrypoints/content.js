@@ -1810,7 +1810,7 @@ export default defineContentScript({
         // Add tooltip to Summarise button
         const summariseTooltip = document.createElement('div');
         summariseTooltip.className = 'home-options-menu-item-tooltip';
-        summariseTooltip.textContent = 'Summarise page, ask AI anything';
+        summariseTooltip.textContent = 'Summarise page';
         summariseBtn.appendChild(summariseTooltip);
         
         // Create Settings button
@@ -12282,23 +12282,27 @@ const TextSelector = {
         transform: translateX(0) scale(1);
       }
       
+      .home-options-btn:hover ~ .home-options-menu .home-options-menu-item:hover,
+      .home-options-menu:hover .home-options-menu-item:hover,
+      .home-options-menu.home-options-menu-visible .home-options-menu-item:hover,
       .home-options-menu-item:hover {
         background: #9527F5;
-        transform: translateX(0) scale(1.2);
+        transform: translateX(0) scale(1.1) !important;
         box-shadow: 0 4px 12px rgba(149, 39, 245, 0.6);
       }
       
       /* Tooltip styles */
       .home-options-menu-item-tooltip {
         position: absolute;
-        left: calc(100% + 12px);
+        right: calc(100% + 12px);
         top: 50%;
         transform: translateY(-50%);
         background: white;
         color: #b29cfb;
         padding: 8px 12px;
         border-radius: 20px;
-        font-size: 18px;
+        font-size: 13px;
+        font-weight: 500;
         white-space: nowrap;
         pointer-events: none;
         opacity: 0;
