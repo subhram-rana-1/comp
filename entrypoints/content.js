@@ -1739,7 +1739,37 @@ export default defineContentScript({
         const summariseBtn = document.createElement('button');
         summariseBtn.className = 'home-options-menu-item';
         summariseBtn.id = 'home-options-summarise-btn';
-        summariseBtn.textContent = 'Summarise';
+        summariseBtn.innerHTML = `
+          <svg fill="white" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 52 52" enable-background="new 0 0 52 52" xml:space="preserve">
+            <g>
+              <g>
+                <g>
+                  <path d="M48.5,2h-45C2.7,2,2,2.7,2,3.5v5C2,9.3,2.7,10,3.5,10h45c0.8,0,1.5-0.7,1.5-1.5v-5C50,2.7,49.3,2,48.5,2z"/>
+                </g>
+              </g>
+              <g>
+                <g>
+                  <path d="M48.5,14h-35c-0.8,0-1.5,0.7-1.5,1.5v3c0,0.8,0.7,1.5,1.5,1.5h35c0.8,0,1.5-0.7,1.5-1.5v-3C50,14.7,49.3,14,48.5,14z"/>
+                </g>
+              </g>
+              <g>
+                <g>
+                  <path d="M48.5,34h-35c-0.8,0-1.5,0.7-1.5,1.5v3c0,0.8,0.7,1.5,1.5,1.5h35c0.8,0,1.5-0.7,1.5-1.5v-3C50,34.7,49.3,34,48.5,34z"/>
+                </g>
+              </g>
+              <g>
+                <g>
+                  <path d="M48.5,44h-39C8.7,44,8,43.3,8,42.5v-7C8,34.7,7.3,34,6.5,34h-3C2.7,34,2,34.7,2,35.5v13C2,49.3,2.7,50,3.5,50h3H8h40.5c0.8,0,1.5-0.7,1.5-1.5v-3C50,44.7,49.3,44,48.5,44z"/>
+                </g>
+              </g>
+              <g>
+                <g>
+                  <path d="M48.5,24h-39C8.7,24,8,23.3,8,22.5v-7C8,14.7,7.3,14,6.5,14h-3C2.7,14,2,14.7,2,15.5v13C2,29.3,2.7,30,3.5,30h2H8h40.5c0.8,0,1.5-0.7,1.5-1.5v-3C50,24.7,49.3,24,48.5,24z"/>
+                </g>
+              </g>
+            </g>
+          </svg>
+        `;
         summariseBtn.addEventListener('click', (e) => {
           e.preventDefault();
           e.stopPropagation();
@@ -1777,10 +1807,21 @@ export default defineContentScript({
           ChatDialog.open(pageText.substring(0, 1000), 'page-general', 'ask', null, 'general');
         });
         
+        // Add tooltip to Summarise button
+        const summariseTooltip = document.createElement('div');
+        summariseTooltip.className = 'home-options-menu-item-tooltip';
+        summariseTooltip.textContent = 'Summarise page, ask AI anything';
+        summariseBtn.appendChild(summariseTooltip);
+        
         // Create Settings button
         const settingsBtn = document.createElement('button');
         settingsBtn.className = 'home-options-menu-item';
-        settingsBtn.textContent = 'Settings';
+        // Use the same gear icon as home-options-btn (inline SVG)
+        settingsBtn.innerHTML = `
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="white" xmlns="http://www.w3.org/2000/svg">
+            <path d="M19.14,12.94c0.04-0.31,0.06-0.63,0.06-0.94s-0.02-0.63-0.06-0.94l2.03-1.58c0.18-0.14,0.23-0.41,0.12-0.61l-1.92-3.32c-0.11-0.2-0.35-0.27-0.56-0.2l-2.39,0.96c-0.5-0.38-1.03-0.7-1.62-0.94L14.5,2.5C14.47,2.22,14.24,2,13.95,2h-3.9c-0.29,0-0.52,0.22-0.55,0.5L9.1,5.37C8.5,5.61,7.97,5.93,7.47,6.31L5.08,5.35c-0.21-0.08-0.45,0-0.56,0.2L2.6,8.87c-0.11,0.2-0.06,0.47,0.12,0.61l2.03,1.58C4.71,11.37,4.68,11.69,4.68,12s0.02,0.63,0.06,0.94l-2.03,1.58c-0.18,0.14-0.23,0.41-0.12,0.61l1.92,3.32c0.11,0.2,0.35,0.27,0.56,0.2l2.39-0.96c0.5,0.38,1.03,0.7,1.62,0.94l0.4,2.87c0.03,0.28,0.26,0.5,0.55,0.5h3.9c0.29,0,0.52-0.22,0.55-0.5l0.4-2.87c0.59-0.24,1.12-0.56,1.62-0.94l2.39,0.96c0.21,0.08,0.45,0,0.56-0.2l1.92-3.32c0.11-0.2,0.06-0.47-0.12-0.61L19.14,12.94z M12,15.5c-1.93,0-3.5-1.57-3.5-3.5S10.07,8.5,12,8.5s3.5,1.57,3.5,3.5S13.93,15.5,12,15.5z"/>
+          </svg>
+        `;
         settingsBtn.addEventListener('click', (e) => {
           e.preventDefault();
           e.stopPropagation();
@@ -1791,6 +1832,12 @@ export default defineContentScript({
           console.log('[Content Script] Settings button clicked');
           showLanguageSelectionModal();
         });
+        
+        // Add tooltip to Settings button
+        const settingsTooltip = document.createElement('div');
+        settingsTooltip.className = 'home-options-menu-item-tooltip';
+        settingsTooltip.textContent = 'Settings';
+        settingsBtn.appendChild(settingsTooltip);
         
         menu.appendChild(summariseBtn);
         menu.appendChild(settingsBtn);
@@ -12193,18 +12240,27 @@ const TextSelector = {
         background: #9527F5;
         color: white;
         border: 2px solid white;
-        border-radius: 8px;
-        padding: 10px 16px;
-        font-size: 14px;
-        font-weight: 500;
+        border-radius: 50%;
+        width: 36px;
+        height: 36px;
+        padding: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
         cursor: pointer;
-        white-space: nowrap;
         box-shadow: 0 2px 8px rgba(149, 39, 245, 0.4);
         user-select: none;
         -webkit-user-select: none;
         opacity: 0;
-        transform: translateX(-10px);
-        transition: opacity 0.3s ease, transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), background 0.2s ease, box-shadow 0.2s ease;
+        transform: translateX(-10px) scale(1);
+        transition: opacity 0.3s ease, transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s ease;
+        position: relative;
+      }
+      
+      .home-options-menu-item svg {
+        width: 16px;
+        height: 16px;
+        display: block;
       }
       
       .home-options-menu-item:nth-child(1) {
@@ -12223,17 +12279,40 @@ const TextSelector = {
       .home-options-menu:hover .home-options-menu-item,
       .home-options-menu.home-options-menu-visible .home-options-menu-item {
         opacity: 1;
-        transform: translateX(0);
+        transform: translateX(0) scale(1);
       }
       
       .home-options-menu-item:hover {
-        background: #7a1fd4;
-        transform: translateX(4px);
+        background: #9527F5;
+        transform: translateX(0) scale(1.2);
         box-shadow: 0 4px 12px rgba(149, 39, 245, 0.6);
       }
       
+      /* Tooltip styles */
+      .home-options-menu-item-tooltip {
+        position: absolute;
+        left: calc(100% + 12px);
+        top: 50%;
+        transform: translateY(-50%);
+        background: white;
+        color: #b29cfb;
+        padding: 8px 12px;
+        border-radius: 20px;
+        font-size: 18px;
+        white-space: nowrap;
+        pointer-events: none;
+        opacity: 0;
+        transition: opacity 0.2s ease;
+        z-index: 10000001;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+      }
+      
+      .home-options-menu-item:hover .home-options-menu-item-tooltip {
+        opacity: 1;
+      }
+      
       .home-options-menu-item:active {
-        transform: translateX(2px);
+        transform: translateX(0) scale(1.1);
       }
       
       /* Tooltip for ask-about-page button - Similar to import-content button tooltip */
