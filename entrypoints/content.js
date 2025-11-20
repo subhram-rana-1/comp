@@ -1376,7 +1376,7 @@ export default defineContentScript({
         chrome.storage.local.get([GLOBAL_STORAGE_KEY]).then((result) => {
           const isEnabled = result[GLOBAL_STORAGE_KEY] ?? true; // Default to true if not set
           if (isEnabled) {
-            showAskAboutPageButton();
+            showCloseButton();
           }
         });
         
@@ -1551,78 +1551,49 @@ export default defineContentScript({
         
         // Only show the button if extension is enabled
         if (isEnabled) {
-          showAskAboutPageButton();
+          showCloseButton();
         } else {
-          console.log('[Content Script] Extension is disabled, not showing ask-about-page button');
+          console.log('[Content Script] Extension is disabled, not showing home options button');
         }
       } catch (error) {
         console.error('[Content Script] Error fetching page text content:', error);
       }
     }
     
-    /**
-     * Show ask-about-page button with animation from the right
-     */
-    function showAskAboutPageButton() {
-      const button = document.getElementById('vocab-ask-about-page-btn');
-      if (!button) {
-        console.warn('[Content Script] Ask-about-page button not found when trying to show it');
-        return;
-      }
-      
-      // Remove hidden class and add visible class for animation
-      button.classList.remove('vocab-ask-about-page-btn-hidden');
-      button.classList.add('vocab-ask-about-page-btn-visible');
-      
-      console.log('[Content Script] Ask-about-page button shown with animation');
-      
-      // Show close button when ask-about-page button is shown
-      showCloseButton();
-    }
-    
-    /**
-     * Hide ask-about-page button
-     */
-    function hideAskAboutPageButton() {
-      const button = document.getElementById('vocab-ask-about-page-btn');
-      if (!button) {
-        return;
-      }
-      
-      button.classList.remove('vocab-ask-about-page-btn-visible');
-      button.classList.add('vocab-ask-about-page-btn-hidden');
-      
-      // Hide close button when ask-about-page button is hidden
-      hideCloseButton();
-    }
     
     /**
      * Show close button
      */
     function showCloseButton() {
-      const button = document.getElementById('vocab-close-btn');
+      const button = document.getElementById('home-options-btn');
       if (!button) {
         return;
       }
       
-      button.style.display = 'flex';
-      button.style.opacity = '0.95';
+      const container = button.closest('.home-options-container');
+      if (container) {
+        container.style.display = 'flex';
+        button.style.opacity = '0.95';
+      }
       
-      console.log('[Content Script] Close button shown');
+      console.log('[Content Script] Home options button shown');
     }
     
     /**
      * Hide close button
      */
     function hideCloseButton() {
-      const button = document.getElementById('vocab-close-btn');
+      const button = document.getElementById('home-options-btn');
       if (!button) {
         return;
       }
       
-      button.style.display = 'none';
+      const container = button.closest('.home-options-container');
+      if (container) {
+        container.style.display = 'none';
+      }
       
-      console.log('[Content Script] Close button hidden');
+      console.log('[Content Script] Home options button hidden');
     }
     
     /**
@@ -1709,69 +1680,35 @@ export default defineContentScript({
       }
     }
     
-    /**
-     * Create top-right ask-about-page button
-     */
-    function createAskAboutPageButton() {
-      // Check if button already exists
-      if (document.getElementById('vocab-ask-about-page-btn')) {
-        return;
-      }
-      
-      // Create button element
-      const button = document.createElement('button');
-      button.id = 'vocab-ask-about-page-btn';
-      button.className = 'vocab-ask-about-page-btn vocab-ask-about-page-btn-hidden';
-      button.setAttribute('aria-label', 'Ask anything about this page');
-      
-      // Use white sparkle icon (matching magic-meaning button)
-      button.innerHTML = `
-        <svg width="24" height="24" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path d="M14 0L17 8L25 11L17 14L14 22L11 14L3 11L11 8L14 0Z" fill="white"/>
-          <path d="M22 16L23.5 20L27.5 21.5L23.5 23L22 27L20.5 23L16.5 21.5L20.5 20L22 16Z" fill="white"/>
-          <path d="M8 21L9.5 24.5L13 26L9.5 27.5L8 31L6.5 27.5L3 26L6.5 24.5L8 21Z" fill="white"/>
-        </svg>
-      `;
-      
-      // Append to body
-      document.body.appendChild(button);
-      
-      // Attach tooltip listeners
-      attachAskAboutPageTooltipListeners(button);
-      
-      // Attach click handler to open chat dialog
-      attachAskAboutPageClickHandler(button);
-      
-      console.log('[Content Script] Ask-about-page button created (hidden initially)');
-      
-      // Note: X button is already created earlier in initialization
-      // Just ensure it's shown/hidden based on extension state
-    }
     
     /**
      * Create circular X button below ask-about-page button
      */
     function createCloseButton() {
       // Check if button already exists
-      if (document.getElementById('vocab-close-btn')) {
+      if (document.getElementById('home-options-btn')) {
         return;
       }
       
       // Function to actually create and append the button
       const createButton = async () => {
         // Check if button already exists (might have been created by another call)
-        if (document.getElementById('vocab-close-btn')) {
+        if (document.getElementById('home-options-btn')) {
           return;
         }
         
+        // Create container for button and menu
+        const container = document.createElement('div');
+        container.className = 'home-options-container';
+        
         // Create button element
         const button = document.createElement('button');
-        button.id = 'vocab-close-btn';
-        button.className = 'vocab-close-btn';
-        button.setAttribute('aria-label', 'Close');
+        button.id = 'home-options-btn';
+        button.className = 'home-options-btn';
+        button.setAttribute('aria-label', 'Home Options');
         
-        // Initially hide the button (will be shown when extension is enabled)
-        button.style.display = 'none';
+        // Initially hide the container (will be shown when extension is enabled)
+        container.style.display = 'none';
         
         // Load gear icon SVG from assets
         try {
@@ -1782,25 +1719,120 @@ export default defineContentScript({
           // Add class to the SVG element for styling
           const svgElement = button.querySelector('svg');
           if (svgElement) {
-            svgElement.classList.add('vocab-close-gear-icon');
+            svgElement.classList.add('home-options-gear-icon');
           }
         } catch (error) {
           console.error('[Content Script] Failed to load gear icon SVG:', error);
           // Fallback to inline SVG if file loading fails
           button.innerHTML = `
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="white" xmlns="http://www.w3.org/2000/svg" class="vocab-close-gear-icon">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="white" xmlns="http://www.w3.org/2000/svg" class="home-options-gear-icon">
               <path d="M19.14,12.94c0.04-0.31,0.06-0.63,0.06-0.94s-0.02-0.63-0.06-0.94l2.03-1.58c0.18-0.14,0.23-0.41,0.12-0.61l-1.92-3.32c-0.11-0.2-0.35-0.27-0.56-0.2l-2.39,0.96c-0.5-0.38-1.03-0.7-1.62-0.94L14.5,2.5C14.47,2.22,14.24,2,13.95,2h-3.9c-0.29,0-0.52,0.22-0.55,0.5L9.1,5.37C8.5,5.61,7.97,5.93,7.47,6.31L5.08,5.35c-0.21-0.08-0.45,0-0.56,0.2L2.6,8.87c-0.11,0.2-0.06,0.47,0.12,0.61l2.03,1.58C4.71,11.37,4.68,11.69,4.68,12s0.02,0.63,0.06,0.94l-2.03,1.58c-0.18,0.14-0.23,0.41-0.12,0.61l1.92,3.32c0.11,0.2,0.35,0.27,0.56,0.2l2.39-0.96c0.5,0.38,1.03,0.7,1.62,0.94l0.4,2.87c0.03,0.28,0.26,0.5,0.55,0.5h3.9c0.29,0,0.52-0.22,0.55-0.5l0.4-2.87c0.59-0.24,1.12-0.56,1.62-0.94l2.39,0.96c0.21,0.08,0.45,0,0.56-0.2l1.92-3.32c0.11-0.2,0.06-0.47-0.12-0.61L19.14,12.94z M12,15.5c-1.93,0-3.5-1.57-3.5-3.5S10.07,8.5,12,8.5s3.5,1.57,3.5,3.5S13.93,15.5,12,15.5z"/>
             </svg>
           `;
         }
         
-        // Append to body
-        document.body.appendChild(button);
+        // Create hover menu
+        const menu = document.createElement('div');
+        menu.className = 'home-options-menu';
         
-        // Add click handler to show language modal
-        button.addEventListener('click', () => {
-          console.log('[Content Script] Close button clicked - showing language modal');
+        // Create Summarise button - uses same handler as ask-about-page button
+        const summariseBtn = document.createElement('button');
+        summariseBtn.className = 'home-options-menu-item';
+        summariseBtn.id = 'home-options-summarise-btn';
+        summariseBtn.textContent = 'Summarise';
+        summariseBtn.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          
+          // Close the menu
+          menu.classList.remove('home-options-menu-visible');
+          
+          // Check if dialog is already open for page-general context
+          // Check for both 'page-general' and 'page-general-generic' (the transformed key)
+          const isPageGeneralOpen = ChatDialog.isOpen && ChatDialog.currentTextKey && 
+            (ChatDialog.currentTextKey === 'page-general' || ChatDialog.currentTextKey.startsWith('page-general'));
+          
+          if (isPageGeneralOpen) {
+            // Toggle off - close the dialog
+            console.log('[HomeOptions] Dialog already open for page-general, closing it. currentTextKey:', ChatDialog.currentTextKey);
+            ChatDialog.close();
+            return;
+          }
+          
+          // Open chat dialog for general page chat
+          // Use 'page-general' as textKey for general page chat
+          // Use pageTextContent if available, otherwise fallback to current page text
+          let pageText = '';
+          if (pageTextContent) {
+            try {
+              const contentData = JSON.parse(pageTextContent);
+              pageText = contentData.text || '';
+            } catch (e) {
+              console.warn('[HomeOptions] Error parsing pageTextContent, using fallback');
+              pageText = document.body.innerText || document.body.textContent || '';
+            }
+          } else {
+            pageText = document.body.innerText || document.body.textContent || '';
+          }
+          ChatDialog.open(pageText.substring(0, 1000), 'page-general', 'ask', null, 'general');
+        });
+        
+        // Create Settings button
+        const settingsBtn = document.createElement('button');
+        settingsBtn.className = 'home-options-menu-item';
+        settingsBtn.textContent = 'Settings';
+        settingsBtn.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          
+          // Close the menu
+          menu.classList.remove('home-options-menu-visible');
+          
+          console.log('[Content Script] Settings button clicked');
           showLanguageSelectionModal();
+        });
+        
+        menu.appendChild(summariseBtn);
+        menu.appendChild(settingsBtn);
+        
+        container.appendChild(button);
+        container.appendChild(menu);
+        
+        // Append container to body
+        document.body.appendChild(container);
+        
+        // Function to toggle menu visibility
+        const toggleMenu = (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          const isVisible = menu.classList.contains('home-options-menu-visible');
+          if (isVisible) {
+            menu.classList.remove('home-options-menu-visible');
+            console.log('[Content Script] Home options menu closed');
+          } else {
+            menu.classList.add('home-options-menu-visible');
+            console.log('[Content Script] Home options menu opened');
+          }
+        };
+        
+        // Function to close menu
+        const closeMenu = () => {
+          menu.classList.remove('home-options-menu-visible');
+        };
+        
+        // Add click handler to toggle menu
+        button.addEventListener('click', toggleMenu);
+        
+        // Close menu when clicking outside
+        document.addEventListener('click', (e) => {
+          if (!container.contains(e.target)) {
+            closeMenu();
+          }
+        });
+        
+        // Prevent menu from closing when clicking on menu items
+        menu.addEventListener('click', (e) => {
+          e.stopPropagation();
         });
         
         console.log('[Content Script] Close X button created (initially hidden)');
@@ -1832,134 +1864,6 @@ export default defineContentScript({
       }
     }
     
-    /**
-     * Attach click handler to open chat dialog
-     */
-    function attachAskAboutPageClickHandler(button) {
-      if (!button) {
-        return;
-      }
-      
-      button.addEventListener('click', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        
-        // Check if dialog is already open for page-general context
-        // Check for both 'page-general' and 'page-general-generic' (the transformed key)
-        const isPageGeneralOpen = ChatDialog.isOpen && ChatDialog.currentTextKey && 
-          (ChatDialog.currentTextKey === 'page-general' || ChatDialog.currentTextKey.startsWith('page-general'));
-        
-        if (isPageGeneralOpen) {
-          // Toggle off - close the dialog
-          console.log('[AskAboutPage] Dialog already open for page-general, closing it. currentTextKey:', ChatDialog.currentTextKey);
-          ChatDialog.close();
-          return;
-        }
-        
-        // Open chat dialog for general page chat
-        // Use 'page-general' as textKey for general page chat
-        // Use pageTextContent if available, otherwise fallback to current page text
-        let pageText = '';
-        if (pageTextContent) {
-          try {
-            const contentData = JSON.parse(pageTextContent);
-            pageText = contentData.text || '';
-          } catch (e) {
-            console.warn('[AskAboutPage] Error parsing pageTextContent, using fallback');
-            pageText = document.body.innerText || document.body.textContent || '';
-          }
-        } else {
-          pageText = document.body.innerText || document.body.textContent || '';
-        }
-        ChatDialog.open(pageText.substring(0, 1000), 'page-general', 'ask', null, 'general');
-      });
-    }
-    
-    /**
-     * Attach tooltip event listeners to ask-about-page button
-     * Similar to ButtonPanel.attachTooltipListeners
-     */
-    function attachAskAboutPageTooltipListeners(button) {
-      if (!button) {
-        return;
-      }
-      
-      let tooltip = null;
-      
-      button.addEventListener('mouseenter', () => {
-        // Clean up any existing tooltips first
-        removeAskAboutPageTooltip();
-        
-        // Create tooltip
-        tooltip = createAskAboutPageTooltip('Ask anything about this page');
-        document.body.appendChild(tooltip);
-        
-        // Position tooltip at the bottom left of the button (to the left of the button)
-        const buttonRect = button.getBoundingClientRect();
-        tooltip.style.position = 'fixed';
-        // Position below the button, aligned to the left side (tooltip's right edge aligns with button's left edge)
-        // Position it so the arrow tip touches the button's bottom edge (6px arrow height)
-        tooltip.style.top = buttonRect.bottom + 'px'; // Arrow tip will be at buttonRect.bottom
-        tooltip.style.right = (window.innerWidth - buttonRect.left) + 'px';
-        tooltip.style.left = 'auto';
-        tooltip.style.zIndex = '9999999';
-        
-        // Trigger animation
-        setTimeout(() => {
-          tooltip.classList.add('visible');
-        }, 10);
-      });
-      
-      button.addEventListener('mouseleave', () => {
-        if (tooltip) {
-          tooltip.classList.remove('visible');
-          setTimeout(() => {
-            if (tooltip && tooltip.parentNode) {
-              tooltip.remove();
-            }
-            tooltip = null;
-          }, 200);
-        }
-      });
-      
-      button.addEventListener('click', () => {
-        if (tooltip) {
-          tooltip.classList.remove('visible');
-          setTimeout(() => {
-            if (tooltip && tooltip.parentNode) {
-              tooltip.remove();
-            }
-            tooltip = null;
-          }, 200);
-        }
-      });
-    }
-    
-    /**
-     * Create tooltip element for ask-about-page button
-     * Similar to ButtonPanel.createTooltip
-     */
-    function createAskAboutPageTooltip(message) {
-      const tooltip = document.createElement('div');
-      tooltip.className = 'vocab-ask-about-page-tooltip';
-      tooltip.textContent = message;
-      return tooltip;
-    }
-    
-    /**
-     * Remove ask-about-page tooltip
-     */
-    function removeAskAboutPageTooltip() {
-      const tooltips = document.querySelectorAll('.vocab-ask-about-page-tooltip');
-      tooltips.forEach(tooltip => {
-        tooltip.classList.remove('visible');
-        setTimeout(() => {
-          if (tooltip.parentNode) {
-            tooltip.remove();
-          }
-        }, 200);
-      });
-    }
     
     console.log('[Content Script] Initializing with global storage key:', GLOBAL_STORAGE_KEY);
     
@@ -1977,9 +1881,6 @@ export default defineContentScript({
     
     // Initialize the chat dialog
     ChatDialog.init();
-    
-    // Create top-right ask-about-page button (initially hidden)
-    createAskAboutPageButton();
     
     // Wait for page to load completely, then fetch page text content in a separate thread
     if (document.readyState === 'complete') {
@@ -2546,9 +2447,9 @@ export default defineContentScript({
           ButtonPanel.show();
           WordSelector.enable();
           TextSelector.enable();
-          // Show ask-about-page button if pageTextContent is available
+          // Show home options button if pageTextContent is available
           if (window.pageTextContent) {
-            showAskAboutPageButton();
+            showCloseButton();
           }
         } else {
           ButtonPanel.hide();
@@ -2557,8 +2458,8 @@ export default defineContentScript({
           // Clear all selections when toggling off
           WordSelector.clearAll();
           TextSelector.clearAll();
-          // Hide ask-about-page button with slide-out animation when extension is disabled
-          hideAskAboutPageButton();
+          // Hide home options button when extension is disabled
+          hideCloseButton();
           // Close preferred language modal if it's open
           const languageModal = document.getElementById('prefered-language-modal');
           const languageOverlay = document.getElementById('prefered-language-overlay');
@@ -2647,9 +2548,9 @@ async function handleTabStateChange(domain, eventType, sendResponse) {
         ButtonPanel.show();
         WordSelector.enable();
         TextSelector.enable();
-        // Show ask-about-page button if pageTextContent is available
+        // Show home options button if pageTextContent is available
         if (window.pageTextContent) {
-          showAskAboutPageButton();
+          showCloseButton();
         }
       } else {
         ButtonPanel.hide();
@@ -2657,8 +2558,8 @@ async function handleTabStateChange(domain, eventType, sendResponse) {
         TextSelector.disable();
         WordSelector.clearAll();
         TextSelector.clearAll();
-        // Hide ask-about-page button with slide-out animation when extension is disabled
-        hideAskAboutPageButton();
+        // Hide home options button when extension is disabled
+        hideCloseButton();
         // Close chat dialog if it's open for ask-about-page context
         if (typeof ChatDialog !== 'undefined' && ChatDialog.isOpen && ChatDialog.currentTextKey) {
           const isPageGeneral = ChatDialog.currentTextKey === 'page-general' || ChatDialog.currentTextKey.startsWith('page-general');
@@ -8379,6 +8280,7 @@ const WordSelector = {
         align-items: center;
         justify-content: center;
         margin-left: auto; /* Always push to the right side, even when Get more examples button is hidden */
+        box-shadow: 0 4px 12px rgba(149, 39, 245, 0.3);
       }
       
       .vocab-word-popup-ask-button:hover:not(.loading) {
@@ -8411,7 +8313,7 @@ const WordSelector = {
       .vocab-word-popup-button {
         padding: 10px 18px;
         border: none;
-        border-radius: 10px;
+        border-radius: 12px;
         background: #A020F0;
         color: white;
         font-weight: 600;
@@ -8424,6 +8326,7 @@ const WordSelector = {
         display: flex;
         align-items: center;
         justify-content: center;
+        box-shadow: 0 4px 12px rgba(149, 39, 245, 0.3);
       }
       
       .vocab-word-popup-button:hover:not(.loading) {
@@ -8922,7 +8825,7 @@ const WordSelector = {
         background: #9527F5 !important;
         color: white;
         border: none;
-        border-radius: 8px;
+        border-radius: 12px;
         font-size: 14px;
         font-weight: 500;
         cursor: pointer;
@@ -8934,6 +8837,7 @@ const WordSelector = {
         top: 50%;
         transform: translateY(-50%);
         z-index: 10;
+        box-shadow: 0 4px 12px rgba(149, 39, 245, 0.3);
       }
       
       .word-web-search-explain-btn:hover {
@@ -12208,11 +12112,20 @@ const TextSelector = {
         height: 24px;
       }
       
-      /* Semi-circular X close button - attached to right edge, positioned below ask-about-page button */
-      .vocab-close-btn {
+      /* Home options container - attached to right edge, positioned below ask-about-page button */
+      .home-options-container {
         position: fixed;
         top: 78px; /* Below ask-about-page button: 20px (top) + 48px (height) + 10px (gap) */
         right: -25px; /* Half off-screen to create protruding effect, flat edge at screen edge */
+        z-index: 10000000;
+        display: flex;
+        flex-direction: row-reverse; /* Reverse order so menu appears on left */
+        align-items: center;
+        gap: 8px;
+      }
+      
+      /* Semi-circular home options button - attached to right edge */
+      .home-options-btn {
         width: 50px; /* Wider button for rectangular shape */
         height: 36px; /* Keep height same */
         background: #9527F5; /* Purple background */
@@ -12227,25 +12140,24 @@ const TextSelector = {
         transition: opacity 0.2s ease, transform 0.15s ease, box-shadow 0.2s ease;
         padding-left: 9px; /* Center icon in semi-circle: 18px radius / 2 = 9px */
         padding-right: 0;
-        z-index: 10000000;
         box-shadow: 0 2px 8px rgba(149, 39, 245, 0.4);
         pointer-events: auto;
         user-select: none;
         -webkit-user-select: none;
       }
       
-      .vocab-close-btn:hover {
+      .home-options-btn:hover {
         transform: translateX(-8px); /* Slide out from right edge on hover */
         opacity: 1;
         box-shadow: 0 4px 12px rgba(149, 39, 245, 0.6);
       }
       
-      .vocab-close-btn:active {
+      .home-options-btn:active {
         transform: translateX(-4px); /* Slight slide out on active */
       }
       
-      .vocab-close-btn svg,
-      .vocab-close-btn .vocab-close-gear-icon {
+      .home-options-btn svg,
+      .home-options-btn .home-options-gear-icon {
         pointer-events: none;
         display: block;
         width: 16px; /* Smaller icon for smaller button */
@@ -12253,9 +12165,75 @@ const TextSelector = {
         transition: transform 0.2s ease;
       }
       
-      .vocab-close-btn:hover svg,
-      .vocab-close-btn:hover .vocab-close-gear-icon {
+      .home-options-btn:hover svg,
+      .home-options-btn:hover .home-options-gear-icon {
         transform: rotate(90deg);
+      }
+      
+      /* Hover menu - slides in from left on hover */
+      .home-options-menu {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        opacity: 0;
+        transform: translateX(20px);
+        pointer-events: none;
+        transition: opacity 0.3s ease, transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+      }
+      
+      .home-options-btn:hover ~ .home-options-menu,
+      .home-options-menu:hover,
+      .home-options-menu.home-options-menu-visible {
+        opacity: 1;
+        transform: translateX(0);
+        pointer-events: auto;
+      }
+      
+      .home-options-menu-item {
+        background: #9527F5;
+        color: white;
+        border: 2px solid white;
+        border-radius: 8px;
+        padding: 10px 16px;
+        font-size: 14px;
+        font-weight: 500;
+        cursor: pointer;
+        white-space: nowrap;
+        box-shadow: 0 2px 8px rgba(149, 39, 245, 0.4);
+        user-select: none;
+        -webkit-user-select: none;
+        opacity: 0;
+        transform: translateX(-10px);
+        transition: opacity 0.3s ease, transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), background 0.2s ease, box-shadow 0.2s ease;
+      }
+      
+      .home-options-menu-item:nth-child(1) {
+        transition-delay: 0.05s;
+      }
+      
+      .home-options-menu-item:nth-child(2) {
+        transition-delay: 0.1s;
+      }
+      
+      .home-options-menu-item:nth-child(3) {
+        transition-delay: 0.15s;
+      }
+      
+      .home-options-btn:hover ~ .home-options-menu .home-options-menu-item,
+      .home-options-menu:hover .home-options-menu-item,
+      .home-options-menu.home-options-menu-visible .home-options-menu-item {
+        opacity: 1;
+        transform: translateX(0);
+      }
+      
+      .home-options-menu-item:hover {
+        background: #7a1fd4;
+        transform: translateX(4px);
+        box-shadow: 0 4px 12px rgba(149, 39, 245, 0.6);
+      }
+      
+      .home-options-menu-item:active {
+        transform: translateX(2px);
       }
       
       /* Tooltip for ask-about-page button - Similar to import-content button tooltip */
@@ -12867,12 +12845,13 @@ const ChatDialog = {
     console.log('[ChatDialog] Condition 3 - currentTextKey === "page-general":', this.currentTextKey === 'page-general');
     console.log('[ChatDialog] Condition 4 - dialogContainer exists:', !!this.dialogContainer);
     
-    // Check for ask-about-page button if textKey is 'page-general' (check for both original and transformed key)
-    let askAboutPageButton = null;
+    // Check for home-options-btn if textKey is 'page-general' (check for both original and transformed key)
+    let homeOptionsButton = null;
     if (this.currentTextKey && (this.currentTextKey === 'page-general' || this.currentTextKey.startsWith('page-general')) && this.dialogContainer) {
-      askAboutPageButton = document.getElementById('vocab-ask-about-page-btn');
-      if (askAboutPageButton) {
-        console.log('[ChatDialog] ✓✓✓ FOUND ASK-ABOUT-PAGE BUTTON! Will minimize to it...');
+      // Check for home-options-btn (for Summarise button)
+      homeOptionsButton = document.getElementById('home-options-btn');
+      if (homeOptionsButton) {
+        console.log('[ChatDialog] ✓✓✓ FOUND HOME-OPTIONS BUTTON! Will minimize to it...');
       }
     }
     
@@ -13244,8 +13223,8 @@ const ChatDialog = {
         console.log('[ChatDialog] ✗✗✗ BOOK ICON NOT FOUND! Cannot minimize to book icon.');
         console.log('[ChatDialog] Falling back to regular close...');
       }
-    } else if (askAboutPageButton) {
-      console.log('[ChatDialog] ✓✓✓ FOUND ASK-ABOUT-PAGE BUTTON! Starting minimization animation...');
+    } else if (homeOptionsButton) {
+      console.log('[ChatDialog] ✓✓✓ FOUND HOME-OPTIONS BUTTON! Starting minimization animation...');
       
       // Check if dialogContainer still exists before proceeding
       if (!this.dialogContainer) {
@@ -13257,7 +13236,7 @@ const ChatDialog = {
       this.dialogContainer.style.setProperty('transition', 'none', 'important');
       
       // Force a reflow to ensure button is in its final position
-      void askAboutPageButton.offsetHeight;
+      void homeOptionsButton.offsetHeight;
       
       // Get dialog size (use getBoundingClientRect for accurate size)
       const dialogRect = this.dialogContainer.getBoundingClientRect();
@@ -13265,12 +13244,12 @@ const ChatDialog = {
       const dialogWidth = dialogRect.width;
       
       // Get button position (use getBoundingClientRect for accurate viewport coordinates)
-      void askAboutPageButton.offsetHeight;
-      const buttonRect = askAboutPageButton.getBoundingClientRect();
+      void homeOptionsButton.offsetHeight;
+      const buttonRect = homeOptionsButton.getBoundingClientRect();
       const buttonCenterX = buttonRect.left + buttonRect.width / 2;
       const buttonCenterY = buttonRect.top + buttonRect.height / 2;
       
-      console.log('[ChatDialog] Ask-about-page button center:', { x: buttonCenterX, y: buttonCenterY });
+      console.log('[ChatDialog] Home-options button center:', { x: buttonCenterX, y: buttonCenterY });
       console.log('[ChatDialog] Button rect:', { left: buttonRect.left, top: buttonRect.top, width: buttonRect.width, height: buttonRect.height });
       console.log('[ChatDialog] Dialog size:', { width: dialogWidth, height: dialogHeight });
       
@@ -13357,6 +13336,7 @@ const ChatDialog = {
       void this.dialogContainer.offsetHeight;
       
       // Set CSS custom properties for the animation
+      // Use current transform as start, and calculate end from current position
       this.dialogContainer.style.setProperty('--minimize-target-x', `${targetCenterX}px`);
       this.dialogContainer.style.setProperty('--minimize-target-y', `${targetCenterY}px`);
       this.dialogContainer.style.setProperty('--minimize-start-transform', `translateY(${startTranslateY}px) translateX(${startTranslateX}px) scale(1)`);
@@ -13387,11 +13367,11 @@ const ChatDialog = {
         }
         
         // Clean up animation class and CSS properties
-          this.dialogContainer.classList.remove('minimizing');
+        this.dialogContainer.classList.remove('minimizing');
         this.dialogContainer.style.removeProperty('--minimize-target-x');
         this.dialogContainer.style.removeProperty('--minimize-target-y');
-          this.dialogContainer.style.removeProperty('--minimize-start-transform');
-          this.dialogContainer.style.removeProperty('--minimize-end-transform');
+        this.dialogContainer.style.removeProperty('--minimize-start-transform');
+        this.dialogContainer.style.removeProperty('--minimize-end-transform');
         
         // Remove dialog container immediately (no need for hide() since animation is done)
         console.log('[ChatDialog] Removing dialog container...');
@@ -13401,9 +13381,9 @@ const ChatDialog = {
           console.log('[ChatDialog] Dialog container removed');
         }
         // Reset state
-          this.isOpen = false;
-          this.currentText = null;
-          this.currentTextKey = null;
+        this.isOpen = false;
+        this.currentText = null;
+        this.currentTextKey = null;
         console.log('[ChatDialog] Dialog state reset');
       }, 300); // 0.3s animation duration (same as appearing animation)
       
@@ -17731,12 +17711,20 @@ const ChatDialog = {
           }, 100);
         }
         
-        // Check for ask-about-page button if textKey is 'page-general' (for book icon context)
-        let askAboutPageButton = null;
+        // Check for Summarise button first, then home-options-btn if textKey is 'page-general' (for book icon context)
+        let homeOptionsButton = null;
+        let summariseButton = null;
         if (this.currentTextKey === 'page-general' || this.currentTextKey.startsWith('page-general')) {
-          askAboutPageButton = document.getElementById('vocab-ask-about-page-btn');
-          if (askAboutPageButton) {
-            console.log('[ChatDialog] ✓✓✓ FOUND ASK-ABOUT-PAGE BUTTON! Starting expansion animation...');
+          // Prioritize Summarise button (the menu item that was clicked)
+          summariseButton = document.getElementById('home-options-summarise-btn');
+          if (summariseButton) {
+            console.log('[ChatDialog] ✓✓✓ FOUND SUMMARISE BUTTON! Starting expansion animation...');
+          } else {
+            // Fallback to home-options-btn
+            homeOptionsButton = document.getElementById('home-options-btn');
+            if (homeOptionsButton) {
+              console.log('[ChatDialog] ✓✓✓ FOUND HOME-OPTIONS BUTTON! Starting expansion animation...');
+            }
           }
         }
         
@@ -17800,11 +17788,71 @@ const ChatDialog = {
             this.dialogContainer.style.setProperty('pointer-events', '');
             this.dialogContainer.style.setProperty('will-change', '');
           }, 300); // 0.3s animation duration (same as appearing animation)
-        } else if (askAboutPageButton) {
-          console.log('[ChatDialog] ✓✓✓ FOUND ASK-ABOUT-PAGE BUTTON! Starting expansion animation...');
+        } else if (summariseButton) {
+          console.log('[ChatDialog] ✓✓✓ FOUND SUMMARISE BUTTON! Starting expansion animation...');
           
-          // Get ask-about-page button position
-          const buttonRect = askAboutPageButton.getBoundingClientRect();
+          // Get Summarise button position
+          const buttonRect = summariseButton.getBoundingClientRect();
+          const buttonCenterX = buttonRect.left + buttonRect.width / 2;
+          const buttonCenterY = buttonRect.top + buttonRect.height / 2;
+          
+          // Get dialog dimensions
+          const dialogRect = this.dialogContainer.getBoundingClientRect();
+          const dialogHeight = dialogRect.height || 600;
+          const viewportHeight = window.innerHeight;
+          const dialogTop = viewportHeight / 2;
+          const currentCenterY = dialogTop;
+          const targetCenterY = buttonCenterY;
+          const translateYOffset = targetCenterY - currentCenterY;
+          const finalTranslateY = -dialogHeight / 2 + translateYOffset;
+          
+          // Calculate target X (button center X - dialog center X)
+          const dialogWidth = dialogRect.width || 400;
+          const dialogCenterX = window.innerWidth - dialogWidth / 2;
+          const targetX = buttonCenterX - dialogCenterX;
+          
+          // Set initial position at button (small scale)
+          const startTransform = `translateY(${finalTranslateY}px) translateX(${targetX}px) scale(0)`;
+          this.dialogContainer.style.setProperty('transform', startTransform);
+          this.dialogContainer.style.setProperty('transition', 'none');
+          
+          // Set CSS variables for expansion animation
+          this.dialogContainer.style.setProperty('--expand-target-x', `${targetX}px`);
+          this.dialogContainer.style.setProperty('--expand-target-y', `${finalTranslateY}px`);
+          this.dialogContainer.style.setProperty('--expand-start-transform', startTransform);
+          this.dialogContainer.style.setProperty('--expand-end-transform', 'translateY(-50%) translateX(0) scale(1)');
+          
+          // Force a reflow to ensure initial position is set
+          this.dialogContainer.offsetHeight;
+          
+          // Add expanding class to trigger animation
+          this.dialogContainer.classList.add('expanding');
+          
+          // Add visible class immediately (but animation will override transform)
+          this.dialogContainer.classList.add('visible');
+          
+          // Remove expanding class after animation completes and restore normal state
+          setTimeout(() => {
+            // Set final transform explicitly to ensure dialog stays in position
+            this.dialogContainer.style.setProperty('transform', 'translateY(-50%) translateX(0) scale(1)');
+            // Remove expanding class after transform is set
+            this.dialogContainer.classList.remove('expanding');
+            // Restore transition for normal interactions
+            this.dialogContainer.style.setProperty('transition', '');
+            // Clean up CSS variables
+            this.dialogContainer.style.removeProperty('--expand-target-x');
+            this.dialogContainer.style.removeProperty('--expand-target-y');
+            this.dialogContainer.style.removeProperty('--expand-start-transform');
+            this.dialogContainer.style.removeProperty('--expand-end-transform');
+            // Re-enable pointer events
+            this.dialogContainer.style.setProperty('pointer-events', '');
+            this.dialogContainer.style.setProperty('will-change', '');
+          }, 300); // 0.3s animation duration (same as appearing animation)
+        } else if (homeOptionsButton) {
+          console.log('[ChatDialog] ✓✓✓ FOUND HOME-OPTIONS BUTTON! Starting expansion animation...');
+          
+          // Get home-options button position
+          const buttonRect = homeOptionsButton.getBoundingClientRect();
           const buttonCenterX = buttonRect.left + buttonRect.width / 2;
           const buttonCenterY = buttonRect.top + buttonRect.height / 2;
           
@@ -17861,7 +17909,7 @@ const ChatDialog = {
             this.dialogContainer.style.setProperty('will-change', '');
           }, 300); // 0.3s animation duration (same as appearing animation)
         } else {
-          console.log('[ChatDialog] Book icon or ask-about-page button not found, using normal slide-in animation');
+          console.log('[ChatDialog] Book icon not found, using normal slide-in animation');
           setTimeout(() => {
             this.dialogContainer.classList.add('visible');
           }, 10);
@@ -18841,7 +18889,7 @@ const ChatDialog = {
         background: #9527F5;
         color: white;
         border: none;
-        border-radius: 8px;
+        border-radius: 12px;
         padding: 10px 20px;
         font-size: 14px;
         font-weight: 500;
@@ -18852,6 +18900,7 @@ const ChatDialog = {
         transition: all 0.2s ease;
         font-family: inherit;
         text-decoration: none;
+        box-shadow: 0 4px 12px rgba(149, 39, 245, 0.3);
       }
       
       .vocab-chat-simplify-more-btn:hover:not(.disabled) {
