@@ -5384,6 +5384,11 @@ const WordSelector = {
       } else {
         e.target.style.overflowY = 'hidden';
       }
+      
+      // Update explain button visibility when input changes
+      if (modal._updateExplainButtonVisibility) {
+        modal._updateExplainButtonVisibility();
+      }
     });
     
     // Handle Enter key
@@ -5446,6 +5451,20 @@ const WordSelector = {
     inputArea.appendChild(sendBtn);
     inputArea.appendChild(deleteBtn);
     
+    // Function to update explain button visibility based on input and conversation state
+    const updateExplainButtonVisibility = () => {
+      const inputValue = inputField.value.trim();
+      const resultsList = modal.querySelector('.word-web-search-results-list');
+      const hasChatMessages = resultsList && resultsList.querySelectorAll('.word-web-search-chat-message').length > 0;
+      
+      // Show explain button only if input is empty AND there are no chat messages
+      if (!inputValue && !hasChatMessages) {
+        explainBtn.style.display = 'flex';
+      } else {
+        explainBtn.style.display = 'none';
+      }
+    };
+    
     // Function to check if results container should be visible
     const updateResultsVisibility = () => {
       const resultsList = modal.querySelector('.word-web-search-results-list');
@@ -5456,12 +5475,13 @@ const WordSelector = {
       if (hasContent || isLoading) {
         // Show results container if there's content or loading
         resultsContainer.style.display = '';
-        explainBtn.style.display = 'none';
       } else {
         // Hide results container if no content
         resultsContainer.style.display = 'none';
-        explainBtn.style.display = 'flex'; // Show explain button
       }
+      
+      // Update explain button visibility
+      updateExplainButtonVisibility();
     };
     
     // Initial visibility check
@@ -5469,6 +5489,7 @@ const WordSelector = {
     
     // Store the update function on the modal for later use
     modal._updateResultsVisibility = updateResultsVisibility;
+    modal._updateExplainButtonVisibility = updateExplainButtonVisibility;
     
     // Prevent clicks inside modal from closing word popup
     modal.addEventListener('click', (e) => {
@@ -6746,6 +6767,16 @@ const WordSelector = {
     const deleteBtn = modal.querySelector('.word-web-search-delete-btn');
     if (deleteBtn) {
       deleteBtn.style.display = 'none';
+    }
+    
+    // Update explain button visibility after clearing chat
+    if (modal._updateExplainButtonVisibility) {
+      modal._updateExplainButtonVisibility();
+    }
+    
+    // Update results visibility
+    if (modal._updateResultsVisibility) {
+      modal._updateResultsVisibility();
     }
   },
   
@@ -8371,6 +8402,11 @@ const WordSelector = {
         cursor: not-allowed;
       }
       
+      .vocab-word-popup-ask-button:focus,
+      .vocab-word-popup-ask-button:focus-visible {
+        outline-offset: 2px;
+      }
+      
       /* View more button - bottom-left positioned */
       .vocab-word-popup-button {
         padding: 10px 18px;
@@ -8492,6 +8528,7 @@ const WordSelector = {
       .word-ask-ai-modal-content {
         display: flex;
         flex-direction: column;
+        padding-top: 20px;
         height: 100%;
         max-height: 49vh; /* Reduced to 70% of original 70vh */
         border-radius: 30px;
@@ -8604,28 +8641,10 @@ const WordSelector = {
         position: relative;
       }
       
-      /* Fade-out effect at top and bottom using pseudo-elements */
+      /* Fade-out effect at top and bottom using pseudo-elements - REMOVED */
       .word-ask-ai-modal-content::before,
       .word-ask-ai-modal-content::after {
-        content: '';
-        position: absolute;
-        left: 0;
-        right: 0;
-        height: 40px;
-        pointer-events: none;
-        z-index: 10;
-      }
-      
-      .word-ask-ai-modal-content::before {
-        top: 0;
-        background: linear-gradient(to bottom, white, rgba(255, 255, 255, 0));
-        border-radius: 30px 30px 0 0;
-      }
-      
-      .word-ask-ai-modal-content::after {
-        bottom: 0;
-        background: linear-gradient(to top, white, rgba(255, 255, 255, 0));
-        border-radius: 0 0 30px 30px;
+        display: none !important;
       }
       
       .word-web-search-loading {
@@ -8865,7 +8884,7 @@ const WordSelector = {
         display: flex;
         gap: 8px;
         padding: 16px;
-        border-top: 1px solid #e5e7eb;
+        // border-top: 1px solid #e5e7eb;
         background: white;
         align-items: center;
         position: relative; /* Enable absolute positioning for explain button */
@@ -8900,7 +8919,7 @@ const WordSelector = {
       
       .word-web-search-explain-btn {
         padding: 8px 16px;
-        background: #9527F5;
+        background: #9527F5 !important;
         color: white;
         border: none;
         border-radius: 8px;
