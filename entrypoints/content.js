@@ -1859,13 +1859,14 @@ export default defineContentScript({
             <path d="M17 3H7C5.9 3 5 3.9 5 5V21L12 18L19 21V5C19 3.9 18.1 3 17 3Z" fill="white"/>
           </svg>
         `;
-        // No click handler yet - user will tell what to do next
+        // Open bookmark words dialog on click
         bookmarkWordsBtn.addEventListener('click', (e) => {
           e.preventDefault();
           e.stopPropagation();
           // Close the menu
           menu.classList.remove('home-options-menu-visible');
-          console.log('[Content Script] Bookmark Words button clicked - handler to be implemented');
+          console.log('[Content Script] Bookmark Words button clicked - opening dialog');
+          BookmarkWordsDialog.open();
         });
         
         // Add tooltip to Bookmark Words button
@@ -1964,6 +1965,7 @@ export default defineContentScript({
     
     // Initialize the chat dialog
     ChatDialog.init();
+    BookmarkWordsDialog.init();
     
     // Wait for page to load completely, then fetch page text content in a separate thread
     if (document.readyState === 'complete') {
@@ -7565,7 +7567,7 @@ const WordSelector = {
       console.log('[WordSelector] Removed bookmark for:', word);
     } else {
       // Add bookmark
-      const success = await BookmarkWordsService.addBookmark(word, meaning);
+      const success = await BookmarkWordsService.addBookmark(word, meaning, window.location.href);
       if (success) {
         bookmarkBtn.classList.add('bookmarked');
         bookmarkBtn.innerHTML = this.createBookmarkIcon(true);
@@ -7624,7 +7626,7 @@ const WordSelector = {
       closeBtn.setAttribute('aria-label', 'Close');
       closeBtn.innerHTML = `
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path d="M18 6L6 18M6 6l12 12" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M18 6L6 18M6 6l12 12" stroke="#9527F5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
         </svg>
       `;
       closeBtn.addEventListener('click', (e) => {
@@ -7646,15 +7648,11 @@ const WordSelector = {
       closeContainer.appendChild(dontShowBtn);
       notification.appendChild(closeContainer);
 
-      // Insert notification after home-options button (appears to the left due to row-reverse)
+      // Insert notification before home-options button to appear on the left
       const container = homeOptionsBtn.parentElement;
       if (container) {
-        // Insert after the button - with row-reverse, this will appear to the left visually
-        if (homeOptionsBtn.nextSibling) {
-          container.insertBefore(notification, homeOptionsBtn.nextSibling);
-        } else {
-          container.appendChild(notification);
-        }
+        // Insert before the button - with row-reverse, this will appear to the left visually
+        container.insertBefore(notification, homeOptionsBtn);
       } else {
         // Fallback: append to body near home-options button
         document.body.appendChild(notification);
@@ -12759,13 +12757,14 @@ const TextSelector = {
         display: flex;
         align-items: center;
         gap: 12px;
-        background: #A020F0;
-        color: white;
+        background: white;
+        color: #c187f5;
         padding: 10px 16px;
-        border-radius: 24px;
+        border: 2px solid #c187f5;
+        border-radius: 20px;
         font-size: 14px;
         font-weight: 500;
-        box-shadow: 0 4px 12px rgba(160, 32, 240, 0.4);
+        box-shadow: 0 4px 12px rgba(149, 39, 245, 0.4);
         z-index: 10000001;
         margin-right: 12px;
         animation: bookmarkNotificationSlideIn 0.3s ease-out;
@@ -12816,10 +12815,14 @@ const TextSelector = {
         height: 14px;
       }
       
+      .bookmark-notification-close svg path {
+        stroke: #c187f5;
+      }
+      
       .bookmark-notification-dont-show {
         background: transparent;
-        border: 1px solid rgba(255, 255, 255, 0.5);
-        color: white;
+        border: None;
+        color: #B794F6;
         padding: 4px 10px;
         border-radius: 12px;
         font-size: 12px;
@@ -12830,8 +12833,8 @@ const TextSelector = {
       }
       
       .bookmark-notification-dont-show:hover {
-        background: rgba(255, 255, 255, 0.1);
-        border-color: rgba(255, 255, 255, 0.8);
+        background: rgba(149, 39, 245, 0.1);
+        border-color: rgba(149, 39, 245, 0.5);
       }
       
       .vocab-ask-about-page-tooltip.visible {
@@ -33923,5 +33926,1443 @@ const ButtonPanel = {
     });
   },
 
+};
+
+// ===================================
+// Bookmark Words Dialog - Shows bookmarked words in a table
+// ===================================
+const BookmarkWordsDialog = {
+  dialogContainer: null,
+  isOpen: false,
+  currentPage: 1,
+  itemsPerPage: 10,
+  sortBy: 'alphabetical', // 'alphabetical', 'oldest', 'newest'
+  searchQuery: '',
+  allBookmarks: [],
+  filteredBookmarks: [],
+  wordChatHistories: new Map(), // Store chat history for each word (persist until page reload)
+  
+  /**
+   * Initialize bookmark words dialog
+   */
+  init() {
+    console.log('[BookmarkWordsDialog] Initializing...');
+    this.injectStyles();
+  },
+  
+  /**
+   * Open bookmark words dialog
+   */
+  async open() {
+    console.log('[BookmarkWordsDialog] Opening...');
+    
+    if (this.isOpen) {
+      console.log('[BookmarkWordsDialog] Already open, closing first');
+      this.close();
+      return;
+    }
+    
+    // Load bookmarks
+    await this.loadBookmarks();
+    
+    // Create and show dialog
+    this.createDialog();
+    this.show();
+    
+    console.log('[BookmarkWordsDialog] Opened');
+  },
+  
+  /**
+   * Close bookmark words dialog
+   */
+  close() {
+    console.log('[BookmarkWordsDialog] Closing...');
+    
+    if (!this.isOpen) {
+      return;
+    }
+    
+    if (this.dialogContainer && this.dialogContainer.classList.contains('visible')) {
+      this.dialogContainer.classList.remove('visible');
+      setTimeout(() => {
+        this.hide();
+      }, 300);
+    } else {
+      this.hide();
+    }
+    
+    console.log('[BookmarkWordsDialog] Closed');
+  },
+  
+  /**
+   * Show dialog
+   */
+  show() {
+    if (!this.dialogContainer) return;
+    
+    this.isOpen = true;
+    
+    // Force a reflow
+    void this.dialogContainer.offsetHeight;
+    
+    // Add visible class to trigger animation
+    this.dialogContainer.classList.add('visible');
+  },
+  
+  /**
+   * Hide dialog
+   */
+  hide() {
+    if (!this.dialogContainer) return;
+    
+    // Clean up dropdown list if it exists
+    const dropdownList = document.querySelector('.vocab-bookmark-words-sort-dropdown-list');
+    if (dropdownList) {
+      dropdownList.remove();
+    }
+    
+    // Clean up event listeners
+    const dropdownContainer = this.dialogContainer.querySelector('.vocab-bookmark-words-sort-dropdown-container');
+    if (dropdownContainer) {
+      if (dropdownContainer._clickHandler) {
+        document.removeEventListener('click', dropdownContainer._clickHandler);
+      }
+      if (dropdownContainer._scrollHandler) {
+        window.removeEventListener('scroll', dropdownContainer._scrollHandler, true);
+      }
+      if (dropdownContainer._resizeHandler) {
+        window.removeEventListener('resize', dropdownContainer._resizeHandler);
+      }
+    }
+    
+    this.dialogContainer.remove();
+    this.dialogContainer = null;
+    this.isOpen = false;
+    this.currentPage = 1;
+    this.searchQuery = '';
+  },
+  
+  /**
+   * Load bookmarks from storage
+   */
+  async loadBookmarks() {
+    try {
+      const bookmarks = await BookmarkWordsService.getAllBookmarks();
+      
+      // Convert to array format: [{word, meaning, dateTime, url}]
+      this.allBookmarks = Object.entries(bookmarks).map(([word, data]) => ({
+        word: word,
+        meaning: data.meaning || '',
+        dateTime: data.dateTime || new Date().toISOString(),
+        url: data.url || ''
+      }));
+      
+      console.log('[BookmarkWordsDialog] Loaded', this.allBookmarks.length, 'bookmarks');
+      
+      // Apply filtering and sorting
+      this.applyFilters();
+    } catch (error) {
+      console.error('[BookmarkWordsDialog] Error loading bookmarks:', error);
+      this.allBookmarks = [];
+      this.filteredBookmarks = [];
+    }
+  },
+  
+  /**
+   * Apply search filter and sorting
+   */
+  applyFilters() {
+    // Apply search filter - only search in word, not meaning
+    let filtered = this.allBookmarks;
+    
+    if (this.searchQuery.trim()) {
+      const query = this.searchQuery.toLowerCase().trim();
+      filtered = filtered.filter(item => 
+        item.word.toLowerCase().includes(query)
+      );
+    }
+    
+    // Apply sorting
+    filtered = [...filtered]; // Create a copy to avoid mutating original
+    
+    switch (this.sortBy) {
+      case 'alphabetical':
+        filtered.sort((a, b) => a.word.localeCompare(b.word));
+        break;
+      case 'oldest':
+        filtered.sort((a, b) => new Date(a.dateTime) - new Date(b.dateTime));
+        break;
+      case 'newest':
+        filtered.sort((a, b) => new Date(b.dateTime) - new Date(a.dateTime));
+        break;
+    }
+    
+    this.filteredBookmarks = filtered;
+    this.currentPage = 1; // Reset to first page when filters change
+    
+    // Update display
+    this.renderTable();
+  },
+  
+  /**
+   * Get paginated bookmarks
+   */
+  getPaginatedBookmarks() {
+    const startIndex = (this.currentPage - 1) * this.itemsPerPage;
+    const endIndex = startIndex + this.itemsPerPage;
+    return this.filteredBookmarks.slice(startIndex, endIndex);
+  },
+  
+  /**
+   * Get total pages
+   */
+  getTotalPages() {
+    return Math.ceil(this.filteredBookmarks.length / this.itemsPerPage);
+  },
+  
+  /**
+   * Create dialog DOM structure
+   */
+  createDialog() {
+    console.log('[BookmarkWordsDialog] Creating dialog...');
+    
+    // Create main container
+    this.dialogContainer = document.createElement('div');
+    this.dialogContainer.id = 'vocab-bookmark-words-dialog';
+    this.dialogContainer.className = 'vocab-bookmark-words-dialog';
+    
+    // Create dialog content
+    const dialogContent = document.createElement('div');
+    dialogContent.className = 'vocab-bookmark-words-content';
+    
+    // Create left side button container
+    const leftButtonContainer = document.createElement('div');
+    leftButtonContainer.className = 'vocab-chat-left-buttons';
+    
+    // Create collapse button
+    const collapseBtn = document.createElement('button');
+    collapseBtn.className = 'vocab-chat-collapse-btn-small';
+    collapseBtn.setAttribute('aria-label', 'Close');
+    collapseBtn.innerHTML = ChatDialog.createCollapseIcon();
+    collapseBtn.addEventListener('click', () => this.close());
+    
+    leftButtonContainer.appendChild(collapseBtn);
+    
+    // Create header
+    const header = document.createElement('div');
+    header.className = 'vocab-bookmark-words-header';
+    header.textContent = 'Bookmarked Words';
+    
+    // Create controls container (search and sort)
+    const controlsContainer = document.createElement('div');
+    controlsContainer.className = 'vocab-bookmark-words-controls';
+    
+    // Create search input
+    const searchContainer = document.createElement('div');
+    searchContainer.className = 'vocab-bookmark-words-search-container';
+    
+    const searchInput = document.createElement('input');
+    searchInput.type = 'text';
+    searchInput.className = 'vocab-bookmark-words-search-input';
+    searchInput.placeholder = 'Search words...';
+    searchInput.value = this.searchQuery;
+    searchInput.addEventListener('input', (e) => {
+      this.searchQuery = e.target.value;
+      this.applyFilters();
+    });
+    
+    searchContainer.appendChild(searchInput);
+    
+    // Create sort dropdown (custom dropdown matching language dropdown style)
+    const sortContainer = document.createElement('div');
+    sortContainer.className = 'vocab-bookmark-words-sort-container';
+    
+    const sortLabel = document.createElement('label');
+    sortLabel.className = 'vocab-bookmark-words-sort-label';
+    sortLabel.textContent = 'Sort by:';
+    
+    // Create dropdown container (similar to language dropdown)
+    const dropdownContainer = document.createElement('div');
+    dropdownContainer.className = 'vocab-bookmark-words-sort-dropdown-container';
+    dropdownContainer.style.cssText = `
+      position: relative;
+      min-width: 160px;
+    `;
+    
+    // Create input field (readonly, for display)
+    const sortInput = document.createElement('input');
+    sortInput.type = 'text';
+    sortInput.className = 'vocab-bookmark-words-sort-input';
+    sortInput.readOnly = true;
+    sortInput.style.cssText = `
+      width: 100%;
+      padding: 12px 45px 12px 16px;
+      border: 2px solid #e5e5e5;
+      border-radius: 8px;
+      font-size: 14px !important;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif !important;
+      font-weight: 400 !important;
+      box-sizing: border-box;
+      outline: none;
+      transition: border-color 0.2s;
+      background-color: white !important;
+      color: black !important;
+      text-shadow: none !important;
+      cursor: pointer;
+      user-select: none;
+      -webkit-user-select: none;
+    `;
+    
+    // Dropdown icon
+    const dropdownIcon = document.createElement('div');
+    dropdownIcon.className = 'vocab-bookmark-words-sort-dropdown-icon';
+    dropdownIcon.innerHTML = `
+      <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M5 7.5L10 12.5L15 7.5" stroke="#666" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    `;
+    dropdownIcon.style.cssText = `
+      position: absolute;
+      right: 12px;
+      top: 50%;
+      transform: translateY(-50%);
+      pointer-events: none;
+      transition: transform 0.2s;
+      z-index: 2;
+    `;
+    
+    // Dropdown list
+    const dropdownList = document.createElement('div');
+    dropdownList.className = 'vocab-bookmark-words-sort-dropdown-list';
+    dropdownList.style.cssText = `
+      position: fixed !important;
+      background-color: white !important;
+      border-left: 2px solid #e5e5e5;
+      border-right: 2px solid #e5e5e5;
+      border-top: none;
+      border-bottom: 2px solid #e5e5e5;
+      border-radius: 0 0 8px 8px;
+      max-height: 300px;
+      overflow-y: auto;
+      display: none;
+      z-index: 2147483650 !important;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+      user-select: none;
+      -webkit-user-select: none;
+      -moz-user-select: none;
+      -ms-user-select: none;
+      isolation: isolate;
+      font-size: 14px !important;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif !important;
+      font-weight: 400 !important;
+      line-height: 1.5 !important;
+    `;
+    
+    const options = [
+      { value: 'alphabetical', text: 'Alphabetical order' },
+      { value: 'oldest', text: 'Older first' },
+      { value: 'newest', text: 'Newest first' }
+    ];
+    
+    // Set initial value
+    const currentOption = options.find(opt => opt.value === this.sortBy) || options[0];
+    sortInput.value = currentOption.text;
+    
+    // Create dropdown items
+    options.forEach(option => {
+      const item = document.createElement('div');
+      item.className = 'vocab-bookmark-words-sort-dropdown-item';
+      item.textContent = option.text;
+      item.style.cssText = `
+        padding: 12px 16px;
+        cursor: pointer;
+        transition: background-color 0.15s;
+        border-bottom: 1px solid #f3f4f6;
+      `;
+      
+      // Highlight selected item
+      if (option.value === this.sortBy) {
+        item.style.backgroundColor = '#f3e8ff';
+        item.style.fontWeight = '500';
+      }
+      
+      item.addEventListener('mouseenter', () => {
+        if (option.value !== this.sortBy) {
+          item.style.backgroundColor = '#f9fafb';
+        }
+      });
+      
+      item.addEventListener('mouseleave', () => {
+        if (option.value !== this.sortBy) {
+          item.style.backgroundColor = 'transparent';
+        }
+      });
+      
+      item.addEventListener('click', () => {
+        this.sortBy = option.value;
+        sortInput.value = option.text;
+        dropdownList.style.display = 'none';
+        dropdownIcon.style.transform = 'translateY(-50%) rotate(0deg)';
+        
+        // Update selected item styling
+        dropdownList.querySelectorAll('.vocab-bookmark-words-sort-dropdown-item').forEach(el => {
+          el.style.backgroundColor = 'transparent';
+          el.style.fontWeight = '400';
+        });
+        item.style.backgroundColor = '#f3e8ff';
+        item.style.fontWeight = '500';
+        
+        this.applyFilters();
+      });
+      
+      dropdownList.appendChild(item);
+    });
+    
+    // Function to update dropdown position
+    const updateDropdownPosition = () => {
+      const rect = sortInput.getBoundingClientRect();
+      dropdownList.style.top = `${rect.bottom + window.scrollY}px`;
+      dropdownList.style.left = `${rect.left + window.scrollX}px`;
+      dropdownList.style.width = `${rect.width}px`;
+    };
+    
+    // Toggle dropdown on input click
+    sortInput.addEventListener('click', () => {
+      if (dropdownList.style.display === 'none' || !dropdownList.style.display) {
+        updateDropdownPosition();
+        dropdownList.style.display = 'block';
+        dropdownIcon.style.transform = 'translateY(-50%) rotate(180deg)';
+        sortInput.style.borderColor = '#9333ea';
+      } else {
+        dropdownList.style.display = 'none';
+        dropdownIcon.style.transform = 'translateY(-50%) rotate(0deg)';
+        sortInput.style.borderColor = '#e5e5e5';
+      }
+    });
+    
+    sortInput.addEventListener('focus', () => {
+      sortInput.style.borderColor = '#9333ea';
+      updateDropdownPosition();
+      dropdownList.style.display = 'block';
+      dropdownIcon.style.transform = 'translateY(-50%) rotate(180deg)';
+    });
+    
+    sortInput.addEventListener('blur', () => {
+      sortInput.style.borderColor = '#e5e5e5';
+      setTimeout(() => {
+        dropdownList.style.display = 'none';
+        dropdownIcon.style.transform = 'translateY(-50%) rotate(0deg)';
+      }, 200);
+    });
+    
+    // Close dropdown when clicking outside
+    const clickHandler = (e) => {
+      if (!dropdownContainer.contains(e.target) && !dropdownList.contains(e.target)) {
+        dropdownList.style.display = 'none';
+        dropdownIcon.style.transform = 'translateY(-50%) rotate(0deg)';
+        sortInput.style.borderColor = '#e5e5e5';
+      }
+    };
+    document.addEventListener('click', clickHandler);
+    
+    // Update dropdown position on scroll/resize
+    const scrollHandler = () => updateDropdownPosition();
+    const resizeHandler = () => updateDropdownPosition();
+    window.addEventListener('scroll', scrollHandler, true);
+    window.addEventListener('resize', resizeHandler);
+    
+    dropdownContainer.appendChild(sortInput);
+    dropdownContainer.appendChild(dropdownIcon);
+    document.body.appendChild(dropdownList);
+    
+    // Store references for cleanup
+    dropdownContainer._dropdownList = dropdownList;
+    dropdownContainer._clickHandler = clickHandler;
+    dropdownContainer._scrollHandler = scrollHandler;
+    dropdownContainer._resizeHandler = resizeHandler;
+    
+    sortContainer.appendChild(sortLabel);
+    sortContainer.appendChild(dropdownContainer);
+    
+    controlsContainer.appendChild(searchContainer);
+    controlsContainer.appendChild(sortContainer);
+    
+    // Create table container
+    const tableContainer = document.createElement('div');
+    tableContainer.className = 'vocab-bookmark-words-table-container';
+    
+    // Create table
+    const table = document.createElement('table');
+    table.className = 'vocab-bookmark-words-table';
+    
+    // Create table header
+    const thead = document.createElement('thead');
+    const headerRow = document.createElement('tr');
+    
+    const wordHeader = document.createElement('th');
+    wordHeader.textContent = 'Word';
+    wordHeader.className = 'vocab-bookmark-words-th-word';
+    
+    const meaningHeader = document.createElement('th');
+    meaningHeader.textContent = 'Meaning';
+    meaningHeader.className = 'vocab-bookmark-words-th-meaning';
+    
+    const sourceHeader = document.createElement('th');
+    sourceHeader.textContent = 'Source';
+    sourceHeader.className = 'vocab-bookmark-words-th-source';
+    
+    const actionsHeader = document.createElement('th');
+    actionsHeader.textContent = 'Actions';
+    actionsHeader.className = 'vocab-bookmark-words-th-actions';
+    
+    headerRow.appendChild(wordHeader);
+    headerRow.appendChild(meaningHeader);
+    headerRow.appendChild(sourceHeader);
+    headerRow.appendChild(actionsHeader);
+    thead.appendChild(headerRow);
+    table.appendChild(thead);
+    
+    // Create table body
+    const tbody = document.createElement('tbody');
+    tbody.id = 'vocab-bookmark-words-tbody';
+    table.appendChild(tbody);
+    
+    tableContainer.appendChild(table);
+    
+    // Create pagination container
+    const paginationContainer = document.createElement('div');
+    paginationContainer.className = 'vocab-bookmark-words-pagination';
+    paginationContainer.id = 'vocab-bookmark-words-pagination';
+    
+    // Assemble dialog
+    dialogContent.appendChild(leftButtonContainer);
+    dialogContent.appendChild(header);
+    dialogContent.appendChild(controlsContainer);
+    dialogContent.appendChild(tableContainer);
+    dialogContent.appendChild(paginationContainer);
+    
+    this.dialogContainer.appendChild(dialogContent);
+    document.body.appendChild(this.dialogContainer);
+    
+    // Render initial table
+    this.renderTable();
+    
+    console.log('[BookmarkWordsDialog] Dialog created');
+  },
+  
+  /**
+   * Render table with paginated bookmarks
+   */
+  renderTable() {
+    const tbody = document.getElementById('vocab-bookmark-words-tbody');
+    const paginationContainer = document.getElementById('vocab-bookmark-words-pagination');
+    
+    if (!tbody || !paginationContainer) {
+      console.warn('[BookmarkWordsDialog] Table elements not found');
+      return;
+    }
+    
+    // Clear existing content
+    tbody.innerHTML = '';
+    paginationContainer.innerHTML = '';
+    
+    // Get paginated bookmarks
+    const paginatedBookmarks = this.getPaginatedBookmarks();
+    const totalPages = this.getTotalPages();
+    
+    // Render table rows
+    if (paginatedBookmarks.length === 0) {
+      const emptyRow = document.createElement('tr');
+      const emptyCell = document.createElement('td');
+      emptyCell.colSpan = 4;
+      emptyCell.className = 'vocab-bookmark-words-empty';
+      emptyCell.textContent = this.searchQuery.trim() 
+        ? 'No bookmarks found matching your search.' 
+        : 'No bookmarks yet. Words you bookmark will appear here.';
+      emptyRow.appendChild(emptyCell);
+      tbody.appendChild(emptyRow);
+    } else {
+      paginatedBookmarks.forEach(bookmark => {
+        const row = document.createElement('tr');
+        
+        const wordCell = document.createElement('td');
+        wordCell.className = 'vocab-bookmark-words-td-word';
+        
+        // Create word container with word text and copy icon
+        const wordContainer = document.createElement('div');
+        wordContainer.className = 'vocab-bookmark-words-word-container';
+        
+        const wordText = document.createElement('span');
+        wordText.className = 'vocab-bookmark-words-word-text';
+        wordText.textContent = bookmark.word;
+        wordText.style.cursor = 'pointer';
+        
+        // Create copy icon
+        const copyIcon = document.createElement('button');
+        copyIcon.className = 'vocab-bookmark-words-copy-icon';
+        copyIcon.setAttribute('aria-label', 'Copy word');
+        copyIcon.innerHTML = `
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <rect x="9" y="9" width="13" height="13" rx="2" ry="2" stroke="#9527F5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" stroke="#9527F5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        `;
+        copyIcon.addEventListener('click', (e) => {
+          e.stopPropagation();
+          navigator.clipboard.writeText(bookmark.word).then(() => {
+            // Show feedback
+            const originalHTML = copyIcon.innerHTML;
+            copyIcon.innerHTML = `
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M20 6L9 17l-5-5" stroke="#16a34a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            `;
+            setTimeout(() => {
+              copyIcon.innerHTML = originalHTML;
+            }, 1000);
+          }).catch(err => {
+            console.error('[BookmarkWordsDialog] Failed to copy word:', err);
+          });
+        });
+        
+        wordContainer.appendChild(wordText);
+        wordContainer.appendChild(copyIcon);
+        wordCell.appendChild(wordContainer);
+        
+        // Make word cell clickable to open word-ask-ai modal
+        wordCell.style.cursor = 'pointer';
+        wordCell.addEventListener('click', (e) => {
+          // Don't trigger if clicking on copy icon
+          if (e.target.closest('.vocab-bookmark-words-copy-icon')) {
+            return;
+          }
+          this.openWordAskAIModal(bookmark.word, bookmark.meaning, wordCell);
+        });
+        
+        const meaningCell = document.createElement('td');
+        meaningCell.className = 'vocab-bookmark-words-td-meaning';
+        meaningCell.textContent = bookmark.meaning;
+        
+        // Create source cell with link icon
+        const sourceCell = document.createElement('td');
+        sourceCell.className = 'vocab-bookmark-words-td-source';
+        
+        if (bookmark.url) {
+          const linkButton = document.createElement('button');
+          linkButton.className = 'vocab-bookmark-words-link-icon';
+          linkButton.setAttribute('aria-label', 'Open source page');
+          linkButton.title = bookmark.url;
+          linkButton.innerHTML = `
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" stroke="#9527F5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              <polyline points="15 3 21 3 21 9" stroke="#9527F5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              <line x1="10" y1="14" x2="21" y2="3" stroke="#9527F5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          `;
+          linkButton.addEventListener('click', (e) => {
+            e.stopPropagation();
+            window.open(bookmark.url, '_blank');
+          });
+          sourceCell.appendChild(linkButton);
+        } else {
+          sourceCell.textContent = '-';
+          sourceCell.style.color = '#9ca3af';
+        }
+        
+        // Create actions cell with delete button
+        const actionsCell = document.createElement('td');
+        actionsCell.className = 'vocab-bookmark-words-td-actions';
+        
+        const deleteButton = document.createElement('button');
+        deleteButton.className = 'vocab-bookmark-words-delete-icon';
+        deleteButton.setAttribute('aria-label', 'Delete bookmark');
+        deleteButton.innerHTML = `
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6h14z" stroke="#ef4444" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            <line x1="10" y1="11" x2="10" y2="17" stroke="#ef4444" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            <line x1="14" y1="11" x2="14" y2="17" stroke="#ef4444" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        `;
+        deleteButton.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          if (confirm(`Are you sure you want to delete "${bookmark.word}" from bookmarks?`)) {
+            const success = await BookmarkWordsService.removeBookmark(bookmark.word);
+            if (success) {
+              // Reload bookmarks and re-render table
+              await this.loadBookmarks();
+              this.renderTable();
+            }
+          }
+        });
+        actionsCell.appendChild(deleteButton);
+        
+        row.appendChild(wordCell);
+        row.appendChild(meaningCell);
+        row.appendChild(sourceCell);
+        row.appendChild(actionsCell);
+        tbody.appendChild(row);
+      });
+    }
+    
+    // Render pagination
+    if (totalPages > 1) {
+      const paginationInfo = document.createElement('div');
+      paginationInfo.className = 'vocab-bookmark-words-pagination-info';
+      paginationInfo.textContent = `Page ${this.currentPage} of ${totalPages} (${this.filteredBookmarks.length} total)`;
+      
+      const paginationButtons = document.createElement('div');
+      paginationButtons.className = 'vocab-bookmark-words-pagination-buttons';
+      
+      // Previous button
+      const prevButton = document.createElement('button');
+      prevButton.className = 'vocab-bookmark-words-pagination-btn';
+      prevButton.textContent = 'Previous';
+      prevButton.disabled = this.currentPage === 1;
+      prevButton.addEventListener('click', () => {
+        if (this.currentPage > 1) {
+          this.currentPage--;
+          this.renderTable();
+        }
+      });
+      
+      // Next button
+      const nextButton = document.createElement('button');
+      nextButton.className = 'vocab-bookmark-words-pagination-btn';
+      nextButton.textContent = 'Next';
+      nextButton.disabled = this.currentPage === totalPages;
+      nextButton.addEventListener('click', () => {
+        if (this.currentPage < totalPages) {
+          this.currentPage++;
+          this.renderTable();
+        }
+      });
+      
+      paginationButtons.appendChild(prevButton);
+      paginationButtons.appendChild(nextButton);
+      
+      paginationContainer.appendChild(paginationInfo);
+      paginationContainer.appendChild(paginationButtons);
+    } else if (this.filteredBookmarks.length > 0) {
+      const paginationInfo = document.createElement('div');
+      paginationInfo.className = 'vocab-bookmark-words-pagination-info';
+      paginationInfo.textContent = `${this.filteredBookmarks.length} bookmark${this.filteredBookmarks.length === 1 ? '' : 's'}`;
+      paginationContainer.appendChild(paginationInfo);
+    }
+  },
+  
+  /**
+   * Open word-ask-ai modal for a bookmarked word
+   * @param {string} word - The word
+   * @param {string} meaning - The meaning
+   * @param {HTMLElement} wordCell - The word cell element (for closing animation)
+   */
+  openWordAskAIModal(word, meaning, wordCell) {
+    console.log('[BookmarkWordsDialog] Opening word-ask-ai modal for:', word);
+    
+    const normalizedWord = word.toLowerCase();
+    
+    // Check if there's existing chat history for this word
+    let existingChatHistory = this.wordChatHistories.get(normalizedWord) || [];
+    
+    // Format initial context as: word: <word> and contextual meaning: <meaning>
+    const initialContext = `word: ${word}\n\ncontextual meaning: ${meaning}`;
+    
+    // Check if modal already exists for this word
+    const existingModal = document.querySelector(`.word-web-search-modal[data-word="${normalizedWord}"]`);
+    if (existingModal) {
+      console.log('[BookmarkWordsDialog] Modal already open for this word');
+      return;
+    }
+    
+    // Ensure word exists in TextSelector.explainedWords for proper chat history persistence
+    if (typeof TextSelector !== 'undefined' && TextSelector.explainedWords) {
+      if (!TextSelector.explainedWords.has(normalizedWord)) {
+        TextSelector.explainedWords.set(normalizedWord, {
+          word: word,
+          meaning: meaning,
+          highlights: new Set(),
+          askAIChatHistory: existingChatHistory,
+          askAIInitialContext: initialContext
+        });
+      } else {
+        // Update existing entry with chat history and initial context
+        const wordData = TextSelector.explainedWords.get(normalizedWord);
+        if (existingChatHistory.length > 0) {
+          wordData.askAIChatHistory = existingChatHistory;
+        }
+        wordData.askAIInitialContext = initialContext;
+      }
+    }
+    
+    // Create a dummy button element for positioning (we'll position relative to word cell)
+    const dummyButton = document.createElement('button');
+    dummyButton.style.position = 'absolute';
+    const wordCellRect = wordCell.getBoundingClientRect();
+    dummyButton.style.top = `${wordCellRect.top}px`;
+    dummyButton.style.left = `${wordCellRect.right}px`;
+    dummyButton.style.width = '0px';
+    dummyButton.style.height = '0px';
+    document.body.appendChild(dummyButton);
+    
+    // Use WordSelector's createAndShowAskAIModal method
+    // Check if TextSelector is available (it's defined as const, so check for the object and method)
+    if (typeof TextSelector !== 'undefined' && TextSelector && typeof TextSelector.createAndShowAskAIModal === 'function') {
+      // Store word cell reference on modal for closing animation
+      const modalPromise = new Promise((resolve) => {
+        // Use setTimeout to wait for modal to be created
+        setTimeout(() => {
+          const modal = document.querySelector(`.word-web-search-modal[data-word="${normalizedWord}"]`);
+          if (modal) {
+            modal._bookmarkWordCell = wordCell;
+            modal._bookmarkWord = word;
+            // Store initial context
+            modal.setAttribute('data-initial-context', initialContext);
+            // Set chat history on modal
+            if (existingChatHistory.length > 0) {
+              modal.setAttribute('data-chat-history', JSON.stringify(existingChatHistory));
+            }
+            resolve(modal);
+          }
+        }, 100);
+      });
+      
+      // Call the method with empty examples array
+      TextSelector.createAndShowAskAIModal(
+        word,
+        meaning,
+        [], // examples
+        null, // wordPopup (not needed)
+        dummyButton, // searchButton (for positioning)
+        existingChatHistory,
+        initialContext
+      );
+      
+      // Set up click outside handler to close modal with animation
+      modalPromise.then(modal => {
+        if (!modal) return;
+        
+        // Remove dummy button
+        dummyButton.remove();
+        
+        // Add click outside handler
+        const clickOutsideHandler = (e) => {
+          // Check if click is outside modal
+          if (!modal.contains(e.target) && !wordCell.contains(e.target)) {
+            // Don't close if clicking inside bookmark words dialog
+            if (this.dialogContainer && this.dialogContainer.contains(e.target)) {
+              return;
+            }
+            
+            console.log('[BookmarkWordsDialog] Clicking outside modal - closing with animation');
+            this.closeWordAskAIModalWithAnimation(modal, wordCell);
+            document.removeEventListener('click', clickOutsideHandler);
+          }
+        };
+        
+        // Use capture phase to catch clicks before they bubble
+        document.addEventListener('click', clickOutsideHandler, true);
+        
+        // Store handler for cleanup
+        modal._clickOutsideHandler = clickOutsideHandler;
+        
+        // Update chat history when modal receives messages
+        const resultsList = modal.querySelector('.word-web-search-results-list');
+        if (resultsList) {
+          const observer = new MutationObserver(() => {
+            // Get chat history from modal's data attribute (updated by sendWebSearchChatMessage)
+            const chatHistoryJson = modal.getAttribute('data-chat-history') || '[]';
+            let chatHistory = [];
+            try {
+              chatHistory = JSON.parse(chatHistoryJson);
+            } catch (e) {
+              console.error('[BookmarkWordsDialog] Error parsing chat history:', e);
+            }
+            
+            // Store chat history in both places
+            this.wordChatHistories.set(normalizedWord, chatHistory);
+            
+            // Also update TextSelector.explainedWords if available
+            if (typeof TextSelector !== 'undefined' && TextSelector.explainedWords && TextSelector.explainedWords.has(normalizedWord)) {
+              const wordData = TextSelector.explainedWords.get(normalizedWord);
+              wordData.askAIChatHistory = chatHistory;
+            }
+            
+            console.log('[BookmarkWordsDialog] Updated chat history for word:', normalizedWord, chatHistory.length, 'messages');
+          });
+          
+          observer.observe(resultsList, { childList: true, subtree: true });
+          observer.observe(modal, { attributes: true, attributeFilter: ['data-chat-history'] });
+          modal._chatHistoryObserver = observer;
+        }
+      });
+    } else {
+      console.error('[BookmarkWordsDialog] TextSelector.createAndShowAskAIModal not available');
+      dummyButton.remove();
+    }
+  },
+  
+  /**
+   * Close word-ask-ai modal with animation (move to word cell and scale down)
+   * @param {HTMLElement} modal - The modal element
+   * @param {HTMLElement} wordCell - The word cell element to animate to
+   */
+  closeWordAskAIModalWithAnimation(modal, wordCell) {
+    console.log('[BookmarkWordsDialog] Closing word-ask-ai modal with animation');
+    
+    // Check if already closing
+    if (modal.classList.contains('ask-ai-closing')) {
+      return;
+    }
+    
+    // Clean up observers and handlers
+    if (modal._chatHistoryObserver) {
+      modal._chatHistoryObserver.disconnect();
+    }
+    if (modal._clickOutsideHandler) {
+      document.removeEventListener('click', modal._clickOutsideHandler, true);
+    }
+    
+    // Get current modal position and dimensions
+    const modalRect = modal.getBoundingClientRect();
+    const currentWidth = modalRect.width;
+    const currentHeight = modalRect.height;
+    
+    const scrollX = window.scrollX || window.pageXOffset || 0;
+    const scrollY = window.scrollY || window.pageYOffset || 0;
+    
+    // Get word cell center position
+    const wordCellRect = wordCell.getBoundingClientRect();
+    const wordCellCenterX = wordCellRect.left + wordCellRect.width / 2;
+    const wordCellCenterY = wordCellRect.top + wordCellRect.height / 2;
+    
+    // Convert to document coordinates
+    const finalLeft = wordCellCenterX + scrollX;
+    const finalTop = wordCellCenterY + scrollY;
+    
+    // Get current modal position
+    let currentTop = parseFloat(modal.style.top);
+    let currentLeft = parseFloat(modal.style.left);
+    
+    if (isNaN(currentTop)) {
+      currentTop = modalRect.top + scrollY;
+    }
+    if (isNaN(currentLeft)) {
+      currentLeft = modalRect.left + scrollX;
+    }
+    
+    // Set initial state
+    modal.style.setProperty('opacity', '1', 'important');
+    modal.style.setProperty('transform', 'none', 'important');
+    modal.style.setProperty('top', `${currentTop}px`, 'important');
+    modal.style.setProperty('left', `${currentLeft}px`, 'important');
+    modal.style.setProperty('width', `${currentWidth}px`, 'important');
+    modal.style.setProperty('height', `${currentHeight}px`, 'important');
+    modal.style.setProperty('overflow', 'hidden', 'important');
+    
+    // Force reflow
+    void modal.offsetHeight;
+    
+    // Remove constraints
+    modal.style.setProperty('min-width', '0px', 'important');
+    modal.style.setProperty('min-height', '0px', 'important');
+    modal.style.setProperty('max-width', 'none', 'important');
+    modal.style.setProperty('max-height', 'none', 'important');
+    
+    // Set transition for 0.2s animation
+    modal.style.setProperty('transition', 'top 0.2s ease-out, left 0.2s ease-out, width 0.2s ease-out, height 0.2s ease-out, opacity 0.2s ease-out', 'important');
+    
+    // Add closing class
+    modal.classList.add('ask-ai-closing');
+    
+    // Force reflow
+    void modal.offsetHeight;
+    
+    // Animate to word cell center and scale down to 0
+    modal.style.setProperty('top', `${finalTop}px`, 'important');
+    modal.style.setProperty('left', `${finalLeft}px`, 'important');
+    modal.style.setProperty('width', '0px', 'important');
+    modal.style.setProperty('height', '0px', 'important');
+    modal.style.setProperty('opacity', '0', 'important');
+    
+    // Remove modal after animation
+    setTimeout(() => {
+      modal.remove();
+      console.log('[BookmarkWordsDialog] Modal removed after animation');
+    }, 200);
+  },
+  
+  /**
+   * Inject styles for bookmark words dialog
+   */
+  injectStyles() {
+    const styleId = 'vocab-bookmark-words-dialog-styles';
+    
+    if (document.getElementById(styleId)) {
+      return;
+    }
+    
+    const style = document.createElement('style');
+    style.id = styleId;
+    style.textContent = `
+      /* Bookmark Words Dialog Container */
+      .vocab-bookmark-words-dialog {
+        position: fixed;
+        right: 0;
+        top: 50%;
+        transform: translateY(-50%) translateX(100%);
+        width: 600px !important;
+        max-width: 90vw;
+        height: 800px !important;
+        max-height: 80vh;
+        z-index: 2147483647 !important;
+        transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+        user-select: none;
+        background: white !important;
+        border-radius: 30px 0 0 30px;
+      }
+      
+      .vocab-bookmark-words-dialog.visible {
+        transform: translateY(-50%) translateX(0);
+      }
+      
+      /* Dialog Content */
+      .vocab-bookmark-words-content {
+        background: white !important;
+        height: 100%;
+        border-radius: 30px 0 0 30px;
+        box-shadow: -4px 0 24px rgba(149, 39, 245, 0.2), -2px 0 12px rgba(149, 39, 245, 0.1);
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        position: relative;
+        padding: 20px;
+        padding-top: 60px;
+      }
+      
+      /* Header */
+      .vocab-bookmark-words-header {
+        font-size: 20px;
+        font-weight: 600;
+        color: #9527F5;
+        margin-bottom: 20px;
+        text-align: center;
+        padding-top: 10px;
+      }
+      
+      /* Controls Container */
+      .vocab-bookmark-words-controls {
+        display: flex;
+        gap: 16px;
+        margin-bottom: 20px;
+        flex-wrap: wrap;
+      }
+      
+      /* Search Container */
+      .vocab-bookmark-words-search-container {
+        flex: 1;
+        min-width: 200px;
+      }
+      
+      .vocab-bookmark-words-search-input {
+        width: 100%;
+        padding: 10px 16px;
+        border: 1.5px solid #d1d5db;
+        border-radius: 8px;
+        font-size: 14px;
+        font-family: inherit;
+        transition: border-color 0.2s ease;
+        box-sizing: border-box;
+      }
+      
+      .vocab-bookmark-words-search-input:focus {
+        outline: none;
+        border-color: #9527F5;
+      }
+      
+      /* Sort Container */
+      .vocab-bookmark-words-sort-container {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      
+      .vocab-bookmark-words-sort-label {
+        font-size: 14px;
+        font-weight: 500;
+        color: #374151;
+        white-space: nowrap;
+      }
+      
+      /* Sort Dropdown Container */
+      .vocab-bookmark-words-sort-dropdown-container {
+        position: relative;
+        min-width: 160px;
+      }
+      
+      /* Sort Dropdown Input (matches language dropdown) */
+      .vocab-bookmark-words-sort-input {
+        width: 100%;
+        padding: 12px 45px 12px 16px;
+        border: 2px solid #e5e5e5;
+        border-radius: 8px;
+        font-size: 14px !important;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif !important;
+        font-weight: 400 !important;
+        box-sizing: border-box;
+        outline: none;
+        transition: border-color 0.2s;
+        background-color: white !important;
+        color: black !important;
+        text-shadow: none !important;
+        cursor: pointer;
+        user-select: none;
+        -webkit-user-select: none;
+      }
+      
+      .vocab-bookmark-words-sort-input:focus {
+        border-color: #9333ea;
+      }
+      
+      /* Sort Dropdown Icon */
+      .vocab-bookmark-words-sort-dropdown-icon {
+        position: absolute;
+        right: 12px;
+        top: 50%;
+        transform: translateY(-50%);
+        pointer-events: none;
+        transition: transform 0.2s;
+        z-index: 2;
+      }
+      
+      /* Sort Dropdown List (matches language dropdown) */
+      .vocab-bookmark-words-sort-dropdown-list {
+        position: fixed !important;
+        background-color: white !important;
+        border-left: 2px solid #e5e5e5;
+        border-right: 2px solid #e5e5e5;
+        border-top: none;
+        border-bottom: 2px solid #e5e5e5;
+        border-radius: 0 0 8px 8px;
+        max-height: 300px;
+        overflow-y: auto;
+        display: none;
+        z-index: 2147483650 !important;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        user-select: none;
+        -webkit-user-select: none;
+        -moz-user-select: none;
+        -ms-user-select: none;
+        isolation: isolate;
+        font-size: 14px !important;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif !important;
+        font-weight: 400 !important;
+        line-height: 1.5 !important;
+      }
+      
+      /* Sort Dropdown Item */
+      .vocab-bookmark-words-sort-dropdown-item {
+        padding: 12px 16px;
+        cursor: pointer;
+        transition: background-color 0.15s;
+        border-bottom: 1px solid #f3f4f6;
+      }
+      
+      .vocab-bookmark-words-sort-dropdown-item:last-child {
+        border-bottom: none;
+      }
+      
+      .vocab-bookmark-words-sort-dropdown-item:hover {
+        background-color: #f9fafb;
+      }
+      
+      /* Scrollbar styling for dropdown list */
+      .vocab-bookmark-words-sort-dropdown-list::-webkit-scrollbar {
+        width: 6px;
+      }
+      
+      .vocab-bookmark-words-sort-dropdown-list::-webkit-scrollbar-track {
+        background: #f1f5f9;
+        border-radius: 3px;
+      }
+      
+      .vocab-bookmark-words-sort-dropdown-list::-webkit-scrollbar-thumb {
+        background: #cbd5e1;
+        border-radius: 3px;
+      }
+      
+      .vocab-bookmark-words-sort-dropdown-list::-webkit-scrollbar-thumb:hover {
+        background: #94a3b8;
+      }
+      
+      /* Table Container */
+      .vocab-bookmark-words-table-container {
+        flex: 1;
+        overflow-y: auto;
+        border: 1px solid #e5e7eb;
+        border-radius: 12px;
+        margin-bottom: 16px;
+      }
+      
+      /* Table */
+      .vocab-bookmark-words-table {
+        width: 100%;
+        border-collapse: collapse;
+        background: white;
+      }
+      
+      /* Table Header */
+      .vocab-bookmark-words-th-word,
+      .vocab-bookmark-words-th-meaning,
+      .vocab-bookmark-words-th-source,
+      .vocab-bookmark-words-th-actions {
+        padding: 12px 16px;
+        text-align: left;
+        font-weight: 600;
+        font-size: 13px;
+        color: #374151;
+        background: #f9fafb;
+        border-bottom: 2px solid #e5e7eb;
+        position: sticky;
+        top: 0;
+        z-index: 1;
+      }
+      
+      .vocab-bookmark-words-th-word {
+        width: 25%;
+      }
+      
+      .vocab-bookmark-words-th-meaning {
+        width: 45%;
+      }
+      
+      .vocab-bookmark-words-th-source {
+        width: 15%;
+      }
+      
+      .vocab-bookmark-words-th-actions {
+        width: 15%;
+      }
+      
+      /* Table Body */
+      .vocab-bookmark-words-td-word,
+      .vocab-bookmark-words-td-meaning,
+      .vocab-bookmark-words-td-source,
+      .vocab-bookmark-words-td-actions {
+        padding: 12px 16px;
+        font-size: 14px;
+        color: #374151;
+        border-bottom: 1px solid #f3f4f6;
+        vertical-align: middle;
+      }
+      
+      .vocab-bookmark-words-td-source,
+      .vocab-bookmark-words-td-actions {
+        text-align: center;
+      }
+      
+      .vocab-bookmark-words-td-word {
+        font-weight: 500;
+        color: #9527F5;
+        position: relative;
+      }
+      
+      /* Word Container */
+      .vocab-bookmark-words-word-container {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      
+      .vocab-bookmark-words-word-text {
+        flex: 1;
+        cursor: pointer;
+        transition: color 0.2s ease;
+      }
+      
+      .vocab-bookmark-words-word-text:hover {
+        color: #7a1fd9;
+        text-decoration: underline;
+      }
+      
+      /* Copy Icon */
+      .vocab-bookmark-words-copy-icon {
+        width: 24px;
+        height: 24px;
+        padding: 4px;
+        border: none;
+        background: transparent;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 4px;
+        transition: background-color 0.2s ease;
+        opacity: 0.6;
+        flex-shrink: 0;
+      }
+      
+      .vocab-bookmark-words-copy-icon:hover {
+        background: #f3f4f6;
+        opacity: 1;
+      }
+      
+      .vocab-bookmark-words-copy-icon:active {
+        background: #e5e7eb;
+      }
+      
+      .vocab-bookmark-words-copy-icon svg {
+        width: 100%;
+        height: 100%;
+      }
+      
+      .vocab-bookmark-words-td-meaning {
+        line-height: 1.5;
+      }
+      
+      /* Link Icon Button */
+      .vocab-bookmark-words-link-icon {
+        width: 32px;
+        height: 32px;
+        padding: 6px;
+        border: none;
+        background: transparent;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 6px;
+        transition: background-color 0.2s ease;
+        opacity: 0.7;
+      }
+      
+      .vocab-bookmark-words-link-icon:hover {
+        background: #f3e8ff;
+        opacity: 1;
+      }
+      
+      .vocab-bookmark-words-link-icon:active {
+        background: #e9d5ff;
+      }
+      
+      .vocab-bookmark-words-link-icon svg {
+        width: 100%;
+        height: 100%;
+      }
+      
+      /* Delete Icon Button */
+      .vocab-bookmark-words-delete-icon {
+        width: 32px;
+        height: 32px;
+        padding: 6px;
+        border: none;
+        background: transparent;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 6px;
+        transition: background-color 0.2s ease;
+        opacity: 0.7;
+      }
+      
+      .vocab-bookmark-words-delete-icon:hover {
+        background: #fef2f2;
+        opacity: 1;
+      }
+      
+      .vocab-bookmark-words-delete-icon:active {
+        background: #fee2e2;
+      }
+      
+      .vocab-bookmark-words-delete-icon svg {
+        width: 100%;
+        height: 100%;
+      }
+      
+      /* Light purple hover effect for table rows (lighter) */
+      .vocab-bookmark-words-table tbody tr:hover {
+        background: #faf5ff !important;
+      }
+      
+      .vocab-bookmark-words-table tbody tr:last-child td {
+        border-bottom: none;
+      }
+      
+      /* Empty State */
+      .vocab-bookmark-words-empty {
+        text-align: center;
+        padding: 40px 20px !important;
+        color: #6b7280;
+        font-size: 14px;
+      }
+      
+      /* Pagination */
+      .vocab-bookmark-words-pagination {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 12px;
+        padding-top: 16px;
+        border-top: 1px solid #e5e7eb;
+      }
+      
+      .vocab-bookmark-words-pagination-info {
+        font-size: 13px;
+        color: #6b7280;
+      }
+      
+      .vocab-bookmark-words-pagination-buttons {
+        display: flex;
+        gap: 8px;
+      }
+      
+      .vocab-bookmark-words-pagination-btn {
+        padding: 8px 16px;
+        border: 1.5px solid #d1d5db;
+        border-radius: 8px;
+        background: white;
+        color: #374151;
+        font-size: 14px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        font-family: inherit;
+      }
+      
+      .vocab-bookmark-words-pagination-btn:hover:not(:disabled) {
+        background: #f9fafb;
+        border-color: #9527F5;
+        color: #9527F5;
+      }
+      
+      .vocab-bookmark-words-pagination-btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+      
+      /* Scrollbar styling */
+      .vocab-bookmark-words-table-container::-webkit-scrollbar {
+        width: 6px;
+      }
+      
+      .vocab-bookmark-words-table-container::-webkit-scrollbar-track {
+        background: #f1f5f9;
+        border-radius: 3px;
+      }
+      
+      .vocab-bookmark-words-table-container::-webkit-scrollbar-thumb {
+        background: #cbd5e1;
+        border-radius: 3px;
+      }
+      
+      .vocab-bookmark-words-table-container::-webkit-scrollbar-thumb:hover {
+        background: #94a3b8;
+      }
+    `;
+    
+    document.head.appendChild(style);
+    console.log('[BookmarkWordsDialog] Styles injected');
+  }
 };
 
