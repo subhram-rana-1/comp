@@ -34326,6 +34326,14 @@ const BookmarkWordsDialog = {
       dropdownList.style.width = `${rect.width}px`;
     };
     
+    // Prevent double-click from triggering word processing
+    sortInput.addEventListener('dblclick', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      e.stopImmediatePropagation();
+      return false;
+    });
+    
     // Toggle dropdown on input click
     sortInput.addEventListener('click', () => {
       if (dropdownList.style.display === 'none' || !dropdownList.style.display) {
@@ -34442,12 +34450,78 @@ const BookmarkWordsDialog = {
     dialogContent.appendChild(paginationContainer);
     
     this.dialogContainer.appendChild(dialogContent);
+    
+    // Create resize handle for left side
+    const resizeHandle = this.createResizeHandle();
+    this.dialogContainer.appendChild(resizeHandle);
+    
     document.body.appendChild(this.dialogContainer);
+    
+    // Initialize resize functionality
+    this.initResize();
     
     // Render initial table
     this.renderTable();
     
     console.log('[BookmarkWordsDialog] Dialog created');
+  },
+  
+  /**
+   * Create resize handle for left side
+   */
+  createResizeHandle() {
+    const handle = document.createElement('div');
+    handle.className = 'vocab-bookmark-words-resize-handle';
+    return handle;
+  },
+  
+  /**
+   * Initialize resize functionality
+   */
+  initResize() {
+    let isResizing = false;
+    let startX = 0;
+    let startWidth = 0;
+    
+    const resizeHandle = this.dialogContainer.querySelector('.vocab-bookmark-words-resize-handle');
+    if (!resizeHandle) return;
+    
+    const startResize = (e) => {
+      isResizing = true;
+      startX = e.clientX;
+      
+      const rect = this.dialogContainer.getBoundingClientRect();
+      startWidth = rect.width;
+      
+      e.preventDefault();
+      document.body.style.userSelect = 'none';
+      resizeHandle.classList.add('resizing');
+    };
+    
+    const resize = (e) => {
+      if (!isResizing) return;
+      
+      // Calculate new width (inverted for right-side panel)
+      const deltaX = startX - e.clientX;
+      const newWidth = Math.max(300, Math.min(1000, startWidth + deltaX));
+      
+      this.dialogContainer.style.setProperty('width', `${newWidth}px`, 'important');
+      // Keep dialog vertically centered during resize
+      this.dialogContainer.style.setProperty('top', '50%', 'important');
+      this.dialogContainer.style.setProperty('transform', 'translateY(-50%) translateX(0)', 'important');
+    };
+    
+    const stopResize = () => {
+      if (!isResizing) return;
+      
+      isResizing = false;
+      document.body.style.userSelect = '';
+      resizeHandle.classList.remove('resizing');
+    };
+    
+    resizeHandle.addEventListener('mousedown', startResize);
+    document.addEventListener('mousemove', resize);
+    document.addEventListener('mouseup', stopResize);
   },
   
   /**
@@ -34585,14 +34659,21 @@ const BookmarkWordsDialog = {
         `;
         deleteButton.addEventListener('click', async (e) => {
           e.stopPropagation();
-          if (confirm(`Are you sure you want to delete "${bookmark.word}" from bookmarks?`)) {
+          
+          // Add fade-out animation
+          row.style.transition = 'opacity 0.3s ease-out, transform 0.3s ease-out';
+          row.style.opacity = '0';
+          row.style.transform = 'translateX(-20px)';
+          
+          // Delete after animation
+          setTimeout(async () => {
             const success = await BookmarkWordsService.removeBookmark(bookmark.word);
             if (success) {
               // Reload bookmarks and re-render table
               await this.loadBookmarks();
               this.renderTable();
             }
-          }
+          }, 300);
         });
         actionsCell.appendChild(deleteButton);
         
@@ -34705,8 +34786,15 @@ const BookmarkWordsDialog = {
     document.body.appendChild(dummyButton);
     
     // Use WordSelector's createAndShowAskAIModal method
-    // Check if TextSelector is available (it's defined as const, so check for the object and method)
-    if (typeof TextSelector !== 'undefined' && TextSelector && typeof TextSelector.createAndShowAskAIModal === 'function') {
+    // Check if TextSelector is available - wait a bit if it's not ready yet
+    const tryOpenModal = () => {
+      if (typeof TextSelector !== 'undefined' && TextSelector && typeof TextSelector.createAndShowAskAIModal === 'function') {
+        return true;
+      }
+      return false;
+    };
+    
+    if (tryOpenModal()) {
       // Store word cell reference on modal for closing animation
       const modalPromise = new Promise((resolve) => {
         // Use setTimeout to wait for modal to be created
@@ -34796,8 +34884,86 @@ const BookmarkWordsDialog = {
         }
       });
     } else {
-      console.error('[BookmarkWordsDialog] TextSelector.createAndShowAskAIModal not available');
-      dummyButton.remove();
+      // TextSelector might not be initialized yet, wait a bit and try again
+      console.log('[BookmarkWordsDialog] TextSelector not ready, waiting...');
+      let attempts = 0;
+      const maxAttempts = 10;
+      const checkInterval = setInterval(() => {
+        attempts++;
+        if (tryOpenModal() || attempts >= maxAttempts) {
+          clearInterval(checkInterval);
+          if (tryOpenModal()) {
+            // Retry opening modal - call the method directly instead of recursive call
+            try {
+              TextSelector.createAndShowAskAIModal(
+                word,
+                meaning,
+                [],
+                null,
+                dummyButton,
+                existingChatHistory,
+                initialContext
+              );
+              
+              // Set up modal handlers after a delay
+              setTimeout(() => {
+                const modal = document.querySelector(`.word-web-search-modal[data-word="${normalizedWord}"]`);
+                if (modal) {
+                  modal._bookmarkWordCell = wordCell;
+                  modal._bookmarkWord = word;
+                  modal.setAttribute('data-initial-context', initialContext);
+                  if (existingChatHistory.length > 0) {
+                    modal.setAttribute('data-chat-history', JSON.stringify(existingChatHistory));
+                  }
+                  
+                  // Set up click outside handler
+                  const clickOutsideHandler = (e) => {
+                    if (!modal.contains(e.target) && !wordCell.contains(e.target)) {
+                      if (this.dialogContainer && this.dialogContainer.contains(e.target)) {
+                        return;
+                      }
+                      console.log('[BookmarkWordsDialog] Clicking outside modal - closing with animation');
+                      this.closeWordAskAIModalWithAnimation(modal, wordCell);
+                      document.removeEventListener('click', clickOutsideHandler, true);
+                    }
+                  };
+                  document.addEventListener('click', clickOutsideHandler, true);
+                  modal._clickOutsideHandler = clickOutsideHandler;
+                  
+                  // Set up chat history observer
+                  const resultsList = modal.querySelector('.word-web-search-results-list');
+                  if (resultsList) {
+                    const observer = new MutationObserver(() => {
+                      const chatHistoryJson = modal.getAttribute('data-chat-history') || '[]';
+                      let chatHistory = [];
+                      try {
+                        chatHistory = JSON.parse(chatHistoryJson);
+                      } catch (e) {
+                        console.error('[BookmarkWordsDialog] Error parsing chat history:', e);
+                      }
+                      this.wordChatHistories.set(normalizedWord, chatHistory);
+                      if (typeof TextSelector !== 'undefined' && TextSelector.explainedWords && TextSelector.explainedWords.has(normalizedWord)) {
+                        const wordData = TextSelector.explainedWords.get(normalizedWord);
+                        wordData.askAIChatHistory = chatHistory;
+                      }
+                    });
+                    observer.observe(resultsList, { childList: true, subtree: true });
+                    observer.observe(modal, { attributes: true, attributeFilter: ['data-chat-history'] });
+                    modal._chatHistoryObserver = observer;
+                  }
+                }
+                dummyButton.remove();
+              }, 100);
+            } catch (error) {
+              console.error('[BookmarkWordsDialog] Error opening modal:', error);
+              dummyButton.remove();
+            }
+          } else {
+            console.error('[BookmarkWordsDialog] TextSelector.createAndShowAskAIModal not available after waiting');
+            dummyButton.remove();
+          }
+        }
+      }, 100);
     }
   },
   
@@ -34920,10 +35086,52 @@ const BookmarkWordsDialog = {
         user-select: none;
         background: white !important;
         border-radius: 30px 0 0 30px;
+        overflow: visible;
       }
       
       .vocab-bookmark-words-dialog.visible {
         transform: translateY(-50%) translateX(0);
+      }
+      
+      /* Resize Handle - Left Side (Purple Strip) */
+      .vocab-bookmark-words-resize-handle {
+        position: absolute;
+        left: 0;
+        top: 0;
+        bottom: 0;
+        width: 4px;
+        cursor: ew-resize;
+        background: transparent;
+        transition: all 0.2s ease;
+        z-index: 1000001;
+      }
+      
+      .vocab-bookmark-words-resize-handle::before {
+        content: '';
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        transform: translate(-50%, -50%);
+        width: 4px;
+        height: 40px;
+        border-radius: 2px;
+        background: #9527F5;
+        box-shadow: 0 0 8px rgba(149, 39, 245, 0.3);
+        transition: all 0.2s ease;
+      }
+      
+      .vocab-bookmark-words-resize-handle:hover::before {
+        background: #9527F5;
+        box-shadow: 0 0 12px rgba(149, 39, 245, 0.5);
+        width: 6px;
+        height: 60px;
+      }
+      
+      .vocab-bookmark-words-resize-handle.resizing::before {
+        background: #7a1fd9;
+        box-shadow: 0 0 16px rgba(149, 39, 245, 0.7);
+        width: 6px;
+        height: 80px;
       }
       
       /* Dialog Content */
