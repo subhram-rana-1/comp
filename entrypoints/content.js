@@ -9627,8 +9627,11 @@ const TextSelector = {
     
     // Click handler: remove button when clicking anywhere except on the button itself
     const handleGlobalClick = (event) => {
+      console.log('[handleGlobalClick] Event triggered, type:', event.type);
+      
       // Check if magic-meaning button is visible
       if (!iconsWrapper || !iconsWrapper.parentNode) {
+        console.log('[handleGlobalClick] Early return: iconsWrapper not found');
         return; // Button already removed, nothing to do
       }
       
@@ -9637,6 +9640,7 @@ const TextSelector = {
         event.target.closest('.vocab-text-magic-meaning-btn') ||
         event.target.closest('.vocab-text-icons-wrapper')
       )) {
+        console.log('[handleGlobalClick] Early return: click is on button');
         // Click is on the button - don't remove it, let the button's own click handler handle it
         return;
       }
@@ -9645,26 +9649,34 @@ const TextSelector = {
       // The spinner should only disappear when the first API event is received
       const magicBtn = iconsWrapper.querySelector('.vocab-text-magic-meaning-btn');
       if (magicBtn && magicBtn.classList.contains('magic-meaning-loading')) {
+        console.log('[handleGlobalClick] Early return: button is in loading state');
         // Button is in loading state - don't remove it
         return;
       }
       
+      console.log('[handleGlobalClick] Setting timeout for OUTSIDE_CLICK');
+      
       // Click is anywhere else (not on button) - remove the button
       // Use a small delay to ensure the button's click handler can execute first if needed
       setTimeout(() => {
+        console.log('[handleGlobalClick] Timeout callback executed');
+        
         // Double-check button still exists (might have been removed by button's own handler)
         if (!iconsWrapper || !iconsWrapper.parentNode) {
+          console.log('[handleGlobalClick] Timeout early return: iconsWrapper removed');
           return;
         }
         
         // Double-check button is not in loading state before removing
         const checkMagicBtn = iconsWrapper.querySelector('.vocab-text-magic-meaning-btn');
         if (checkMagicBtn && checkMagicBtn.classList.contains('magic-meaning-loading')) {
+          console.log('[handleGlobalClick] Timeout early return: button is loading');
           // Button is in loading state - don't remove it
           return;
         }
         
         // Remove the button when clicking outside
+        console.log('OUTSIDE_CLICK');
         performCleanup();
       }, 10);
     };
@@ -9875,22 +9887,34 @@ const TextSelector = {
     // Helper function to find all scrollable containers
     const findScrollableContainers = (element) => {
       const scrollableContainers = [];
+      // Ensure we start with an Element (not a text node)
       let current = element;
+      if (current && current.nodeType === Node.TEXT_NODE) {
+        current = current.parentElement;
+      }
       
       while (current && current !== document.body && current !== document.documentElement) {
-        const style = window.getComputedStyle(current);
-        const overflowY = style.overflowY;
-        const overflowX = style.overflowX;
-        const overflow = style.overflow;
-        
-        // Check if element is scrollable
-        if (overflow === 'auto' || overflow === 'scroll' || 
-            overflowY === 'auto' || overflowY === 'scroll' ||
-            overflowX === 'auto' || overflowX === 'scroll') {
-          const hasScrollableContent = current.scrollHeight > current.clientHeight || 
-                                       current.scrollWidth > current.clientWidth;
-          if (hasScrollableContent) {
-            scrollableContainers.push(current);
+        // Only process Element nodes (not text nodes or other node types)
+        if (current.nodeType === Node.ELEMENT_NODE) {
+          try {
+            const style = window.getComputedStyle(current);
+            const overflowY = style.overflowY;
+            const overflowX = style.overflowX;
+            const overflow = style.overflow;
+            
+            // Check if element is scrollable
+            if (overflow === 'auto' || overflow === 'scroll' || 
+                overflowY === 'auto' || overflowY === 'scroll' ||
+                overflowX === 'auto' || overflowX === 'scroll') {
+              const hasScrollableContent = current.scrollHeight > current.clientHeight || 
+                                           current.scrollWidth > current.clientWidth;
+              if (hasScrollableContent) {
+                scrollableContainers.push(current);
+              }
+            }
+          } catch (e) {
+            // If getComputedStyle fails, skip this element and continue
+            console.warn('[TextSelector] Error getting computed style for element:', e);
           }
         }
         
@@ -11024,6 +11048,7 @@ const TextSelector = {
       e.preventDefault();
       e.stopPropagation();
       
+      console.log('MAGIC_MEANING_CLICK');
       console.log('[TextSelector] Magic-meaning button clicked for:', textKey);
       
       // STEP 1: IMMEDIATELY change the clicked button to spinner state (before anything else)
