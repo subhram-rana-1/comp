@@ -46,22 +46,24 @@ class BookmarkWordsService {
    * Add a word to bookmarks
    * @param {string} word - The word to bookmark
    * @param {string} meaning - The meaning of the word
+   * @param {string} url - The URL of the page where the word was bookmarked
    * @returns {Promise<boolean>} True if successfully added
    */
-  static async addBookmark(word, meaning) {
+  static async addBookmark(word, meaning, url = '') {
     try {
       const normalizedWord = word.toLowerCase().trim();
       const bookmarks = await this.getAllBookmarks();
       
       const bookmarkData = {
         meaning: meaning,
-        dateTime: new Date().toISOString()
+        dateTime: new Date().toISOString(),
+        url: url || window.location.href
       };
       
       bookmarks[normalizedWord] = bookmarkData;
       
       await chrome.storage.local.set({ [this.STORAGE_KEY]: bookmarks });
-      console.log('[BookmarkWordsService] Added bookmark for:', normalizedWord);
+      console.log('[BookmarkWordsService] Added bookmark for:', normalizedWord, 'URL:', bookmarkData.url);
       return true;
     } catch (error) {
       console.error('[BookmarkWordsService] Error adding bookmark:', error);
