@@ -3,6 +3,7 @@ import SimplifyService from '../core/services/SimplifyService.js';
 import SummariseService from '../core/services/SummariseService.js';
 import WordExplanationService from '../core/services/WordExplanationService.js';
 import WebSearchService from '../core/services/WebSearchService.js';
+import BookmarkWordsService from '../core/services/BookmarkWordsService.js';
 import ApiConfig from '../core/config/apiConfig.js';
 
 export default defineContentScript({
@@ -1848,8 +1849,34 @@ export default defineContentScript({
         settingsTooltip.textContent = 'Settings';
         settingsBtn.appendChild(settingsTooltip);
         
+        // Create Bookmark Words button (3rd option)
+        const bookmarkWordsBtn = document.createElement('button');
+        bookmarkWordsBtn.className = 'home-options-menu-item';
+        bookmarkWordsBtn.id = 'home-options-bookmark-words-btn';
+        // Bookmark icon SVG
+        bookmarkWordsBtn.innerHTML = `
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="white" xmlns="http://www.w3.org/2000/svg">
+            <path d="M17 3H7C5.9 3 5 3.9 5 5V21L12 18L19 21V5C19 3.9 18.1 3 17 3Z" fill="white"/>
+          </svg>
+        `;
+        // No click handler yet - user will tell what to do next
+        bookmarkWordsBtn.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          // Close the menu
+          menu.classList.remove('home-options-menu-visible');
+          console.log('[Content Script] Bookmark Words button clicked - handler to be implemented');
+        });
+        
+        // Add tooltip to Bookmark Words button
+        const bookmarkWordsTooltip = document.createElement('div');
+        bookmarkWordsTooltip.className = 'home-options-menu-item-tooltip';
+        bookmarkWordsTooltip.textContent = 'Bookmark words';
+        bookmarkWordsBtn.appendChild(bookmarkWordsTooltip);
+        
         menu.appendChild(summariseBtn);
         menu.appendChild(settingsBtn);
+        menu.appendChild(bookmarkWordsBtn);
         
         container.appendChild(button);
         container.appendChild(menu);
@@ -3053,7 +3080,8 @@ const WordSelector = {
       // Also check if clicking on popup buttons (speaker, close, get more examples)
       const clickedOnPopupButton = e.target.closest('.vocab-word-popup-speaker') || 
                                    e.target.closest('.vocab-word-popup-close') || 
-                                   e.target.closest('.vocab-word-popup-button');
+                                   e.target.closest('.vocab-word-popup-button') ||
+                                   e.target.closest('.vocab-word-popup-bookmark');
       
       // Check if clicking inside the ask AI modal - don't close word popup in this case
       const clickedInsideAskAIModal = e.target.closest('.word-web-search-modal');
@@ -4391,9 +4419,9 @@ const WordSelector = {
    * @param {Array<string>} examples - Example sentences
    * @param {boolean} shouldAllowFetchMoreExamples - Whether to show the "View more examples" button
    * @param {string|null} languageCode - Language code from API response (e.g., "ENGLISH"). If "ENGLISH", shows speaker icon for pronunciation
-   * @returns {HTMLElement} Popup element
+   * @returns {Promise<HTMLElement>} Popup element
    */
-  createWordPopup(word, meaning, examples, shouldAllowFetchMoreExamples = true, languageCode = null) {
+  async createWordPopup(word, meaning, examples, shouldAllowFetchMoreExamples = true, languageCode = null) {
     const popup = document.createElement('div');
     popup.className = 'vocab-word-popup';
     popup.setAttribute('data-word', word.toLowerCase());
@@ -4475,18 +4503,32 @@ const WordSelector = {
     //   popup.classList.add('has-speaker-icon');
     // }
     
-    // View more button - bottom-left positioned
+    // Bookmark icon - check if word is already bookmarked
+    const bookmarkBtn = document.createElement('button');
+    bookmarkBtn.className = 'vocab-word-popup-bookmark';
+    bookmarkBtn.setAttribute('aria-label', 'Bookmark word');
+    bookmarkBtn.setAttribute('title', 'Save to bookmarks');
+    bookmarkBtn.setAttribute('data-word', word.toLowerCase());
+    
+    // Check if word is bookmarked and set initial state
+    const isBookmarked = await BookmarkWordsService.isBookmarked(word);
+    if (isBookmarked) {
+      bookmarkBtn.classList.add('bookmarked');
+      bookmarkBtn.innerHTML = this.createBookmarkIcon(true);
+    } else {
+      bookmarkBtn.innerHTML = this.createBookmarkIcon(false);
+    }
+    
+    bookmarkBtn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      await this.handleBookmarkClick(word, meaning, bookmarkBtn);
+    });
+    
+    // View more button - first button
     const button = document.createElement('button');
     button.className = 'vocab-word-popup-button';
-    // Add sparkle icon prefix
-    const sparkleIconForMoreExamples = `
-      <svg width="18" height="18" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg" style="margin-right: 6px; display: inline-block; vertical-align: middle;">
-        <path d="M14 0L17 8L25 11L17 14L14 22L11 14L3 11L11 8L14 0Z" fill="white"/>
-        <path d="M22 16L23.5 20L27.5 21.5L23.5 23L22 27L20.5 23L16.5 21.5L20.5 20L22 16Z" fill="white"/>
-        <path d="M8 21L9.5 24.5L13 26L9.5 27.5L8 31L6.5 27.5L3 26L6.5 24.5L8 21Z" fill="white"/>
-      </svg>
-    `;
-    button.innerHTML = sparkleIconForMoreExamples + '<span>Get more examples</span>';
+    button.setAttribute('title', 'Generate more examples');
+    button.innerHTML = this.createSparkleIcon();
     button.setAttribute('data-word', word.toLowerCase());
     button.setAttribute('data-meaning', meaning);
     
@@ -4504,19 +4546,12 @@ const WordSelector = {
       await this.handleViewMoreExamples(word, meaning, examples, button, popup);
     });
     
-    // Ask button - bottom-right positioned
+    // Ask button - last button
     const askButton = document.createElement('button');
     askButton.className = 'vocab-word-popup-ask-button';
     askButton.setAttribute('aria-label', 'Ask AI');
-    // Add sparkle icon prefix (same as Get more examples button)
-    const sparkleIconForAskAI = `
-      <svg width="18" height="18" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg" style="margin-right: 6px; display: inline-block; vertical-align: middle;">
-        <path d="M14 0L17 8L25 11L17 14L14 22L11 14L3 11L11 8L14 0Z" fill="white"/>
-        <path d="M22 16L23.5 20L27.5 21.5L23.5 23L22 27L20.5 23L16.5 21.5L20.5 20L22 16Z" fill="white"/>
-        <path d="M8 21L9.5 24.5L13 26L9.5 27.5L8 31L6.5 27.5L3 26L6.5 24.5L8 21Z" fill="white"/>
-      </svg>
-    `;
-    askButton.innerHTML = sparkleIconForAskAI + '<span>Ask AI</span>';
+    askButton.setAttribute('title', 'Ask AI');
+    askButton.innerHTML = this.createChatIcon();
     
     // Ask AI button should always be visible, never hide it
     askButton.style.display = 'flex';
@@ -4550,8 +4585,9 @@ const WordSelector = {
       this.openWebSearchModal(word, meaning, examples, popup, askButton);
     });
     
-    // Add button first (left), then ask button (right)
+    // Add buttons in order: Get more examples, Bookmark, Ask AI
     bottomContainer.appendChild(button);
+    bottomContainer.appendChild(bookmarkBtn);
     bottomContainer.appendChild(askButton);
     
     // Append bottom container to popup
@@ -4574,17 +4610,17 @@ const WordSelector = {
     button.classList.add('loading');
     const originalHTML = button.innerHTML; // Store original HTML to restore later
     
-    // Create white spinner icon for loading state
-    const whiteSpinnerIcon = `
-      <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg" style="margin-right: 6px; display: inline-block; vertical-align: middle;">
-        <circle cx="9" cy="9" r="7" stroke="white" stroke-width="0.8" stroke-linecap="round" stroke-dasharray="14 30" opacity="0.3"/>
-        <circle cx="9" cy="9" r="7" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-dasharray="14 30" stroke-dashoffset="6" opacity="1">
-          <animateTransform attributeName="transform" type="rotate" from="0 9 9" to="360 9 9" dur="1s" repeatCount="indefinite"/>
+    // Create light purple spinner icon for loading state
+    const lightPurpleSpinnerIcon = `
+      <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="10" cy="10" r="8" stroke="#D8B4FE" stroke-width="1" stroke-linecap="round" stroke-dasharray="12 28" opacity="0.3"/>
+        <circle cx="10" cy="10" r="8" stroke="#D8B4FE" stroke-width="2" stroke-linecap="round" stroke-dasharray="12 28" stroke-dashoffset="6" opacity="1">
+          <animateTransform attributeName="transform" type="rotate" from="0 10 10" to="360 10 10" dur="1s" repeatCount="indefinite"/>
         </circle>
       </svg>
     `;
     
-    button.innerHTML = whiteSpinnerIcon + '<span>Loading...</span>';
+    button.innerHTML = lightPurpleSpinnerIcon;
     
     try {
       // Extract all currently displayed examples from the popup
@@ -6861,7 +6897,7 @@ const WordSelector = {
    * @param {HTMLElement} wordElement - The word highlight element
    * @param {boolean} sticky - Whether popup should stay (click) or disappear on mouseleave (hover)
    */
-  showWordPopup(wordElement, sticky = false) {
+  async showWordPopup(wordElement, sticky = false) {
     console.log('[WordSelector] ===== SHOW WORD POPUP CALLED =====');
     console.log('[WordSelector] Parameters:', {
       wordElement: wordElement,
@@ -6962,7 +6998,7 @@ const WordSelector = {
     // Use languageCode from wordData (already extracted above)
     console.log('[WordSelector] Language code for popup:', languageCode);
     // IMPORTANT: Always pass original meaning and examples, never cached translations
-    const popup = this.createWordPopup(word, meaning, examples, shouldAllowFetchMoreExamples, languageCode);
+    const popup = await this.createWordPopup(word, meaning, examples, shouldAllowFetchMoreExamples, languageCode);
     
     if (!popup) {
       console.error('[WordSelector] ✗ Failed to create popup element');
@@ -7467,6 +7503,174 @@ const WordSelector = {
         <path d="M18 6L6 18M6 6l12 12" stroke="#A020F0" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>
       </svg>
     `;
+  },
+
+  /**
+   * Create bookmark icon SVG
+   * @param {boolean} filled - Whether to show filled (bookmarked) or wireframe icon
+   * @returns {string} SVG markup
+   */
+  createBookmarkIcon(filled = false) {
+    if (filled) {
+      // Solid filled purple bookmark icon (when bookmarked, show purple)
+      return `
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M17 3H7C5.9 3 5 3.9 5 5V21L12 18L19 21V5C19 3.9 18.1 3 17 3Z" stroke="#A020F0" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="#A020F0"/>
+        </svg>
+      `;
+    } else {
+      // Wireframe bookmark icon (light purple) - matching chat icon thickness
+      return `
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M17 3H7C5.9 3 5 3.9 5 5V21L12 18L19 21V5C19 3.9 18.1 3 17 3Z" stroke="#D8B4FE" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+        </svg>
+      `;
+    }
+  },
+
+  createChatIcon() {
+    // Chat dots icon from provided SVG (light purple) - converted to stroke for consistent thickness
+    return `
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M13.0867 21.3877L13.7321 21.7697L13.0867 21.3877ZM13.6288 20.4718L12.9833 20.0898L13.6288 20.4718ZM10.3712 20.4718L9.72579 20.8539H9.72579L10.3712 20.4718ZM10.9133 21.3877L11.5587 21.0057L10.9133 21.3877ZM1.25 10.5C1.25 10.9142 1.58579 11.25 2 11.25C2.41421 11.25 2.75 10.9142 2.75 10.5H1.25ZM3.07351 15.6264C2.915 15.2437 2.47627 15.062 2.09359 15.2205C1.71091 15.379 1.52918 15.8177 1.68769 16.2004L3.07351 15.6264ZM7.78958 18.9915L7.77666 19.7413L7.78958 18.9915ZM5.08658 18.6194L4.79957 19.3123H4.79957L5.08658 18.6194ZM21.6194 15.9134L22.3123 16.2004V16.2004L21.6194 15.9134ZM16.2104 18.9915L16.1975 18.2416L16.2104 18.9915ZM18.9134 18.6194L19.2004 19.3123H19.2004L18.9134 18.6194ZM19.6125 2.7368L19.2206 3.37628L19.6125 2.7368ZM21.2632 4.38751L21.9027 3.99563V3.99563L21.2632 4.38751ZM4.38751 2.7368L3.99563 2.09732V2.09732L4.38751 2.7368ZM2.7368 4.38751L2.09732 3.99563H2.09732L2.7368 4.38751ZM9.40279 19.2098L9.77986 18.5615L9.77986 18.5615L9.40279 19.2098ZM13.7321 21.7697L14.2742 20.8539L12.9833 20.0898L12.4412 21.0057L13.7321 21.7697ZM9.72579 20.8539L10.2679 21.7697L11.5587 21.0057L11.0166 20.0898L9.72579 20.8539ZM12.4412 21.0057C12.2485 21.3313 11.7515 21.3313 11.5587 21.0057L10.2679 21.7697C11.0415 23.0767 12.9585 23.0767 13.7321 21.7697L12.4412 21.0057ZM10.5 2.75H13.5V1.25H10.5V2.75ZM21.25 10.5V11.5H22.75V10.5H21.25ZM7.8025 18.2416C6.54706 18.2199 5.88923 18.1401 5.37359 17.9265L4.79957 19.3123C5.60454 19.6457 6.52138 19.7197 7.77666 19.7413L7.8025 18.2416ZM1.68769 16.2004C2.27128 17.6093 3.39066 18.7287 4.79957 19.3123L5.3736 17.9265C4.33223 17.4951 3.50486 16.6678 3.07351 15.6264L1.68769 16.2004ZM21.25 11.5C21.25 12.6751 21.2496 13.5189 21.2042 14.1847C21.1592 14.8438 21.0726 15.2736 20.9265 15.6264L22.3123 16.2004C22.5468 15.6344 22.6505 15.0223 22.7007 14.2868C22.7504 13.5581 22.75 12.6546 22.75 11.5H21.25ZM16.2233 19.7413C17.4786 19.7197 18.3955 19.6457 19.2004 19.3123L18.6264 17.9265C18.1108 18.1401 17.4529 18.2199 16.1975 18.2416L16.2233 19.7413ZM20.9265 15.6264C20.4951 16.6678 19.6678 17.4951 18.6264 17.9265L19.2004 19.3123C20.6093 18.7287 21.7287 17.6093 22.3123 16.2004L20.9265 15.6264ZM13.5 2.75C15.1512 2.75 16.337 2.75079 17.2619 2.83873C18.1757 2.92561 18.7571 3.09223 19.2206 3.37628L20.0044 2.09732C19.2655 1.64457 18.4274 1.44279 17.4039 1.34547C16.3915 1.24921 15.1222 1.25 13.5 1.25V2.75ZM22.75 10.5C22.75 8.87781 22.7508 7.6085 22.6545 6.59611C22.5572 5.57256 22.3554 4.73445 21.9027 3.99563L20.6237 4.77938C20.9078 5.24291 21.0744 5.82434 21.1613 6.73809C21.2492 7.663 21.25 8.84876 21.25 10.5H22.75ZM19.2206 3.37628C19.7925 3.72672 20.2733 4.20752 20.6237 4.77938L21.9027 3.99563C21.4286 3.22194 20.7781 2.57144 20.0044 2.09732L19.2206 3.37628ZM10.5 1.25C8.87781 1.25 7.6085 1.24921 6.59611 1.34547C5.57256 1.44279 4.73445 1.64457 3.99563 2.09732L4.77938 3.37628C5.24291 3.09223 5.82434 2.92561 6.73809 2.83873C7.663 2.75079 8.84876 2.75 10.5 2.75V1.25ZM2.75 10.5C2.75 8.84876 2.75079 7.663 2.83873 6.73809C2.92561 5.82434 3.09223 5.24291 3.37628 4.77938L2.09732 3.99563C1.64457 4.73445 1.44279 5.57256 1.34547 6.59611C1.24921 7.6085 1.25 8.87781 1.25 10.5H2.75ZM3.99563 2.09732C3.22194 2.57144 2.57144 3.22194 2.09732 3.99563L3.37628 4.77938C3.72672 4.20752 4.20752 3.72672 4.77938 3.37628L3.99563 2.09732ZM11.0166 20.0898C10.8136 19.7468 10.6354 19.4441 10.4621 19.2063C10.2795 18.9559 10.0702 18.7304 9.77986 18.5615L9.02572 19.8582C9.07313 19.8857 9.13772 19.936 9.24985 20.0898C9.37122 20.2564 9.50835 20.4865 9.72579 20.8539L11.0166 20.0898ZM7.77666 19.7413C8.21575 19.7489 8.49387 19.7545 8.70588 19.7779C8.90399 19.7999 8.98078 19.832 9.02572 19.8582L9.77986 18.5615C9.4871 18.3912 9.18246 18.3215 8.87097 18.287C8.57339 18.2541 8.21375 18.2487 7.8025 18.2416L7.77666 19.7413ZM14.2742 20.8539C14.4916 20.4865 14.6287 20.2564 14.7501 20.0898C14.8622 19.936 14.9268 19.8857 14.9742 19.8582L14.2201 18.5615C13.9298 18.7304 13.7204 18.9559 13.5379 19.2063C13.3646 19.4441 13.1864 19.7468 12.9833 20.0898L14.2742 20.8539ZM16.1975 18.2416C15.7862 18.2487 15.4266 18.2541 15.129 18.287C14.8175 18.3215 14.5129 18.3912 14.2201 18.5615L14.9742 19.8582C15.0192 19.832 15.096 19.7999 15.2941 19.7779C15.5061 19.7545 15.7842 19.7489 16.2233 19.7413L16.1975 18.2416Z" stroke="#D8B4FE" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+        <path d="M8 11H8.009M11.991 11H12M15.991 11H16" stroke="#D8B4FE" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    `;
+  },
+
+  createSparkleIcon() {
+    // Simple sparkle icon (light purple) - matching chat icon thickness
+    return `
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M12 2L14.5 8.5L21 11L14.5 13.5L12 20L9.5 13.5L3 11L9.5 8.5L12 2Z" stroke="#D8B4FE" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+      </svg>
+    `;
+  },
+
+  /**
+   * Handle bookmark button click
+   * @param {string} word - The word to bookmark/unbookmark
+   * @param {string} meaning - The meaning of the word
+   * @param {HTMLElement} bookmarkBtn - The bookmark button element
+   */
+  async handleBookmarkClick(word, meaning, bookmarkBtn) {
+    const normalizedWord = word.toLowerCase().trim();
+    const isCurrentlyBookmarked = await BookmarkWordsService.isBookmarked(word);
+    
+    if (isCurrentlyBookmarked) {
+      // Remove bookmark
+      await BookmarkWordsService.removeBookmark(word);
+      bookmarkBtn.classList.remove('bookmarked');
+      bookmarkBtn.innerHTML = this.createBookmarkIcon(false);
+      console.log('[WordSelector] Removed bookmark for:', word);
+    } else {
+      // Add bookmark
+      const success = await BookmarkWordsService.addBookmark(word, meaning);
+      if (success) {
+        bookmarkBtn.classList.add('bookmarked');
+        bookmarkBtn.innerHTML = this.createBookmarkIcon(true);
+        console.log('[WordSelector] Added bookmark for:', word);
+        
+        // Show notification message
+        this.showBookmarkNotification();
+      } else {
+        console.error('[WordSelector] Failed to add bookmark for:', word);
+      }
+    }
+  },
+
+  /**
+   * Show bookmark notification message
+   */
+  showBookmarkNotification() {
+    // Check if user has dismissed this notification
+    const storageKey = 'bookmarkNotificationDismissed';
+    chrome.storage.local.get([storageKey]).then((result) => {
+      if (result[storageKey]) {
+        console.log('[WordSelector] Bookmark notification dismissed, not showing');
+        return;
+      }
+
+      // Find home-options button
+      const homeOptionsBtn = document.getElementById('home-options-btn');
+      if (!homeOptionsBtn) {
+        console.warn('[WordSelector] Home options button not found, cannot show notification');
+        return;
+      }
+
+      // Remove existing notification if any
+      const existingNotification = document.querySelector('.bookmark-notification');
+      if (existingNotification) {
+        existingNotification.remove();
+      }
+
+      // Create notification container
+      const notification = document.createElement('div');
+      notification.className = 'bookmark-notification';
+      
+      // Message text
+      const message = document.createElement('span');
+      message.className = 'bookmark-notification-message';
+      message.textContent = 'Word saved here';
+      notification.appendChild(message);
+
+      // Close button container
+      const closeContainer = document.createElement('div');
+      closeContainer.className = 'bookmark-notification-close-container';
+
+      // Cross icon button
+      const closeBtn = document.createElement('button');
+      closeBtn.className = 'bookmark-notification-close';
+      closeBtn.setAttribute('aria-label', 'Close');
+      closeBtn.innerHTML = `
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M18 6L6 18M6 6l12 12" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      `;
+      closeBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        notification.remove();
+      });
+
+      // Don't show again button
+      const dontShowBtn = document.createElement('button');
+      dontShowBtn.className = 'bookmark-notification-dont-show';
+      dontShowBtn.textContent = "Don't show again";
+      dontShowBtn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        await chrome.storage.local.set({ [storageKey]: true });
+        notification.remove();
+      });
+
+      closeContainer.appendChild(closeBtn);
+      closeContainer.appendChild(dontShowBtn);
+      notification.appendChild(closeContainer);
+
+      // Insert notification after home-options button (appears to the left due to row-reverse)
+      const container = homeOptionsBtn.parentElement;
+      if (container) {
+        // Insert after the button - with row-reverse, this will appear to the left visually
+        if (homeOptionsBtn.nextSibling) {
+          container.insertBefore(notification, homeOptionsBtn.nextSibling);
+        } else {
+          container.appendChild(notification);
+        }
+      } else {
+        // Fallback: append to body near home-options button
+        document.body.appendChild(notification);
+        const rect = homeOptionsBtn.getBoundingClientRect();
+        notification.style.position = 'fixed';
+        notification.style.left = `${rect.left - 200}px`;
+        notification.style.top = `${rect.top}px`;
+      }
+
+      // Auto-dismiss after 2 seconds
+      setTimeout(() => {
+        if (notification.parentElement) {
+          notification.remove();
+        }
+      }, 2000);
+    });
   },
 
   /**
@@ -8230,7 +8434,7 @@ const WordSelector = {
         left: 24px;
         right: 24px;
         display: flex;
-        justify-content: space-between;
+        justify-content: flex-end;
         align-items: center;
         z-index: 20;
         gap: 12px;
@@ -8318,36 +8522,71 @@ const WordSelector = {
         animation: vocab-spin 0.8s linear infinite;
       }
       
-      /* Ask button - bottom-right positioned */
+      /* Ask button - square shaped with chat icon */
       .vocab-word-popup-ask-button {
-        padding: 10px 18px;
+        width: 40px;
+        height: 40px;
+        padding: 0;
         border: none;
-        border-radius: 10px;
-        background: #A020F0;
-        color: white;
-        font-weight: 600;
-        font-size: 13px;
+        border-radius: 8px;
+        background: none;
         cursor: pointer;
-        transition: background-color 0.2s ease, opacity 0.2s ease, transform 0.2s ease;
-        text-align: center;
-        min-width: 100px;
-        flex-shrink: 0;
+        transition: background-color 0.2s ease, transform 0.15s ease;
         display: flex;
         align-items: center;
         justify-content: center;
-        margin-left: auto; /* Always push to the right side, even when Get more examples button is hidden */
-        box-shadow: 0 4px 12px rgba(149, 39, 245, 0.3);
+        flex-shrink: 0;
+        position: relative;
+      }
+      
+      .vocab-word-popup-ask-button[title]:hover::after {
+        content: attr(title);
+        position: absolute;
+        bottom: calc(100% + 8px);
+        left: 50%;
+        transform: translateX(-50%);
+        background: #1C274C;
+        color: white;
+        padding: 6px 10px;
+        border-radius: 6px;
+        font-size: 12px;
+        font-weight: 500;
+        white-space: nowrap;
+        z-index: 100000;
+        pointer-events: none;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+      }
+      
+      .vocab-word-popup-ask-button[title]:hover::before {
+        content: '';
+        position: absolute;
+        bottom: calc(100% + 2px);
+        left: 50%;
+        transform: translateX(-50%);
+        border: 5px solid transparent;
+        border-top-color: #1C274C;
+        z-index: 100001;
+        pointer-events: none;
+      }
+      
+      .vocab-word-popup-ask-button svg {
+        width: 20px;
+        height: 20px;
+        pointer-events: none;
+        transition: stroke 0.2s ease, fill 0.2s ease;
       }
       
       .vocab-word-popup-ask-button:hover:not(.loading) {
-        background: #8B1AC4;
-        transform: translateY(-1px);
+        background: #E9D5FF;
+      }
+      
+      .vocab-word-popup-ask-button:hover:not(.loading) svg path {
+        stroke: #A020F0;
+        fill: #A020F0;
       }
       
       .vocab-word-popup-ask-button:active:not(.loading) {
-        background: #7016A8;
-        transform: translateY(0) scale(0.95);
-        border-radius: 10px !important; /* Preserve border radius on click */
+        transform: scale(0.9);
       }
       
       .vocab-word-popup-ask-button.loading {
@@ -8365,34 +8604,70 @@ const WordSelector = {
         outline-offset: 2px;
       }
       
-      /* View more button - bottom-left positioned */
+      /* View more button - square shaped with sparkle icon */
       .vocab-word-popup-button {
-        padding: 10px 18px;
+        width: 40px;
+        height: 40px;
+        padding: 0;
         border: none;
-        border-radius: 12px;
-        background: #A020F0;
-        color: white;
-        font-weight: 600;
-        font-size: 13px;
+        border-radius: 8px;
+        background: none;
         cursor: pointer;
-        transition: background-color 0.2s ease, opacity 0.2s ease, transform 0.2s ease;
-        text-align: center;
-        min-width: 140px; /* Ensure button has minimum width */
-        flex-shrink: 0;
+        transition: background-color 0.2s ease, transform 0.15s ease;
         display: flex;
         align-items: center;
         justify-content: center;
-        box-shadow: 0 4px 12px rgba(149, 39, 245, 0.3);
+        flex-shrink: 0;
+        position: relative;
+      }
+      
+      .vocab-word-popup-button[title]:hover::after {
+        content: attr(title);
+        position: absolute;
+        bottom: calc(100% + 8px);
+        left: 50%;
+        transform: translateX(-50%);
+        background: #1C274C;
+        color: white;
+        padding: 6px 10px;
+        border-radius: 6px;
+        font-size: 12px;
+        font-weight: 500;
+        white-space: nowrap;
+        z-index: 100000;
+        pointer-events: none;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+      }
+      
+      .vocab-word-popup-button[title]:hover::before {
+        content: '';
+        position: absolute;
+        bottom: calc(100% + 2px);
+        left: 50%;
+        transform: translateX(-50%);
+        border: 5px solid transparent;
+        border-top-color: #1C274C;
+        z-index: 100001;
+        pointer-events: none;
+      }
+      
+      .vocab-word-popup-button svg {
+        width: 20px;
+        height: 20px;
+        pointer-events: none;
+        transition: stroke 0.2s ease;
       }
       
       .vocab-word-popup-button:hover:not(.loading) {
-        background: #8B1AC4;
-        transform: translateY(-1px);
+        background: #E9D5FF;
+      }
+      
+      .vocab-word-popup-button:hover:not(.loading) svg path {
+        stroke: #A020F0;
       }
       
       .vocab-word-popup-button:active:not(.loading) {
-        background: #7016A8;
-        transform: translateY(0) scale(0.95);
+        transform: scale(0.9);
       }
       
       .vocab-word-popup-button.loading {
@@ -9028,6 +9303,91 @@ const WordSelector = {
         width: 14px;
         height: 14px;
         pointer-events: none;
+      }
+      
+      /* Bookmark icon button */
+      .vocab-word-popup-bookmark {
+        position: relative;
+        width: 40px;
+        height: 40px;
+        background: none;
+        border: none;
+        border-radius: 8px;
+        cursor: pointer;
+        opacity: 1;
+        transition: background-color 0.2s ease, transform 0.15s ease;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+        padding: 0;
+      }
+      
+      .vocab-word-popup-bookmark[title]:hover::after {
+        content: attr(title);
+        position: absolute;
+        bottom: calc(100% + 8px);
+        left: 50%;
+        transform: translateX(-50%);
+        background: #1C274C;
+        color: white;
+        padding: 6px 10px;
+        border-radius: 6px;
+        font-size: 12px;
+        font-weight: 500;
+        white-space: nowrap;
+        z-index: 100000;
+        pointer-events: none;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+      }
+      
+      .vocab-word-popup-bookmark[title]:hover::before {
+        content: '';
+        position: absolute;
+        bottom: calc(100% + 2px);
+        left: 50%;
+        transform: translateX(-50%);
+        border: 5px solid transparent;
+        border-top-color: #1C274C;
+        z-index: 100001;
+        pointer-events: none;
+      }
+      
+      .vocab-word-popup-bookmark svg {
+        width: 20px;
+        height: 20px;
+        pointer-events: none;
+        transition: stroke 0.2s ease, fill 0.2s ease;
+      }
+      
+      .vocab-word-popup-bookmark:hover {
+        background: #E9D5FF;
+      }
+      
+      .vocab-word-popup-bookmark:hover:not(.bookmarked) svg path {
+        stroke: #A020F0;
+      }
+      
+      .vocab-word-popup-bookmark:active {
+        transform: scale(0.9);
+      }
+      
+      .vocab-word-popup-bookmark.bookmarked {
+        background: none;
+      }
+      
+      .vocab-word-popup-bookmark.bookmarked svg path {
+        stroke: #A020F0;
+        fill: #A020F0;
+      }
+      
+      .vocab-word-popup-bookmark.bookmarked:hover {
+        background: #E9D5FF;
+      }
+      
+      .vocab-word-popup-bookmark.bookmarked:hover svg path {
+        stroke: #A020F0;
+        fill: #A020F0;
       }
       
       /* Loading spinner animation */
@@ -12317,6 +12677,10 @@ const TextSelector = {
         transition-delay: 0.15s;
       }
       
+      .home-options-menu-item:nth-child(4) {
+        transition-delay: 0.2s;
+      }
+      
       .home-options-btn:hover ~ .home-options-menu .home-options-menu-item,
       .home-options-menu:hover .home-options-menu-item,
       .home-options-menu.home-options-menu-visible .home-options-menu-item {
@@ -12387,6 +12751,87 @@ const TextSelector = {
         width: auto !important;
         height: auto !important;
         min-height: 40px !important;
+      }
+      
+      /* Bookmark notification */
+      .bookmark-notification {
+        position: relative;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        background: #A020F0;
+        color: white;
+        padding: 10px 16px;
+        border-radius: 24px;
+        font-size: 14px;
+        font-weight: 500;
+        box-shadow: 0 4px 12px rgba(160, 32, 240, 0.4);
+        z-index: 10000001;
+        margin-right: 12px;
+        animation: bookmarkNotificationSlideIn 0.3s ease-out;
+        white-space: nowrap;
+      }
+      
+      @keyframes bookmarkNotificationSlideIn {
+        from {
+          opacity: 0;
+          transform: translateX(20px);
+        }
+        to {
+          opacity: 1;
+          transform: translateX(0);
+        }
+      }
+      
+      .bookmark-notification-message {
+        flex: 1;
+      }
+      
+      .bookmark-notification-close-container {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      
+      .bookmark-notification-close {
+        width: 20px;
+        height: 20px;
+        background: transparent;
+        border: none;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0;
+        opacity: 0.8;
+        transition: opacity 0.2s ease;
+      }
+      
+      .bookmark-notification-close:hover {
+        opacity: 1;
+      }
+      
+      .bookmark-notification-close svg {
+        width: 14px;
+        height: 14px;
+      }
+      
+      .bookmark-notification-dont-show {
+        background: transparent;
+        border: 1px solid rgba(255, 255, 255, 0.5);
+        color: white;
+        padding: 4px 10px;
+        border-radius: 12px;
+        font-size: 12px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        white-space: nowrap;
+      }
+      
+      .bookmark-notification-dont-show:hover {
+        background: rgba(255, 255, 255, 0.1);
+        border-color: rgba(255, 255, 255, 0.8);
       }
       
       .vocab-ask-about-page-tooltip.visible {
