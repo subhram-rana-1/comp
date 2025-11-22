@@ -8925,7 +8925,7 @@ const WordSelector = {
         justify-content: flex-start;
         padding: 12px 16px;
         border-bottom: none;
-        cursor: move;
+        cursor: default;
       }
       
       /* Header area should show move cursor, but close button should show pointer */
@@ -34845,8 +34845,9 @@ const BookmarkWordsDialog = {
           });
         });
         
-        wordContainer.appendChild(wordText);
+        // Add copy icon first (left side), then word text
         wordContainer.appendChild(copyIcon);
+        wordContainer.appendChild(wordText);
         wordCell.appendChild(wordContainer);
         
         // Make word cell clickable to open word-ask-ai modal
@@ -34862,10 +34863,16 @@ const BookmarkWordsDialog = {
         const meaningCell = document.createElement('td');
         meaningCell.className = 'vocab-bookmark-words-td-meaning';
         meaningCell.textContent = bookmark.meaning;
+        meaningCell.style.cursor = 'pointer';
+        // Make meaning cell clickable to open word-ask-ai modal
+        meaningCell.addEventListener('click', (e) => {
+          this.openWordAskAIModal(bookmark.word, bookmark.meaning, wordCell);
+        });
         
         // Create source cell with link icon
         const sourceCell = document.createElement('td');
         sourceCell.className = 'vocab-bookmark-words-td-source';
+        sourceCell.style.cursor = 'pointer';
         
         if (bookmark.url) {
           const linkButton = document.createElement('button');
@@ -34901,10 +34908,19 @@ const BookmarkWordsDialog = {
           sourceCell.textContent = '-';
           sourceCell.style.color = '#9ca3af';
         }
+        // Make source cell clickable to open word-ask-ai modal (but not when clicking link button)
+        sourceCell.addEventListener('click', (e) => {
+          // Don't trigger if clicking on link button
+          if (e.target.closest('.vocab-bookmark-words-link-icon')) {
+            return;
+          }
+          this.openWordAskAIModal(bookmark.word, bookmark.meaning, wordCell);
+        });
         
         // Create actions cell with delete button
         const actionsCell = document.createElement('td');
         actionsCell.className = 'vocab-bookmark-words-td-actions';
+        actionsCell.style.cursor = 'pointer';
         
         const deleteButton = document.createElement('button');
         deleteButton.className = 'vocab-bookmark-words-delete-icon';
@@ -34935,6 +34951,14 @@ const BookmarkWordsDialog = {
           }, 300);
         });
         actionsCell.appendChild(deleteButton);
+        // Make actions cell clickable to open word-ask-ai modal (but not when clicking delete button)
+        actionsCell.addEventListener('click', (e) => {
+          // Don't trigger if clicking on delete button
+          if (e.target.closest('.vocab-bookmark-words-delete-icon')) {
+            return;
+          }
+          this.openWordAskAIModal(bookmark.word, bookmark.meaning, wordCell);
+        });
         
         row.appendChild(wordCell);
         row.appendChild(meaningCell);
@@ -34992,6 +35016,7 @@ const BookmarkWordsDialog = {
   
   /**
    * Open word-ask-ai modal for a bookmarked word
+   * Creates a fresh modal for each word with conversation stored in memory
    * @param {string} word - The word
    * @param {string} meaning - The meaning
    * @param {HTMLElement} wordCell - The word cell element (for closing animation)
@@ -35000,230 +35025,681 @@ const BookmarkWordsDialog = {
     console.log('[BookmarkWordsDialog] Opening word-ask-ai modal for:', word);
     
     const normalizedWord = word.toLowerCase();
+    const bookmarkDialog = this;
     
-    // Check if there's existing chat history for this word
+    // Check if modal is already open for this word - toggle behavior
+    const existingModalForWord = document.querySelector(`.word-web-search-modal[data-word="${normalizedWord}"]`);
+    if (existingModalForWord) {
+      console.log('[BookmarkWordsDialog] Modal already open for this word, closing it (toggle)');
+      // Close the modal
+      if (existingModalForWord._rowElement) {
+        existingModalForWord._rowElement.style.backgroundColor = '';
+        existingModalForWord._rowElement.removeAttribute('data-has-active-modal');
+      }
+      this.closeWordAskAIModalWithAnimation(existingModalForWord, wordCell);
+      return;
+    }
+    
+    // First, close ALL other existing modals (not for this word)
+    const allExistingModals = document.querySelectorAll('.word-web-search-modal');
+    allExistingModals.forEach(existingModal => {
+      if (existingModal.getAttribute('data-word') === normalizedWord) {
+        return; // Skip the modal for this word (shouldn't exist, but just in case)
+      }
+      console.log('[BookmarkWordsDialog] Closing existing modal');
+      // Clean up observers and handlers before removing
+      if (existingModal._chatHistoryObserver) {
+        existingModal._chatHistoryObserver.disconnect();
+      }
+      if (existingModal._clickOutsideHandler) {
+        document.removeEventListener('click', existingModal._clickOutsideHandler, true);
+      }
+      if (existingModal._resizeObserver) {
+        existingModal._resizeObserver.disconnect();
+      }
+      if (existingModal._resizeHandler) {
+        window.removeEventListener('resize', existingModal._resizeHandler);
+      }
+      if (existingModal._scrollHandler) {
+        window.removeEventListener('scroll', existingModal._scrollHandler);
+      }
+      // Remove row highlight if exists
+      if (existingModal._rowElement) {
+        existingModal._rowElement.style.backgroundColor = '';
+        existingModal._rowElement.removeAttribute('data-has-active-modal');
+      }
+      existingModal.remove();
+    });
+    
+    // Remove highlights from all rows
+    const allRows = this.dialogContainer.querySelectorAll('tr');
+    allRows.forEach(row => {
+      row.style.backgroundColor = '';
+    });
+    
+    // Add light green background to the current row
+    const row = wordCell.closest('tr');
+    if (row) {
+      row.style.backgroundColor = '#f0fdf4'; // Very light green
+      row.style.transition = 'background-color 0.2s ease';
+      // Add hover effect for darker green - only for rows with green background
+      // Mark this row as having an active modal
+      row.setAttribute('data-has-active-modal', 'true');
+      row.addEventListener('mouseenter', function() {
+        // Only apply darker green if this row has the active modal (green background)
+        if (this.getAttribute('data-has-active-modal') === 'true') {
+          const currentBg = this.style.backgroundColor;
+          const rgbGreen = 'rgb(240, 253, 244)';
+          const hexGreen = '#f0fdf4';
+          if (currentBg === rgbGreen || currentBg === hexGreen) {
+            this.style.setProperty('background-color', '#dcfce7', 'important'); // Darker green
+          }
+        }
+      });
+      row.addEventListener('mouseleave', function() {
+        // Only restore if this row has the active modal
+        if (this.getAttribute('data-has-active-modal') === 'true') {
+          const currentBg = this.style.backgroundColor;
+          const darkerGreen = 'rgb(220, 252, 231)';
+          const darkerGreenHex = '#dcfce7';
+          if (currentBg === darkerGreen || currentBg === darkerGreenHex) {
+            this.style.setProperty('background-color', '#f0fdf4', 'important'); // Back to light green
+          }
+        }
+      });
+    }
+    
+    // Check if there's existing chat history for this word (stored in memory)
     let existingChatHistory = this.wordChatHistories.get(normalizedWord) || [];
     
     // Format initial context as: word: <word> and contextual meaning: <meaning>
     const initialContext = `word: ${word}\n\ncontextual meaning: ${meaning}`;
     
-    // Check if modal already exists for this word
-    const existingModal = document.querySelector(`.word-web-search-modal[data-word="${normalizedWord}"]`);
-    if (existingModal) {
-      console.log('[BookmarkWordsDialog] Modal already open for this word');
+    // Get vocab-bookmark-words-content element for positioning
+    const contentElement = this.dialogContainer.querySelector('.vocab-bookmark-words-content');
+    if (!contentElement) {
+      console.error('[BookmarkWordsDialog] vocab-bookmark-words-content not found');
       return;
     }
     
-    // Ensure word exists in TextSelector.explainedWords for proper chat history persistence
-    if (typeof TextSelector !== 'undefined' && TextSelector.explainedWords) {
-      if (!TextSelector.explainedWords.has(normalizedWord)) {
-        TextSelector.explainedWords.set(normalizedWord, {
-          word: word,
-          meaning: meaning,
-          highlights: new Set(),
-          askAIChatHistory: existingChatHistory,
-          askAIInitialContext: initialContext
-        });
-      } else {
-        // Update existing entry with chat history and initial context
-        const wordData = TextSelector.explainedWords.get(normalizedWord);
-        if (existingChatHistory.length > 0) {
-          wordData.askAIChatHistory = existingChatHistory;
-        }
-        wordData.askAIInitialContext = initialContext;
-      }
-    }
-    
-    // Create a dummy button element for positioning (we'll position relative to word cell)
-    const dummyButton = document.createElement('button');
-    dummyButton.style.position = 'absolute';
-    const wordCellRect = wordCell.getBoundingClientRect();
-    dummyButton.style.top = `${wordCellRect.top}px`;
-    dummyButton.style.left = `${wordCellRect.right}px`;
-    dummyButton.style.width = '0px';
-    dummyButton.style.height = '0px';
-    document.body.appendChild(dummyButton);
-    
-    // Use WordSelector's createAndShowAskAIModal method
-    // Check if TextSelector is available - wait a bit if it's not ready yet
-    const tryOpenModal = () => {
-      if (typeof TextSelector !== 'undefined' && TextSelector && typeof TextSelector.createAndShowAskAIModal === 'function') {
-        return true;
-      }
-      return false;
+    // Function to position modal relative to vocab-bookmark-words-content with 10px gap
+    // Sequence: 1) Detect left border of content, 2) Position modal's right edge 10px left of content's left, 3) Set width
+    const positionModal = () => {
+      if (!contentElement || !modal) return;
+      
+      const contentRect = contentElement.getBoundingClientRect();
+      const scrollX = window.scrollX || window.pageXOffset || 0;
+      const scrollY = window.scrollY || window.pageYOffset || 0;
+      
+      // Step 1: Detect the left border of bookmark content element
+      const contentLeftEdge = contentRect.left;
+      
+      // Step 2: Calculate where modal's RIGHT edge should be: 10px left of content's left edge
+      const modalRightEdge = contentLeftEdge - 10;
+      
+      // Step 3: Calculate available space for modal (from viewport left to modal right edge)
+      const viewportPadding = 10;
+      const availableWidth = modalRightEdge - viewportPadding;
+      
+      // Step 4: Set modal width (use 600px as desired, but respect available space)
+      const desiredWidth = 600;
+      const modalWidth = Math.min(desiredWidth, availableWidth);
+      
+      // Step 5: Calculate modal's left position so its right edge is at modalRightEdge
+      const modalLeft = modalRightEdge - modalWidth;
+      const modalTop = contentRect.top + scrollY;
+      
+      // Apply width and position
+      modal.style.setProperty('width', `${modalWidth}px`, 'important');
+      modal.style.setProperty('max-width', `${modalWidth}px`, 'important');
+      modal.style.setProperty('left', `${modalLeft + scrollX}px`, 'important');
+      modal.style.setProperty('top', `${modalTop}px`, 'important');
     };
     
-    if (tryOpenModal()) {
-      // Store word cell reference on modal for closing animation
-      const modalPromise = new Promise((resolve) => {
-        // Use setTimeout to wait for modal to be created
-        setTimeout(() => {
-          const modal = document.querySelector(`.word-web-search-modal[data-word="${normalizedWord}"]`);
-          if (modal) {
-            modal._bookmarkWordCell = wordCell;
-            modal._bookmarkWord = word;
-            // Store initial context
-            modal.setAttribute('data-initial-context', initialContext);
-            // Set chat history on modal
-            if (existingChatHistory.length > 0) {
-              modal.setAttribute('data-chat-history', JSON.stringify(existingChatHistory));
-            }
-            resolve(modal);
-          }
-        }, 100);
-      });
-      
-      // Call the method with empty examples array
-      TextSelector.createAndShowAskAIModal(
-        word,
-        meaning,
-        [], // examples
-        null, // wordPopup (not needed)
-        dummyButton, // searchButton (for positioning)
-        existingChatHistory,
-        initialContext
-      );
-      
-      // Set up click outside handler to close modal with animation
-      modalPromise.then(modal => {
-        if (!modal) return;
-        
-        // Remove dummy button
-        dummyButton.remove();
-        
-        // Add click outside handler
-        const clickOutsideHandler = (e) => {
-          // Check if click is outside modal
-          if (!modal.contains(e.target) && !wordCell.contains(e.target)) {
-            // Don't close if clicking inside bookmark words dialog
-            if (this.dialogContainer && this.dialogContainer.contains(e.target)) {
-              return;
-            }
-            
-            console.log('[BookmarkWordsDialog] Clicking outside modal - closing with animation');
-            this.closeWordAskAIModalWithAnimation(modal, wordCell);
-            document.removeEventListener('click', clickOutsideHandler);
-          }
-        };
-        
-        // Use capture phase to catch clicks before they bubble
-        document.addEventListener('click', clickOutsideHandler, true);
-        
-        // Store handler for cleanup
-        modal._clickOutsideHandler = clickOutsideHandler;
-        
-        // Update chat history when modal receives messages
-        const resultsList = modal.querySelector('.word-web-search-results-list');
-        if (resultsList) {
-          const observer = new MutationObserver(() => {
-            // Get chat history from modal's data attribute (updated by sendWebSearchChatMessage)
-            const chatHistoryJson = modal.getAttribute('data-chat-history') || '[]';
-            let chatHistory = [];
-            try {
-              chatHistory = JSON.parse(chatHistoryJson);
-            } catch (e) {
-              console.error('[BookmarkWordsDialog] Error parsing chat history:', e);
-            }
-            
-            // Store chat history in both places
-            this.wordChatHistories.set(normalizedWord, chatHistory);
-            
-            // Also update TextSelector.explainedWords if available
-            if (typeof TextSelector !== 'undefined' && TextSelector.explainedWords && TextSelector.explainedWords.has(normalizedWord)) {
-              const wordData = TextSelector.explainedWords.get(normalizedWord);
-              wordData.askAIChatHistory = chatHistory;
-            }
-            
-            console.log('[BookmarkWordsDialog] Updated chat history for word:', normalizedWord, chatHistory.length, 'messages');
-          });
-          
-          observer.observe(resultsList, { childList: true, subtree: true });
-          observer.observe(modal, { attributes: true, attributeFilter: ['data-chat-history'] });
-          modal._chatHistoryObserver = observer;
-        }
-      });
-    } else {
-      // TextSelector might not be initialized yet, wait a bit and try again
-      console.log('[BookmarkWordsDialog] TextSelector not ready, waiting...');
-      let attempts = 0;
-      const maxAttempts = 10;
-      const checkInterval = setInterval(() => {
-        attempts++;
-        if (tryOpenModal() || attempts >= maxAttempts) {
-          clearInterval(checkInterval);
-          if (tryOpenModal()) {
-            // Retry opening modal - call the method directly instead of recursive call
-            try {
-              TextSelector.createAndShowAskAIModal(
-                word,
-                meaning,
-                [],
-                null,
-                dummyButton,
-                existingChatHistory,
-                initialContext
-              );
-              
-              // Set up modal handlers after a delay
-              setTimeout(() => {
-                const modal = document.querySelector(`.word-web-search-modal[data-word="${normalizedWord}"]`);
-                if (modal) {
-                  modal._bookmarkWordCell = wordCell;
-                  modal._bookmarkWord = word;
-                  modal.setAttribute('data-initial-context', initialContext);
-                  if (existingChatHistory.length > 0) {
-                    modal.setAttribute('data-chat-history', JSON.stringify(existingChatHistory));
-                  }
-                  
-                  // Set up click outside handler
-                  const clickOutsideHandler = (e) => {
-                    if (!modal.contains(e.target) && !wordCell.contains(e.target)) {
-                      if (this.dialogContainer && this.dialogContainer.contains(e.target)) {
-                        return;
-                      }
-                      console.log('[BookmarkWordsDialog] Clicking outside modal - closing with animation');
-                      this.closeWordAskAIModalWithAnimation(modal, wordCell);
-                      document.removeEventListener('click', clickOutsideHandler, true);
-                    }
-                  };
-                  document.addEventListener('click', clickOutsideHandler, true);
-                  modal._clickOutsideHandler = clickOutsideHandler;
-                  
-                  // Set up chat history observer
-                  const resultsList = modal.querySelector('.word-web-search-results-list');
-                  if (resultsList) {
-                    const observer = new MutationObserver(() => {
-                      const chatHistoryJson = modal.getAttribute('data-chat-history') || '[]';
-                      let chatHistory = [];
-                      try {
-                        chatHistory = JSON.parse(chatHistoryJson);
-                      } catch (e) {
-                        console.error('[BookmarkWordsDialog] Error parsing chat history:', e);
-                      }
-                      this.wordChatHistories.set(normalizedWord, chatHistory);
-                      if (typeof TextSelector !== 'undefined' && TextSelector.explainedWords && TextSelector.explainedWords.has(normalizedWord)) {
-                        const wordData = TextSelector.explainedWords.get(normalizedWord);
-                        wordData.askAIChatHistory = chatHistory;
-                      }
-                    });
-                    observer.observe(resultsList, { childList: true, subtree: true });
-                    observer.observe(modal, { attributes: true, attributeFilter: ['data-chat-history'] });
-                    modal._chatHistoryObserver = observer;
-                  }
-                }
-                dummyButton.remove();
-              }, 100);
-            } catch (error) {
-              console.error('[BookmarkWordsDialog] Error opening modal:', error);
-              dummyButton.remove();
-            }
-          } else {
-            console.error('[BookmarkWordsDialog] TextSelector.createAndShowAskAIModal not available after waiting');
-            dummyButton.remove();
-          }
-        }
-      }, 100);
+    // Create modal container
+    const modal = document.createElement('div');
+    modal.className = 'word-web-search-modal';
+    modal.setAttribute('data-word', normalizedWord);
+    modal.setAttribute('data-initial-context', initialContext);
+    if (existingChatHistory.length > 0) {
+      modal.setAttribute('data-chat-history', JSON.stringify(existingChatHistory));
     }
+    modal._bookmarkWordCell = wordCell;
+    modal._bookmarkWord = word;
+    modal._contentElement = contentElement;
+    modal._rowElement = row; // Store row reference for cleanup
+    
+    // Create modal header with minimize button
+    const modalHeader = document.createElement('div');
+    modalHeader.className = 'word-web-search-modal-header';
+    modalHeader.style.display = 'flex';
+    modalHeader.style.justifyContent = 'flex-end';
+    modalHeader.style.padding = '12px 16px';
+    modalHeader.style.borderBottom = '1px solid rgba(149, 39, 245, 0.1)';
+    // Prevent dragging on header - set cursor to default
+    modalHeader.style.cursor = 'default';
+    modalHeader.setAttribute('data-no-drag', 'true');
+    
+    const minimizeBtn = document.createElement('button');
+    minimizeBtn.className = 'word-web-search-modal-minimize';
+    minimizeBtn.setAttribute('aria-label', 'Minimize');
+    minimizeBtn.title = 'Minimize';
+    minimizeBtn.innerHTML = `
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <line x1="5" y1="12" x2="19" y2="12" stroke="#9527F5" stroke-width="2" stroke-linecap="round"/>
+      </svg>
+    `;
+    minimizeBtn.style.cssText = `
+      width: 28px;
+      height: 28px;
+      border: none;
+      background: transparent;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 4px;
+      transition: background-color 0.2s ease;
+    `;
+    minimizeBtn.addEventListener('mouseenter', () => {
+      minimizeBtn.style.backgroundColor = 'rgba(149, 39, 245, 0.1)';
+    });
+    minimizeBtn.addEventListener('mouseleave', () => {
+      minimizeBtn.style.backgroundColor = 'transparent';
+    });
+    minimizeBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      bookmarkDialog.closeWordAskAIModalWithAnimation(modal, wordCell);
+    });
+    
+    modalHeader.appendChild(minimizeBtn);
+    
+    // Create modal content container
+    const modalContent = document.createElement('div');
+    modalContent.className = 'word-ask-ai-modal-content';
+    
+    // Create search results container
+    const resultsContainer = document.createElement('div');
+    resultsContainer.className = 'word-web-search-results';
+    
+    // Create results list
+    const resultsList = document.createElement('div');
+    resultsList.className = 'word-web-search-results-list';
+    
+    // Restore chat history if exists
+    if (existingChatHistory.length > 0) {
+      resultsContainer.style.display = '';
+      existingChatHistory.forEach(msg => {
+        if (msg.role === 'user') {
+          const userMessageDiv = document.createElement('div');
+          userMessageDiv.className = 'word-web-search-chat-message user-message';
+          // Remove prefix from user message for display
+          const displayText = msg.content.replace(/^Here the word of interest is '[^']+'. Based on the context given can you answer my question. Here is my question :- /, '');
+          userMessageDiv.textContent = displayText;
+          resultsList.appendChild(userMessageDiv);
+        } else if (msg.role === 'assistant') {
+          const aiMessageDiv = document.createElement('div');
+          aiMessageDiv.className = 'word-web-search-chat-message ai-message';
+          const aiResponseText = document.createElement('div');
+          aiResponseText.className = 'word-web-search-chat-response-text';
+          // Use bookmark dialog's markdown renderer
+          aiResponseText.innerHTML = bookmarkDialog.renderBookmarkMarkdown(msg.content);
+          aiMessageDiv.appendChild(aiResponseText);
+          resultsList.appendChild(aiMessageDiv);
+        }
+      });
+    }
+    
+    resultsContainer.appendChild(resultsList);
+    
+    // Create chat input area
+    const inputArea = document.createElement('div');
+    inputArea.className = 'word-web-search-input-area';
+    
+    const inputField = document.createElement('textarea');
+    inputField.className = 'word-web-search-input';
+    inputField.placeholder = 'Ask AI anything about the word';
+    inputField.rows = 1;
+    
+    // Auto-resize textarea
+    inputField.addEventListener('input', (e) => {
+      e.target.style.height = 'auto';
+      const maxHeight = 120;
+      const newHeight = Math.min(e.target.scrollHeight, maxHeight);
+      e.target.style.height = newHeight + 'px';
+      
+      if (e.target.scrollHeight > maxHeight) {
+        e.target.style.overflowY = 'auto';
+      } else {
+        e.target.style.overflowY = 'hidden';
+      }
+      
+      if (modal._updateExplainButtonVisibility) {
+        modal._updateExplainButtonVisibility();
+      }
+    });
+    
+    // Handle Enter key
+    inputField.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        e.stopPropagation();
+        bookmarkDialog.sendBookmarkWordChatMessage(modal, word, inputField);
+      }
+    });
+    
+    inputField.addEventListener('click', (e) => {
+      e.stopPropagation();
+    });
+    
+    // Create send button
+    const sendBtn = document.createElement('button');
+    sendBtn.className = 'word-web-search-send-btn';
+    sendBtn.setAttribute('aria-label', 'Send message');
+    sendBtn.innerHTML = typeof TextSelector !== 'undefined' && TextSelector.createSendIcon 
+      ? TextSelector.createSendIcon() 
+      : `<svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M10 15V5M10 5L5 10M10 5L15 10" stroke="#9527F5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+    sendBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      bookmarkDialog.sendBookmarkWordChatMessage(modal, word, inputField);
+    });
+    
+    // Create delete button
+    const deleteBtn = document.createElement('button');
+    deleteBtn.className = 'word-web-search-delete-btn';
+    deleteBtn.setAttribute('aria-label', 'Clear chat history');
+    deleteBtn.title = 'Clear chat history';
+    deleteBtn.innerHTML = typeof TextSelector !== 'undefined' && TextSelector.createTrashIcon
+      ? TextSelector.createTrashIcon()
+      : `<svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M3 5h14M6.5 5V3.5a1.5 1.5 0 0 1 1.5-1.5h4a1.5 1.5 0 0 1 1.5 1.5V5M15 5v10.5a1.5 1.5 0 0 1-1.5 1.5h-7a1.5 1.5 0 0 1-1.5-1.5V5h10Z" stroke="#ef4444" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 9v5M12 9v5" stroke="#ef4444" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+    deleteBtn.style.display = existingChatHistory.length > 0 ? 'flex' : 'none';
+    deleteBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      bookmarkDialog.clearBookmarkWordChatHistory(modal, normalizedWord);
+    });
+    
+    // Create "Explain" button
+    const explainBtn = document.createElement('button');
+    explainBtn.className = 'word-web-search-explain-btn';
+    explainBtn.textContent = 'Explain';
+    explainBtn.setAttribute('aria-label', 'Explain word');
+    explainBtn.style.display = existingChatHistory.length === 0 ? 'flex' : 'none';
+    explainBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      inputField.value = 'Please explain the selected word in detail';
+      bookmarkDialog.sendBookmarkWordChatMessage(modal, word, inputField);
+      explainBtn.style.display = 'none';
+    });
+    
+    inputField.style.paddingRight = '90px';
+    
+    inputArea.appendChild(inputField);
+    inputArea.appendChild(explainBtn);
+    inputArea.appendChild(sendBtn);
+    inputArea.appendChild(deleteBtn);
+    
+    // Function to update explain button visibility
+    const updateExplainButtonVisibility = () => {
+      const inputValue = inputField.value.trim();
+      const hasChatMessages = resultsList.querySelectorAll('.word-web-search-chat-message').length > 0;
+      if (!inputValue && !hasChatMessages) {
+        explainBtn.style.display = 'flex';
+      } else {
+        explainBtn.style.display = 'none';
+      }
+    };
+    
+    modal._updateExplainButtonVisibility = updateExplainButtonVisibility;
+    
+    // Assemble modal
+    modal.appendChild(modalHeader);
+    modalContent.appendChild(resultsContainer);
+    modalContent.appendChild(inputArea);
+    modal.appendChild(modalContent);
+    
+    // Append to body
+    document.body.appendChild(modal);
+    
+    // Set modal styles (basic styles first, width will be set in positionModal)
+    modal.style.setProperty('position', 'absolute', 'important');
+    // Set z-index higher than vocab-bookmark-words-content (which is 2147483647)
+    // Using max safe z-index value to ensure modal appears above content
+    modal.style.setProperty('z-index', '2147483647', 'important');
+    modal.style.setProperty('display', 'flex', 'important');
+    modal.style.setProperty('visibility', 'visible', 'important');
+    modal.style.setProperty('opacity', '1', 'important');
+    modal.style.setProperty('background', 'white', 'important');
+    modal.style.setProperty('pointer-events', 'all', 'important');
+    modal.style.setProperty('min-width', '500px', 'important');
+    modal.style.setProperty('min-height', '200px', 'important');
+    // Width will be set by positionModal() based on available space
+    
+    // Position modal immediately - this will also set the width
+    positionModal();
+    
+    // Also position after layout is complete (for any edge cases)
+    requestAnimationFrame(() => {
+      positionModal();
+      // One more time after a small delay to catch any late layout changes
+      setTimeout(() => {
+        positionModal();
+      }, 0);
+    });
+    
+    // Add opening animation class for smooth opening
+    modal.classList.add('ask-ai-opening');
+    requestAnimationFrame(() => {
+      modal.style.setProperty('opacity', '0', 'important');
+      modal.style.setProperty('transform', 'scale(0.9)', 'important');
+      requestAnimationFrame(() => {
+        modal.style.setProperty('transition', 'opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1), transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)', 'important');
+        modal.style.setProperty('opacity', '1', 'important');
+        modal.style.setProperty('transform', 'scale(1)', 'important');
+        setTimeout(() => {
+          modal.classList.remove('ask-ai-opening');
+          modal.style.setProperty('transition', '', 'important');
+        }, 300);
+      });
+    });
+    
+    // Set up ResizeObserver to update modal position when content width changes
+    const resizeObserver = new ResizeObserver(() => {
+      positionModal();
+    });
+    resizeObserver.observe(contentElement);
+    modal._resizeObserver = resizeObserver;
+    
+    // Also update position on window resize and scroll
+    const handleResize = () => {
+      positionModal();
+    };
+    const handleScroll = () => {
+      positionModal();
+    };
+    window.addEventListener('resize', handleResize);
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    modal._resizeHandler = handleResize;
+    modal._scrollHandler = handleScroll;
+    
+    // Prevent clicks inside modal from closing word popup
+    modal.addEventListener('click', (e) => {
+      e.stopPropagation();
+    });
+    
+    // Set up click outside handler
+    const clickOutsideHandler = (e) => {
+      if (!modal.contains(e.target) && !wordCell.contains(e.target)) {
+        if (this.dialogContainer && this.dialogContainer.contains(e.target)) {
+          return;
+        }
+        console.log('[BookmarkWordsDialog] Clicking outside modal - closing with animation');
+        this.closeWordAskAIModalWithAnimation(modal, wordCell);
+        document.removeEventListener('click', clickOutsideHandler, true);
+      }
+    };
+    document.addEventListener('click', clickOutsideHandler, true);
+    modal._clickOutsideHandler = clickOutsideHandler;
+    
+    // Set up chat history observer to update memory storage
+    const observer = new MutationObserver(() => {
+      const chatHistoryJson = modal.getAttribute('data-chat-history') || '[]';
+      let chatHistory = [];
+      try {
+        chatHistory = JSON.parse(chatHistoryJson);
+      } catch (e) {
+        console.error('[BookmarkWordsDialog] Error parsing chat history:', e);
+      }
+      // Store chat history in memory (not chrome storage)
+      this.wordChatHistories.set(normalizedWord, chatHistory);
+      console.log('[BookmarkWordsDialog] Updated chat history for word:', normalizedWord, chatHistory.length, 'messages');
+    });
+    
+    observer.observe(resultsList, { childList: true, subtree: true });
+    observer.observe(modal, { attributes: true, attributeFilter: ['data-chat-history'] });
+    modal._chatHistoryObserver = observer;
+    
+    // Don't make modal draggable - user requested to remove panning functionality
+    // Modal should remain fixed in position relative to content
+  },
+  
+  /**
+   * Send chat message for bookmarked word
+   * @param {HTMLElement} modal - The modal element
+   * @param {string} word - The word
+   * @param {HTMLElement} inputField - The input field
+   */
+  async sendBookmarkWordChatMessage(modal, word, inputField) {
+    const bookmarkDialog = this;
+    const question = inputField.value.trim();
+    if (!question) return;
+    
+    console.log('[BookmarkWordsDialog] Sending chat message:', question);
+    
+    const normalizedWord = word.toLowerCase();
+    
+    // Clear input
+    inputField.value = '';
+    inputField.style.height = 'auto';
+    
+    // Get chat history from modal
+    const chatHistoryJson = modal.getAttribute('data-chat-history') || '[]';
+    let chatHistory = [];
+    try {
+      chatHistory = JSON.parse(chatHistoryJson);
+    } catch (e) {
+      console.error('[BookmarkWordsDialog] Error parsing chat history:', e);
+      chatHistory = [];
+    }
+    
+    // Get initial context
+    let initialContext = modal.getAttribute('data-initial-context') || '';
+    if (!initialContext || initialContext.trim() === '') {
+      initialContext = `Word: ${word}`;
+    }
+    
+    // Add prefix to user question
+    const prefixedQuestion = `Here the word of interest is '${word}'. Based on the context given can you answer my question. Here is my question :- ${question}`;
+    
+    // Display user message
+    const resultsList = modal.querySelector('.word-web-search-results-list');
+    const resultsContainer = modal.querySelector('.word-web-search-results');
+    if (resultsContainer) {
+      resultsContainer.style.display = '';
+    }
+    
+    const userMessageDiv = document.createElement('div');
+    userMessageDiv.className = 'word-web-search-chat-message user-message';
+    userMessageDiv.textContent = question;
+    resultsList.appendChild(userMessageDiv);
+    
+    // Hide explain button
+    const explainBtn = modal.querySelector('.word-web-search-explain-btn');
+    if (explainBtn) {
+      explainBtn.style.display = 'none';
+    }
+    
+    // Create AI response container
+    const aiMessageDiv = document.createElement('div');
+    aiMessageDiv.className = 'word-web-search-chat-message ai-message';
+    const aiResponseText = document.createElement('div');
+    aiResponseText.className = 'word-web-search-chat-response-text';
+    aiMessageDiv.appendChild(aiResponseText);
+    resultsList.appendChild(aiMessageDiv);
+    
+    // Scroll to bottom
+    const scrollToBottom = (element) => {
+      if (!element) return;
+      const scrollableContent = element.closest('.word-web-search-results') || element;
+      scrollableContent.scrollTop = scrollableContent.scrollHeight;
+    };
+    scrollToBottom(resultsList);
+    
+    // Disable input and send button
+    inputField.disabled = true;
+    const sendBtn = modal.querySelector('.word-web-search-send-btn');
+    sendBtn.disabled = true;
+    
+    // Show delete button
+    const deleteBtn = modal.querySelector('.word-web-search-delete-btn');
+    if (deleteBtn) {
+      deleteBtn.style.display = 'flex';
+    }
+    
+    // Call API
+    let accumulatedText = '';
+    const abortAsk = await ApiService.ask({
+      initial_context: initialContext,
+      chat_history: chatHistory,
+      question: prefixedQuestion,
+      context_type: 'TEXT',
+      onChunk: (chunk, accumulated) => {
+        accumulatedText = accumulated || accumulatedText + chunk;
+        // Use bookmark dialog's markdown renderer
+        aiResponseText.innerHTML = bookmarkDialog.renderBookmarkMarkdown(accumulatedText);
+        scrollToBottom(resultsList);
+      },
+      onComplete: (updatedChatHistory) => {
+        console.log('[BookmarkWordsDialog] Chat response completed');
+        
+        let finalChatHistory = chatHistory;
+        if (updatedChatHistory && Array.isArray(updatedChatHistory)) {
+          finalChatHistory = updatedChatHistory;
+          modal.setAttribute('data-chat-history', JSON.stringify(updatedChatHistory));
+        } else {
+          chatHistory.push({
+            role: 'user',
+            content: prefixedQuestion
+          });
+          chatHistory.push({
+            role: 'assistant',
+            content: accumulatedText
+          });
+          finalChatHistory = chatHistory;
+          modal.setAttribute('data-chat-history', JSON.stringify(chatHistory));
+        }
+        
+        // Store in memory (not chrome storage)
+        bookmarkDialog.wordChatHistories.set(normalizedWord, finalChatHistory);
+        
+        scrollToBottom(resultsList);
+        
+        // Re-enable input and send button
+        inputField.disabled = false;
+        sendBtn.disabled = false;
+        inputField.focus();
+      },
+      onError: (error) => {
+        console.error('[BookmarkWordsDialog] Chat error:', error);
+        aiResponseText.textContent = `Error: ${error.message || 'Failed to get response'}`;
+        inputField.disabled = false;
+        sendBtn.disabled = false;
+        inputField.focus();
+      }
+    });
+  },
+  
+  /**
+   * Clear chat history for bookmarked word
+   * @param {HTMLElement} modal - The modal element
+   * @param {string} normalizedWord - The normalized word
+   */
+  clearBookmarkWordChatHistory(modal, normalizedWord) {
+    console.log('[BookmarkWordsDialog] Clearing chat history for word:', normalizedWord);
+    
+    // Clear from memory
+    this.wordChatHistories.set(normalizedWord, []);
+    
+    // Reset chat history in modal
+    modal.setAttribute('data-chat-history', JSON.stringify([]));
+    
+    // Remove chat messages from results list
+    const resultsList = modal.querySelector('.word-web-search-results-list');
+    const chatMessages = resultsList.querySelectorAll('.word-web-search-chat-message');
+    chatMessages.forEach(msg => msg.remove());
+    
+    // Hide delete button
+    const deleteBtn = modal.querySelector('.word-web-search-delete-btn');
+    if (deleteBtn) {
+      deleteBtn.style.display = 'none';
+    }
+    
+    // Update explain button visibility
+    if (modal._updateExplainButtonVisibility) {
+      modal._updateExplainButtonVisibility();
+    }
+  },
+  
+  /**
+   * Render markdown text to HTML (properly handles bold, italic, etc.)
+   * @param {string} text - Markdown text
+   * @returns {string} HTML string
+   */
+  renderBookmarkMarkdown(text) {
+    if (!text) return '';
+    
+    let html = String(text);
+    
+    // Process markdown patterns first (don't escape yet)
+    // Code blocks (```) - process first
+    html = html.replace(/```(\w+)?\n([\s\S]*?)```/g, '<pre><code>$2</code></pre>');
+    
+    // Inline code (`)
+    html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
+    
+    // Bold (**text** or __text__) - must come before italic
+    html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+    html = html.replace(/__([^_]+)__/g, '<strong>$1</strong>');
+    
+    // Italic (*text* or _text_) - but avoid conflicts with bold
+    html = html.replace(/(?<!\*)\*([^*\n]+?)\*(?!\*)/g, '<em>$1</em>');
+    html = html.replace(/(?<!_)_([^_\n]+?)_(?!_)/g, '<em>$1</em>');
+    
+    // Links [text](url)
+    html = html.replace(/\[([^\]]+)\]\(([^\)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
+    
+    // Headings
+    html = html.replace(/^### (.+)$/gm, '<h3>$1</h3>');
+    html = html.replace(/^## (.+)$/gm, '<h2>$1</h2>');
+    html = html.replace(/^# (.+)$/gm, '<h1>$1</h1>');
+    
+    // Now escape all HTML (this will escape both tags and content)
+    html = html
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+    
+    // Unescape ONLY the HTML tags we created from markdown (not the content inside)
+    html = html
+      .replace(/&lt;strong&gt;/g, '<strong>')
+      .replace(/&lt;\/strong&gt;/g, '</strong>')
+      .replace(/&lt;em&gt;/g, '<em>')
+      .replace(/&lt;\/em&gt;/g, '</em>')
+      .replace(/&lt;code&gt;/g, '<code>')
+      .replace(/&lt;\/code&gt;/g, '</code>')
+      .replace(/&lt;pre&gt;/g, '<pre>')
+      .replace(/&lt;\/pre&gt;/g, '</pre>')
+      .replace(/&lt;h1&gt;/g, '<h1>')
+      .replace(/&lt;\/h1&gt;/g, '</h1>')
+      .replace(/&lt;h2&gt;/g, '<h2>')
+      .replace(/&lt;\/h2&gt;/g, '</h2>')
+      .replace(/&lt;h3&gt;/g, '<h3>')
+      .replace(/&lt;\/h3&gt;/g, '</h3>')
+      .replace(/&lt;a href="([^"]+)" target="_blank" rel="noopener noreferrer"&gt;/g, '<a href="$1" target="_blank" rel="noopener noreferrer">')
+      .replace(/&lt;\/a&gt;/g, '</a>');
+    
+    // Line breaks
+    html = html.replace(/\n\n/g, '<br><br>');
+    html = html.replace(/\n/g, '<br>');
+    
+    // Lists
+    html = html.replace(/^\* (.+)$/gm, '<li>$1</li>');
+    html = html.replace(/^- (.+)$/gm, '<li>$1</li>');
+    html = html.replace(/^\d+\. (.+)$/gm, '<li>$1</li>');
+    
+    // Wrap consecutive <li> in <ul>
+    html = html.replace(/(<li>.*?<\/li>)/gs, '<ul>$1</ul>');
+    
+    return html;
   },
   
   /**
@@ -35239,12 +35715,27 @@ const BookmarkWordsDialog = {
       return;
     }
     
+    // Remove row highlight and data attribute
+    if (modal._rowElement) {
+      modal._rowElement.style.backgroundColor = '';
+      modal._rowElement.removeAttribute('data-has-active-modal');
+    }
+    
     // Clean up observers and handlers
     if (modal._chatHistoryObserver) {
       modal._chatHistoryObserver.disconnect();
     }
     if (modal._clickOutsideHandler) {
       document.removeEventListener('click', modal._clickOutsideHandler, true);
+    }
+    if (modal._resizeObserver) {
+      modal._resizeObserver.disconnect();
+    }
+    if (modal._resizeHandler) {
+      window.removeEventListener('resize', modal._resizeHandler);
+    }
+    if (modal._scrollHandler) {
+      window.removeEventListener('scroll', modal._scrollHandler);
     }
     
     // Get current modal position and dimensions
@@ -35275,9 +35766,8 @@ const BookmarkWordsDialog = {
       currentLeft = modalRect.left + scrollX;
     }
     
-    // Set initial state
+    // Set initial state - no fade out, just scale and move
     modal.style.setProperty('opacity', '1', 'important');
-    modal.style.setProperty('transform', 'none', 'important');
     modal.style.setProperty('top', `${currentTop}px`, 'important');
     modal.style.setProperty('left', `${currentLeft}px`, 'important');
     modal.style.setProperty('width', `${currentWidth}px`, 'important');
@@ -35293,8 +35783,9 @@ const BookmarkWordsDialog = {
     modal.style.setProperty('max-width', 'none', 'important');
     modal.style.setProperty('max-height', 'none', 'important');
     
-    // Set transition for 0.2s animation
-    modal.style.setProperty('transition', 'top 0.2s ease-out, left 0.2s ease-out, width 0.2s ease-out, height 0.2s ease-out, opacity 0.2s ease-out', 'important');
+    // Set transition for closing animation - no opacity fade, just transform and position
+    modal.style.setProperty('transition', 'top 0.2s ease-out, left 0.2s ease-out, width 0.2s ease-out, height 0.2s ease-out, transform 0.2s ease-out', 'important');
+    modal.style.setProperty('opacity', '1', 'important'); // Keep opacity at 1, no fade
     
     // Add closing class
     modal.classList.add('ask-ai-closing');
@@ -35302,12 +35793,13 @@ const BookmarkWordsDialog = {
     // Force reflow
     void modal.offsetHeight;
     
-    // Animate to word cell center and scale down to 0
+    // Animate to word cell center and scale down to 0 (no opacity fade)
     modal.style.setProperty('top', `${finalTop}px`, 'important');
     modal.style.setProperty('left', `${finalLeft}px`, 'important');
     modal.style.setProperty('width', '0px', 'important');
     modal.style.setProperty('height', '0px', 'important');
-    modal.style.setProperty('opacity', '0', 'important');
+    // Keep opacity at 1 - no fade out
+    modal.style.setProperty('opacity', '1', 'important');
     
     // Remove modal after animation
     setTimeout(() => {
@@ -35629,6 +36121,14 @@ const BookmarkWordsDialog = {
         vertical-align: middle;
       }
       
+      /* Hover effect for rows with green background (active modal) */
+      .vocab-bookmark-words-table tbody tr[style*="background-color: rgb(240, 253, 244)"],
+      .vocab-bookmark-words-table tbody tr[style*="background-color: #f0fdf4"] {
+        transition: background-color 0.2s ease;
+      }
+      
+      /* Note: Hover is handled via JavaScript event listeners for better control */
+      
       .vocab-bookmark-words-td-source,
       .vocab-bookmark-words-td-actions {
         text-align: center;
@@ -35772,6 +36272,17 @@ const BookmarkWordsDialog = {
       /* Light purple hover effect for table rows (very very light) */
       .vocab-bookmark-words-table tbody tr:hover {
         background: rgba(149, 39, 245, 0.05) !important;
+      }
+      
+      /* Override hover for green rows (active modal) - use darker green instead of purple */
+      /* Only rows with data-has-active-modal attribute should show darker green */
+      .vocab-bookmark-words-table tbody tr[data-has-active-modal="true"]:hover {
+        background-color: #dcfce7 !important; /* Darker green, not purple */
+      }
+      
+      /* Ensure rows without active modal still show purple on hover */
+      .vocab-bookmark-words-table tbody tr:not([data-has-active-modal="true"]):hover {
+        background: rgba(149, 39, 245, 0.05) !important; /* Light purple */
       }
       
       .vocab-bookmark-words-table tbody tr:last-child td {
