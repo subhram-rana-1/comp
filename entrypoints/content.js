@@ -12628,6 +12628,8 @@ const TextSelector = {
         transition: opacity 0.3s ease, transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
       }
       
+      .home-options-container:hover .home-options-menu,
+      .home-options-container-visible:hover .home-options-menu,
       .home-options-btn:hover ~ .home-options-menu,
       .home-options-menu:hover,
       .home-options-menu.home-options-menu-visible {
@@ -35175,7 +35177,7 @@ const BookmarkWordsDialog = {
       .vocab-bookmark-words-search-input {
         width: 100%;
         padding: 10px 16px;
-        border: 1.5px solid #d1d5db;
+        border: 1.5px solid rgba(149, 39, 245, 0.4);
         border-radius: 8px;
         font-size: 14px;
         font-family: inherit;
@@ -35206,13 +35208,17 @@ const BookmarkWordsDialog = {
       .vocab-bookmark-words-sort-dropdown-container {
         position: relative;
         min-width: 160px;
+        border: 1.5px solid rgba(149, 39, 245, 0.4);
+        border-radius: 8px;
+        padding: 0;
+        box-sizing: border-box;
       }
       
       /* Sort Dropdown Input (matches language dropdown) */
       .vocab-bookmark-words-sort-input {
         width: 100%;
         padding: 12px 45px 12px 16px;
-        border: 2px solid #e5e5e5;
+        border: none;
         border-radius: 8px;
         font-size: 14px !important;
         font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif !important;
@@ -35307,7 +35313,7 @@ const BookmarkWordsDialog = {
       .vocab-bookmark-words-table-container {
         flex: 1;
         overflow-y: auto;
-        border: 1px solid #e5e7eb;
+        border: 1px solid rgba(149, 39, 245, 0.4);
         border-radius: 12px;
         margin-bottom: 16px;
       }
@@ -35329,7 +35335,7 @@ const BookmarkWordsDialog = {
         font-weight: 600;
         font-size: 13px;
         color: #374151;
-        background: #f9fafb;
+        background: rgba(149, 39, 245, 0.1);
         border-bottom: 2px solid #e5e7eb;
         position: sticky;
         top: 0;
@@ -35360,7 +35366,7 @@ const BookmarkWordsDialog = {
         padding: 12px 16px;
         font-size: 14px;
         color: #374151;
-        border-bottom: 1px solid #f3f4f6;
+        border-bottom: 1px solid rgba(149, 39, 245, 0.2);
         vertical-align: middle;
       }
       
@@ -35488,9 +35494,14 @@ const BookmarkWordsDialog = {
         height: 100%;
       }
       
-      /* Light purple hover effect for table rows (lighter) */
+      /* Table row with smooth transition */
+      .vocab-bookmark-words-table tbody tr {
+        transition: background-color 0.3s ease;
+      }
+      
+      /* Light purple hover effect for table rows (very very light) */
       .vocab-bookmark-words-table tbody tr:hover {
-        background: #faf5ff !important;
+        background: rgba(149, 39, 245, 0.05) !important;
       }
       
       .vocab-bookmark-words-table tbody tr:last-child td {
@@ -35512,12 +35523,12 @@ const BookmarkWordsDialog = {
         align-items: center;
         gap: 12px;
         padding-top: 16px;
-        border-top: 1px solid #e5e7eb;
+        border-top: 1px solid rgba(149, 39, 245, 0.4);
       }
       
       .vocab-bookmark-words-pagination-info {
         font-size: 13px;
-        color: #6b7280;
+        color: rgba(149, 39, 245, 0.7);
       }
       
       .vocab-bookmark-words-pagination-buttons {
