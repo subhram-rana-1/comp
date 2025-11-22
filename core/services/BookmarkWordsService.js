@@ -99,16 +99,17 @@ class BookmarkWordsService {
    * Toggle bookmark status for a word
    * @param {string} word - The word to toggle
    * @param {string} meaning - The meaning (required if adding)
+   * @param {string} url - The URL of the page where the word was bookmarked
    * @returns {Promise<boolean>} True if bookmarked after toggle, false if removed
    */
-  static async toggleBookmark(word, meaning) {
+  static async toggleBookmark(word, meaning, url = '') {
     const isBookmarked = await this.isBookmarked(word);
     
     if (isBookmarked) {
       await this.removeBookmark(word);
       return false;
     } else {
-      await this.addBookmark(word, meaning);
+      await this.addBookmark(word, meaning, url);
       return true;
     }
   }
