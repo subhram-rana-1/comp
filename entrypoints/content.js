@@ -682,7 +682,7 @@ export default defineContentScript({
         visibility: visible !important;
       `;
       brandingHeading.innerHTML = `
-        <span style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif !important; color: #9527F5 !important; font-size: 28px !important; font-weight: 600 !important; text-shadow: none !important; background: transparent !important; opacity: 1 !important; visibility: visible !important;">Explainzo</span>
+        <span style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif !important; color: #9527F5 !important; font-size: 28px !important; font-weight: 600 !important; text-shadow: none !important; background: transparent !important; opacity: 1 !important; visibility: visible !important;">XplainO</span>
         <span class="brand-icon" style="display: inline-flex; align-items: center; opacity: 1 !important; visibility: visible !important;">
           <svg width="24" height="24" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg" style="opacity: 1 !important; visibility: visible !important;">
             <path d="M14 0L17 8L25 11L17 14L14 22L11 14L3 11L11 8L14 0Z" fill="#9527F5"/>
@@ -2171,7 +2171,7 @@ export default defineContentScript({
         
         const heading = document.createElement('h2');
         heading.className = 'banner-heading';
-        heading.textContent = 'Explainzo';
+        heading.textContent = 'XplainO';
         
         // Add magic-meaning icon SVG to the right of the heading
         const iconWrapper = document.createElement('span');
