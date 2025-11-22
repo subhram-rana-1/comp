@@ -14,8 +14,8 @@ const packageJson = JSON.parse(readFileSync(join(rootDir, 'package.json'), 'utf-
 const version = packageJson.version;
 const packageName = packageJson.name;
 
-// Use "Explainzo" for the zip filename (replace spaces with hyphens for filename)
-const extensionDisplayName = 'Explainzo';
+// Use "XplainO" for the zip filename (replace spaces with hyphens for filename)
+const extensionDisplayName = 'XplainO';
 const zipFileName = `${extensionDisplayName.replace(/\s+/g, '-').toLowerCase()}-${version}.zip`;
 
 const outputDir = join(rootDir, '.output');
