@@ -34331,7 +34331,7 @@ const BookmarkWordsDialog = {
       width: 100%;
       padding: 12px 45px 12px 16px;
       border: 2px solid #e5e5e5;
-      border-radius: 8px;
+      border-radius: 13px;
       font-size: 14px !important;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif !important;
       font-weight: 400 !important;
@@ -35426,7 +35426,7 @@ const BookmarkWordsDialog = {
         width: 100%;
         padding: 10px 16px;
         border: 1.5px solid rgba(149, 39, 245, 0.4);
-        border-radius: 8px;
+        border-radius: 13px;
         font-size: 14px;
         font-family: inherit;
         transition: border-color 0.2s ease;
@@ -35457,7 +35457,7 @@ const BookmarkWordsDialog = {
         position: relative;
         min-width: 160px;
         border: 1.5px solid rgba(149, 39, 245, 0.4);
-        border-radius: 8px;
+        border-radius: 13px;
         padding: 0;
         box-sizing: border-box;
         z-index: 2147483651 !important;
@@ -35469,7 +35469,7 @@ const BookmarkWordsDialog = {
         width: 100%;
         padding: 12px 45px 12px 16px;
         border: none;
-        border-radius: 8px;
+        border-radius: 13px;
         font-size: 14px !important;
         font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif !important;
         font-weight: 400 !important;
@@ -35564,7 +35564,7 @@ const BookmarkWordsDialog = {
         flex: 1;
         overflow-y: auto;
         border: 1px solid rgba(149, 39, 245, 0.4);
-        border-radius: 12px;
+        border-radius: 20px;
         margin-bottom: 16px;
       }
       
@@ -35651,11 +35651,13 @@ const BookmarkWordsDialog = {
       
       /* Search highlight styling */
       .vocab-bookmark-words-search-highlight {
-        background-color: rgba(34, 197, 94, 0.2);
-        border: 1px solid rgba(34, 197, 94, 0.4);
-        border-radius: 3px;
-        padding: 1px 2px;
+        background-color: transparent;
+        border: none;
+        border-bottom: 3px solid #22c55e;
+        border-radius: 0;
+        padding: 0;
         color: inherit;
+        text-decoration: none;
       }
       
       /* Copy Icon */
