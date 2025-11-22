@@ -1967,6 +1967,117 @@ export default defineContentScript({
     ChatDialog.init();
     BookmarkWordsDialog.init();
     
+    // Handle query params for word highlighting
+    const handleQueryParams = () => {
+      const urlParams = new URLSearchParams(window.location.search);
+      const word = urlParams.get('xplaino_word');
+      
+      if (word) {
+        // Wait a bit for page to be fully rendered
+        setTimeout(() => {
+          // Find first occurrence of word on page
+          const walker = document.createTreeWalker(
+            document.body,
+            NodeFilter.SHOW_TEXT,
+            null,
+            false
+          );
+          
+          let foundNode = null;
+          let node;
+          while (node = walker.nextNode()) {
+            const text = node.textContent;
+            // Use word boundary regex to find exact word match
+            const regex = new RegExp(`\\b${word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
+            if (regex.test(text)) {
+              foundNode = node;
+              break;
+            }
+          }
+          
+          if (foundNode) {
+            // Function to highlight word text within a text node
+            const highlightWordInTextNode = (textNode, searchWord) => {
+              const escapedWord = searchWord.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+              const regex = new RegExp(`\\b${escapedWord}\\b`, 'gi');
+              const text = textNode.textContent;
+              const match = text.match(regex);
+              
+              if (match) {
+                const matchIndex = text.search(regex);
+                const beforeText = text.substring(0, matchIndex);
+                const matchedText = match[0];
+                const afterText = text.substring(matchIndex + matchedText.length);
+                
+                // Get parent element to preserve its styling
+                const parent = textNode.parentNode;
+                const computedStyle = window.getComputedStyle(parent);
+                
+                // Create highlight span
+                const highlightSpan = document.createElement('span');
+                
+                // Preserve existing text styling from parent
+                highlightSpan.style.fontSize = computedStyle.fontSize;
+                highlightSpan.style.fontWeight = computedStyle.fontWeight;
+                highlightSpan.style.fontStyle = computedStyle.fontStyle;
+                highlightSpan.style.fontFamily = computedStyle.fontFamily;
+                highlightSpan.style.color = computedStyle.color;
+                highlightSpan.style.textDecoration = computedStyle.textDecoration;
+                highlightSpan.style.lineHeight = computedStyle.lineHeight;
+                highlightSpan.style.letterSpacing = computedStyle.letterSpacing;
+                highlightSpan.style.textTransform = computedStyle.textTransform;
+                highlightSpan.style.fontVariant = computedStyle.fontVariant;
+                
+                // Add highlight styling (background, border, etc.)
+                highlightSpan.style.backgroundColor = '#d1fae5';
+                highlightSpan.style.border = '2px solid #86efac';
+                highlightSpan.style.borderRadius = '6px';
+                highlightSpan.style.padding = '2px 4px';
+                highlightSpan.style.transition = 'all 0.3s ease';
+                highlightSpan.style.display = 'inline'; // Ensure it's inline to preserve text flow
+                
+                highlightSpan.textContent = matchedText;
+                
+                // Replace text node with new nodes
+                if (beforeText) {
+                  parent.insertBefore(document.createTextNode(beforeText), textNode);
+                }
+                parent.insertBefore(highlightSpan, textNode);
+                if (afterText) {
+                  parent.insertBefore(document.createTextNode(afterText), textNode);
+                }
+                parent.removeChild(textNode);
+                
+                // Scroll to the highlighted word
+                highlightSpan.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                
+                console.log('[WordSelector] Highlighted word:', searchWord);
+                return true;
+              }
+              
+              return false;
+            };
+            
+            // Highlight the word
+            const highlighted = highlightWordInTextNode(foundNode, word);
+            
+            if (!highlighted) {
+              console.warn('[WordSelector] Could not highlight word:', word);
+            }
+          } else {
+            console.warn('[WordSelector] Could not find word on page:', word);
+          }
+        }, 500); // Wait 500ms for page to render
+      }
+    };
+    
+    // Check query params on page load
+    if (document.readyState === 'complete') {
+      handleQueryParams();
+    } else {
+      window.addEventListener('load', handleQueryParams);
+    }
+    
     // Wait for page to load completely, then fetch page text content in a separate thread
     if (document.readyState === 'complete') {
       // Page already loaded, fetch content immediately
@@ -13096,6 +13207,12 @@ const ChatDialog = {
       currentTextKey: this.currentTextKey
     });
     console.log('[ChatDialog] ChatHistories Map contents:', Array.from(this.chatHistories.keys()));
+    
+    // Close BookmarkWordsDialog if it's open
+    if (typeof BookmarkWordsDialog !== 'undefined' && BookmarkWordsDialog.isOpen) {
+      console.log('[ChatDialog] BookmarkWordsDialog is open, closing it before opening chat/summary dialog');
+      BookmarkWordsDialog.close();
+    }
     
     // Set the chat context
     this.chatContext = chatContext;
@@ -33969,6 +34086,10 @@ const BookmarkWordsDialog = {
     
     // Create and show dialog
     this.createDialog();
+    
+    // Load saved width from storage
+    await this.loadSavedDimensions();
+    
     this.show();
     
     console.log('[BookmarkWordsDialog] Opened');
@@ -33985,6 +34106,14 @@ const BookmarkWordsDialog = {
     }
     
     if (this.dialogContainer && this.dialogContainer.classList.contains('visible')) {
+      // Remove inline transform to allow CSS transition to work
+      // The CSS will handle the slide-out animation when we remove the 'visible' class
+      this.dialogContainer.style.removeProperty('transform');
+      
+      // Force reflow to ensure the style change is applied
+      void this.dialogContainer.offsetHeight;
+      
+      // Remove visible class to trigger slide-out animation
       this.dialogContainer.classList.remove('visible');
       setTimeout(() => {
         this.hide();
@@ -34189,6 +34318,8 @@ const BookmarkWordsDialog = {
     dropdownContainer.style.cssText = `
       position: relative;
       min-width: 160px;
+      z-index: 2147483651;
+      isolation: isolate;
     `;
     
     // Create input field (readonly, for display)
@@ -34247,7 +34378,7 @@ const BookmarkWordsDialog = {
       max-height: 300px;
       overflow-y: auto;
       display: none;
-      z-index: 2147483650 !important;
+      z-index: 2147483651 !important;
       box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
       user-select: none;
       -webkit-user-select: none;
@@ -34258,6 +34389,7 @@ const BookmarkWordsDialog = {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif !important;
       font-weight: 400 !important;
       line-height: 1.5 !important;
+      pointer-events: auto !important;
     `;
     
     const options = [
@@ -34323,9 +34455,13 @@ const BookmarkWordsDialog = {
     // Function to update dropdown position
     const updateDropdownPosition = () => {
       const rect = sortInput.getBoundingClientRect();
-      dropdownList.style.top = `${rect.bottom + window.scrollY}px`;
-      dropdownList.style.left = `${rect.left + window.scrollX}px`;
+      // For fixed positioning, use viewport coordinates (no scroll offset needed)
+      dropdownList.style.top = `${rect.bottom}px`;
+      dropdownList.style.left = `${rect.left}px`;
       dropdownList.style.width = `${rect.width}px`;
+      // Ensure dropdown is visible and on top
+      dropdownList.style.zIndex = '2147483651';
+      dropdownList.style.visibility = 'visible';
     };
     
     // Prevent double-click from triggering word processing
@@ -34510,20 +34646,114 @@ const BookmarkWordsDialog = {
       this.dialogContainer.style.setProperty('width', `${newWidth}px`, 'important');
       // Keep dialog vertically centered during resize
       this.dialogContainer.style.setProperty('top', '50%', 'important');
+      // Only set transform inline during resize, will be removed on close
       this.dialogContainer.style.setProperty('transform', 'translateY(-50%) translateX(0)', 'important');
     };
     
-    const stopResize = () => {
+    const stopResize = async () => {
       if (!isResizing) return;
       
       isResizing = false;
       document.body.style.userSelect = '';
       resizeHandle.classList.remove('resizing');
+      
+      // Save the current width to storage
+      const currentWidth = this.dialogContainer.style.width;
+      if (currentWidth) {
+        try {
+          await chrome.storage.local.set({
+            'vocab-bookmark-words-dialog-width': currentWidth
+          });
+          console.log('[BookmarkWordsDialog] Saved width to storage:', currentWidth);
+        } catch (error) {
+          console.error('[BookmarkWordsDialog] Error saving width to storage:', error);
+        }
+      }
     };
     
     resizeHandle.addEventListener('mousedown', startResize);
     document.addEventListener('mousemove', resize);
     document.addEventListener('mouseup', stopResize);
+  },
+  
+  /**
+   * Load saved dimensions from storage
+   */
+  async loadSavedDimensions() {
+    if (!this.dialogContainer) return;
+    
+    try {
+      const result = await chrome.storage.local.get(['vocab-bookmark-words-dialog-width']);
+      if (result['vocab-bookmark-words-dialog-width']) {
+        const savedWidth = result['vocab-bookmark-words-dialog-width'];
+        this.dialogContainer.style.setProperty('width', savedWidth, 'important');
+        console.log('[BookmarkWordsDialog] Loaded saved width from storage:', savedWidth);
+      }
+    } catch (error) {
+      console.error('[BookmarkWordsDialog] Error loading saved dimensions:', error);
+    }
+  },
+  
+  /**
+   * Highlight matched substring in text
+   * @param {string} text - The text to highlight
+   * @param {string} query - The search query
+   * @returns {string} - HTML string with highlighted matches
+   */
+  highlightMatch(text, query) {
+    if (!query || !query.trim()) {
+      return text;
+    }
+    
+    const queryLower = query.toLowerCase().trim();
+    const textLower = text.toLowerCase();
+    const matches = [];
+    
+    // Find all matches (case-insensitive)
+    let startIndex = 0;
+    while (startIndex < text.length) {
+      const index = textLower.indexOf(queryLower, startIndex);
+      if (index === -1) break;
+      matches.push({ start: index, end: index + queryLower.length });
+      startIndex = index + 1;
+    }
+    
+    if (matches.length === 0) {
+      return text;
+    }
+    
+    // Build HTML with highlights
+    let result = '';
+    let lastIndex = 0;
+    
+    matches.forEach(match => {
+      // Add text before match
+      if (match.start > lastIndex) {
+        result += this.escapeHtml(text.substring(lastIndex, match.start));
+      }
+      // Add highlighted match
+      const matchedText = text.substring(match.start, match.end);
+      result += `<span class="vocab-bookmark-words-search-highlight">${this.escapeHtml(matchedText)}</span>`;
+      lastIndex = match.end;
+    });
+    
+    // Add remaining text
+    if (lastIndex < text.length) {
+      result += this.escapeHtml(text.substring(lastIndex));
+    }
+    
+    return result;
+  },
+  
+  /**
+   * Escape HTML to prevent XSS
+   * @param {string} text - Text to escape
+   * @returns {string} - Escaped text
+   */
+  escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
   },
   
   /**
@@ -34570,7 +34800,12 @@ const BookmarkWordsDialog = {
         
         const wordText = document.createElement('span');
         wordText.className = 'vocab-bookmark-words-word-text';
-        wordText.textContent = bookmark.word;
+        // Highlight matched substring if there's a search query
+        if (this.searchQuery && this.searchQuery.trim()) {
+          wordText.innerHTML = this.highlightMatch(bookmark.word, this.searchQuery);
+        } else {
+          wordText.textContent = bookmark.word;
+        }
         wordText.style.cursor = 'pointer';
         
         // Create copy icon
@@ -34637,7 +34872,20 @@ const BookmarkWordsDialog = {
           `;
           linkButton.addEventListener('click', (e) => {
             e.stopPropagation();
-            window.open(bookmark.url, '_blank');
+            // Build URL with query params
+            try {
+              const url = new URL(bookmark.url);
+              url.searchParams.set('xplaino_word', bookmark.word);
+              console.log('[BookmarkWordsDialog] Opening URL with params:', url.toString());
+              window.open(url.toString(), '_blank');
+            } catch (error) {
+              console.error('[BookmarkWordsDialog] Error building URL:', error, 'bookmark.url:', bookmark.url);
+              // Fallback: try to append query params manually
+              const separator = bookmark.url.includes('?') ? '&' : '?';
+              const finalUrl = `${bookmark.url}${separator}xplaino_word=${encodeURIComponent(bookmark.word)}`;
+              console.log('[BookmarkWordsDialog] Opening URL (fallback):', finalUrl);
+              window.open(finalUrl, '_blank');
+            }
           });
           sourceCell.appendChild(linkButton);
         } else {
@@ -35083,7 +35331,7 @@ const BookmarkWordsDialog = {
         height: 800px !important;
         max-height: 80vh;
         z-index: 2147483647 !important;
-        transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), width 0s;
         font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
         user-select: none;
         background: white !important;
@@ -35212,6 +35460,8 @@ const BookmarkWordsDialog = {
         border-radius: 8px;
         padding: 0;
         box-sizing: border-box;
+        z-index: 2147483651 !important;
+        isolation: isolate;
       }
       
       /* Sort Dropdown Input (matches language dropdown) */
@@ -35261,7 +35511,7 @@ const BookmarkWordsDialog = {
         max-height: 300px;
         overflow-y: auto;
         display: none;
-        z-index: 2147483650 !important;
+        z-index: 2147483651 !important;
         box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
         user-select: none;
         -webkit-user-select: none;
@@ -35399,6 +35649,15 @@ const BookmarkWordsDialog = {
         text-decoration: underline;
       }
       
+      /* Search highlight styling */
+      .vocab-bookmark-words-search-highlight {
+        background-color: rgba(34, 197, 94, 0.2);
+        border: 1px solid rgba(34, 197, 94, 0.4);
+        border-radius: 3px;
+        padding: 1px 2px;
+        color: inherit;
+      }
+      
       /* Copy Icon */
       .vocab-bookmark-words-copy-icon {
         width: 24px;
@@ -35523,7 +35782,7 @@ const BookmarkWordsDialog = {
         align-items: center;
         gap: 12px;
         padding-top: 16px;
-        border-top: 1px solid rgba(149, 39, 245, 0.4);
+        border-top: None;
       }
       
       .vocab-bookmark-words-pagination-info {
