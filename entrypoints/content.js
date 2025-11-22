@@ -8871,11 +8871,13 @@ const WordSelector = {
       .word-ask-ai-modal-content {
         display: flex;
         flex-direction: column;
-        padding-top: 20px;
+        padding: 20px 0 10px 0;
         height: 100%;
         max-height: 49vh; /* Reduced to 70% of original 70vh */
         border-radius: 30px;
         position: relative;
+        box-sizing: border-box !important;
+        overflow: hidden !important;
         /* Disable text selection in the modal */
         user-select: none !important;
         -webkit-user-select: none !important;
@@ -9237,7 +9239,7 @@ const WordSelector = {
         flex: 1;
         padding: 10px 12px;
         border: 1px solid #e5e7eb;
-        border-radius: 10px;
+        border-radius: 15px;
         font-size: 14px;
         font-family: inherit;
         resize: none;
