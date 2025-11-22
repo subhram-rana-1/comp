@@ -12820,6 +12820,13 @@ const TextSelector = {
         border-radius: 20px;
         font-size: 13px;
         font-weight: 500;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif !important;
+        font-style: normal !important;
+        font-variant: normal !important;
+        text-transform: none !important;
+        letter-spacing: normal !important;
+        line-height: 1.4 !important;
+        text-decoration: none !important;
         white-space: nowrap;
         pointer-events: none;
         opacity: 0;
