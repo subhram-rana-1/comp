@@ -1711,9 +1711,9 @@ export default defineContentScript({
         // Initially hide the container (will be shown when extension is enabled)
         container.style.display = 'none';
         
-        // Load brand logo white SVG from assets
+        // Load logo white SVG from assets
         try {
-          const svgUrl = chrome.runtime.getURL('assets/brand-logo-white.svg');
+          const svgUrl = chrome.runtime.getURL('assets/logo_white.svg');
           const response = await fetch(svgUrl);
           const svgContent = await response.text();
           button.innerHTML = svgContent;
@@ -1721,9 +1721,12 @@ export default defineContentScript({
           const svgElement = button.querySelector('svg');
           if (svgElement) {
             svgElement.classList.add('home-options-gear-icon');
+            // Set explicit width and height for proper sizing
+            svgElement.setAttribute('width', '16');
+            svgElement.setAttribute('height', '16');
           }
         } catch (error) {
-          console.error('[Content Script] Failed to load brand logo white SVG:', error);
+          console.error('[Content Script] Failed to load logo white SVG:', error);
           // Fallback to inline SVG if file loading fails
           button.innerHTML = `
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" class="home-options-gear-icon">
@@ -12936,7 +12939,8 @@ const TextSelector = {
       }
       
       .home-options-btn svg *,
-      .home-options-btn .home-options-gear-icon * {
+      .home-options-btn .home-options-gear-icon *,
+      .home-options-btn svg image {
         display: block !important;
         visibility: visible !important;
       }
