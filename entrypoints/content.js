@@ -16501,10 +16501,82 @@ const ChatDialog = {
     sendBtn.className = 'vocab-chat-send-btn';
     sendBtn.setAttribute('aria-label', 'Send message');
     sendBtn.innerHTML = this.createSendIcon();
-    sendBtn.addEventListener('click', () => {
+    sendBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
       console.log('[ChatDialog] ===== SEND BUTTON CLICKED =====');
-      console.log('[ChatDialog] Send button clicked, calling sendMessage()');
-      this.sendMessage();
+      
+      // Check if API call is in progress (stop icon is shown)
+      const isStopIcon = sendBtn.querySelector('rect[fill="#9527F5"]');
+      if (isStopIcon) {
+        // Abort the API call
+        const abortFn = this.dialogContainer?._currentAbortFn;
+        if (abortFn && typeof abortFn === 'function') {
+          console.log('[ChatDialog] Aborting API call');
+          abortFn();
+          
+          // Get accumulated text from dialog container or extract from DOM
+          let accumulatedText = '';
+          if (this.dialogContainer?._currentAccumulatedText) {
+            accumulatedText = this.dialogContainer._currentAccumulatedText;
+          } else {
+            // Fallback: extract from streaming message in DOM
+            const chatContainer = document.getElementById('vocab-chat-messages');
+            if (chatContainer) {
+              const lastAiMessage = chatContainer.querySelector('.vocab-chat-message-ai:last-child');
+              if (lastAiMessage) {
+                const messageContent = lastAiMessage.querySelector('.vocab-chat-message-content');
+                if (messageContent) {
+                  accumulatedText = messageContent.textContent || messageContent.innerText || '';
+                }
+              }
+            }
+          }
+          
+          // Save accumulated response to chat history if we have text
+          if (accumulatedText && accumulatedText.trim()) {
+            // Use the requestTextKey from when the request was made (in case user switched tabs)
+            const requestTextKey = this.dialogContainer?._currentRequestTextKey || this.currentTextKey;
+            
+            // Get the chat history for the correct textKey
+            const chatHistoryForRequest = this.chatHistories.get(requestTextKey) || [];
+            
+            // Add AI response to the chat history
+            chatHistoryForRequest.push({
+              type: 'ai',
+              message: accumulatedText.trim(),
+              timestamp: new Date().toISOString()
+            });
+            
+            // Update stored chat history for this textKey
+            if (requestTextKey) {
+              this.chatHistories.set(requestTextKey, chatHistoryForRequest);
+              
+              // If we're still in the same chat, also update current chatHistory
+              if (this.currentTextKey === requestTextKey) {
+                this.chatHistory = [...chatHistoryForRequest];
+              }
+              
+              console.log('[ChatDialog] Saved stopped response to chat history for textKey:', requestTextKey);
+            }
+          }
+          
+          // Clear abort function, accumulated text, and requestTextKey
+          if (this.dialogContainer) {
+            this.dialogContainer._currentAbortFn = null;
+            this.dialogContainer._currentAccumulatedText = null;
+            this.dialogContainer._currentRequestTextKey = null;
+          }
+          
+          // Restore send icon
+          sendBtn.innerHTML = this.createSendIcon();
+          sendBtn.setAttribute('aria-label', 'Send message');
+          sendBtn.disabled = false;
+        }
+      } else {
+        // Normal send action
+        console.log('[ChatDialog] Send button clicked, calling sendMessage()');
+        this.sendMessage();
+      }
     });
     
     // Create delete button (same size as send button)
@@ -16672,6 +16744,19 @@ const ChatDialog = {
     let possibleQuestions = []; // Store possibleQuestions during streaming
     let abortRequest = null;
     
+    // Get send button and change to stop icon
+    const sendBtn = this.dialogContainer.querySelector('.vocab-chat-send-btn');
+    if (sendBtn) {
+      sendBtn.innerHTML = this.createStopIcon();
+      sendBtn.setAttribute('aria-label', 'Stop request');
+      sendBtn.disabled = false; // Keep enabled so user can click to stop
+    }
+    
+    // Store requestTextKey on dialog container for use when stopping
+    if (this.dialogContainer) {
+      this.dialogContainer._currentRequestTextKey = requestTextKey;
+    }
+    
     // Check if we're still in the same chat tab that initiated the request
     const isSameChat = this.currentTextKey === requestTextKey;
     
@@ -16698,6 +16783,11 @@ const ChatDialog = {
           // Update accumulated text
           accumulatedText = accumulated || '';
           
+          // Store accumulated text on dialog container for access when stopping
+          if (this.dialogContainer) {
+            this.dialogContainer._currentAccumulatedText = accumulatedText;
+          }
+          
           // Check if we're still in the same chat tab
           if (this.currentTextKey === requestTextKey && streamingMessageContent) {
             // Update the message bubble in real-time (don't pass possibleQuestions during streaming)
@@ -16719,6 +16809,18 @@ const ChatDialog = {
       
       // Remove loading animation
       this.removeLoadingAnimation();
+      
+      // Clear abort function, accumulated text, and requestTextKey, restore send button icon
+      if (this.dialogContainer) {
+        this.dialogContainer._currentAbortFn = null;
+        this.dialogContainer._currentAccumulatedText = null;
+        this.dialogContainer._currentRequestTextKey = null;
+      }
+      if (sendBtn) {
+        sendBtn.innerHTML = this.createSendIcon();
+        sendBtn.setAttribute('aria-label', 'Send message');
+        sendBtn.disabled = false;
+      }
       
           // Store the received possibleQuestions - ensure it's an array
           if (Array.isArray(receivedPossibleQuestions)) {
@@ -16798,6 +16900,16 @@ const ChatDialog = {
           // Remove loading animation
           this.removeLoadingAnimation();
           
+          // Clear abort function and restore send button icon
+          if (this.dialogContainer) {
+            this.dialogContainer._currentAbortFn = null;
+          }
+          if (sendBtn) {
+            sendBtn.innerHTML = this.createSendIcon();
+            sendBtn.setAttribute('aria-label', 'Send message');
+            sendBtn.disabled = false;
+          }
+          
         // Check if it's a 429 rate limit error
           const isRateLimit = error.status === 429 || 
                              error.message.includes('429') || 
@@ -16849,9 +16961,26 @@ const ChatDialog = {
       }
       });
       
+      // Store abort function on dialog container for stop functionality
+      if (this.dialogContainer && abortRequest) {
+        this.dialogContainer._currentAbortFn = abortRequest;
+      }
+      
     } catch (error) {
       console.error('[ChatDialog] Error initiating streaming request:', error);
       this.removeLoadingAnimation();
+      
+      // Clear abort function, accumulated text, and requestTextKey, restore send button icon
+      if (this.dialogContainer) {
+        this.dialogContainer._currentAbortFn = null;
+        this.dialogContainer._currentAccumulatedText = null;
+        this.dialogContainer._currentRequestTextKey = null;
+      }
+      if (sendBtn) {
+        sendBtn.innerHTML = this.createSendIcon();
+        sendBtn.setAttribute('aria-label', 'Send message');
+        sendBtn.disabled = false;
+      }
       
       // Remove streaming message bubble if it exists
       if (streamingMessageBubble && streamingMessageBubble.parentNode) {
@@ -18869,6 +18998,17 @@ const ChatDialog = {
     return `
       <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
         <path d="M10 15V5M10 5L5 10M10 5L15 10" stroke="#9527F5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    `;
+  },
+  
+  /**
+   * Create stop icon (square purple)
+   */
+  createStopIcon() {
+    return `
+      <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" style="display: block !important; visibility: visible !important;">
+        <rect x="4" y="4" width="12" height="12" fill="#9527F5" stroke="none" style="display: block !important; visibility: visible !important;"/>
       </svg>
     `;
   },
