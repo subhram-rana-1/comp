@@ -1,0 +1,11 @@
+<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <mask id="ringMask">
+      <rect width="24" height="24" fill="white"/>
+      <!-- Cut out the oval (black = transparent) -->
+      <ellipse cx="13.5" cy="13" rx="5.5" ry="4" transform="rotate(-12 13.5 13)" fill="black"/>
+    </mask>
+  </defs>
+  <!-- White ring: outer circle (off-center top-left) -->
+  <circle cx="11.5" cy="10.5" r="9.5" fill="white" mask="url(#ringMask)"/>
+</svg>
