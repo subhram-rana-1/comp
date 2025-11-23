@@ -1,7 +1,7 @@
 {
   "name": "xplaino",
   "version": "1.0.3",
-  "description": "Enhance your reading, vocabulary, and comprehension instantly in any language with AI-powered insights.",
+  "description": "Get AI-powered contextual explanations, summaries, and instant answers in any language—right as you browse",
   "type": "module",
   "private": true,
   "scripts": {
