@@ -2056,6 +2056,7 @@ export default defineContentScript({
                 highlightSpan.style.fontVariant = computedStyle.fontVariant;
                 
                 // Add highlight styling (background, border, etc.) - matching vocab-word-explained style
+                // Start with initial green background
                 highlightSpan.style.backgroundColor = 'rgba(240, 253, 244, 0.5)';
                 highlightSpan.style.border = '0.5px solid #22c55e';
                 highlightSpan.style.borderRadius = '8px';
@@ -2077,6 +2078,16 @@ export default defineContentScript({
                 
                 // Scroll to the highlighted word
                 highlightSpan.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                
+                // Add pulsation animation class (3 pulses)
+                highlightSpan.classList.add('xplaino-word-pulsate');
+                
+                // After animation completes (1.5s), remove animation class and persist green background
+                setTimeout(() => {
+                  highlightSpan.classList.remove('xplaino-word-pulsate');
+                  // Ensure final green background is persisted
+                  highlightSpan.style.backgroundColor = 'rgba(240, 253, 244, 0.5)';
+                }, 1500); // Match animation duration (1.5s)
                 
                 console.log('[WordSelector] Highlighted word:', searchWord);
                 return true;
@@ -8310,6 +8321,32 @@ const WordSelector = {
         }
         100% {
           transform: scale(1);
+        }
+      }
+      
+      /* Green pulsation animation for URL param words - pulsates 3 times */
+      .xplaino-word-pulsate {
+        animation: xplainoWordPulsate 1.5s ease-in-out;
+      }
+      
+      @keyframes xplainoWordPulsate {
+        0%, 100% {
+          background-color: rgba(240, 253, 244, 0.5);
+        }
+        16.66% {
+          background-color: rgba(34, 197, 94, 0.8);
+        }
+        33.33% {
+          background-color: rgba(240, 253, 244, 0.5);
+        }
+        50% {
+          background-color: rgba(34, 197, 94, 0.8);
+        }
+        66.66% {
+          background-color: rgba(240, 253, 244, 0.5);
+        }
+        83.33% {
+          background-color: rgba(34, 197, 94, 0.8);
         }
       }
       
