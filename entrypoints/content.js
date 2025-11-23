@@ -1711,9 +1711,9 @@ export default defineContentScript({
         // Initially hide the container (will be shown when extension is enabled)
         container.style.display = 'none';
         
-        // Load brand logo white SVG from assets
+        // Load logo white SVG from assets
         try {
-          const svgUrl = chrome.runtime.getURL('assets/brand-logo-white.svg');
+          const svgUrl = chrome.runtime.getURL('assets/logo_white.svg');
           const response = await fetch(svgUrl);
           const svgContent = await response.text();
           button.innerHTML = svgContent;
@@ -1721,9 +1721,12 @@ export default defineContentScript({
           const svgElement = button.querySelector('svg');
           if (svgElement) {
             svgElement.classList.add('home-options-gear-icon');
+            // Set explicit width and height for proper sizing
+            svgElement.setAttribute('width', '16');
+            svgElement.setAttribute('height', '16');
           }
         } catch (error) {
-          console.error('[Content Script] Failed to load brand logo white SVG:', error);
+          console.error('[Content Script] Failed to load logo white SVG:', error);
           // Fallback to inline SVG if file loading fails
           button.innerHTML = `
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" class="home-options-gear-icon">
@@ -2053,6 +2056,7 @@ export default defineContentScript({
                 highlightSpan.style.fontVariant = computedStyle.fontVariant;
                 
                 // Add highlight styling (background, border, etc.) - matching vocab-word-explained style
+                // Start with initial green background
                 highlightSpan.style.backgroundColor = 'rgba(240, 253, 244, 0.5)';
                 highlightSpan.style.border = '0.5px solid #22c55e';
                 highlightSpan.style.borderRadius = '8px';
@@ -2074,6 +2078,16 @@ export default defineContentScript({
                 
                 // Scroll to the highlighted word
                 highlightSpan.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                
+                // Add pulsation animation class (3 pulses)
+                highlightSpan.classList.add('xplaino-word-pulsate');
+                
+                // After animation completes (1.5s), remove animation class and persist green background
+                setTimeout(() => {
+                  highlightSpan.classList.remove('xplaino-word-pulsate');
+                  // Ensure final green background is persisted
+                  highlightSpan.style.backgroundColor = 'rgba(240, 253, 244, 0.5)';
+                }, 1500); // Match animation duration (1.5s)
                 
                 console.log('[WordSelector] Highlighted word:', searchWord);
                 return true;
@@ -5575,7 +5589,56 @@ const WordSelector = {
     sendBtn.innerHTML = this.createSendIcon();
     sendBtn.addEventListener('click', (e) => {
       e.stopPropagation();
-      this.sendWebSearchChatMessage(modal, word, inputField);
+      // Check if API call is in progress (stop icon is shown)
+      const isStopIcon = sendBtn.querySelector('rect[fill="#9527F5"]');
+      if (isStopIcon) {
+        // Abort the API call
+        const abortFn = modal._currentAbortFn;
+        if (abortFn && typeof abortFn === 'function') {
+          console.log('[WordSelector] Aborting API call');
+          abortFn();
+          // Store current chat in memory before aborting
+          const resultsList = modal.querySelector('.word-web-search-results-list');
+          const chatMessages = resultsList.querySelectorAll('.word-web-search-chat-message');
+          if (chatMessages.length > 0) {
+            // Build chat history from current messages
+            const chatHistory = [];
+            chatMessages.forEach((msg, index) => {
+              if (msg.classList.contains('user-message')) {
+                chatHistory.push({
+                  role: 'user',
+                  content: msg.textContent.trim()
+                });
+              } else if (msg.classList.contains('ai-message')) {
+                const responseText = msg.querySelector('.word-web-search-chat-response-text');
+                if (responseText) {
+                  chatHistory.push({
+                    role: 'assistant',
+                    content: responseText.textContent.trim()
+                  });
+                }
+              }
+            });
+            // Store in modal
+            modal.setAttribute('data-chat-history', JSON.stringify(chatHistory));
+            // Also save to explainedWords map
+            const normalizedWord = word.toLowerCase();
+            if (this.explainedWords.has(normalizedWord)) {
+              const wordData = this.explainedWords.get(normalizedWord);
+              wordData.askAIChatHistory = chatHistory;
+              console.log('[WordSelector] Saved chat history to explainedWords map after abort');
+            }
+          }
+          // Clear abort function
+          modal._currentAbortFn = null;
+          // Restore send icon
+          sendBtn.innerHTML = this.createSendIcon();
+          sendBtn.setAttribute('aria-label', 'Send message');
+        }
+      } else {
+        // Normal send action
+        this.sendWebSearchChatMessage(modal, word, inputField);
+      }
     });
     
     // Create delete button
@@ -5595,7 +5658,7 @@ const WordSelector = {
     explainBtn.className = 'word-web-search-explain-btn';
     explainBtn.textContent = 'Explain';
     explainBtn.setAttribute('aria-label', 'Explain word');
-    explainBtn.style.display = 'none'; // Hidden by default, shown when no content
+    explainBtn.style.setProperty('display', 'none', 'important'); // Hidden by default, shown when no content
     explainBtn.addEventListener('click', (e) => {
       e.stopPropagation();
       // Simulate asking "Please explain the selected word in detail"
@@ -5603,7 +5666,7 @@ const WordSelector = {
       // Trigger the send action
       this.sendWebSearchChatMessage(modal, word, inputField);
       // Hide the explain button after clicking
-      explainBtn.style.display = 'none';
+      explainBtn.style.setProperty('display', 'none', 'important');
     });
     
     // Add padding to input field to make room for explain button on the right
@@ -5614,17 +5677,23 @@ const WordSelector = {
     inputArea.appendChild(sendBtn);
     inputArea.appendChild(deleteBtn);
     
-    // Function to update explain button visibility based on input and conversation state
+    // Function to update explain button visibility based on input and results state
     const updateExplainButtonVisibility = () => {
       const inputValue = inputField.value.trim();
       const resultsList = modal.querySelector('.word-web-search-results-list');
-      const hasChatMessages = resultsList && resultsList.querySelectorAll('.word-web-search-chat-message').length > 0;
       
-      // Show explain button only if input is empty AND there are no chat messages
-      if (!inputValue && !hasChatMessages) {
-        explainBtn.style.display = 'flex';
+      // Check if input area has content (input field has text)
+      const isInputEmpty = !inputValue;
+      
+      // Check if results container has content (results list has children)
+      const isResultsEmpty = !resultsList || resultsList.children.length === 0;
+      
+      // Show explain button only if BOTH input and results are empty
+      // Use setProperty with !important to override CSS rules
+      if (isInputEmpty && isResultsEmpty) {
+        explainBtn.style.setProperty('display', 'flex', 'important');
       } else {
-        explainBtn.style.display = 'none';
+        explainBtn.style.setProperty('display', 'none', 'important');
       }
     };
     
@@ -6471,6 +6540,11 @@ const WordSelector = {
           </div>
         `;
         metadataDiv.style.display = 'block';
+        
+        // Update explain button visibility when metadata is shown
+        if (modal._updateExplainButtonVisibility) {
+          modal._updateExplainButtonVisibility();
+        }
       },
       onResult: (result) => {
         console.log('[WordSelector] Search result received:', result);
@@ -6539,6 +6613,11 @@ const WordSelector = {
         setTimeout(() => {
           resultItem.style.transition = 'opacity 0.3s ease';
           resultItem.style.opacity = '1';
+          
+          // Update explain button visibility when results are added
+          if (modal._updateExplainButtonVisibility) {
+            modal._updateExplainButtonVisibility();
+          }
         }, 10);
       },
       onComplete: () => {
@@ -6547,6 +6626,11 @@ const WordSelector = {
         // Hide loading indicator
         if (loadingIndicator && loadingIndicator.parentNode) {
           loadingIndicator.style.display = 'none';
+        }
+        
+        // Update explain button visibility after search completes
+        if (modal._updateExplainButtonVisibility) {
+          modal._updateExplainButtonVisibility();
         }
         
         // Store search context for chat (ensure it's never empty)
@@ -6642,7 +6726,7 @@ const WordSelector = {
     // Hide explain button after first message
     const explainBtn = modal.querySelector('.word-web-search-explain-btn');
     if (explainBtn) {
-      explainBtn.style.display = 'none';
+      explainBtn.style.setProperty('display', 'none', 'important');
     }
     
     // Update results visibility
@@ -6661,10 +6745,12 @@ const WordSelector = {
     // Scroll to bottom when user message is added
     this.scrollToBottom(resultsList, false, false);
     
-    // Disable input and send button
-    inputField.disabled = true;
+    // Keep input enabled (always enabled)
+    // inputField.disabled = true; // REMOVED - input should always be enabled
     const sendBtn = modal.querySelector('.word-web-search-send-btn');
-    sendBtn.disabled = true;
+    // Change icon to stop icon and update aria-label
+    sendBtn.innerHTML = this.createStopIcon();
+    sendBtn.setAttribute('aria-label', 'Stop request');
     
     // Show delete button if not already shown
     const deleteBtn = modal.querySelector('.word-web-search-delete-btn');
@@ -6726,8 +6812,13 @@ const WordSelector = {
         // Scroll to bottom when response is complete (always scroll to show full response)
         this.scrollToBottom(resultsList, false, false);
         
-        // Re-enable input and send button
-        inputField.disabled = false;
+        // Input is always enabled, just restore send button icon
+        // inputField.disabled = false; // REMOVED - input is always enabled
+        // Clear abort function
+        modal._currentAbortFn = null;
+        // Restore send button icon
+        sendBtn.innerHTML = this.createSendIcon();
+        sendBtn.setAttribute('aria-label', 'Send message');
         sendBtn.disabled = false;
         
         // Update results visibility after AI response completes
@@ -6741,15 +6832,20 @@ const WordSelector = {
         console.error('[WordSelector] Chat error:', error);
         aiResponseText.textContent = `Error: ${error.message}`;
         
-        // Re-enable input and send button
-        inputField.disabled = false;
+        // Input is always enabled, just restore send button icon
+        // inputField.disabled = false; // REMOVED - input is always enabled
+        // Clear abort function
+        modal._currentAbortFn = null;
+        // Restore send button icon
+        sendBtn.innerHTML = this.createSendIcon();
+        sendBtn.setAttribute('aria-label', 'Send message');
         sendBtn.disabled = false;
         inputField.focus();
       }
     });
     
-    // Store abort function
-    modal.setAttribute('data-ask-abort', abortAsk.toString());
+    // Store abort function on modal object (not as string attribute)
+    modal._currentAbortFn = abortAsk;
   },
   
   /**
@@ -6950,6 +7046,17 @@ const WordSelector = {
     return `
       <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
         <path d="M10 15V5M10 5L5 10M10 5L15 10" stroke="#9527F5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    `;
+  },
+  
+  /**
+   * Create stop icon (square purple)
+   */
+  createStopIcon() {
+    return `
+      <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" style="display: block !important; visibility: visible !important;">
+        <rect x="4" y="4" width="12" height="12" fill="#9527F5" stroke="none" style="display: block !important; visibility: visible !important;"/>
       </svg>
     `;
   },
@@ -8217,6 +8324,32 @@ const WordSelector = {
         }
       }
       
+      /* Green pulsation animation for URL param words - pulsates 3 times */
+      .xplaino-word-pulsate {
+        animation: xplainoWordPulsate 1.5s ease-in-out;
+      }
+      
+      @keyframes xplainoWordPulsate {
+        0%, 100% {
+          background-color: rgba(240, 253, 244, 0.5);
+        }
+        16.66% {
+          background-color: rgba(34, 197, 94, 0.8);
+        }
+        33.33% {
+          background-color: rgba(240, 253, 244, 0.5);
+        }
+        50% {
+          background-color: rgba(34, 197, 94, 0.8);
+        }
+        66.66% {
+          background-color: rgba(240, 253, 244, 0.5);
+        }
+        83.33% {
+          background-color: rgba(34, 197, 94, 0.8);
+        }
+      }
+      
       /* Popup animation for green word when it first appears - pops twice to show clickable entity */
       .vocab-word-explained.word-popup {
         display: inline-block !important; /* Need inline-block for transform animation */
@@ -8276,24 +8409,30 @@ const WordSelector = {
       
       /* Green cross button for explained words - white circular background with thin green border */
       .vocab-word-remove-explained-btn {
-        position: absolute;
-        top: -10px;
-        right: -10px;
-        width: 18px;
-        height: 18px;
+        position: absolute !important;
+        top: -10px !important;
+        right: -10px !important;
+        width: 18px !important;
+        height: 18px !important;
+        min-width: 18px !important;
+        min-height: 18px !important;
+        max-width: 18px !important;
+        max-height: 18px !important;
         background: white !important; /* White circular non-transparent background */
         border: 1px solid #4ade80 !important; /* Thin green border */
         border-radius: 50% !important; /* Circular shape */
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        cursor: pointer;
-        opacity: 0.9;
-        transition: opacity 0.3s ease-in-out, transform 0.3s ease-in-out, scale 0.3s ease-in-out, background-color 0.2s ease, border-color 0.2s ease;
-        padding: 0;
-        z-index: 999999;
-        box-shadow: 0 1px 3px rgba(34, 197, 94, 0.2);
-        box-sizing: border-box;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        cursor: pointer !important;
+        opacity: 0.9 !important;
+        transition: opacity 0.3s ease-in-out, transform 0.3s ease-in-out, scale 0.3s ease-in-out, background-color 0.2s ease, border-color 0.2s ease !important;
+        padding: 0 !important;
+        z-index: 999999 !important;
+        box-shadow: 0 1px 3px rgba(34, 197, 94, 0.2) !important;
+        box-sizing: border-box !important;
+        margin: 0 !important;
+        flex-shrink: 0 !important;
       }
       
       /* Smooth animation for green cross button disappearance - 0.3s duration */
@@ -8328,10 +8467,22 @@ const WordSelector = {
       }
       
       .vocab-word-remove-explained-btn svg {
-        pointer-events: none;
-        display: block;
-        width: 10px;
-        height: 10px;
+        pointer-events: none !important;
+        display: block !important;
+        width: 10px !important;
+        height: 10px !important;
+        min-width: 10px !important;
+        min-height: 10px !important;
+        max-width: 10px !important;
+        max-height: 10px !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+        flex-shrink: 0 !important;
+      }
+      
+      .vocab-word-remove-explained-btn svg * {
+        display: block !important;
+        visibility: visible !important;
       }
       
       /* Contextual Meaning Popup Card */
@@ -8857,6 +9008,28 @@ const WordSelector = {
         -ms-user-select: none !important;
       }
       
+      /* Ensure all SVG elements are visible and properly rendered */
+      .word-web-search-modal svg,
+      .vocab-vertical-button-group svg,
+      .vocab-vertical-btn svg,
+      .word-web-search-send-btn svg,
+      .word-web-search-explain-btn svg {
+        display: block !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+        position: relative !important;
+        overflow: visible !important;
+        pointer-events: auto !important;
+      }
+      
+      .word-web-search-modal svg *,
+      .vocab-vertical-button-group svg *,
+      .vocab-vertical-btn svg * {
+        display: block !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+      }
+      
       /* Re-enable text selection for input and textarea */
       .word-web-search-modal input,
       .word-web-search-modal textarea {
@@ -9201,19 +9374,20 @@ const WordSelector = {
       
       .word-web-search-input {
         flex: 1;
-        padding: 10px 12px;
-        border: 1px solid #e5e7eb;
-        border-radius: 15px;
-        font-size: 14px;
-        font-family: inherit;
-        resize: none;
-        outline: none;
-        transition: border-color 0.2s ease;
-        min-height: 40px;
-        max-height: 120px;
+        padding: 10px 12px !important;
+        border: 1px solid #e5e7eb !important;
+        border-radius: 15px !important;
+        font-size: 14px !important;
+        font-family: inherit !important;
+        resize: none !important;
+        outline: none !important;
+        transition: border-color 0.2s ease !important;
+        min-height: 40px !important;
+        max-height: 120px !important;
         color: #1f2937 !important;
         caret-color: #9527F5 !important;
         background-color: white !important;
+        box-sizing: border-box !important;
       }
       
       .word-web-search-input:focus {
@@ -9224,26 +9398,57 @@ const WordSelector = {
       
       .word-web-search-input::placeholder {
         color: #9ca3af !important;
+        opacity: 1 !important;
+        visibility: visible !important;
+      }
+      
+      .word-web-search-input::-webkit-input-placeholder {
+        color: #9ca3af !important;
+        opacity: 1 !important;
+        visibility: visible !important;
+      }
+      
+      .word-web-search-input::-moz-placeholder {
+        color: #9ca3af !important;
+        opacity: 1 !important;
+        visibility: visible !important;
+      }
+      
+      .word-web-search-input:-ms-input-placeholder {
+        color: #9ca3af !important;
+        opacity: 1 !important;
+        visibility: visible !important;
       }
       
       .word-web-search-explain-btn {
-        padding: 8px 16px;
+        padding: 8px 16px !important;
         background: #9527F5 !important;
-        color: white;
-        border: none;
-        border-radius: 12px;
-        font-size: 14px;
-        font-weight: 500;
-        cursor: pointer;
-        transition: transform 0.2s ease;
-        flex-shrink: 0;
-        font-family: inherit;
-        position: absolute;
-        right: 65px; /* Shifted left to avoid overlapping text area border */
-        top: 50%;
-        transform: translateY(-50%);
-        z-index: 10;
-        box-shadow: 0 4px 12px rgba(149, 39, 245, 0.3);
+        color: white !important;
+        border: none !important;
+        border-radius: 12px !important;
+        font-size: 14px !important;
+        font-weight: 500 !important;
+        cursor: pointer !important;
+        transition: transform 0.2s ease !important;
+        flex-shrink: 0 !important;
+        font-family: inherit !important;
+        position: absolute !important;
+        right: 65px !important; /* Shifted left to avoid overlapping text area border */
+        top: 50% !important;
+        transform: translateY(-50%) !important;
+        z-index: 10 !important;
+        box-shadow: 0 4px 12px rgba(149, 39, 245, 0.3) !important;
+        width: auto !important;
+        height: auto !important;
+        min-width: auto !important;
+        min-height: auto !important;
+        max-width: none !important;
+        max-height: none !important;
+        white-space: nowrap !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        box-sizing: border-box !important;
       }
       
       .word-web-search-explain-btn:hover {
@@ -9255,17 +9460,38 @@ const WordSelector = {
       }
       
       .word-web-search-send-btn {
-        width: 30px;
-        height: 30px;
-        background: white;
-        border: 2px solid #9527F5;
-        border-radius: 50%;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        cursor: pointer;
-        transition: all 0.2s ease;
-        flex-shrink: 0;
+        width: 30px !important;
+        height: 30px !important;
+        background: white !important;
+        border: 2px solid #9527F5 !important;
+        border-radius: 50% !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        cursor: pointer !important;
+        transition: all 0.2s ease !important;
+        flex-shrink: 0 !important;
+        position: relative !important;
+        overflow: visible !important;
+      }
+      
+      .word-web-search-send-btn svg {
+        width: 20px !important;
+        height: 20px !important;
+        display: block !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+        position: relative !important;
+        flex-shrink: 0 !important;
+        max-width: 20px !important;
+        max-height: 20px !important;
+        min-width: 20px !important;
+        min-height: 20px !important;
+      }
+      
+      .word-web-search-send-btn svg * {
+        display: block !important;
+        visibility: visible !important;
       }
       
       .word-web-search-send-btn:hover {
@@ -12123,27 +12349,33 @@ const TextSelector = {
       
       /* Book button - Closed book icon on top-left */
       .vocab-text-book-btn {
-        position: relative;
-        width: 22px;
-        height: 22px;
+        position: relative !important;
+        width: 22px !important;
+        height: 22px !important;
+        min-width: 22px !important;
+        min-height: 22px !important;
+        max-width: 22px !important;
+        max-height: 22px !important;
         background: #FFFFFF !important; /* Fully non-transparent white background */
         border: 2px solid #22c55e !important; /* Green border */
         border-radius: 50% !important; /* Circular shape */
         display: flex !important;
-        align-items: center;
-        justify-content: center;
+        align-items: center !important;
+        justify-content: center !important;
         cursor: pointer !important;
         opacity: 1 !important; /* Start fully visible to prevent glitchy appearance */
         visibility: visible !important; /* Ensure button is visible */
-        transition: opacity 0.2s ease, transform 0.15s ease;
-        padding: 0;
-        flex-shrink: 0;
-        box-shadow: 0 2px 4px rgba(34, 197, 94, 0.2); /* Subtle green shadow for depth */
+        transition: opacity 0.2s ease, transform 0.15s ease !important;
+        padding: 0 !important;
+        flex-shrink: 0 !important;
+        box-shadow: 0 2px 4px rgba(34, 197, 94, 0.2) !important; /* Subtle green shadow for depth */
         pointer-events: auto !important; /* Ensure button is clickable on all websites */
         z-index: 10000004 !important; /* Ensure button is above other elements */
         user-select: none !important; /* Prevent text selection */
         -webkit-user-select: none !important;
-        will-change: transform, opacity; /* Optimize animation performance */
+        will-change: transform, opacity !important; /* Optimize animation performance */
+        box-sizing: border-box !important;
+        margin: 0 !important;
       }
       
       .vocab-text-book-btn:hover {
@@ -12156,11 +12388,23 @@ const TextSelector = {
       }
       
       .vocab-text-book-btn svg {
-        pointer-events: none;
-        display: block;
-        width: 18px;
-        height: 18px;
-        filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.1));
+        pointer-events: none !important;
+        display: block !important;
+        width: 18px !important;
+        height: 18px !important;
+        min-width: 18px !important;
+        min-height: 18px !important;
+        max-width: 18px !important;
+        max-height: 18px !important;
+        filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.1)) !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+        flex-shrink: 0 !important;
+      }
+      
+      .vocab-text-book-btn svg * {
+        display: block !important;
+        visibility: visible !important;
       }
       
       /* Book button breathing animation when first appears */
@@ -12364,23 +12608,28 @@ const TextSelector = {
       
       /* Green remove button - green cross on white circular background with green border */
       .vocab-text-remove-green-btn {
-        position: relative;
-        width: 18px;
-        height: 18px;
+        position: relative !important;
+        width: 18px !important;
+        height: 18px !important;
+        min-width: 18px !important;
+        min-height: 18px !important;
+        max-width: 18px !important;
+        max-height: 18px !important;
         background-color: #FFFFFF !important; /* Fully opaque white background */
         background: #FFFFFF !important; /* Fully opaque white background */
         border: 1px solid #22c55e !important; /* Green border */
         border-radius: 50% !important; /* Circular shape */
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        cursor: pointer;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        cursor: pointer !important;
         opacity: 1 !important; /* Fully opaque */
-        transition: opacity 0.2s ease, transform 0.15s ease, background-color 0.2s ease, border-color 0.2s ease;
-        padding: 0;
-        flex-shrink: 0;
-        box-sizing: border-box;
-        box-shadow: 0 1px 3px rgba(34, 197, 94, 0.2);
+        transition: opacity 0.2s ease, transform 0.15s ease, background-color 0.2s ease, border-color 0.2s ease !important;
+        padding: 0 !important;
+        flex-shrink: 0 !important;
+        box-sizing: border-box !important;
+        box-shadow: 0 1px 3px rgba(34, 197, 94, 0.2) !important;
+        margin: 0 !important;
       }
       
       .vocab-text-remove-green-btn:hover {
@@ -12400,10 +12649,22 @@ const TextSelector = {
       }
       
       .vocab-text-remove-green-btn svg {
-        pointer-events: none;
-        display: block;
-        width: 10px;
-        height: 10px;
+        pointer-events: none !important;
+        display: block !important;
+        width: 10px !important;
+        height: 10px !important;
+        min-width: 10px !important;
+        min-height: 10px !important;
+        max-width: 10px !important;
+        max-height: 10px !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+        flex-shrink: 0 !important;
+      }
+      
+      .vocab-text-remove-green-btn svg * {
+        display: block !important;
+        visibility: visible !important;
       }
       
       /* Dark green dashed underline for simplified texts - darker green */
@@ -12630,44 +12891,60 @@ const TextSelector = {
       
       /* Home options container - attached to right edge, positioned below ask-about-page button */
       .home-options-container {
-        position: fixed;
-        top: 78px; /* Below ask-about-page button: 20px (top) + 48px (height) + 10px (gap) */
-        right: -25px; /* Half off-screen to create protruding effect, flat edge at screen edge */
-        z-index: 10000000;
-        display: flex;
-        flex-direction: row-reverse; /* Reverse order so menu appears on left */
-        align-items: center;
-        gap: 8px;
-        opacity: 0;
-        transform: translateX(100px);
-        transition: opacity 0.4s cubic-bezier(0.34, 1.56, 0.64, 1), transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+        position: fixed !important;
+        top: 78px !important; /* Below ask-about-page button: 20px (top) + 48px (height) + 10px (gap) */
+        right: -25px !important; /* Half off-screen to create protruding effect, flat edge at screen edge */
+        z-index: 10000000 !important;
+        display: flex !important;
+        flex-direction: row-reverse !important; /* Reverse order so menu appears on left */
+        align-items: center !important;
+        gap: 8px !important;
+        opacity: 0 !important;
+        transform: translateX(100px) !important;
+        transition: opacity 0.4s cubic-bezier(0.34, 1.56, 0.64, 1), transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) !important;
+        width: auto !important;
+        height: auto !important;
+        min-width: auto !important;
+        min-height: auto !important;
+        max-width: none !important;
+        max-height: none !important;
+        box-sizing: border-box !important;
+        margin: 0 !important;
+        padding: 0 !important;
       }
       
       .home-options-container.home-options-container-visible {
-        opacity: 1;
-        transform: translateX(0);
+        opacity: 1 !important;
+        transform: translateX(0) !important;
       }
       
       /* Semi-circular home options button - attached to right edge */
       .home-options-btn {
-        width: 52px; /* Wider button for rectangular shape */
-        height: 32px; /* Keep height same */
-        background: #9527F5; /* Purple background */
-        border: 1px solid white; /* White border */
-        border-right: none; /* No right border for flat edge (touching screen edge) */
-        border-radius: 18px 0 0 18px; /* Semi-circular: rounded on left (semi-circle), flat on right */
-        display: flex;
-        align-items: center;
-        justify-content: flex-start; /* Align to left */
-        cursor: pointer;
-        opacity: 0.95;
-        transition: opacity 0.2s ease, transform 0.15s ease, box-shadow 0.2s ease;
-        padding-left: 7px; /* Move icon more to the left */
-        padding-right: 0;
-        box-shadow: 0 2px 8px rgba(149, 39, 245, 0.4);
-        pointer-events: auto;
-        user-select: none;
-        -webkit-user-select: none;
+        width: 52px !important; /* Wider button for rectangular shape */
+        height: 32px !important; /* Keep height same */
+        min-width: 52px !important;
+        min-height: 32px !important;
+        max-width: 52px !important;
+        max-height: 32px !important;
+        background: #9527F5 !important; /* Purple background */
+        border: 1px solid white !important; /* White border */
+        border-right: none !important; /* No right border for flat edge (touching screen edge) */
+        border-radius: 18px 0 0 18px !important; /* Semi-circular: rounded on left (semi-circle), flat on right */
+        display: flex !important;
+        align-items: center !important;
+        justify-content: flex-start !important; /* Align to left */
+        cursor: pointer !important;
+        opacity: 0.95 !important;
+        transition: opacity 0.2s ease, transform 0.15s ease, box-shadow 0.2s ease !important;
+        padding-left: 7px !important; /* Move icon more to the left */
+        padding-right: 0 !important;
+        box-shadow: 0 2px 8px rgba(149, 39, 245, 0.4) !important;
+        pointer-events: auto !important;
+        user-select: none !important;
+        -webkit-user-select: none !important;
+        box-sizing: border-box !important;
+        margin: 0 !important;
+        flex-shrink: 0 !important;
       }
       
       .home-options-btn:hover,
@@ -12683,12 +12960,26 @@ const TextSelector = {
       
       .home-options-btn svg,
       .home-options-btn .home-options-gear-icon {
-        pointer-events: none;
-        display: block;
-        width: 16px; /* Smaller icon for smaller button */
-        height: 16px; /* Smaller icon for smaller button */
-        transition: transform 0.2s ease;
-        margin-left: -2px; /* Move logo a bit more to the left */
+        pointer-events: none !important;
+        display: block !important;
+        width: 16px !important; /* Smaller icon for smaller button */
+        height: 16px !important; /* Smaller icon for smaller button */
+        min-width: 16px !important;
+        min-height: 16px !important;
+        max-width: 16px !important;
+        max-height: 16px !important;
+        transition: transform 0.2s ease !important;
+        margin-left: -2px !important; /* Move logo a bit more to the left */
+        visibility: visible !important;
+        opacity: 1 !important;
+        flex-shrink: 0 !important;
+      }
+      
+      .home-options-btn svg *,
+      .home-options-btn .home-options-gear-icon *,
+      .home-options-btn svg image {
+        display: block !important;
+        visibility: visible !important;
       }
       
       .home-options-container-active .home-options-btn svg,
@@ -12698,13 +12989,22 @@ const TextSelector = {
       
       /* Hover menu - slides in from left on hover */
       .home-options-menu {
-        display: flex;
-        flex-direction: column;
-        gap: 8px;
-        opacity: 0;
-        transform: translateX(20px);
-        pointer-events: none;
-        transition: opacity 0.3s ease, transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+        display: flex !important;
+        flex-direction: column !important;
+        gap: 8px !important;
+        opacity: 0 !important;
+        transform: translateX(20px) !important;
+        pointer-events: none !important;
+        transition: opacity 0.3s ease, transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) !important;
+        width: auto !important;
+        height: auto !important;
+        min-width: auto !important;
+        min-height: auto !important;
+        max-width: none !important;
+        max-height: none !important;
+        box-sizing: border-box !important;
+        margin: 0 !important;
+        padding: 0 !important;
       }
       
       .home-options-container:hover .home-options-menu,
@@ -12712,36 +13012,55 @@ const TextSelector = {
       .home-options-btn:hover ~ .home-options-menu,
       .home-options-menu:hover,
       .home-options-menu.home-options-menu-visible {
-        opacity: 1;
-        transform: translateX(0);
-        pointer-events: auto;
+        opacity: 1 !important;
+        transform: translateX(0) !important;
+        pointer-events: auto !important;
       }
       
       .home-options-menu-item {
-        background: #9527F5;
-        color: white;
-        border: 2px solid white;
-        border-radius: 50%;
-        width: 36px;
-        height: 36px;
-        padding: 0;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        cursor: pointer;
-        box-shadow: 0 2px 8px rgba(149, 39, 245, 0.4);
-        user-select: none;
-        -webkit-user-select: none;
-        opacity: 0;
-        transform: translateX(-10px) scale(1);
-        transition: opacity 0.3s ease, transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s ease;
-        position: relative;
+        background: #9527F5 !important;
+        color: white !important;
+        border: 2px solid white !important;
+        border-radius: 50% !important;
+        width: 36px !important;
+        height: 36px !important;
+        min-width: 36px !important;
+        min-height: 36px !important;
+        max-width: 36px !important;
+        max-height: 36px !important;
+        padding: 0 !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        cursor: pointer !important;
+        box-shadow: 0 2px 8px rgba(149, 39, 245, 0.4) !important;
+        user-select: none !important;
+        -webkit-user-select: none !important;
+        opacity: 0 !important;
+        transform: translateX(-10px) scale(1) !important;
+        transition: opacity 0.3s ease, transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s ease !important;
+        position: relative !important;
+        box-sizing: border-box !important;
+        margin: 0 !important;
+        flex-shrink: 0 !important;
       }
       
       .home-options-menu-item svg {
-        width: 16px;
-        height: 16px;
-        display: block;
+        width: 16px !important;
+        height: 16px !important;
+        min-width: 16px !important;
+        min-height: 16px !important;
+        max-width: 16px !important;
+        max-height: 16px !important;
+        display: block !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+        flex-shrink: 0 !important;
+      }
+      
+      .home-options-menu-item svg * {
+        display: block !important;
+        visibility: visible !important;
       }
       
       .home-options-menu-item:nth-child(1) {
@@ -12763,8 +13082,10 @@ const TextSelector = {
       .home-options-btn:hover ~ .home-options-menu .home-options-menu-item,
       .home-options-menu:hover .home-options-menu-item,
       .home-options-menu.home-options-menu-visible .home-options-menu-item {
-        opacity: 1;
-        transform: translateX(0) scale(1);
+        opacity: 1 !important;
+        transform: translateX(0) scale(1) !important;
+        width: 36px !important;
+        height: 36px !important;
       }
       
       .home-options-btn:hover ~ .home-options-menu .home-options-menu-item:hover,
@@ -12808,7 +13129,9 @@ const TextSelector = {
       }
       
       .home-options-menu-item:active {
-        transform: translateX(0) scale(1.1);
+        transform: translateX(0) scale(1.1) !important;
+        width: 36px !important;
+        height: 36px !important;
       }
       
       /* Tooltip for ask-about-page button - Similar to import-content button tooltip */
@@ -16215,10 +16538,82 @@ const ChatDialog = {
     sendBtn.className = 'vocab-chat-send-btn';
     sendBtn.setAttribute('aria-label', 'Send message');
     sendBtn.innerHTML = this.createSendIcon();
-    sendBtn.addEventListener('click', () => {
+    sendBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
       console.log('[ChatDialog] ===== SEND BUTTON CLICKED =====');
-      console.log('[ChatDialog] Send button clicked, calling sendMessage()');
-      this.sendMessage();
+      
+      // Check if API call is in progress (stop icon is shown)
+      const isStopIcon = sendBtn.querySelector('rect[fill="#9527F5"]');
+      if (isStopIcon) {
+        // Abort the API call
+        const abortFn = this.dialogContainer?._currentAbortFn;
+        if (abortFn && typeof abortFn === 'function') {
+          console.log('[ChatDialog] Aborting API call');
+          abortFn();
+          
+          // Get accumulated text from dialog container or extract from DOM
+          let accumulatedText = '';
+          if (this.dialogContainer?._currentAccumulatedText) {
+            accumulatedText = this.dialogContainer._currentAccumulatedText;
+          } else {
+            // Fallback: extract from streaming message in DOM
+            const chatContainer = document.getElementById('vocab-chat-messages');
+            if (chatContainer) {
+              const lastAiMessage = chatContainer.querySelector('.vocab-chat-message-ai:last-child');
+              if (lastAiMessage) {
+                const messageContent = lastAiMessage.querySelector('.vocab-chat-message-content');
+                if (messageContent) {
+                  accumulatedText = messageContent.textContent || messageContent.innerText || '';
+                }
+              }
+            }
+          }
+          
+          // Save accumulated response to chat history if we have text
+          if (accumulatedText && accumulatedText.trim()) {
+            // Use the requestTextKey from when the request was made (in case user switched tabs)
+            const requestTextKey = this.dialogContainer?._currentRequestTextKey || this.currentTextKey;
+            
+            // Get the chat history for the correct textKey
+            const chatHistoryForRequest = this.chatHistories.get(requestTextKey) || [];
+            
+            // Add AI response to the chat history
+            chatHistoryForRequest.push({
+              type: 'ai',
+              message: accumulatedText.trim(),
+              timestamp: new Date().toISOString()
+            });
+            
+            // Update stored chat history for this textKey
+            if (requestTextKey) {
+              this.chatHistories.set(requestTextKey, chatHistoryForRequest);
+              
+              // If we're still in the same chat, also update current chatHistory
+              if (this.currentTextKey === requestTextKey) {
+                this.chatHistory = [...chatHistoryForRequest];
+              }
+              
+              console.log('[ChatDialog] Saved stopped response to chat history for textKey:', requestTextKey);
+            }
+          }
+          
+          // Clear abort function, accumulated text, and requestTextKey
+          if (this.dialogContainer) {
+            this.dialogContainer._currentAbortFn = null;
+            this.dialogContainer._currentAccumulatedText = null;
+            this.dialogContainer._currentRequestTextKey = null;
+          }
+          
+          // Restore send icon
+          sendBtn.innerHTML = this.createSendIcon();
+          sendBtn.setAttribute('aria-label', 'Send message');
+          sendBtn.disabled = false;
+        }
+      } else {
+        // Normal send action
+        console.log('[ChatDialog] Send button clicked, calling sendMessage()');
+        this.sendMessage();
+      }
     });
     
     // Create delete button (same size as send button)
@@ -16386,6 +16781,19 @@ const ChatDialog = {
     let possibleQuestions = []; // Store possibleQuestions during streaming
     let abortRequest = null;
     
+    // Get send button and change to stop icon
+    const sendBtn = this.dialogContainer.querySelector('.vocab-chat-send-btn');
+    if (sendBtn) {
+      sendBtn.innerHTML = this.createStopIcon();
+      sendBtn.setAttribute('aria-label', 'Stop request');
+      sendBtn.disabled = false; // Keep enabled so user can click to stop
+    }
+    
+    // Store requestTextKey on dialog container for use when stopping
+    if (this.dialogContainer) {
+      this.dialogContainer._currentRequestTextKey = requestTextKey;
+    }
+    
     // Check if we're still in the same chat tab that initiated the request
     const isSameChat = this.currentTextKey === requestTextKey;
     
@@ -16412,6 +16820,11 @@ const ChatDialog = {
           // Update accumulated text
           accumulatedText = accumulated || '';
           
+          // Store accumulated text on dialog container for access when stopping
+          if (this.dialogContainer) {
+            this.dialogContainer._currentAccumulatedText = accumulatedText;
+          }
+          
           // Check if we're still in the same chat tab
           if (this.currentTextKey === requestTextKey && streamingMessageContent) {
             // Update the message bubble in real-time (don't pass possibleQuestions during streaming)
@@ -16433,6 +16846,18 @@ const ChatDialog = {
       
       // Remove loading animation
       this.removeLoadingAnimation();
+      
+      // Clear abort function, accumulated text, and requestTextKey, restore send button icon
+      if (this.dialogContainer) {
+        this.dialogContainer._currentAbortFn = null;
+        this.dialogContainer._currentAccumulatedText = null;
+        this.dialogContainer._currentRequestTextKey = null;
+      }
+      if (sendBtn) {
+        sendBtn.innerHTML = this.createSendIcon();
+        sendBtn.setAttribute('aria-label', 'Send message');
+        sendBtn.disabled = false;
+      }
       
           // Store the received possibleQuestions - ensure it's an array
           if (Array.isArray(receivedPossibleQuestions)) {
@@ -16512,6 +16937,16 @@ const ChatDialog = {
           // Remove loading animation
           this.removeLoadingAnimation();
           
+          // Clear abort function and restore send button icon
+          if (this.dialogContainer) {
+            this.dialogContainer._currentAbortFn = null;
+          }
+          if (sendBtn) {
+            sendBtn.innerHTML = this.createSendIcon();
+            sendBtn.setAttribute('aria-label', 'Send message');
+            sendBtn.disabled = false;
+          }
+          
         // Check if it's a 429 rate limit error
           const isRateLimit = error.status === 429 || 
                              error.message.includes('429') || 
@@ -16563,9 +16998,26 @@ const ChatDialog = {
       }
       });
       
+      // Store abort function on dialog container for stop functionality
+      if (this.dialogContainer && abortRequest) {
+        this.dialogContainer._currentAbortFn = abortRequest;
+      }
+      
     } catch (error) {
       console.error('[ChatDialog] Error initiating streaming request:', error);
       this.removeLoadingAnimation();
+      
+      // Clear abort function, accumulated text, and requestTextKey, restore send button icon
+      if (this.dialogContainer) {
+        this.dialogContainer._currentAbortFn = null;
+        this.dialogContainer._currentAccumulatedText = null;
+        this.dialogContainer._currentRequestTextKey = null;
+      }
+      if (sendBtn) {
+        sendBtn.innerHTML = this.createSendIcon();
+        sendBtn.setAttribute('aria-label', 'Send message');
+        sendBtn.disabled = false;
+      }
       
       // Remove streaming message bubble if it exists
       if (streamingMessageBubble && streamingMessageBubble.parentNode) {
@@ -18027,9 +18479,11 @@ const ChatDialog = {
     // Show button if there are messages OR if there's a summary
     // (Summary is preserved separately, so we check both)
     if (this.chatHistory.length > 0 || this.pageSummary) {
-      deleteBtn.style.display = 'flex';
+      deleteBtn.style.setProperty('display', 'flex', 'important');
+      deleteBtn.classList.remove('hidden');
     } else {
-      deleteBtn.style.display = 'none';
+      deleteBtn.style.setProperty('display', 'none', 'important');
+      deleteBtn.classList.add('hidden');
     }
   },
   
@@ -18586,6 +19040,17 @@ const ChatDialog = {
   },
   
   /**
+   * Create stop icon (square purple)
+   */
+  createStopIcon() {
+    return `
+      <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" style="display: block !important; visibility: visible !important;">
+        <rect x="4" y="4" width="12" height="12" fill="#9527F5" stroke="none" style="display: block !important; visibility: visible !important;"/>
+      </svg>
+    `;
+  },
+  
+  /**
    * Create trash icon - red color for wireframe button
    */
   createTrashIcon() {
@@ -18786,19 +19251,27 @@ const ChatDialog = {
       
       /* Small Collapse Button */
       .vocab-chat-collapse-btn-small {
-        width: 32px;
-        height: 32px;
-        background: white;
-        border: 1.5px solid #d1d5db;
-        border-radius: 8px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        cursor: pointer;
-        transition: all 0.2s ease;
-        text-decoration: none;
-        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
-        opacity: 0.95;
+        width: 32px !important;
+        height: 32px !important;
+        min-width: 32px !important;
+        min-height: 32px !important;
+        max-width: 32px !important;
+        max-height: 32px !important;
+        background: white !important;
+        border: 1.5px solid #d1d5db !important;
+        border-radius: 8px !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        cursor: pointer !important;
+        transition: all 0.2s ease !important;
+        text-decoration: none !important;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08) !important;
+        opacity: 0.95 !important;
+        box-sizing: border-box !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        flex-shrink: 0 !important;
       }
       
       .vocab-chat-collapse-btn-small:hover {
@@ -18816,10 +19289,22 @@ const ChatDialog = {
       }
       
       .vocab-chat-collapse-btn-small svg {
-        width: 16px;
-        height: 16px;
-        opacity: 0.7;
-        transition: opacity 0.2s ease;
+        width: 16px !important;
+        height: 16px !important;
+        min-width: 16px !important;
+        min-height: 16px !important;
+        max-width: 16px !important;
+        max-height: 16px !important;
+        opacity: 0.7 !important;
+        transition: opacity 0.2s ease !important;
+        display: block !important;
+        visibility: visible !important;
+        flex-shrink: 0 !important;
+      }
+      
+      .vocab-chat-collapse-btn-small svg * {
+        display: block !important;
+        visibility: visible !important;
       }
       
       .vocab-chat-collapse-btn-small:hover svg {
@@ -18888,25 +19373,34 @@ const ChatDialog = {
       
       /* Focus Button - Top Right */
       .vocab-chat-focus-btn-top-right {
-        position: absolute;
-        top: 20px;
-        right: 20px;
-        padding: 6px 12px;
-        background: #9527F5;
-        border: none;
-        border-radius: 6px;
+        position: absolute !important;
+        top: 20px !important;
+        right: 20px !important;
+        padding: 6px 12px !important;
+        background: #9527F5 !important;
+        border: none !important;
+        border-radius: 6px !important;
         display: flex !important;
         flex-direction: row !important;
         align-items: center !important;
         justify-content: center !important;
         gap: 6px !important;
-        cursor: pointer;
-        z-index: 10;
-        transition: all 0.2s ease;
-        font-size: 12px;
-        font-weight: 500;
-        color: white;
-        text-decoration: none;
+        cursor: pointer !important;
+        z-index: 10 !important;
+        transition: all 0.2s ease !important;
+        font-size: 12px !important;
+        font-weight: 500 !important;
+        color: white !important;
+        text-decoration: none !important;
+        width: auto !important;
+        height: auto !important;
+        min-width: auto !important;
+        min-height: auto !important;
+        max-width: none !important;
+        max-height: none !important;
+        box-sizing: border-box !important;
+        margin: 0 !important;
+        flex-shrink: 0 !important;
       }
       
       .vocab-chat-focus-btn-top-right:hover {
@@ -19346,21 +19840,30 @@ const ChatDialog = {
       }
       
       .vocab-chat-simplify-more-btn {
-        background: #9527F5;
-        color: white;
-        border: none;
-        border-radius: 12px;
-        padding: 10px 20px;
-        font-size: 14px;
-        font-weight: 500;
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        cursor: pointer;
-        transition: all 0.2s ease;
-        font-family: inherit;
-        text-decoration: none;
-        box-shadow: 0 4px 12px rgba(149, 39, 245, 0.3);
+        background: #9527F5 !important;
+        color: white !important;
+        border: none !important;
+        border-radius: 12px !important;
+        padding: 10px 20px !important;
+        font-size: 14px !important;
+        font-weight: 500 !important;
+        display: flex !important;
+        align-items: center !important;
+        gap: 8px !important;
+        cursor: pointer !important;
+        transition: all 0.2s ease !important;
+        font-family: inherit !important;
+        text-decoration: none !important;
+        box-shadow: 0 4px 12px rgba(149, 39, 245, 0.3) !important;
+        width: auto !important;
+        height: auto !important;
+        min-width: auto !important;
+        min-height: auto !important;
+        max-width: none !important;
+        max-height: none !important;
+        box-sizing: border-box !important;
+        margin: 0 !important;
+        flex-shrink: 0 !important;
       }
       
       .vocab-chat-simplify-more-btn:hover:not(.disabled) {
@@ -19689,18 +20192,43 @@ const ChatDialog = {
       
       /* Send Button - Wireframe Purple Circular */
       .vocab-chat-send-btn {
-        width: 30px;
-        height: 30px;
-        background: white;
-        border: 2px solid #9527F5;
-        border-radius: 50%;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        cursor: pointer;
-        transition: all 0.2s ease;
-        flex-shrink: 0;
-        text-decoration: none;
+        width: 30px !important;
+        height: 30px !important;
+        min-width: 30px !important;
+        min-height: 30px !important;
+        max-width: 30px !important;
+        max-height: 30px !important;
+        background: white !important;
+        border: 2px solid #9527F5 !important;
+        border-radius: 50% !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        cursor: pointer !important;
+        transition: all 0.2s ease !important;
+        flex-shrink: 0 !important;
+        text-decoration: none !important;
+        box-sizing: border-box !important;
+        margin: 0 !important;
+        padding: 0 !important;
+      }
+      
+      .vocab-chat-send-btn svg {
+        width: 20px !important;
+        height: 20px !important;
+        min-width: 20px !important;
+        min-height: 20px !important;
+        max-width: 20px !important;
+        max-height: 20px !important;
+        display: block !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+        flex-shrink: 0 !important;
+      }
+      
+      .vocab-chat-send-btn svg * {
+        display: block !important;
+        visibility: visible !important;
       }
       
       .vocab-chat-send-btn:hover {
@@ -20024,19 +20552,48 @@ const ChatDialog = {
       
       /* Delete Conversation Button - Wireframe Red Circular */
       .vocab-chat-delete-conversation-btn {
-        width: 35px;
-        height: 35px;
-        background: white;
-        border: 2px solid #ef4444;
-        border-radius: 50%;
-        display: none;
-        align-items: center;
-        justify-content: center;
-        cursor: pointer;
-        transition: all 0.2s ease;
-        flex-shrink: 0;
-        margin-left: 4px;
-        text-decoration: none;
+        width: 35px !important;
+        height: 35px !important;
+        min-width: 35px !important;
+        min-height: 35px !important;
+        max-width: 35px !important;
+        max-height: 35px !important;
+        background: white !important;
+        border: 2px solid #ef4444 !important;
+        border-radius: 50% !important;
+        display: flex !important; /* Changed from 'none' to 'flex' - visibility controlled by inline style */
+        align-items: center !important;
+        justify-content: center !important;
+        cursor: pointer !important;
+        transition: all 0.2s ease !important;
+        flex-shrink: 0 !important;
+        margin-left: 4px !important;
+        text-decoration: none !important;
+        box-sizing: border-box !important;
+        padding: 0 !important;
+      }
+      
+      /* Allow inline style to control visibility - use setProperty for higher specificity */
+      .vocab-chat-delete-conversation-btn.hidden {
+        display: none !important;
+      }
+      
+      .vocab-chat-delete-conversation-btn svg {
+        width: 18px !important;
+        height: 18px !important;
+        min-width: 18px !important;
+        min-height: 18px !important;
+        max-width: 18px !important;
+        max-height: 18px !important;
+        display: block !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+        flex-shrink: 0 !important;
+      }
+      
+      .vocab-chat-delete-conversation-btn svg * {
+        display: block !important;
+        visibility: visible !important;
       }
       
       .vocab-chat-delete-conversation-btn:hover {
@@ -23111,6 +23668,22 @@ const ButtonPanel = {
         pointer-events: auto;
         transform: translateY(-50%) translateX(8px);
       }
+      
+      /* Ensure all SVG icons in vertical button group are visible */
+      .vocab-vertical-button-group svg {
+        display: block !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+        position: relative !important;
+        overflow: visible !important;
+        pointer-events: auto !important;
+      }
+      
+      .vocab-vertical-button-group svg * {
+        display: block !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+      }
 
 
       .vocab-vertical-btn {
@@ -23144,17 +23717,33 @@ const ButtonPanel = {
       }
 
       .vocab-vertical-btn-icon {
-        width: 36px;
-        height: 36px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        flex-shrink: 0;
+        width: 36px !important;
+        height: 36px !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        flex-shrink: 0 !important;
+        position: relative !important;
+        overflow: visible !important;
       }
       
       .vocab-vertical-btn-icon svg {
-        width: 36px;
-        height: 36px;
+        width: 36px !important;
+        height: 36px !important;
+        display: block !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+        position: relative !important;
+        flex-shrink: 0 !important;
+        max-width: 36px !important;
+        max-height: 36px !important;
+        min-width: 36px !important;
+        min-height: 36px !important;
+      }
+      
+      .vocab-vertical-btn-icon svg * {
+        display: block !important;
+        visibility: visible !important;
       }
 
       .vocab-vertical-btn-text {
@@ -23197,13 +23786,25 @@ const ButtonPanel = {
         }
 
         .vocab-vertical-btn-icon {
-          width: 30px;
-          height: 30px;
+          width: 30px !important;
+          height: 30px !important;
         }
         
         .vocab-vertical-btn-icon svg {
-          width: 30px;
-          height: 30px;
+          width: 30px !important;
+          height: 30px !important;
+          display: block !important;
+          visibility: visible !important;
+          opacity: 1 !important;
+          max-width: 30px !important;
+          max-height: 30px !important;
+          min-width: 30px !important;
+          min-height: 30px !important;
+        }
+        
+        .vocab-vertical-btn-icon svg * {
+          display: block !important;
+          visibility: visible !important;
         }
 
         /* Adjust content indicator size for mobile */
@@ -35032,12 +35633,61 @@ const BookmarkWordsDialog = {
     const sendBtn = document.createElement('button');
     sendBtn.className = 'word-web-search-send-btn';
     sendBtn.setAttribute('aria-label', 'Send message');
-    sendBtn.innerHTML = typeof TextSelector !== 'undefined' && TextSelector.createSendIcon 
-      ? TextSelector.createSendIcon() 
-      : `<svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M10 15V5M10 5L5 10M10 5L15 10" stroke="#9527F5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+    const createSendIconFn = typeof TextSelector !== 'undefined' && TextSelector.createSendIcon 
+      ? TextSelector.createSendIcon 
+      : () => `<svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M10 15V5M10 5L5 10M10 5L15 10" stroke="#9527F5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+    const createStopIconFn = typeof TextSelector !== 'undefined' && TextSelector.createStopIcon 
+      ? TextSelector.createStopIcon 
+      : () => `<svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" style="display: block !important; visibility: visible !important;"><rect x="4" y="4" width="12" height="12" fill="#9527F5" stroke="none" style="display: block !important; visibility: visible !important;"/></svg>`;
+    sendBtn.innerHTML = createSendIconFn();
     sendBtn.addEventListener('click', (e) => {
       e.stopPropagation();
-      bookmarkDialog.sendBookmarkWordChatMessage(modal, word, inputField);
+      // Check if API call is in progress (stop icon is shown)
+      const isStopIcon = sendBtn.querySelector('rect[fill="#9527F5"]');
+      if (isStopIcon) {
+        // Abort the API call
+        const abortFn = modal._currentAbortFn;
+        if (abortFn && typeof abortFn === 'function') {
+          console.log('[BookmarkWordsDialog] Aborting API call');
+          abortFn();
+          // Store current chat in memory before aborting
+          const resultsList = modal.querySelector('.word-web-search-results-list');
+          const chatMessages = resultsList.querySelectorAll('.word-web-search-chat-message');
+          if (chatMessages.length > 0) {
+            // Build chat history from current messages
+            const chatHistory = [];
+            chatMessages.forEach((msg) => {
+              if (msg.classList.contains('user-message')) {
+                chatHistory.push({
+                  role: 'user',
+                  content: msg.textContent.trim()
+                });
+              } else if (msg.classList.contains('ai-message')) {
+                const responseText = msg.querySelector('.word-web-search-chat-response-text');
+                if (responseText) {
+                  chatHistory.push({
+                    role: 'assistant',
+                    content: responseText.textContent.trim()
+                  });
+                }
+              }
+            });
+            // Store in modal
+            modal.setAttribute('data-chat-history', JSON.stringify(chatHistory));
+            // Store in memory
+            bookmarkDialog.wordChatHistories.set(normalizedWord, chatHistory);
+            console.log('[BookmarkWordsDialog] Saved chat history after abort');
+          }
+          // Clear abort function
+          modal._currentAbortFn = null;
+          // Restore send icon
+          sendBtn.innerHTML = createSendIconFn();
+          sendBtn.setAttribute('aria-label', 'Send message');
+        }
+      } else {
+        // Normal send action
+        bookmarkDialog.sendBookmarkWordChatMessage(modal, word, inputField);
+      }
     });
     
     // Create delete button
@@ -35059,12 +35709,12 @@ const BookmarkWordsDialog = {
     explainBtn.className = 'word-web-search-explain-btn';
     explainBtn.textContent = 'Explain';
     explainBtn.setAttribute('aria-label', 'Explain word');
-    explainBtn.style.display = existingChatHistory.length === 0 ? 'flex' : 'none';
+    explainBtn.style.setProperty('display', existingChatHistory.length === 0 ? 'flex' : 'none', 'important');
     explainBtn.addEventListener('click', (e) => {
       e.stopPropagation();
       inputField.value = 'Please explain the selected word in detail';
       bookmarkDialog.sendBookmarkWordChatMessage(modal, word, inputField);
-      explainBtn.style.display = 'none';
+      explainBtn.style.setProperty('display', 'none', 'important');
     });
     
     inputField.style.paddingRight = '90px';
@@ -35077,11 +35727,20 @@ const BookmarkWordsDialog = {
     // Function to update explain button visibility
     const updateExplainButtonVisibility = () => {
       const inputValue = inputField.value.trim();
-      const hasChatMessages = resultsList.querySelectorAll('.word-web-search-chat-message').length > 0;
-      if (!inputValue && !hasChatMessages) {
-        explainBtn.style.display = 'flex';
+      const resultsList = modal.querySelector('.word-web-search-results-list');
+      
+      // Check if input area has content (input field has text)
+      const isInputEmpty = !inputValue;
+      
+      // Check if results container has content (results list has children)
+      const isResultsEmpty = !resultsList || resultsList.children.length === 0;
+      
+      // Show explain button only if BOTH input and results are empty
+      // Use setProperty with !important to override CSS rules
+      if (isInputEmpty && isResultsEmpty) {
+        explainBtn.style.setProperty('display', 'flex', 'important');
       } else {
-        explainBtn.style.display = 'none';
+        explainBtn.style.setProperty('display', 'none', 'important');
       }
     };
     
@@ -35251,7 +35910,7 @@ const BookmarkWordsDialog = {
     // Hide explain button
     const explainBtn = modal.querySelector('.word-web-search-explain-btn');
     if (explainBtn) {
-      explainBtn.style.display = 'none';
+      explainBtn.style.setProperty('display', 'none', 'important');
     }
     
     // Create AI response container
@@ -35270,10 +35929,15 @@ const BookmarkWordsDialog = {
     };
     scrollToBottom(resultsList);
     
-    // Disable input and send button
-    inputField.disabled = true;
+    // Keep input enabled (always enabled)
+    // inputField.disabled = true; // REMOVED - input should always be enabled
     const sendBtn = modal.querySelector('.word-web-search-send-btn');
-    sendBtn.disabled = true;
+    // Change icon to stop icon and update aria-label
+    const createStopIconFn = typeof TextSelector !== 'undefined' && TextSelector.createStopIcon 
+      ? TextSelector.createStopIcon 
+      : () => `<svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" style="display: block !important; visibility: visible !important;"><rect x="4" y="4" width="12" height="12" fill="#9527F5" stroke="none" style="display: block !important; visibility: visible !important;"/></svg>`;
+    sendBtn.innerHTML = createStopIconFn();
+    sendBtn.setAttribute('aria-label', 'Stop request');
     
     // Show delete button
     const deleteBtn = modal.querySelector('.word-web-search-delete-btn');
@@ -35319,19 +35983,39 @@ const BookmarkWordsDialog = {
         
         scrollToBottom(resultsList);
         
-        // Re-enable input and send button
-        inputField.disabled = false;
+        // Input is always enabled, just restore send button icon
+        // inputField.disabled = false; // REMOVED - input is always enabled
+        // Clear abort function
+        modal._currentAbortFn = null;
+        // Restore send button icon
+        const createSendIconFn = typeof TextSelector !== 'undefined' && TextSelector.createSendIcon 
+          ? TextSelector.createSendIcon 
+          : () => `<svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M10 15V5M10 5L5 10M10 5L15 10" stroke="#9527F5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+        sendBtn.innerHTML = createSendIconFn();
+        sendBtn.setAttribute('aria-label', 'Send message');
         sendBtn.disabled = false;
         inputField.focus();
       },
       onError: (error) => {
         console.error('[BookmarkWordsDialog] Chat error:', error);
         aiResponseText.textContent = `Error: ${error.message || 'Failed to get response'}`;
-        inputField.disabled = false;
+        // Input is always enabled, just restore send button icon
+        // inputField.disabled = false; // REMOVED - input is always enabled
+        // Clear abort function
+        modal._currentAbortFn = null;
+        // Restore send button icon
+        const createSendIconFn = typeof TextSelector !== 'undefined' && TextSelector.createSendIcon 
+          ? TextSelector.createSendIcon 
+          : () => `<svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M10 15V5M10 5L5 10M10 5L15 10" stroke="#9527F5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+        sendBtn.innerHTML = createSendIconFn();
+        sendBtn.setAttribute('aria-label', 'Send message');
         sendBtn.disabled = false;
         inputField.focus();
       }
     });
+    
+    // Store abort function on modal object (not as string attribute)
+    modal._currentAbortFn = abortAsk;
   },
   
   /**
