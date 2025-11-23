@@ -659,7 +659,7 @@ export default defineContentScript({
         padding-bottom: 20px;
       `;
       
-      // Branding name with sparkle logo
+      // Settings heading
       const brandingHeading = document.createElement('h2');
       brandingHeading.style.cssText = `
         margin: 0 !important;
@@ -681,16 +681,7 @@ export default defineContentScript({
         opacity: 1 !important;
         visibility: visible !important;
       `;
-      brandingHeading.innerHTML = `
-        <span style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif !important; color: #9527F5 !important; font-size: 28px !important; font-weight: 600 !important; text-shadow: none !important; background: transparent !important; opacity: 1 !important; visibility: visible !important;">XplainO</span>
-        <span class="brand-icon" style="display: inline-flex; align-items: center; opacity: 1 !important; visibility: visible !important;">
-          <svg width="24" height="24" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg" style="opacity: 1 !important; visibility: visible !important;">
-            <path d="M14 0L17 8L25 11L17 14L14 22L11 14L3 11L11 8L14 0Z" fill="#9527F5"/>
-            <path d="M22 16L23.5 20L27.5 21.5L23.5 23L22 27L20.5 23L16.5 21.5L20.5 20L22 16Z" fill="#9527F5"/>
-            <path d="M8 21L9.5 24.5L13 26L9.5 27.5L8 31L6.5 27.5L3 26L6.5 24.5L8 21Z" fill="#9527F5"/>
-          </svg>
-        </span>
-      `;
+      brandingHeading.textContent = 'Settings';
       
       // Subheading
       const subHeading = document.createElement('p');
@@ -1720,9 +1711,9 @@ export default defineContentScript({
         // Initially hide the container (will be shown when extension is enabled)
         container.style.display = 'none';
         
-        // Load gear icon SVG from assets
+        // Load brand logo white SVG from assets
         try {
-          const svgUrl = chrome.runtime.getURL('assets/gear-icon.svg');
+          const svgUrl = chrome.runtime.getURL('assets/brand-logo-white.svg');
           const response = await fetch(svgUrl);
           const svgContent = await response.text();
           button.innerHTML = svgContent;
@@ -1732,11 +1723,17 @@ export default defineContentScript({
             svgElement.classList.add('home-options-gear-icon');
           }
         } catch (error) {
-          console.error('[Content Script] Failed to load gear icon SVG:', error);
+          console.error('[Content Script] Failed to load brand logo white SVG:', error);
           // Fallback to inline SVG if file loading fails
           button.innerHTML = `
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="white" xmlns="http://www.w3.org/2000/svg" class="home-options-gear-icon">
-              <path d="M19.14,12.94c0.04-0.31,0.06-0.63,0.06-0.94s-0.02-0.63-0.06-0.94l2.03-1.58c0.18-0.14,0.23-0.41,0.12-0.61l-1.92-3.32c-0.11-0.2-0.35-0.27-0.56-0.2l-2.39,0.96c-0.5-0.38-1.03-0.7-1.62-0.94L14.5,2.5C14.47,2.22,14.24,2,13.95,2h-3.9c-0.29,0-0.52,0.22-0.55,0.5L9.1,5.37C8.5,5.61,7.97,5.93,7.47,6.31L5.08,5.35c-0.21-0.08-0.45,0-0.56,0.2L2.6,8.87c-0.11,0.2-0.06,0.47,0.12,0.61l2.03,1.58C4.71,11.37,4.68,11.69,4.68,12s0.02,0.63,0.06,0.94l-2.03,1.58c-0.18,0.14-0.23,0.41-0.12,0.61l1.92,3.32c0.11,0.2,0.35,0.27,0.56,0.2l2.39-0.96c0.5,0.38,1.03,0.7,1.62,0.94l0.4,2.87c0.03,0.28,0.26,0.5,0.55,0.5h3.9c0.29,0,0.52-0.22,0.55-0.5l0.4-2.87c0.59-0.24,1.12-0.56,1.62-0.94l2.39,0.96c0.21,0.08,0.45,0,0.56-0.2l1.92-3.32c0.11-0.2,0.06-0.47-0.12-0.61L19.14,12.94z M12,15.5c-1.93,0-3.5-1.57-3.5-3.5S10.07,8.5,12,8.5s3.5,1.57,3.5,3.5S13.93,15.5,12,15.5z"/>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" class="home-options-gear-icon">
+              <defs>
+                <mask id="ringMaskFallback">
+                  <rect width="24" height="24" fill="white"/>
+                  <ellipse cx="13.5" cy="13" rx="5.5" ry="4" transform="rotate(-12 13.5 13)" fill="black"/>
+                </mask>
+              </defs>
+              <circle cx="11.5" cy="10.5" r="9.5" fill="white" mask="url(#ringMaskFallback)"/>
             </svg>
           `;
         }
@@ -1744,6 +1741,26 @@ export default defineContentScript({
         // Create hover menu
         const menu = document.createElement('div');
         menu.className = 'home-options-menu';
+        
+        // Track mouse state
+        let isMouseInside = false;
+        
+        // Function to update active state based on menu visibility and mouse position
+        const updateActiveState = () => {
+          const isVisible = menu.classList.contains('home-options-menu-visible');
+          
+          if (isVisible || isMouseInside) {
+            container.classList.add('home-options-container-active');
+          } else {
+            container.classList.remove('home-options-container-active');
+          }
+        };
+        
+        // Function to close menu
+        const closeMenu = () => {
+          menu.classList.remove('home-options-menu-visible');
+          updateActiveState();
+        };
         
         // Create Summarise button - uses same handler as ask-about-page button
         const summariseBtn = document.createElement('button');
@@ -1785,7 +1802,7 @@ export default defineContentScript({
         e.stopPropagation();
           
           // Close the menu
-          menu.classList.remove('home-options-menu-visible');
+          closeMenu();
         
         // Check if dialog is already open for page-general context
         // Check for both 'page-general' and 'page-general-generic' (the transformed key)
@@ -1837,7 +1854,7 @@ export default defineContentScript({
           e.stopPropagation();
           
           // Close the menu
-          menu.classList.remove('home-options-menu-visible');
+          closeMenu();
           
           console.log('[Content Script] Settings button clicked');
           showLanguageSelectionModal();
@@ -1864,7 +1881,7 @@ export default defineContentScript({
           e.preventDefault();
           e.stopPropagation();
           // Close the menu
-          menu.classList.remove('home-options-menu-visible');
+          closeMenu();
           console.log('[Content Script] Bookmark Words button clicked - opening dialog');
           BookmarkWordsDialog.open();
         });
@@ -1872,7 +1889,7 @@ export default defineContentScript({
         // Add tooltip to Bookmark Words button
         const bookmarkWordsTooltip = document.createElement('div');
         bookmarkWordsTooltip.className = 'home-options-menu-item-tooltip';
-        bookmarkWordsTooltip.textContent = 'Bookmark words';
+        bookmarkWordsTooltip.textContent = 'Bookmarks';
         bookmarkWordsBtn.appendChild(bookmarkWordsTooltip);
         
         menu.appendChild(summariseBtn);
@@ -1897,15 +1914,22 @@ export default defineContentScript({
             menu.classList.add('home-options-menu-visible');
             console.log('[Content Script] Home options menu opened');
           }
-        };
-        
-        // Function to close menu
-        const closeMenu = () => {
-          menu.classList.remove('home-options-menu-visible');
+          updateActiveState();
         };
         
         // Add click handler to toggle menu
         button.addEventListener('click', toggleMenu);
+        
+        // Handle mouse enter/leave on container
+        container.addEventListener('mouseenter', () => {
+          isMouseInside = true;
+          updateActiveState();
+        });
+        
+        container.addEventListener('mouseleave', () => {
+          isMouseInside = false;
+          updateActiveState();
+        });
         
         // Close menu when clicking outside
         document.addEventListener('click', (e) => {
@@ -2028,11 +2052,11 @@ export default defineContentScript({
                 highlightSpan.style.textTransform = computedStyle.textTransform;
                 highlightSpan.style.fontVariant = computedStyle.fontVariant;
                 
-                // Add highlight styling (background, border, etc.)
-                highlightSpan.style.backgroundColor = '#d1fae5';
-                highlightSpan.style.border = '2px solid #86efac';
-                highlightSpan.style.borderRadius = '6px';
-                highlightSpan.style.padding = '2px 4px';
+                // Add highlight styling (background, border, etc.) - matching vocab-word-explained style
+                highlightSpan.style.backgroundColor = 'rgba(240, 253, 244, 0.5)';
+                highlightSpan.style.border = '0.5px solid #22c55e';
+                highlightSpan.style.borderRadius = '8px';
+                highlightSpan.style.padding = '0 2px';
                 highlightSpan.style.transition = 'all 0.3s ease';
                 highlightSpan.style.display = 'inline'; // Ensure it's inline to preserve text flow
                 
@@ -2149,9 +2173,14 @@ export default defineContentScript({
         this.bannerContainer.id = 'explain-ai-banner';
         this.bannerContainer.className = 'explain-ai-banner';
         
-        // Create header with close button (cross icon at top right)
+        // Create header with logo at top left and close button at top right
         const header = document.createElement('div');
         header.className = 'banner-header';
+        
+        const logoImg = document.createElement('img');
+        logoImg.src = chrome.runtime.getURL('logo_1-removebg.png');
+        logoImg.className = 'banner-logo';
+        logoImg.alt = 'XplainO Logo';
         
         const closeButton = document.createElement('button');
         closeButton.className = 'banner-close';
@@ -2163,9 +2192,10 @@ export default defineContentScript({
         closeButton.setAttribute('aria-label', 'Close banner');
         closeButton.addEventListener('click', () => this.hideBanner());
         
+        header.appendChild(logoImg);
         header.appendChild(closeButton);
         
-        // Create heading container (below cross icon, vertically centered)
+        // Create heading container (vertically centered)
         const headingContainer = document.createElement('div');
         headingContainer.className = 'banner-heading-container';
         
@@ -2193,7 +2223,7 @@ export default defineContentScript({
         
         const instruction1 = document.createElement('p');
         instruction1.className = 'banner-instruction-item';
-        instruction1.innerHTML = 'Double click a <span class="banner-highlight">word</span> to select';
+        instruction1.innerHTML = 'Double click a word to select';
         
         const instruction2 = document.createElement('p');
         instruction2.className = 'banner-instruction-item';
@@ -2295,17 +2325,65 @@ export default defineContentScript({
           
           .banner-header {
             display: flex;
-            justify-content: flex-start;
+            justify-content: space-between;
             align-items: flex-start;
             margin-bottom: 8px;
             position: relative;
+          }
+          
+          .banner-close {
+            background: none;
+            border: none;
+            cursor: pointer;
+            padding: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+            transition: background-color 0.2s ease;
+          }
+          
+          .banner-close:hover {
+            background-color: rgba(149, 39, 245, 0.1);
+          }
+          
+          .banner-close:active {
+            background-color: rgba(149, 39, 245, 0.2);
+          }
+          
+          .banner-logo {
+            width: 50px;
+            height: 50px;
+            object-fit: contain;
+            animation: bannerLogoGlowPulse 2s ease-in-out infinite, bannerLogoScaleLinear 2s linear infinite;
+          }
+          
+          @keyframes bannerLogoGlowPulse {
+            0%, 100% {
+              filter: drop-shadow(0 0 4px rgba(149, 39, 245, 0.3));
+            }
+            33% {
+              filter: drop-shadow(0 0 12px rgba(149, 39, 245, 0.7));
+            }
+            66% {
+              filter: drop-shadow(0 0 20px rgba(149, 39, 245, 0.9));
+            }
+          }
+          
+          @keyframes bannerLogoScaleLinear {
+            0%, 100% {
+              transform: scale(1);
+            }
+            50% {
+              transform: scale(1.15);
+            }
           }
           
           .banner-heading-container {
             display: flex;
             align-items: center;
             justify-content: center;
-            margin-bottom: 16px;
+            margin-bottom: 22px;
           }
           
           .banner-heading {
@@ -2334,28 +2412,6 @@ export default defineContentScript({
             opacity: 1 !important;
           }
           
-          .banner-close {
-            position: absolute;
-            top: -4px;
-            left: -4px;
-            background: rgba(149, 39, 245, 0.3);
-            border: none;
-            cursor: pointer;
-            padding: 4px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            border-radius: 50%;
-            transition: background-color 0.2s ease;
-          }
-          
-          .banner-close:hover {
-            background-color: rgba(149, 39, 245, 0.4);
-          }
-          
-          .banner-close:active {
-            background-color: rgba(149, 39, 245, 0.5);
-          }
           
           .banner-instructions {
             margin-bottom: 16px;
@@ -2391,11 +2447,12 @@ export default defineContentScript({
           .banner-footer {
             display: flex;
             justify-content: flex-end;
+            align-items: center;
             padding-top: 8px;
           }
           
           .banner-dont-show {
-            background: rgba(149, 39, 245, 0.35);
+            background: rgba(149, 39, 245, 0.1);
             border: none;
             color: #9527F5;
             font-size: 13px;
@@ -2407,11 +2464,11 @@ export default defineContentScript({
           }
           
           .banner-dont-show:hover {
-            background-color: rgba(149, 39, 245, 0.45);
+            background-color: rgba(149, 39, 245, 0.2);
           }
           
           .banner-dont-show:active {
-            background-color: rgba(149, 39, 245, 0.5);
+            background-color: rgba(149, 39, 245, 0.25);
           }
         `;
         
@@ -7683,103 +7740,10 @@ const WordSelector = {
         bookmarkBtn.classList.add('bookmarked');
         bookmarkBtn.innerHTML = this.createBookmarkIcon(true);
         console.log('[WordSelector] Added bookmark for:', word);
-        
-        // Show notification message
-        this.showBookmarkNotification();
       } else {
         console.error('[WordSelector] Failed to add bookmark for:', word);
       }
     }
-  },
-
-  /**
-   * Show bookmark notification message
-   */
-  showBookmarkNotification() {
-    // Check if user has dismissed this notification
-    const storageKey = 'bookmarkNotificationDismissed';
-    chrome.storage.local.get([storageKey]).then((result) => {
-      if (result[storageKey]) {
-        console.log('[WordSelector] Bookmark notification dismissed, not showing');
-        return;
-      }
-
-      // Find home-options button
-      const homeOptionsBtn = document.getElementById('home-options-btn');
-      if (!homeOptionsBtn) {
-        console.warn('[WordSelector] Home options button not found, cannot show notification');
-        return;
-      }
-
-      // Remove existing notification if any
-      const existingNotification = document.querySelector('.bookmark-notification');
-      if (existingNotification) {
-        existingNotification.remove();
-      }
-
-      // Create notification container
-      const notification = document.createElement('div');
-      notification.className = 'bookmark-notification';
-      
-      // Message text
-      const message = document.createElement('span');
-      message.className = 'bookmark-notification-message';
-      message.textContent = 'Word saved here';
-      notification.appendChild(message);
-
-      // Close button container
-      const closeContainer = document.createElement('div');
-      closeContainer.className = 'bookmark-notification-close-container';
-
-      // Cross icon button
-      const closeBtn = document.createElement('button');
-      closeBtn.className = 'bookmark-notification-close';
-      closeBtn.setAttribute('aria-label', 'Close');
-      closeBtn.innerHTML = `
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path d="M18 6L6 18M6 6l12 12" stroke="#9527F5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>
-      `;
-      closeBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        notification.remove();
-      });
-
-      // Don't show again button
-      const dontShowBtn = document.createElement('button');
-      dontShowBtn.className = 'bookmark-notification-dont-show';
-      dontShowBtn.textContent = "Don't show again";
-      dontShowBtn.addEventListener('click', async (e) => {
-        e.stopPropagation();
-        await chrome.storage.local.set({ [storageKey]: true });
-        notification.remove();
-      });
-
-      closeContainer.appendChild(closeBtn);
-      closeContainer.appendChild(dontShowBtn);
-      notification.appendChild(closeContainer);
-
-      // Insert notification before home-options button to appear on the left
-      const container = homeOptionsBtn.parentElement;
-      if (container) {
-        // Insert before the button - with row-reverse, this will appear to the left visually
-        container.insertBefore(notification, homeOptionsBtn);
-      } else {
-        // Fallback: append to body near home-options button
-        document.body.appendChild(notification);
-        const rect = homeOptionsBtn.getBoundingClientRect();
-        notification.style.position = 'fixed';
-        notification.style.left = `${rect.left - 200}px`;
-        notification.style.top = `${rect.top}px`;
-      }
-
-      // Auto-dismiss after 2 seconds
-      setTimeout(() => {
-        if (notification.parentElement) {
-          notification.remove();
-        }
-      }, 2000);
-    });
   },
 
   /**
@@ -12686,10 +12650,10 @@ const TextSelector = {
       
       /* Semi-circular home options button - attached to right edge */
       .home-options-btn {
-        width: 50px; /* Wider button for rectangular shape */
-        height: 36px; /* Keep height same */
+        width: 52px; /* Wider button for rectangular shape */
+        height: 32px; /* Keep height same */
         background: #9527F5; /* Purple background */
-        border: 2px solid white; /* White border */
+        border: 1px solid white; /* White border */
         border-right: none; /* No right border for flat edge (touching screen edge) */
         border-radius: 18px 0 0 18px; /* Semi-circular: rounded on left (semi-circle), flat on right */
         display: flex;
@@ -12698,7 +12662,7 @@ const TextSelector = {
         cursor: pointer;
         opacity: 0.95;
         transition: opacity 0.2s ease, transform 0.15s ease, box-shadow 0.2s ease;
-        padding-left: 9px; /* Center icon in semi-circle: 18px radius / 2 = 9px */
+        padding-left: 7px; /* Move icon more to the left */
         padding-right: 0;
         box-shadow: 0 2px 8px rgba(149, 39, 245, 0.4);
         pointer-events: auto;
@@ -12706,8 +12670,9 @@ const TextSelector = {
         -webkit-user-select: none;
       }
       
-      .home-options-btn:hover {
-        transform: translateX(-8px); /* Slide out from right edge on hover */
+      .home-options-btn:hover,
+      .home-options-container-active .home-options-btn {
+        transform: translateX(-8px); /* Slide out from right edge on hover or when menu is visible */
         opacity: 1;
         box-shadow: 0 4px 12px rgba(149, 39, 245, 0.6);
       }
@@ -12723,11 +12688,12 @@ const TextSelector = {
         width: 16px; /* Smaller icon for smaller button */
         height: 16px; /* Smaller icon for smaller button */
         transition: transform 0.2s ease;
+        margin-left: -2px; /* Move logo a bit more to the left */
       }
       
-      .home-options-btn:hover svg,
-      .home-options-btn:hover .home-options-gear-icon {
-        transform: rotate(90deg);
+      .home-options-container-active .home-options-btn svg,
+      .home-options-container-active .home-options-btn .home-options-gear-icon {
+        transform: rotate(90deg) scale(1.6);
       }
       
       /* Hover menu - slides in from left on hover */
@@ -12871,92 +12837,6 @@ const TextSelector = {
         width: auto !important;
         height: auto !important;
         min-height: 40px !important;
-      }
-      
-      /* Bookmark notification */
-      .bookmark-notification {
-        position: relative;
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        background: white;
-        color: #c187f5;
-        padding: 10px 16px;
-        border: 2px solid #c187f5;
-        border-radius: 20px;
-        font-size: 14px;
-        font-weight: 500;
-        box-shadow: 0 4px 12px rgba(149, 39, 245, 0.4);
-        z-index: 10000001;
-        margin-right: 12px;
-        animation: bookmarkNotificationSlideIn 0.3s ease-out;
-        white-space: nowrap;
-      }
-      
-      @keyframes bookmarkNotificationSlideIn {
-        from {
-          opacity: 0;
-          transform: translateX(20px);
-        }
-        to {
-          opacity: 1;
-          transform: translateX(0);
-        }
-      }
-      
-      .bookmark-notification-message {
-        flex: 1;
-      }
-      
-      .bookmark-notification-close-container {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-      }
-      
-      .bookmark-notification-close {
-        width: 20px;
-        height: 20px;
-        background: transparent;
-        border: none;
-        cursor: pointer;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        padding: 0;
-        opacity: 0.8;
-        transition: opacity 0.2s ease;
-      }
-      
-      .bookmark-notification-close:hover {
-        opacity: 1;
-      }
-      
-      .bookmark-notification-close svg {
-        width: 14px;
-        height: 14px;
-      }
-      
-      .bookmark-notification-close svg path {
-        stroke: #c187f5;
-      }
-      
-      .bookmark-notification-dont-show {
-        background: transparent;
-        border: None;
-        color: #B794F6;
-        padding: 4px 10px;
-        border-radius: 12px;
-        font-size: 12px;
-        font-weight: 500;
-        cursor: pointer;
-        transition: all 0.2s ease;
-        white-space: nowrap;
-      }
-      
-      .bookmark-notification-dont-show:hover {
-        background: rgba(149, 39, 245, 0.1);
-        border-color: rgba(149, 39, 245, 0.5);
       }
       
       .vocab-ask-about-page-tooltip.visible {
@@ -13925,141 +13805,27 @@ const ChatDialog = {
         console.log('[ChatDialog] Falling back to regular close...');
       }
     } else if (homeOptionsButton) {
-      console.log('[ChatDialog] ✓✓✓ FOUND HOME-OPTIONS BUTTON! Starting minimization animation...');
+      console.log('[ChatDialog] ✓✓✓ FOUND HOME-OPTIONS BUTTON! Using simple slide-out animation (like bookmark modal)...');
       
       // Check if dialogContainer still exists before proceeding
       if (!this.dialogContainer) {
-        console.error('[ChatDialog] ERROR: dialogContainer is null, cannot minimize');
+        console.error('[ChatDialog] ERROR: dialogContainer is null, cannot close');
         return;
       }
       
-      // IMMEDIATELY disable transition to prevent slide-out animation
-      this.dialogContainer.style.setProperty('transition', 'none', 'important');
+      // Use simple slide-out animation (same as bookmark modal)
+      // Remove inline transform to allow CSS transition to work
+      this.dialogContainer.style.removeProperty('transform');
       
-      // Force a reflow to ensure button is in its final position
-      void homeOptionsButton.offsetHeight;
-      
-      // Get dialog size (use getBoundingClientRect for accurate size)
-      const dialogRect = this.dialogContainer.getBoundingClientRect();
-      const dialogHeight = dialogRect.height;
-      const dialogWidth = dialogRect.width;
-      
-      // Get button position (use getBoundingClientRect for accurate viewport coordinates)
-      void homeOptionsButton.offsetHeight;
-      const buttonRect = homeOptionsButton.getBoundingClientRect();
-      const buttonCenterX = buttonRect.left + buttonRect.width / 2;
-      const buttonCenterY = buttonRect.top + buttonRect.height / 2;
-      
-      console.log('[ChatDialog] Home-options button center:', { x: buttonCenterX, y: buttonCenterY });
-      console.log('[ChatDialog] Button rect:', { left: buttonRect.left, top: buttonRect.top, width: buttonRect.width, height: buttonRect.height });
-      console.log('[ChatDialog] Dialog size:', { width: dialogWidth, height: dialogHeight });
-      
-      const viewportHeight = window.innerHeight;
-      const viewportWidth = window.innerWidth;
-      
-      // Calculate DEFAULT dialog center position (not current position)
-      const defaultDialogCenterX = viewportWidth - dialogWidth / 2;
-      const defaultDialogCenterY = viewportHeight / 2;
-      
-      // Calculate target position: button center (viewport coordinates)
-      const targetCenterX = buttonCenterX;
-      const targetCenterY = buttonCenterY;
-      
-      // Calculate how much to move from DEFAULT center to target center
-      const deltaX = targetCenterX - defaultDialogCenterX;
-      const deltaY = targetCenterY - defaultDialogCenterY;
-      
-      // Calculate current dialog center from actual position
-      const currentDialogCenterX = dialogRect.left + dialogWidth / 2;
-      const currentDialogCenterY = dialogRect.top + dialogHeight / 2;
-      
-      // Calculate delta from CURRENT position to button (not default position)
-      const deltaXFromCurrent = targetCenterX - currentDialogCenterX;
-      const deltaYFromCurrent = targetCenterY - currentDialogCenterY;
-      
-      // Parse current transform to get translate values
-      const currentComputedStyle = window.getComputedStyle(this.dialogContainer);
-      const currentTransform = currentComputedStyle.transform;
-      
-      let startTranslateX = 0;
-      let startTranslateY = -dialogHeight / 2; // Default: -50% of height
-      
-      if (currentTransform && currentTransform !== 'none') {
-        // Try to extract translate values from matrix or translate string
-        const matrixMatch = currentTransform.match(/matrix\([^)]+\)/);
-        if (matrixMatch) {
-          const values = currentTransform.match(/[-+]?[0-9]*\.?[0-9]+/g);
-          if (values && values.length >= 6) {
-            startTranslateX = parseFloat(values[4]) || 0;
-            startTranslateY = parseFloat(values[5]) || -dialogHeight / 2;
-          }
-        } else {
-          const translateXMatch = currentTransform.match(/translateX\(([^)]+)\)/);
-          const translateYMatch = currentTransform.match(/translateY\(([^)]+)\)/);
-          if (translateXMatch) {
-            const val = translateXMatch[1].replace('px', '').trim();
-            startTranslateX = parseFloat(val) || 0;
-          }
-          if (translateYMatch) {
-            const val = translateYMatch[1].replace('px', '').replace('%', '').trim();
-            if (translateYMatch[1].includes('%')) {
-              startTranslateY = (parseFloat(val) / 100) * dialogHeight;
-            } else {
-              startTranslateY = parseFloat(val) || -dialogHeight / 2;
-            }
-          }
-        }
-      }
-      
-      // Calculate end transform from current position
-      const endTranslateX = startTranslateX + deltaXFromCurrent;
-      const endTranslateY = startTranslateY + deltaYFromCurrent;
-      
-      console.log('[ChatDialog] Animation calculation from CURRENT position:');
-      console.log('[ChatDialog]   currentTransform:', currentTransform);
-      console.log('[ChatDialog]   currentDialogCenterX:', currentDialogCenterX, 'currentDialogCenterY:', currentDialogCenterY);
-      console.log('[ChatDialog]   startTranslateX:', startTranslateX, 'startTranslateY:', startTranslateY);
-      console.log('[ChatDialog]   deltaXFromCurrent:', deltaXFromCurrent, 'deltaYFromCurrent:', deltaYFromCurrent);
-      console.log('[ChatDialog]   endTranslateX:', endTranslateX, 'endTranslateY:', endTranslateY);
-      
-      // Clean up any previous animation state FIRST before setting new properties
-      this.dialogContainer.classList.remove('minimizing', 'expanding');
-      this.dialogContainer.style.removeProperty('--minimize-target-x');
-      this.dialogContainer.style.removeProperty('--minimize-target-y');
-      this.dialogContainer.style.removeProperty('--minimize-start-transform');
-      this.dialogContainer.style.removeProperty('--minimize-end-transform');
-      this.dialogContainer.style.removeProperty('--expand-start-transform');
-      this.dialogContainer.style.removeProperty('--expand-end-transform');
-      this.dialogContainer.style.removeProperty('animation');
-      this.dialogContainer.style.removeProperty('transition');
-      
-      // Force a reflow to ensure cleanup is applied
+      // Force reflow to ensure the style change is applied
       void this.dialogContainer.offsetHeight;
       
-      // Set CSS custom properties for the animation
-      // Use current transform as start, and calculate end from current position
-      this.dialogContainer.style.setProperty('--minimize-target-x', `${targetCenterX}px`);
-      this.dialogContainer.style.setProperty('--minimize-target-y', `${targetCenterY}px`);
-      this.dialogContainer.style.setProperty('--minimize-start-transform', `translateY(${startTranslateY}px) translateX(${startTranslateX}px) scale(1)`);
-      this.dialogContainer.style.setProperty('--minimize-end-transform', `translateY(${endTranslateY}px) translateX(${endTranslateX}px) scale(0)`);
-      
-      // Ensure dialog is visible before animation starts
-      if (!this.dialogContainer.classList.contains('visible')) {
-        this.dialogContainer.classList.add('visible');
-      }
-      
-      // Force a reflow to ensure styles are applied
-      void this.dialogContainer.offsetHeight;
-      
-      // Add minimizing class to trigger animation
-      this.dialogContainer.classList.add('minimizing');
-      
-      // Force a reflow to ensure animation starts
-      void this.dialogContainer.offsetHeight;
+      // Remove visible class to trigger slide-out animation
+      this.dialogContainer.classList.remove('visible');
       
       // Wait for animation to complete, then hide dialog
       setTimeout(() => {
-        console.log('[ChatDialog] Minimization animation completed, hiding dialog');
+        console.log('[ChatDialog] Slide-out animation completed, hiding dialog');
         
         // Check if dialogContainer still exists before accessing it
         if (!this.dialogContainer) {
@@ -14067,14 +13833,7 @@ const ChatDialog = {
           return;
         }
         
-        // Clean up animation class and CSS properties
-          this.dialogContainer.classList.remove('minimizing');
-        this.dialogContainer.style.removeProperty('--minimize-target-x');
-        this.dialogContainer.style.removeProperty('--minimize-target-y');
-          this.dialogContainer.style.removeProperty('--minimize-start-transform');
-          this.dialogContainer.style.removeProperty('--minimize-end-transform');
-        
-        // Remove dialog container immediately (no need for hide() since animation is done)
+        // Remove dialog container
         console.log('[ChatDialog] Removing dialog container...');
         if (this.dialogContainer) {
           this.dialogContainer.remove();
@@ -14082,11 +13841,11 @@ const ChatDialog = {
           console.log('[ChatDialog] Dialog container removed');
         }
         // Reset state
-          this.isOpen = false;
-          this.currentText = null;
-          this.currentTextKey = null;
+        this.isOpen = false;
+        this.currentText = null;
+        this.currentTextKey = null;
         console.log('[ChatDialog] Dialog state reset');
-      }, 300); // 0.3s animation duration (same as appearing animation)
+      }, 300); // 0.3s animation duration (same as bookmark modal)
       
       return; // Exit early, cleanup will continue in setTimeout
     } else {
@@ -34291,7 +34050,63 @@ const BookmarkWordsDialog = {
     // Create header
     const header = document.createElement('div');
     header.className = 'vocab-bookmark-words-header';
-    header.textContent = 'Bookmarked Words';
+    header.textContent = 'Bookmarks';
+    
+    // Create action buttons container (right-aligned flex container)
+    const actionButtonsContainer = document.createElement('div');
+    actionButtonsContainer.className = 'vocab-bookmark-words-action-buttons';
+    
+    // Create refresh button
+    const refreshButton = document.createElement('button');
+    refreshButton.className = 'vocab-bookmark-words-refresh-btn';
+    refreshButton.setAttribute('aria-label', 'Reload bookmarks');
+    refreshButton.innerHTML = `
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" class="vocab-bookmark-words-refresh-icon">
+        <path d="M12 21C7.02944 21 3 16.9706 3 12C3 9.69494 3.86656 7.59227 5.29168 6L8 3M12 3C16.9706 3 21 7.02944 21 12C21 14.3051 20.1334 16.4077 18.7083 18L16 21M3 3H8M8 3V8M21 21H16M16 21V16" stroke="#9527F5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    `;
+    
+    // Add tooltip
+    const tooltip = document.createElement('div');
+    tooltip.className = 'vocab-bookmark-words-refresh-tooltip';
+    tooltip.textContent = 'Reload bookmarks';
+    refreshButton.appendChild(tooltip);
+    
+    // Add click handler to reload bookmarks with animation
+    refreshButton.addEventListener('click', async () => {
+      const icon = refreshButton.querySelector('.vocab-bookmark-words-refresh-icon');
+      if (!icon) return;
+      
+      // Start rotation animation
+      refreshButton.classList.add('vocab-bookmark-words-refresh-loading');
+      
+      // Load bookmarks
+      await this.loadBookmarks();
+      this.renderTable();
+      
+      // Stop rotation and show green tick
+      refreshButton.classList.remove('vocab-bookmark-words-refresh-loading');
+      refreshButton.classList.add('vocab-bookmark-words-refresh-success');
+      
+      // Show green tick mark
+      icon.innerHTML = `
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M20 6L9 17l-5-5" stroke="#16a34a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      `;
+      
+      // After 1 second, show refresh icon again
+      setTimeout(() => {
+        refreshButton.classList.remove('vocab-bookmark-words-refresh-success');
+        icon.innerHTML = `
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" class="vocab-bookmark-words-refresh-icon">
+            <path d="M12 21C7.02944 21 3 16.9706 3 12C3 9.69494 3.86656 7.59227 5.29168 6L8 3M12 3C16.9706 3 21 7.02944 21 12C21 14.3051 20.1334 16.4077 18.7083 18L16 21M3 3H8M8 3V8M21 21H16M16 21V16" stroke="#9527F5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        `;
+      }, 1000);
+    });
+    
+    actionButtonsContainer.appendChild(refreshButton);
     
     // Create controls container (search and sort)
     const controlsContainer = document.createElement('div');
@@ -34592,6 +34407,7 @@ const BookmarkWordsDialog = {
     // Assemble dialog
     dialogContent.appendChild(leftButtonContainer);
     dialogContent.appendChild(header);
+    dialogContent.appendChild(actionButtonsContainer);
     dialogContent.appendChild(controlsContainer);
     dialogContent.appendChild(tableContainer);
     dialogContent.appendChild(paginationContainer);
@@ -34935,10 +34751,32 @@ const BookmarkWordsDialog = {
         deleteButton.addEventListener('click', async (e) => {
           e.stopPropagation();
           
-          // Add fade-out animation
-          row.style.transition = 'opacity 0.3s ease-out, transform 0.3s ease-out';
+          // Animate height to zero in 0.2 seconds
+          const rowHeight = row.offsetHeight;
+          const cells = row.querySelectorAll('td');
+          
+          // Set initial height and prepare for animation
+          row.style.height = `${rowHeight}px`;
+          row.style.opacity = '1';
+          row.style.overflow = 'hidden';
+          row.style.display = 'table-row';
+          
+          // Set transition
+          row.style.transition = 'height 0.2s ease-out, opacity 0.2s ease-out';
+          cells.forEach(cell => {
+            cell.style.transition = 'padding 0.2s ease-out';
+          });
+          
+          // Force reflow
+          void row.offsetHeight;
+          
+          // Animate to zero
+          row.style.height = '0';
           row.style.opacity = '0';
-          row.style.transform = 'translateX(-20px)';
+          cells.forEach(cell => {
+            cell.style.paddingTop = '0';
+            cell.style.paddingBottom = '0';
+          });
           
           // Delete after animation
           setTimeout(async () => {
@@ -34948,7 +34786,7 @@ const BookmarkWordsDialog = {
               await this.loadBookmarks();
               this.renderTable();
             }
-          }, 300);
+          }, 200);
         });
         actionsCell.appendChild(deleteButton);
         // Make actions cell clickable to open word-ask-ai modal (but not when clicking delete button)
@@ -35907,6 +35745,95 @@ const BookmarkWordsDialog = {
         margin-bottom: 20px;
         text-align: center;
         padding-top: 10px;
+      }
+      
+      /* Action Buttons Container */
+      .vocab-bookmark-words-action-buttons {
+        display: flex;
+        justify-content: flex-end;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 16px;
+        padding: 0 20px;
+      }
+      
+      /* Refresh Button */
+      .vocab-bookmark-words-refresh-btn {
+        position: relative;
+        background: none;
+        border: none;
+        border-radius: 8px;
+        width: 40px;
+        height: 40px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        padding: 0;
+      }
+      
+      .vocab-bookmark-words-refresh-btn:hover {
+        transform: scale(1.05);
+      }
+      
+      .vocab-bookmark-words-refresh-btn:active {
+        transform: scale(0.95);
+      }
+      
+      .vocab-bookmark-words-refresh-btn svg {
+        width: 24px;
+        height: 24px;
+      }
+      
+      /* Rotation animation for loading state */
+      .vocab-bookmark-words-refresh-btn.vocab-bookmark-words-refresh-loading .vocab-bookmark-words-refresh-icon {
+        animation: vocab-bookmark-words-refresh-rotate 1s linear infinite;
+      }
+      
+      @keyframes vocab-bookmark-words-refresh-rotate {
+        from {
+          transform: rotate(0deg);
+        }
+        to {
+          transform: rotate(360deg);
+        }
+      }
+      
+      /* Success state (green tick) */
+      .vocab-bookmark-words-refresh-btn.vocab-bookmark-words-refresh-success svg {
+        width: 24px;
+        height: 24px;
+      }
+      
+      /* Tooltip */
+      .vocab-bookmark-words-refresh-tooltip {
+        position: absolute;
+        bottom: calc(100% + 8px);
+        right: 0;
+        background: #333;
+        color: white;
+        padding: 6px 12px;
+        border-radius: 6px;
+        font-size: 12px;
+        white-space: nowrap;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.2s ease;
+        z-index: 1000;
+      }
+      
+      .vocab-bookmark-words-refresh-tooltip::after {
+        content: '';
+        position: absolute;
+        top: 100%;
+        right: 12px;
+        border: 5px solid transparent;
+        border-top-color: #333;
+      }
+      
+      .vocab-bookmark-words-refresh-btn:hover .vocab-bookmark-words-refresh-tooltip {
+        opacity: 1;
       }
       
       /* Controls Container */
