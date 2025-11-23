@@ -35852,7 +35852,7 @@ const BookmarkWordsDialog = {
         font-weight: 600;
         font-size: 13px;
         color: #374151;
-        background: rgba(149, 39, 245, 0.1);
+        background: rgba(223, 199, 255, 1);
         border-bottom: 2px solid #e5e7eb;
         position: sticky;
         top: 0;
