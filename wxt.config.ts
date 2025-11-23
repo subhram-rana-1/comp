@@ -14,7 +14,7 @@ export default defineConfig({
   manifest: {
     name: 'XplainO',
     version: packageJson.version,
-    description: 'Enhance your reading, vocabulary, and comprehension instantly in any language with AI-powered insights.',
+    description: 'Get AI-powered contextual explanations, summaries, and instant answers in any language—right as you browse',
     action: {
       default_title: 'Boost your vocabulary and comprehension with AI',
     },
