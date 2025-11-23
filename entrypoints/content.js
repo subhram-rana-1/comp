@@ -33823,7 +33823,7 @@ const BookmarkWordsDialog = {
   isOpen: false,
   currentPage: 1,
   itemsPerPage: 10,
-  sortBy: 'alphabetical', // 'alphabetical', 'oldest', 'newest'
+  sortBy: 'newest', // 'alphabetical', 'oldest', 'newest' (default: 'newest')
   searchQuery: '',
   allBookmarks: [],
   filteredBookmarks: [],
@@ -33913,26 +33913,6 @@ const BookmarkWordsDialog = {
    */
   hide() {
     if (!this.dialogContainer) return;
-    
-    // Clean up dropdown list if it exists
-    const dropdownList = document.querySelector('.vocab-bookmark-words-sort-dropdown-list');
-    if (dropdownList) {
-      dropdownList.remove();
-    }
-    
-    // Clean up event listeners
-    const dropdownContainer = this.dialogContainer.querySelector('.vocab-bookmark-words-sort-dropdown-container');
-    if (dropdownContainer) {
-      if (dropdownContainer._clickHandler) {
-        document.removeEventListener('click', dropdownContainer._clickHandler);
-      }
-      if (dropdownContainer._scrollHandler) {
-        window.removeEventListener('scroll', dropdownContainer._scrollHandler, true);
-      }
-      if (dropdownContainer._resizeHandler) {
-        window.removeEventListener('resize', dropdownContainer._resizeHandler);
-      }
-    }
     
     this.dialogContainer.remove();
     this.dialogContainer = null;
@@ -34128,234 +34108,152 @@ const BookmarkWordsDialog = {
     
     searchContainer.appendChild(searchInput);
     
-    // Create sort dropdown (custom dropdown matching language dropdown style)
-    const sortContainer = document.createElement('div');
-    sortContainer.className = 'vocab-bookmark-words-sort-container';
+    controlsContainer.appendChild(searchContainer);
     
-    const sortLabel = document.createElement('label');
-    sortLabel.className = 'vocab-bookmark-words-sort-label';
-    sortLabel.textContent = 'Sort by:';
-    
-    // Create dropdown container (similar to language dropdown)
-    const dropdownContainer = document.createElement('div');
-    dropdownContainer.className = 'vocab-bookmark-words-sort-dropdown-container';
-    dropdownContainer.style.cssText = `
+    // Create sort dropdown
+    const sortDropdownContainer = document.createElement('div');
+    sortDropdownContainer.className = 'vocab-bookmark-words-sort-container';
+    sortDropdownContainer.style.cssText = `
       position: relative;
-      min-width: 160px;
-      z-index: 2147483651;
-      isolation: isolate;
+      min-width: 180px;
     `;
     
-    // Create input field (readonly, for display)
-    const sortInput = document.createElement('input');
-    sortInput.type = 'text';
-    sortInput.className = 'vocab-bookmark-words-sort-input';
-    sortInput.readOnly = true;
-    sortInput.style.cssText = `
+    const sortDropdownWrapper = document.createElement('div');
+    sortDropdownWrapper.style.cssText = `
+      position: relative;
       width: 100%;
-      padding: 12px 45px 12px 16px;
-      border: 2px solid #e5e5e5;
-      border-radius: 13px;
-      font-size: 14px !important;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif !important;
-      font-weight: 400 !important;
-      box-sizing: border-box;
-      outline: none;
-      transition: border-color 0.2s;
-      background-color: white !important;
-      color: black !important;
-      text-shadow: none !important;
-      cursor: pointer;
-      user-select: none;
-      -webkit-user-select: none;
     `;
     
-    // Dropdown icon
-    const dropdownIcon = document.createElement('div');
-    dropdownIcon.className = 'vocab-bookmark-words-sort-dropdown-icon';
-    dropdownIcon.innerHTML = `
+    const sortDropdownInput = document.createElement('input');
+    sortDropdownInput.type = 'text';
+    sortDropdownInput.className = 'vocab-bookmark-words-sort-input';
+    sortDropdownInput.id = 'vocab-bookmark-words-sort-input';
+    sortDropdownInput.value = this.sortBy === 'newest' ? 'Newest first' : 
+                              this.sortBy === 'oldest' ? 'Oldest first' : 
+                              'Alphabetical order';
+    sortDropdownInput.readOnly = true;
+    sortDropdownInput.style.cssText = `
+      width: 100%;
+      padding: 10px 45px 10px 16px;
+      border: 1.5px solid rgba(149, 39, 245, 0.4);
+      border-radius: 13px;
+      font-size: 14px;
+      font-family: inherit;
+      font-weight: 400;
+      background-color: white;
+      cursor: pointer;
+      transition: border-color 0.2s ease;
+      box-sizing: border-box;
+    `;
+    
+    const sortDropdownIcon = document.createElement('div');
+    sortDropdownIcon.className = 'vocab-bookmark-words-sort-icon';
+    sortDropdownIcon.innerHTML = `
       <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
         <path d="M5 7.5L10 12.5L15 7.5" stroke="#666" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
       </svg>
     `;
-    dropdownIcon.style.cssText = `
+    sortDropdownIcon.style.cssText = `
       position: absolute;
       right: 12px;
       top: 50%;
       transform: translateY(-50%);
       pointer-events: none;
-      transition: transform 0.2s;
-      z-index: 2;
+      transition: transform 0.2s ease;
     `;
     
-    // Dropdown list
-    const dropdownList = document.createElement('div');
-    dropdownList.className = 'vocab-bookmark-words-sort-dropdown-list';
-    dropdownList.style.cssText = `
-      position: fixed !important;
-      background-color: white !important;
-      border-left: 2px solid #e5e5e5;
-      border-right: 2px solid #e5e5e5;
+    const sortDropdownList = document.createElement('div');
+    sortDropdownList.className = 'vocab-bookmark-words-sort-list';
+    sortDropdownList.id = 'vocab-bookmark-words-sort-list';
+    sortDropdownList.style.cssText = `
+      position: absolute;
+      top: 100%;
+      left: 0;
+      right: 0;
+      background-color: white;
+      border: 1.5px solid rgba(149, 39, 245, 0.4);
       border-top: none;
-      border-bottom: 2px solid #e5e5e5;
-      border-radius: 0 0 8px 8px;
-      max-height: 300px;
+      border-radius: 0 0 13px 13px;
+      max-height: 200px;
       overflow-y: auto;
       display: none;
-      z-index: 2147483651 !important;
+      z-index: 1000;
       box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-      user-select: none;
-      -webkit-user-select: none;
-      -moz-user-select: none;
-      -ms-user-select: none;
-      isolation: isolate;
-      font-size: 14px !important;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif !important;
-      font-weight: 400 !important;
-      line-height: 1.5 !important;
-      pointer-events: auto !important;
+      margin-top: -1px;
     `;
     
-    const options = [
-      { value: 'alphabetical', text: 'Alphabetical order' },
-      { value: 'oldest', text: 'Older first' },
-      { value: 'newest', text: 'Newest first' }
+    const sortOptions = [
+      { value: 'newest', label: 'Newest first' },
+      { value: 'oldest', label: 'Oldest first' },
+      { value: 'alphabetical', label: 'Alphabetical order' }
     ];
     
-    // Set initial value
-    const currentOption = options.find(opt => opt.value === this.sortBy) || options[0];
-    sortInput.value = currentOption.text;
-    
     // Create dropdown items
-    options.forEach(option => {
+    sortOptions.forEach((option) => {
       const item = document.createElement('div');
-      item.className = 'vocab-bookmark-words-sort-dropdown-item';
-      item.textContent = option.text;
+      item.textContent = option.label;
+      item.setAttribute('data-value', option.value);
       item.style.cssText = `
         padding: 12px 16px;
         cursor: pointer;
-        transition: background-color 0.15s;
-        border-bottom: 1px solid #f3f4f6;
+        transition: background-color 0.2s, color 0.2s;
+        user-select: none;
+        -webkit-user-select: none;
+        -moz-user-select: none;
+        -ms-user-select: none;
+        background-color: white;
+        color: black;
+        font-size: 14px;
+        font-family: inherit;
+        font-weight: 400;
       `;
       
-      // Highlight selected item
-      if (option.value === this.sortBy) {
-        item.style.backgroundColor = '#f3e8ff';
-        item.style.fontWeight = '500';
-      }
-      
       item.addEventListener('mouseenter', () => {
-        if (option.value !== this.sortBy) {
-          item.style.backgroundColor = '#f9fafb';
-        }
+        item.style.backgroundColor = '#e9d5ff';
+        item.style.color = '#9333ea';
       });
       
       item.addEventListener('mouseleave', () => {
-        if (option.value !== this.sortBy) {
-          item.style.backgroundColor = 'transparent';
-        }
+        item.style.backgroundColor = 'white';
+        item.style.color = 'black';
       });
       
       item.addEventListener('click', () => {
         this.sortBy = option.value;
-        sortInput.value = option.text;
-        dropdownList.style.display = 'none';
-        dropdownIcon.style.transform = 'translateY(-50%) rotate(0deg)';
-        
-        // Update selected item styling
-        dropdownList.querySelectorAll('.vocab-bookmark-words-sort-dropdown-item').forEach(el => {
-          el.style.backgroundColor = 'transparent';
-          el.style.fontWeight = '400';
-        });
-        item.style.backgroundColor = '#f3e8ff';
-        item.style.fontWeight = '500';
-        
+        sortDropdownInput.value = option.label;
+        sortDropdownList.style.display = 'none';
+        sortDropdownIcon.style.transform = 'translateY(-50%) rotate(0deg)';
         this.applyFilters();
+        this.renderTable();
       });
       
-      dropdownList.appendChild(item);
-    });
-    
-    // Function to update dropdown position
-    const updateDropdownPosition = () => {
-      const rect = sortInput.getBoundingClientRect();
-      // For fixed positioning, use viewport coordinates (no scroll offset needed)
-      dropdownList.style.top = `${rect.bottom}px`;
-      dropdownList.style.left = `${rect.left}px`;
-      dropdownList.style.width = `${rect.width}px`;
-      // Ensure dropdown is visible and on top
-      dropdownList.style.zIndex = '2147483651';
-      dropdownList.style.visibility = 'visible';
-    };
-    
-    // Prevent double-click from triggering word processing
-    sortInput.addEventListener('dblclick', (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      e.stopImmediatePropagation();
-      return false;
+      sortDropdownList.appendChild(item);
     });
     
     // Toggle dropdown on input click
-    sortInput.addEventListener('click', () => {
-      if (dropdownList.style.display === 'none' || !dropdownList.style.display) {
-        updateDropdownPosition();
-        dropdownList.style.display = 'block';
-        dropdownIcon.style.transform = 'translateY(-50%) rotate(180deg)';
-        sortInput.style.borderColor = '#9333ea';
-      } else {
-        dropdownList.style.display = 'none';
-        dropdownIcon.style.transform = 'translateY(-50%) rotate(0deg)';
-        sortInput.style.borderColor = '#e5e5e5';
-      }
-    });
-    
-    sortInput.addEventListener('focus', () => {
-      sortInput.style.borderColor = '#9333ea';
-      updateDropdownPosition();
-      dropdownList.style.display = 'block';
-      dropdownIcon.style.transform = 'translateY(-50%) rotate(180deg)';
-    });
-    
-    sortInput.addEventListener('blur', () => {
-      sortInput.style.borderColor = '#e5e5e5';
-      setTimeout(() => {
-        dropdownList.style.display = 'none';
-        dropdownIcon.style.transform = 'translateY(-50%) rotate(0deg)';
-      }, 200);
+    sortDropdownInput.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const isOpen = sortDropdownList.style.display === 'block';
+      sortDropdownList.style.display = isOpen ? 'none' : 'block';
+      sortDropdownIcon.style.transform = isOpen 
+        ? 'translateY(-50%) rotate(0deg)' 
+        : 'translateY(-50%) rotate(180deg)';
     });
     
     // Close dropdown when clicking outside
-    const clickHandler = (e) => {
-      if (!dropdownContainer.contains(e.target) && !dropdownList.contains(e.target)) {
-        dropdownList.style.display = 'none';
-        dropdownIcon.style.transform = 'translateY(-50%) rotate(0deg)';
-        sortInput.style.borderColor = '#e5e5e5';
+    document.addEventListener('click', (e) => {
+      if (!sortDropdownWrapper.contains(e.target)) {
+        sortDropdownList.style.display = 'none';
+        sortDropdownIcon.style.transform = 'translateY(-50%) rotate(0deg)';
       }
-    };
-    document.addEventListener('click', clickHandler);
+    });
     
-    // Update dropdown position on scroll/resize
-    const scrollHandler = () => updateDropdownPosition();
-    const resizeHandler = () => updateDropdownPosition();
-    window.addEventListener('scroll', scrollHandler, true);
-    window.addEventListener('resize', resizeHandler);
+    sortDropdownWrapper.appendChild(sortDropdownInput);
+    sortDropdownWrapper.appendChild(sortDropdownIcon);
+    sortDropdownWrapper.appendChild(sortDropdownList);
+    sortDropdownContainer.appendChild(sortDropdownWrapper);
     
-    dropdownContainer.appendChild(sortInput);
-    dropdownContainer.appendChild(dropdownIcon);
-    document.body.appendChild(dropdownList);
-    
-    // Store references for cleanup
-    dropdownContainer._dropdownList = dropdownList;
-    dropdownContainer._clickHandler = clickHandler;
-    dropdownContainer._scrollHandler = scrollHandler;
-    dropdownContainer._resizeHandler = resizeHandler;
-    
-    sortContainer.appendChild(sortLabel);
-    sortContainer.appendChild(dropdownContainer);
-    
-    controlsContainer.appendChild(searchContainer);
-    controlsContainer.appendChild(sortContainer);
+    controlsContainer.appendChild(sortDropdownContainer);
     
     // Create table container
     const tableContainer = document.createElement('div');
@@ -35866,125 +35764,66 @@ const BookmarkWordsDialog = {
         border-color: #9527F5;
       }
       
-      /* Sort Container */
-      .vocab-bookmark-words-sort-container {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-      }
-      
-      .vocab-bookmark-words-sort-label {
-        font-size: 14px;
-        font-weight: 500;
-        color: #374151;
-        white-space: nowrap;
-      }
-      
       /* Sort Dropdown Container */
-      .vocab-bookmark-words-sort-dropdown-container {
+      .vocab-bookmark-words-sort-container {
         position: relative;
-        min-width: 160px;
-        border: 1.5px solid rgba(149, 39, 245, 0.4);
-        border-radius: 13px;
-        padding: 0;
-        box-sizing: border-box;
-        z-index: 2147483651 !important;
-        isolation: isolate;
+        min-width: 180px;
       }
       
-      /* Sort Dropdown Input (matches language dropdown) */
       .vocab-bookmark-words-sort-input {
         width: 100%;
-        padding: 12px 45px 12px 16px;
-        border: none;
+        padding: 10px 45px 10px 16px;
+        border: 1.5px solid rgba(149, 39, 245, 0.4);
         border-radius: 13px;
-        font-size: 14px !important;
-        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif !important;
-        font-weight: 400 !important;
-        box-sizing: border-box;
-        outline: none;
-        transition: border-color 0.2s;
-        background-color: white !important;
-        color: black !important;
-        text-shadow: none !important;
+        font-size: 14px;
+        font-family: inherit;
+        font-weight: 400;
+        background-color: white;
         cursor: pointer;
-        user-select: none;
-        -webkit-user-select: none;
+        transition: border-color 0.2s ease;
+        box-sizing: border-box;
       }
       
       .vocab-bookmark-words-sort-input:focus {
-        border-color: #9333ea;
+        outline: none;
+        border-color: #9527F5;
       }
       
-      /* Sort Dropdown Icon */
-      .vocab-bookmark-words-sort-dropdown-icon {
+      .vocab-bookmark-words-sort-list {
         position: absolute;
-        right: 12px;
-        top: 50%;
-        transform: translateY(-50%);
-        pointer-events: none;
-        transition: transform 0.2s;
-        z-index: 2;
-      }
-      
-      /* Sort Dropdown List (matches language dropdown) */
-      .vocab-bookmark-words-sort-dropdown-list {
-        position: fixed !important;
-        background-color: white !important;
-        border-left: 2px solid #e5e5e5;
-        border-right: 2px solid #e5e5e5;
+        top: 100%;
+        left: 0;
+        right: 0;
+        background-color: white;
+        border: 1.5px solid rgba(149, 39, 245, 0.4);
         border-top: none;
-        border-bottom: 2px solid #e5e5e5;
-        border-radius: 0 0 8px 8px;
-        max-height: 300px;
+        border-radius: 0 0 13px 13px;
+        max-height: 200px;
         overflow-y: auto;
         display: none;
-        z-index: 2147483651 !important;
+        z-index: 1000;
         box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        margin-top: -1px;
+      }
+      
+      .vocab-bookmark-words-sort-list div {
+        padding: 12px 16px;
+        cursor: pointer;
+        transition: background-color 0.2s, color 0.2s;
         user-select: none;
         -webkit-user-select: none;
         -moz-user-select: none;
         -ms-user-select: none;
-        isolation: isolate;
-        font-size: 14px !important;
-        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif !important;
-        font-weight: 400 !important;
-        line-height: 1.5 !important;
+        background-color: white;
+        color: black;
+        font-size: 14px;
+        font-family: inherit;
+        font-weight: 400;
       }
       
-      /* Sort Dropdown Item */
-      .vocab-bookmark-words-sort-dropdown-item {
-        padding: 12px 16px;
-        cursor: pointer;
-        transition: background-color 0.15s;
-        border-bottom: 1px solid #f3f4f6;
-      }
-      
-      .vocab-bookmark-words-sort-dropdown-item:last-child {
-        border-bottom: none;
-      }
-      
-      .vocab-bookmark-words-sort-dropdown-item:hover {
-        background-color: #f9fafb;
-      }
-      
-      /* Scrollbar styling for dropdown list */
-      .vocab-bookmark-words-sort-dropdown-list::-webkit-scrollbar {
-        width: 6px;
-      }
-      
-      .vocab-bookmark-words-sort-dropdown-list::-webkit-scrollbar-track {
-        background: #f1f5f9;
-        border-radius: 3px;
-      }
-      
-      .vocab-bookmark-words-sort-dropdown-list::-webkit-scrollbar-thumb {
-        background: #cbd5e1;
-        border-radius: 3px;
-      }
-      
-      .vocab-bookmark-words-sort-dropdown-list::-webkit-scrollbar-thumb:hover {
-        background: #94a3b8;
+      .vocab-bookmark-words-sort-list div:hover {
+        background-color: #e9d5ff !important;
+        color: #9333ea !important;
       }
       
       /* Table Container */
