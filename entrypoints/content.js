@@ -17785,8 +17785,22 @@ const ChatDialog = {
     // First, collect all matching elements with their scores
     const matchingElements = [];
     
+    // Get chat dialog container to exclude from search
+    const chatDialog = document.getElementById('vocab-chat-dialog');
+    
+    // Helper function to check if element is inside chat dialog
+    const isInsideChatDialog = (element) => {
+      if (!chatDialog) return false;
+      return chatDialog.contains(element) || element === chatDialog;
+    };
+    
     // Search through all elements
     for (const elem of allElements) {
+      // Skip if element is inside chat dialog
+      if (isInsideChatDialog(elem)) {
+        continue;
+      }
+      
       // Skip if element is hidden or too small
       const style = window.getComputedStyle(elem);
       if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') {
