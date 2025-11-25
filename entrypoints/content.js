@@ -10395,13 +10395,34 @@ const TextSelector = {
     let lastScrollY = window.pageYOffset || document.documentElement.scrollTop;
     
     // Function to update button position on scroll (maintains relative position to selection)
+    // This works for both normal button state and spinner state
+    // Track consecutive zero-size rects to avoid premature cleanup during scroll
+    let zeroSizeRectCount = 0;
+    const MAX_ZERO_SIZE_RECTS = 3; // Allow up to 3 consecutive zero-size rects before cleanup
+    
     const updateButtonPosition = () => {
       try {
+        // Check if button wrapper still exists
+        if (!iconsWrapper || !iconsWrapper.parentNode) {
+          console.log('[TextSelector] updateButtonPosition: iconsWrapper no longer exists, skipping');
+          return;
+        }
+        
+        // Check if button is in loading state (spinner showing) - don't cleanup during loading
+        const magicBtn = iconsWrapper.querySelector('.vocab-text-magic-meaning-btn');
+        const isInLoadingState = magicBtn && magicBtn.classList.contains('magic-meaning-loading');
+        
+        console.log('[TextSelector] updateButtonPosition called - isInLoadingState:', isInLoadingState, 'textKey:', textKey);
+        
         // Check if range is still valid
         if (!range || !range.commonAncestorContainer || 
             !document.contains(range.commonAncestorContainer)) {
-          // Range is invalid, cleanup button
-          if (performCleanup) performCleanup();
+          console.log('[TextSelector] updateButtonPosition: Range is invalid');
+          // Range is invalid, cleanup button (but not if loading)
+          if (!isInLoadingState && performCleanup) {
+            console.log('[TextSelector] updateButtonPosition: Cleaning up due to invalid range');
+            performCleanup();
+          }
           return;
         }
         
@@ -10409,6 +10430,43 @@ const TextSelector = {
         const currentSelectionRect = range.getBoundingClientRect();
         const currentScrollX = window.pageXOffset || document.documentElement.scrollLeft;
         const currentScrollY = window.pageYOffset || document.documentElement.scrollTop;
+        
+        console.log('[TextSelector] updateButtonPosition: Selection rect:', {
+          width: currentSelectionRect.width,
+          height: currentSelectionRect.height,
+          left: currentSelectionRect.left,
+          top: currentSelectionRect.top
+        });
+        
+        // Check if selection rect is zero-size (might be temporary during scroll)
+        const isZeroSize = currentSelectionRect.width === 0 && currentSelectionRect.height === 0;
+        
+        if (isZeroSize) {
+          zeroSizeRectCount++;
+          console.log('[TextSelector] updateButtonPosition: Zero-size rect detected, count:', zeroSizeRectCount);
+          
+          // If button is in loading state, don't cleanup even if rect is zero
+          // This prevents spinner from disappearing during scroll on some websites
+          if (isInLoadingState) {
+            console.log('[TextSelector] updateButtonPosition: Button is loading, skipping cleanup despite zero-size rect');
+            // Still try to maintain last known position
+            if (iconsWrapper.style.left && iconsWrapper.style.top) {
+              // Keep current position, don't update
+              return;
+            }
+          } else if (zeroSizeRectCount >= MAX_ZERO_SIZE_RECTS) {
+            // Only cleanup if not loading and we've seen multiple consecutive zero-size rects
+            console.log('[TextSelector] updateButtonPosition: Cleaning up due to multiple zero-size rects');
+            if (performCleanup) performCleanup();
+            return;
+          } else {
+            // Reset counter if we get a valid rect again
+            zeroSizeRectCount = 0;
+          }
+        } else {
+          // Reset counter when we get a valid rect
+          zeroSizeRectCount = 0;
+        }
         
         // Calculate selection's position in document coordinates
         const selectionLeftInDoc = currentSelectionRect.left + currentScrollX;
@@ -10438,25 +10496,25 @@ const TextSelector = {
           newTop = currentScrollY + 10;
         }
         
-        // Update button position
+        // Update button position (using absolute positioning)
+        iconsWrapper.style.setProperty('position', 'absolute', 'important');
         iconsWrapper.style.setProperty('left', `${newLeft}px`, 'important');
         iconsWrapper.style.setProperty('top', `${newTop}px`, 'important');
         iconsWrapper.style.setProperty('right', 'auto', 'important');
         
+        console.log('[TextSelector] updateButtonPosition: Updated position to', newLeft, newTop);
+        
         // Update last scroll position for tracking
         lastScrollX = currentScrollX;
         lastScrollY = currentScrollY;
-        
-        // Also check if the selected text is still visible (for cleanup)
-        if (currentSelectionRect.width === 0 && currentSelectionRect.height === 0) {
-          // Selection is not visible, cleanup button
-          if (performCleanup) performCleanup();
-          return;
-        }
       } catch (error) {
         console.warn('[TextSelector] Error updating button position:', error);
-        // If error persists, cleanup button
-        if (performCleanup) performCleanup();
+        // If error persists and button is not loading, cleanup button
+        const magicBtn = iconsWrapper?.querySelector('.vocab-text-magic-meaning-btn');
+        const isInLoadingState = magicBtn && magicBtn.classList.contains('magic-meaning-loading');
+        if (!isInLoadingState && performCleanup) {
+          performCleanup();
+        }
       }
     };
     
@@ -10526,6 +10584,13 @@ const TextSelector = {
     
     // Define performCleanup function after handlers are created
     performCleanup = () => {
+      // Clean up fixed scroll handler if it exists (for spinner)
+      if (iconsWrapper && iconsWrapper._fixedScrollHandler) {
+        window.removeEventListener('scroll', iconsWrapper._fixedScrollHandler);
+        iconsWrapper._fixedScrollHandler = null;
+        iconsWrapper._fixedPosition = null;
+      }
+      
       // Remove button
       if (iconsWrapper && iconsWrapper.parentNode) {
         iconsWrapper.remove();
@@ -10580,13 +10645,30 @@ const TextSelector = {
         // Maintain relative position to selection when container scrolls
         // Use the same offset-based approach as the main scroll handler
         try {
+          // Check if button wrapper still exists
+          if (!iconsWrapper || !iconsWrapper.parentNode) {
+            return;
+          }
+          
+          // Check if button is in loading state (spinner showing)
+          const magicBtn = iconsWrapper.querySelector('.vocab-text-magic-meaning-btn');
+          const isInLoadingState = magicBtn && magicBtn.classList.contains('magic-meaning-loading');
+          
           if (!range || !range.commonAncestorContainer || 
               !document.contains(range.commonAncestorContainer)) {
+            // Don't update position if range is invalid, but don't cleanup (let main handler do it)
             return;
           }
           
           // Get current selection position
           const currentSelectionRect = range.getBoundingClientRect();
+          
+          // If selection rect is zero-size and button is loading, skip update but don't cleanup
+          if ((currentSelectionRect.width === 0 && currentSelectionRect.height === 0) && isInLoadingState) {
+            // Keep current position during loading state
+            return;
+          }
+          
           const currentScrollX = window.pageXOffset || document.documentElement.scrollLeft;
           const currentScrollY = window.pageYOffset || document.documentElement.scrollTop;
           
@@ -10850,11 +10932,21 @@ const TextSelector = {
         range.insertNode(highlight);
         console.log('[TextSelector] Used extractContents with block display (fallback) - block element spacing preserved');
       } else {
+        // For inline text (no block elements), ensure display stays inline to prevent line breaks
+        highlight.style.setProperty('display', 'inline', 'important');
         const extractedContents = range.extractContents();
         highlight.appendChild(extractedContents);
         range.insertNode(highlight);
       }
       console.log('[TextSelector] Used extractContents (fallback) - formatting preserved');
+    }
+    
+    // After wrapping, ensure inline text highlights remain inline (prevent newline after selection)
+    // Check if highlight contains only inline content (no block elements)
+    const hasBlockElements = highlight.querySelector('p, div, h1, h2, h3, h4, h5, h6, section, article, aside, header, footer, nav, main, blockquote, pre, address, ul, ol, li');
+    if (!hasBlockElements) {
+      // Force inline display for inline text to prevent line breaks
+      highlight.style.setProperty('display', 'inline', 'important');
     }
     
     // After wrapping, ensure all child elements with color classes or inline styles maintain their colors
@@ -11670,6 +11762,12 @@ const TextSelector = {
           wrapperBtn.innerHTML = this.createSpinnerIcon();
           wrapperBtn.disabled = true;
         }
+        
+        // Keep using absolute positioning - don't switch to fixed
+        // The normal scroll handler (updateButtonPosition) will continue to work
+        // We just need to make sure it doesn't skip when spinner is showing
+        // Actually, we removed the skip logic, so it should work now
+        
         // DO NOT REMOVE buttonWrapper - keep it visible with spinner during API call
         // It will be removed later when green book appears
       }
@@ -26398,6 +26496,13 @@ const ButtonPanel = {
               // Remove from buttonWrapper (floating button on body) if it exists
               const buttonWrapper = TextSelector.buttonWrappers?.get(textKey);
               if (buttonWrapper) {
+                // Clean up fixed scroll handler if it exists
+                if (buttonWrapper._fixedScrollHandler) {
+                  window.removeEventListener('scroll', buttonWrapper._fixedScrollHandler);
+                  buttonWrapper._fixedScrollHandler = null;
+                  buttonWrapper._fixedPosition = null;
+                }
+                
                 // Clean up event listeners if they exist
                 if (buttonWrapper._cleanupHandlers) {
                   window.removeEventListener('scroll', buttonWrapper._cleanupHandlers.scroll);
@@ -26437,13 +26542,23 @@ const ButtonPanel = {
               existingGreenCross.remove();
             }
                 
-            // Create green cross button at top-left
+            // Reuse or create icons wrapper for book icon (book icon positioned at top-left)
+            let newIconsWrapper = highlight.querySelector('.vocab-text-icons-wrapper');
+            if (!newIconsWrapper) {
+              newIconsWrapper = document.createElement('div');
+              newIconsWrapper.className = 'vocab-text-icons-wrapper vocab-text-icons-wrapper-book';
+              newIconsWrapper.setAttribute('data-text-key', textKey);
+              highlight.appendChild(newIconsWrapper);
+            } else {
+              // Update class to include book wrapper class (magic button already removed above)
+              newIconsWrapper.className = 'vocab-text-icons-wrapper vocab-text-icons-wrapper-book';
+            }
+            
+            // Create green cross button and add it to the icons wrapper (near book icon at top-left)
             const greenCrossBtn = document.createElement('button');
             greenCrossBtn.className = 'vocab-text-remove-green-btn';
             greenCrossBtn.setAttribute('aria-label', 'Remove simplified text');
-            greenCrossBtn.style.position = 'absolute';
-            greenCrossBtn.style.top = '-10px';
-            greenCrossBtn.style.left = '-10px';
+            greenCrossBtn.style.position = 'relative';
             greenCrossBtn.style.width = '18px';
             greenCrossBtn.style.height = '18px';
             greenCrossBtn.style.background = '#FFFFFF';
@@ -26458,6 +26573,7 @@ const ButtonPanel = {
             greenCrossBtn.style.border = '1px solid #22c55e';
             greenCrossBtn.style.padding = '0';
             greenCrossBtn.style.boxSizing = 'border-box';
+            greenCrossBtn.style.margin = '0';
             greenCrossBtn.innerHTML = `
               <svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg" style="width: 10px; height: 10px;">
                 <path d="M2 2L10 10M10 2L2 10" stroke="#22c55e" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
@@ -26469,19 +26585,8 @@ const ButtonPanel = {
               console.log('[TextSelector] Green cross button clicked for simplified text:', textKey);
               TextSelector.removeFromSimplifiedTexts(textKey);
             });
-            highlight.appendChild(greenCrossBtn);
-                
-            // Reuse or create icons wrapper for book icon (book icon positioned at top-left)
-            let newIconsWrapper = highlight.querySelector('.vocab-text-icons-wrapper');
-            if (!newIconsWrapper) {
-              newIconsWrapper = document.createElement('div');
-              newIconsWrapper.className = 'vocab-text-icons-wrapper vocab-text-icons-wrapper-book';
-              newIconsWrapper.setAttribute('data-text-key', textKey);
-              highlight.appendChild(newIconsWrapper);
-            } else {
-              // Update class to include book wrapper class (magic button already removed above)
-              newIconsWrapper.className = 'vocab-text-icons-wrapper vocab-text-icons-wrapper-book';
-            }
+            // Add cross button to icons wrapper (before book button so it appears first/on top)
+            newIconsWrapper.insertBefore(greenCrossBtn, newIconsWrapper.firstChild);
             
             // Remove any existing book button
             const existingBookBtn = newIconsWrapper.querySelector('.vocab-text-book-btn');
