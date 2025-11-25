@@ -75,8 +75,10 @@ const StorageManager = {
 // UI Module - Handles UI Updates
 // ===================================
 const UIManager = {
-  // DOM elements
-  toggleSwitch: document.getElementById('extensionToggle'),
+  // DOM elements - get dynamically to ensure DOM is ready
+  get toggleSwitch() { 
+    return document.getElementById('extensionToggle'); 
+  },
   get catIcon() { return document.querySelector('.cat-icon'); },
   get title() { return document.querySelector('.title'); },
   get instructions() { return document.querySelector('.instructions'); },
@@ -89,17 +91,17 @@ const UIManager = {
   updateUI(isEnabled) {
     if (isEnabled) {
       // ON state
-      this.catIcon.classList.add('active');
+      if (this.catIcon) this.catIcon.classList.add('active');
       document.body.classList.add('extension-on');
-      this.instructions.classList.add('show');
-      this.fingerPoint.style.display = 'none';
+      if (this.instructions) this.instructions.classList.add('show');
+      if (this.fingerPoint) this.fingerPoint.style.display = 'none';
       console.log('Extension Enabled');
     } else {
       // OFF state
-      this.catIcon.classList.remove('active');
+      if (this.catIcon) this.catIcon.classList.remove('active');
       document.body.classList.remove('extension-on');
-      this.instructions.classList.remove('show');
-      this.fingerPoint.style.display = 'block';
+      if (this.instructions) this.instructions.classList.remove('show');
+      if (this.fingerPoint) this.fingerPoint.style.display = 'block';
       console.log('Extension Disabled');
     }
   },
@@ -109,7 +111,20 @@ const UIManager = {
    * @param {boolean} isEnabled - The state to set
    */
   setToggleState(isEnabled) {
-    this.toggleSwitch.checked = isEnabled;
+    const toggle = this.toggleSwitch;
+    if (toggle) {
+      // Store the current state to prevent infinite loops
+      const previousState = toggle.checked;
+      toggle.checked = isEnabled;
+      console.log('[UIManager] Toggle state set to:', isEnabled, '(was:', previousState, ')');
+      
+      // Force a visual update by triggering a small reflow
+      toggle.style.display = 'none';
+      toggle.offsetHeight; // Trigger reflow
+      toggle.style.display = '';
+    } else {
+      console.error('[UIManager] Toggle switch not found!');
+    }
   }
 };
 
@@ -120,6 +135,7 @@ class PopupApp {
   static currentDomain = null;
   static loadingState = null;
   static normalContent = null;
+  static toggleInitialized = false;
 
   /**
    * Check if the current tab is loading
@@ -192,27 +208,81 @@ class PopupApp {
       }
     });
 
-    // Load global saved state from storage (only if content is visible)
-    if (this.normalContent && this.normalContent.classList.contains('visible')) {
+    // Always initialize toggle state immediately, regardless of content visibility
+    // This ensures the toggle always reflects the saved state when popup opens
+    await this.initializeToggle();
+  }
+
+  /**
+   * Initialize the toggle switch with saved state
+   * This is called immediately on popup open to ensure toggle reflects saved state
+   */
+  static async initializeToggle() {
+    try {
+      // Wait for toggle switch to be available in DOM
+      const toggleSwitch = UIManager.toggleSwitch;
+      if (!toggleSwitch) {
+        console.log('[Popup] Toggle switch not found, retrying...');
+        // Retry after a short delay if toggle isn't ready
+        setTimeout(() => this.initializeToggle(), 50);
+        return;
+      }
+
+      // Load saved state from storage
       const savedState = await StorageManager.loadToggleState();
+      console.log('[Popup] Initializing toggle with saved state:', savedState);
       
-      // Update UI and toggle switch with saved state
+      // Update toggle switch state (without triggering change event)
       UIManager.setToggleState(savedState);
+      
+      // Update UI to reflect the state
       UIManager.updateUI(savedState);
 
-      // Listen for toggle changes
-      UIManager.toggleSwitch.addEventListener('change', this.handleToggleChange.bind(this));
-    } else {
-      // If still loading, wait for content to be visible before initializing toggle
-      const initInterval = setInterval(async () => {
-        if (this.normalContent && this.normalContent.classList.contains('visible')) {
-          clearInterval(initInterval);
-          const savedState = await StorageManager.loadToggleState();
-          UIManager.setToggleState(savedState);
-          UIManager.updateUI(savedState);
-          UIManager.toggleSwitch.addEventListener('change', this.handleToggleChange.bind(this));
+      // Attach event listener for toggle changes
+      // Check if already initialized to avoid duplicate listeners
+      if (!this.toggleInitialized) {
+        const toggleHandler = async (event) => {
+          console.log('[Popup] ===== TOGGLE EVENT FIRED =====');
+          console.log('[Popup] Event type:', event.type);
+          console.log('[Popup] Toggle checked state:', toggleSwitch.checked);
+          await this.handleToggleChange(event);
+        };
+        
+        // Add change event listener (primary)
+        toggleSwitch.addEventListener('change', toggleHandler);
+        
+        // Also listen to click on the label/toggle-slider in case the input change doesn't fire
+        const toggleLabel = toggleSwitch.closest('.toggle-switch');
+        if (toggleLabel) {
+          toggleLabel.addEventListener('click', (e) => {
+            // Only handle if the click wasn't directly on the input
+            if (e.target !== toggleSwitch) {
+              setTimeout(async () => {
+                console.log('[Popup] Toggle label clicked, state:', toggleSwitch.checked);
+                const fakeEvent = { target: toggleSwitch, type: 'change' };
+                await this.handleToggleChange(fakeEvent);
+              }, 0);
+            }
+          });
         }
-      }, 200);
+        
+        this.toggleInitialized = true;
+        this.toggleHandler = toggleHandler; // Store reference
+        console.log('[Popup] Toggle event listeners attached');
+        console.log('[Popup] Toggle element:', {
+          id: toggleSwitch.id,
+          type: toggleSwitch.type,
+          checked: toggleSwitch.checked,
+          disabled: toggleSwitch.disabled,
+          parent: toggleSwitch.parentElement?.className
+        });
+      }
+      
+      console.log('[Popup] Toggle initialized successfully. Final state:', toggleSwitch.checked);
+    } catch (error) {
+      console.error('[Popup] Error initializing toggle:', error);
+      // Retry after a short delay
+      setTimeout(() => this.initializeToggle(), 100);
     }
   }
 
@@ -221,16 +291,19 @@ class PopupApp {
    * @param {Event} event - The change event
    */
   static async handleToggleChange(event) {
-    const isEnabled = event.target.checked;
+    const toggleSwitch = event.target;
+    const isEnabled = toggleSwitch.checked;
     
-    console.log('[Popup] Global toggle changed:', isEnabled);
+    console.log('[Popup] ===== TOGGLE CHANGED =====');
+    console.log('[Popup] New toggle state:', isEnabled);
+    console.log('[Popup] Toggle element:', toggleSwitch);
     
     // Update UI
     UIManager.updateUI(isEnabled);
     
     // Save global state to storage
     await StorageManager.saveToggleState(isEnabled);
-    console.log('[Popup] Global state saved to storage');
+    console.log('[Popup] Global state saved to storage:', isEnabled);
     
     // Notify content script of the change (broadcast to all tabs)
     try {
@@ -255,6 +328,8 @@ class PopupApp {
       console.error('[Popup] Error sending message to content scripts:', error);
       // Storage change listener should still work even if message fails
     }
+    
+    console.log('[Popup] ===== TOGGLE CHANGE HANDLED =====');
   }
 }
 

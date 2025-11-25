@@ -2512,7 +2512,7 @@ export default defineContentScript({
           WordSelector.enable();
           TextSelector.enable();
         } else {
-          ButtonPanel.hide();
+          ButtonPanel.hide(true); // Hide immediately when disabling
           WordSelector.disable();
           TextSelector.disable();
           WordSelector.clearAll();
@@ -2623,17 +2623,17 @@ export default defineContentScript({
             ButtonPanel.show();
             WordSelector.enable();
             TextSelector.enable();
-          } else {
-            ButtonPanel.hide();
-            WordSelector.disable();
-            TextSelector.disable();
-            // Clear all selections when toggling off
-            WordSelector.clearAll();
-            TextSelector.clearAll();
-          }
-          
-          // Update banner visibility
-          BannerModule.updateVisibility(isEnabled);
+        } else {
+          ButtonPanel.hide(true); // Hide immediately when disabling
+          WordSelector.disable();
+          TextSelector.disable();
+          // Clear all selections when toggling off
+          WordSelector.clearAll();
+          TextSelector.clearAll();
+        }
+        
+        // Update banner visibility
+        BannerModule.updateVisibility(isEnabled);
         }
       }
     });
@@ -2654,7 +2654,7 @@ export default defineContentScript({
             showCloseButton();
           }
         } else {
-          ButtonPanel.hide();
+          ButtonPanel.hide(true); // Hide immediately when disabling
           WordSelector.disable();
           TextSelector.disable();
           // Clear all selections when toggling off
@@ -2755,7 +2755,7 @@ async function handleTabStateChange(domain, eventType, sendResponse) {
           showCloseButton();
         }
       } else {
-        ButtonPanel.hide();
+        ButtonPanel.hide(true); // Hide immediately when disabling
         WordSelector.disable();
         TextSelector.disable();
         WordSelector.clearAll();
@@ -26202,6 +26202,13 @@ const ButtonPanel = {
    * @param {string} textKey - The specific text key to process
    */
   async handleMagicMeaningForText(textKey) {
+    // Check if extension is globally enabled
+    const isEnabled = await this.checkExtensionEnabled();
+    if (!isEnabled) {
+      console.log('[ButtonPanel] Extension is disabled, ignoring magic meaning click for text');
+      return;
+    }
+    
     console.log('[ButtonPanel] Magic meaning clicked for specific text:', textKey);
     
     // Check if textKey exists in selectedTexts
@@ -26778,6 +26785,13 @@ const ButtonPanel = {
    * Handler for Magic meaning button
    */
   async handleMagicMeaning() {
+    // Check if extension is globally enabled
+    const isEnabled = await this.checkExtensionEnabled();
+    if (!isEnabled) {
+      console.log('[ButtonPanel] Extension is disabled, ignoring magic meaning click');
+      return;
+    }
+    
     console.log('[ButtonPanel] Magic meaning clicked');
     
     // Get all selected texts and words
@@ -27891,7 +27905,14 @@ const ButtonPanel = {
   /**
    * Handler for Ask button
    */
-  handleAsk() {
+  async handleAsk() {
+    // Check if extension is globally enabled
+    const isEnabled = await this.checkExtensionEnabled();
+    if (!isEnabled) {
+      console.log('[ButtonPanel] Extension is disabled, ignoring ask click');
+      return;
+    }
+    
     console.log('[ButtonPanel] Ask button clicked');
     
     // Get the first selected text
@@ -28156,7 +28177,14 @@ const ButtonPanel = {
   /**
    * Handler for PDF button
    */
-  handlePDFButton() {
+  async handlePDFButton() {
+    // Check if extension is globally enabled
+    const isEnabled = await this.checkExtensionEnabled();
+    if (!isEnabled) {
+      console.log('[ButtonPanel] Extension is disabled, ignoring PDF button click');
+      return;
+    }
+    
     console.log('[ButtonPanel] PDF button clicked');
     // Hide the vertical group after selection
     this.hideVerticalButtonGroup();
@@ -28176,7 +28204,14 @@ const ButtonPanel = {
   /**
    * Handler for Image button
    */
-  handleImageButton() {
+  async handleImageButton() {
+    // Check if extension is globally enabled
+    const isEnabled = await this.checkExtensionEnabled();
+    if (!isEnabled) {
+      console.log('[ButtonPanel] Extension is disabled, ignoring image button click');
+      return;
+    }
+    
     console.log('[ButtonPanel] Image button clicked');
     // Hide the vertical group after selection
     this.hideVerticalButtonGroup();
@@ -28196,7 +28231,14 @@ const ButtonPanel = {
   /**
    * Handler for Topics button
    */
-  handleTopicsButton() {
+  async handleTopicsButton() {
+    // Check if extension is globally enabled
+    const isEnabled = await this.checkExtensionEnabled();
+    if (!isEnabled) {
+      console.log('[ButtonPanel] Extension is disabled, ignoring topics button click');
+      return;
+    }
+    
     console.log('[ButtonPanel] Topics button clicked');
     // Hide the vertical group after selection
     this.hideVerticalButtonGroup();
@@ -28216,7 +28258,14 @@ const ButtonPanel = {
   /**
    * Handler for Text button
    */
-  handleTextButton() {
+  async handleTextButton() {
+    // Check if extension is globally enabled
+    const isEnabled = await this.checkExtensionEnabled();
+    if (!isEnabled) {
+      console.log('[ButtonPanel] Extension is disabled, ignoring text button click');
+      return;
+    }
+    
     console.log('[ButtonPanel] Text button clicked');
     // Hide the vertical group after selection
     this.hideVerticalButtonGroup();
@@ -28682,9 +28731,21 @@ const ButtonPanel = {
 
   /**
    * Hide the button panel
+   * @param {boolean} immediate - If true, hide immediately without animation (used when disabling extension)
    */
-  hide() {
+  hide(immediate = false) {
     if (this.panelContainer) {
+      if (immediate) {
+        // Hide immediately without animation (when extension is disabled)
+        this.panelContainer.style.display = 'none';
+        const wrapperContainer = this.panelContainer.querySelector('.vocab-wrapper-container');
+        if (wrapperContainer) {
+          wrapperContainer.classList.remove('pop-in', 'pop-out');
+        }
+        console.log('[ButtonPanel] Panel hidden immediately (extension disabled)');
+        return;
+      }
+      
       // Get the wrapper container and trigger pop-out animation
       const wrapperContainer = this.panelContainer.querySelector('.vocab-wrapper-container');
       if (wrapperContainer) {
