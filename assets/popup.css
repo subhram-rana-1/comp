@@ -196,65 +196,15 @@ input:checked + .toggle-slider:before {
   display: block;
 }
 
-/* Cat Icon */
-.icon-container {
-  position: absolute;
-  top: 20px;
-  left: 20px;
-  animation: fadeInScale 0.4s cubic-bezier(0.4, 0, 0.2, 1) 0.1s both;
-}
-
-@keyframes fadeInScale {
-  0% {
-    opacity: 0;
-    transform: scale(0.8);
-  }
-  100% {
-    opacity: 1;
-    transform: scale(1);
-  }
-}
-
-.cat-icon {
-  width: 50px;
-  height: 50px;
-  object-fit: contain;
-  filter: brightness(1.8) saturate(0.2) sepia(0.15) hue-rotate(220deg);
-  opacity: 0.5;
-  transition: all 0.3s ease;
-}
-
-.cat-icon.active {
-  filter: none;
-  opacity: 1;
-  animation: catGlowPulse 2s ease-in-out infinite, catScaleLinear 2s linear infinite;
-}
-
-@keyframes catGlowPulse {
-  0%, 100% {
-    filter: drop-shadow(0 0 4px rgba(149, 39, 245, 0.3));
-  }
-  33% {
-    filter: drop-shadow(0 0 12px rgba(149, 39, 245, 0.7));
-  }
-  66% {
-    filter: drop-shadow(0 0 20px rgba(149, 39, 245, 0.9));
-  }
-}
-
-@keyframes catScaleLinear {
-  0%, 100% {
-    transform: scale(1);
-  }
-  50% {
-    transform: scale(1.15);
-  }
-}
 
 /* Title Container */
 .title-container {
   margin: 40px 0 0 0;
   animation: fadeInUp 0.4s cubic-bezier(0.4, 0, 0.2, 1) 0.15s both;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
 }
 
 @keyframes fadeInUp {
@@ -268,27 +218,13 @@ input:checked + .toggle-slider:before {
   }
 }
 
-/* Brand Name */
-.brand-name {
-  margin: 0;
-  font-size: 32px;
-  font-weight: 600;
-  color: #9527F5;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  line-height: 1;
-}
-
-.brand-icon {
-  display: inline-flex;
-  align-items: center;
-  line-height: 1;
-}
-
-.brand-icon svg {
-  display: block;
+/* Branding Image */
+.branding-img {
+  max-width: 250px;
+  width: 100%;
+  height: auto;
+  object-fit: contain;
+  margin-bottom: 8px;
 }
 
 /* Subtitle */

@@ -2187,14 +2187,9 @@ export default defineContentScript({
         this.bannerContainer.id = 'explain-ai-banner';
         this.bannerContainer.className = 'explain-ai-banner';
         
-        // Create header with logo at top left and close button at top right
+        // Create header with close button at top right
         const header = document.createElement('div');
         header.className = 'banner-header';
-        
-        const logoImg = document.createElement('img');
-        logoImg.src = chrome.runtime.getURL('logo_1-removebg.png');
-        logoImg.className = 'banner-logo';
-        logoImg.alt = 'XplainO Logo';
         
         const closeButton = document.createElement('button');
         closeButton.className = 'banner-close';
@@ -2206,30 +2201,18 @@ export default defineContentScript({
         closeButton.setAttribute('aria-label', 'Close banner');
         closeButton.addEventListener('click', () => this.hideBanner());
         
-        header.appendChild(logoImg);
         header.appendChild(closeButton);
         
         // Create heading container (vertically centered)
         const headingContainer = document.createElement('div');
         headingContainer.className = 'banner-heading-container';
         
-        const heading = document.createElement('h2');
-        heading.className = 'banner-heading';
-        heading.textContent = 'XplainO';
+        const brandingImg = document.createElement('img');
+        brandingImg.src = chrome.runtime.getURL('branding-removebg.png');
+        brandingImg.alt = 'XplainO';
+        brandingImg.className = 'banner-branding-img';
         
-        // Add magic-meaning icon SVG to the right of the heading
-        const iconWrapper = document.createElement('span');
-        iconWrapper.className = 'banner-heading-icon';
-        iconWrapper.innerHTML = `
-          <svg width="24" height="24" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M14 0L17 8L25 11L17 14L14 22L11 14L3 11L11 8L14 0Z" fill="#9527F5"/>
-            <path d="M22 16L23.5 20L27.5 21.5L23.5 23L22 27L20.5 23L16.5 21.5L20.5 20L22 16Z" fill="#9527F5"/>
-            <path d="M8 21L9.5 24.5L13 26L9.5 27.5L8 31L6.5 27.5L3 26L6.5 24.5L8 21Z" fill="#9527F5"/>
-          </svg>
-        `;
-        
-        heading.appendChild(iconWrapper);
-        headingContainer.appendChild(heading);
+        headingContainer.appendChild(brandingImg);
         
         // Create instructions container
         const instructions = document.createElement('div');
@@ -2365,34 +2348,6 @@ export default defineContentScript({
             background-color: rgba(149, 39, 245, 0.2);
           }
           
-          .banner-logo {
-            width: 50px;
-            height: 50px;
-            object-fit: contain;
-            animation: bannerLogoGlowPulse 2s ease-in-out infinite, bannerLogoScaleLinear 2s linear infinite;
-          }
-          
-          @keyframes bannerLogoGlowPulse {
-            0%, 100% {
-              filter: drop-shadow(0 0 4px rgba(149, 39, 245, 0.3));
-            }
-            33% {
-              filter: drop-shadow(0 0 12px rgba(149, 39, 245, 0.7));
-            }
-            66% {
-              filter: drop-shadow(0 0 20px rgba(149, 39, 245, 0.9));
-            }
-          }
-          
-          @keyframes bannerLogoScaleLinear {
-            0%, 100% {
-              transform: scale(1);
-            }
-            50% {
-              transform: scale(1.15);
-            }
-          }
-          
           .banner-heading-container {
             display: flex;
             align-items: center;
@@ -2400,30 +2355,10 @@ export default defineContentScript({
             margin-bottom: 22px;
           }
           
-          .banner-heading {
-            margin: 0 !important;
-            font-size: 28px !important;
-            font-weight: 600 !important;
-            color: #9527F5 !important;
-            display: flex !important;
-            align-items: center !important;
-            gap: 8px !important;
-            visibility: visible !important;
-            opacity: 1 !important;
-          }
-          
-          .banner-heading-icon {
-            display: inline-flex !important;
-            align-items: center !important;
-            line-height: 1 !important;
-            visibility: visible !important;
-            opacity: 1 !important;
-          }
-          
-          .banner-heading-icon svg {
-            display: block !important;
-            visibility: visible !important;
-            opacity: 1 !important;
+          .banner-branding-img {
+            max-width: 200px;
+            height: auto;
+            object-fit: contain;
           }
           
           
