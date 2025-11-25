@@ -11385,6 +11385,16 @@ const TextSelector = {
     // it will already be in disappearing state
     highlight.classList.add('underline-disappearing');
     
+    // Also add disappearing class to all child elements with green background (vocab-word-explained)
+    // This ensures the underline is removed from words with green background too
+    const explainedWords = highlight.querySelectorAll('.vocab-word-explained');
+    explainedWords.forEach(wordElement => {
+      // Ensure the underline is removed from these elements by explicitly setting text-decoration
+      wordElement.style.setProperty('text-decoration', 'none', 'important');
+      wordElement.style.setProperty('text-decoration-line', 'none', 'important');
+      wordElement.style.setProperty('text-decoration-color', 'transparent', 'important');
+    });
+    
     // Wait for green underline animation to complete before removing elements
     setTimeout(() => {
       // Remove icons wrapper
@@ -11392,9 +11402,23 @@ const TextSelector = {
         iconsWrapper.remove();
       }
       
-      // Remove the simplified class (green underline)
+      // Remove the simplified class (green underline) from the main highlight
       // After this, if purple underline is visible, it will already be fading out
       highlight.classList.remove('vocab-text-simplified', 'vocab-text-vanishing');
+      
+      // Explicitly remove underline from all child elements, especially those with green background
+      // This ensures the underline is completely removed regardless of green background
+      const allChildElements = highlight.querySelectorAll('*');
+      allChildElements.forEach(childElement => {
+        // Remove any text-decoration that might be inherited or applied
+        childElement.style.removeProperty('text-decoration');
+        childElement.style.removeProperty('text-decoration-line');
+        childElement.style.removeProperty('text-decoration-color');
+        childElement.style.removeProperty('text-decoration-style');
+        childElement.style.removeProperty('text-decoration-thickness');
+        // Also remove simplified class if it exists on child elements
+        childElement.classList.remove('vocab-text-simplified');
+      });
       
       // Continue with removal - purple underline should already be disappearing
       // Wait for purple underline to fade out before actually removing
@@ -11802,10 +11826,8 @@ const TextSelector = {
         this.textToHighlights.set(textKey, highlight);
       }
       
-      // Show the purple dashed underline
-      highlight.style.removeProperty('text-decoration');
-      highlight.style.removeProperty('text-decoration-line');
-      highlight.classList.add('underline-appearing');
+      // Do NOT show purple underline - only green underline will appear when vocab-text-simplified class is added
+      // Keep underline hidden - it will only show when magic explain adds the simplified class
       
       // Add fast pulsating animation to the text with purple background
       highlight.classList.add('vocab-text-loading');
@@ -11957,14 +11979,14 @@ const TextSelector = {
     const style = document.createElement('style');
     style.id = styleId;
     style.textContent = `
-      /* Text highlight wrapper - Dashed underline that works across paragraphs */
+      /* Text highlight wrapper - No underline by default, only shown when magic explain is clicked */
       .vocab-text-highlight {
         position: relative;
-        text-decoration-line: underline;
-        text-decoration-style: dashed;
-        text-decoration-color: #B88AE6; /* Lighter purple - fully opaque */
-        text-decoration-thickness: 0.6px;
-        text-underline-offset: 2px;
+        text-decoration-line: none !important; /* No underline by default */
+        text-decoration-style: none !important;
+        text-decoration-color: transparent !important;
+        text-decoration-thickness: 0;
+        text-underline-offset: 0;
         cursor: text;
         overflow: visible;
         transition: text-decoration-color 0.3s ease-in-out, opacity 0.3s ease-in-out;
@@ -12014,22 +12036,25 @@ const TextSelector = {
         /* Block elements should maintain their original computed font sizes and margins, not inherit from the span */
       }
       
-      /* Smooth animation for underline appearance - 0.3s duration */
+      /* Smooth animation for underline appearance - 0.3s duration (not used anymore, kept for compatibility) */
       .vocab-text-highlight.underline-appearing {
-        text-decoration-color: transparent;
-        animation: underlineFadeIn 0.3s ease-in-out forwards;
+        text-decoration-color: transparent !important;
+        text-decoration-line: none !important;
+        /* No animation - underline should never appear for regular highlights */
       }
       
       /* Smooth animation for underline disappearance - same 0.3s duration */
       .vocab-text-highlight.underline-disappearing {
-        animation: underlineFadeOut 0.3s ease-in-out forwards;
+        text-decoration-color: transparent !important;
+        text-decoration-line: none !important;
+        animation: none; /* No animation needed since underline is always hidden */
       }
       
-      /* Prevent purple underline from appearing when simplified text is being removed */
-      /* Keep underline transparent during disappearing animation to avoid glitch */
+      /* Ensure underline stays hidden when simplified text is being removed */
       .vocab-text-highlight.underline-disappearing:not(.vocab-text-simplified) {
         text-decoration-color: transparent !important;
-        animation: none; /* Prevent animation from purple, keep it transparent */
+        text-decoration-line: none !important;
+        animation: none; /* Keep it transparent */
       }
       
       @keyframes underlineFadeIn {
@@ -12037,13 +12062,13 @@ const TextSelector = {
           text-decoration-color: transparent;
         }
         100% {
-          text-decoration-color: #B88AE6; /* Lighter purple - fully opaque */
+          text-decoration-color: transparent; /* Always transparent - no purple underline */
         }
       }
       
       @keyframes underlineFadeOut {
         0% {
-          text-decoration-color: #B88AE6; /* Lighter purple - fully opaque */
+          text-decoration-color: transparent;
         }
         100% {
           text-decoration-color: transparent;
@@ -12114,7 +12139,7 @@ const TextSelector = {
       
       /* Ensure elements with color classes maintain their colors AND the underline */
       /* DO NOT override color for these elements - let website's CSS apply */
-      /* BUT ensure the purple underline is preserved */
+      /* Ensure underline is preserved for special elements (for green underline when simplified) */
       .vocab-text-highlight a.user-orange,
       .vocab-text-highlight a.rated-user,
       .vocab-text-highlight a[class*="user-orange"],
@@ -12139,25 +12164,17 @@ const TextSelector = {
         /* Don't set color at all - let the website's CSS for these classes apply */
         /* The website's CSS should have the same or higher specificity */
         /* By not setting color here, the website's CSS will apply */
-        /* BUT preserve the purple underline from the parent highlight */
-        text-decoration: inherit !important; /* Inherit the purple underline from parent */
-        text-decoration-line: underline !important; /* Ensure underline is visible */
-        text-decoration-style: dashed !important; /* Ensure dashed style */
-        text-decoration-color: #B88AE6 !important; /* Ensure purple color */
-        text-decoration-thickness: 0.6px !important; /* Ensure thickness */
-        text-underline-offset: 2px !important; /* Ensure offset */
+        /* No underline by default - only green underline when simplified class is added */
+        text-decoration: none !important; /* No underline by default */
+        text-decoration-line: none !important;
       }
       
       /* Also ensure elements with inline color styles preserve the underline */
       .vocab-text-highlight [style*="color"],
       .vocab-text-highlight [style*="Color"] {
-        /* Preserve the purple underline even for elements with inline color styles */
-        text-decoration: inherit !important; /* Inherit the purple underline from parent */
-        text-decoration-line: underline !important; /* Ensure underline is visible */
-        text-decoration-style: dashed !important; /* Ensure dashed style */
-        text-decoration-color: #B88AE6 !important; /* Ensure purple color */
-        text-decoration-thickness: 0.6px !important; /* Ensure thickness */
-        text-underline-offset: 2px !important; /* Ensure offset */
+        /* No underline by default - only green underline when simplified class is added */
+        text-decoration: none !important; /* No underline by default */
+        text-decoration-line: none !important;
       }
       
       /* Ensure elements with inline color styles work - inline styles have highest specificity */
@@ -12702,16 +12719,42 @@ const TextSelector = {
       
       /* Dark green dashed underline for simplified texts - darker green */
       .vocab-text-simplified {
+        text-decoration-line: underline !important; /* Show underline when simplified */
         text-decoration-color: #16a34a !important; /* Darker green */
         text-decoration-style: dashed !important;
         text-decoration-thickness: 1.1px !important; /* Original thickness */
+        text-underline-offset: 2px !important; /* Offset for better visibility */
         transition: text-decoration-color 0.3s ease-out;
+      }
+      
+      /* Ensure words with green background inside simplified text still show the underline */
+      /* But allow underline to be removed when simplified class is removed */
+      .vocab-text-simplified .vocab-word-explained {
+        text-decoration: inherit !important; /* Inherit underline from parent */
+        text-decoration-line: inherit !important;
+        text-decoration-color: inherit !important;
+        text-decoration-style: inherit !important;
+        text-decoration-thickness: inherit !important;
+      }
+      
+      /* When simplified text is vanishing, ensure all child elements also remove underline */
+      .vocab-text-simplified.vocab-text-vanishing .vocab-word-explained,
+      .vocab-text-simplified.underline-disappearing .vocab-word-explained {
+        text-decoration-color: transparent !important;
+        text-decoration-line: none !important;
       }
       
       /* Vanishing animation for simplified text */
       .vocab-text-simplified.vocab-text-vanishing {
         text-decoration-color: transparent !important;
         transition: text-decoration-color 0.3s ease-out;
+      }
+      
+      /* When simplified class is removed, ensure underline is removed from all children */
+      .vocab-text-highlight:not(.vocab-text-simplified) .vocab-word-explained {
+        text-decoration: none !important;
+        text-decoration-line: none !important;
+        text-decoration-color: transparent !important;
       }
       
       /* Vanishing animation for icons wrapper */
@@ -26529,7 +26572,9 @@ const ButtonPanel = {
               }
             }
             
-            // Change underline to light green
+            // Change underline to light green - remove inline styles that hide underline
+            highlight.style.removeProperty('text-decoration');
+            highlight.style.removeProperty('text-decoration-line');
             highlight.classList.add('vocab-text-simplified');
             
             // Remove any existing cross buttons
@@ -26907,7 +26952,9 @@ const ButtonPanel = {
                       existingIconsWrapper.remove();
                     }
                 
-                // Change underline to light green
+                // Change underline to light green - remove inline styles that hide underline
+                highlight.style.removeProperty('text-decoration');
+                highlight.style.removeProperty('text-decoration-line');
                 highlight.classList.add('vocab-text-simplified');
                 
                 // Replace purple cross button with green cross button at top-left
