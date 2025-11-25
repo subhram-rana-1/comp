@@ -2187,14 +2187,9 @@ export default defineContentScript({
         this.bannerContainer.id = 'explain-ai-banner';
         this.bannerContainer.className = 'explain-ai-banner';
         
-        // Create header with logo at top left and close button at top right
+        // Create header with close button at top right
         const header = document.createElement('div');
         header.className = 'banner-header';
-        
-        const logoImg = document.createElement('img');
-        logoImg.src = chrome.runtime.getURL('logo_1-removebg.png');
-        logoImg.className = 'banner-logo';
-        logoImg.alt = 'XplainO Logo';
         
         const closeButton = document.createElement('button');
         closeButton.className = 'banner-close';
@@ -2206,30 +2201,18 @@ export default defineContentScript({
         closeButton.setAttribute('aria-label', 'Close banner');
         closeButton.addEventListener('click', () => this.hideBanner());
         
-        header.appendChild(logoImg);
         header.appendChild(closeButton);
         
         // Create heading container (vertically centered)
         const headingContainer = document.createElement('div');
         headingContainer.className = 'banner-heading-container';
         
-        const heading = document.createElement('h2');
-        heading.className = 'banner-heading';
-        heading.textContent = 'XplainO';
+        const brandingImg = document.createElement('img');
+        brandingImg.src = chrome.runtime.getURL('branding-removebg.png');
+        brandingImg.alt = 'XplainO';
+        brandingImg.className = 'banner-branding-img';
         
-        // Add magic-meaning icon SVG to the right of the heading
-        const iconWrapper = document.createElement('span');
-        iconWrapper.className = 'banner-heading-icon';
-        iconWrapper.innerHTML = `
-          <svg width="24" height="24" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M14 0L17 8L25 11L17 14L14 22L11 14L3 11L11 8L14 0Z" fill="#9527F5"/>
-            <path d="M22 16L23.5 20L27.5 21.5L23.5 23L22 27L20.5 23L16.5 21.5L20.5 20L22 16Z" fill="#9527F5"/>
-            <path d="M8 21L9.5 24.5L13 26L9.5 27.5L8 31L6.5 27.5L3 26L6.5 24.5L8 21Z" fill="#9527F5"/>
-          </svg>
-        `;
-        
-        heading.appendChild(iconWrapper);
-        headingContainer.appendChild(heading);
+        headingContainer.appendChild(brandingImg);
         
         // Create instructions container
         const instructions = document.createElement('div');
@@ -2365,34 +2348,6 @@ export default defineContentScript({
             background-color: rgba(149, 39, 245, 0.2);
           }
           
-          .banner-logo {
-            width: 50px;
-            height: 50px;
-            object-fit: contain;
-            animation: bannerLogoGlowPulse 2s ease-in-out infinite, bannerLogoScaleLinear 2s linear infinite;
-          }
-          
-          @keyframes bannerLogoGlowPulse {
-            0%, 100% {
-              filter: drop-shadow(0 0 4px rgba(149, 39, 245, 0.3));
-            }
-            33% {
-              filter: drop-shadow(0 0 12px rgba(149, 39, 245, 0.7));
-            }
-            66% {
-              filter: drop-shadow(0 0 20px rgba(149, 39, 245, 0.9));
-            }
-          }
-          
-          @keyframes bannerLogoScaleLinear {
-            0%, 100% {
-              transform: scale(1);
-            }
-            50% {
-              transform: scale(1.15);
-            }
-          }
-          
           .banner-heading-container {
             display: flex;
             align-items: center;
@@ -2400,30 +2355,10 @@ export default defineContentScript({
             margin-bottom: 22px;
           }
           
-          .banner-heading {
-            margin: 0 !important;
-            font-size: 28px !important;
-            font-weight: 600 !important;
-            color: #9527F5 !important;
-            display: flex !important;
-            align-items: center !important;
-            gap: 8px !important;
-            visibility: visible !important;
-            opacity: 1 !important;
-          }
-          
-          .banner-heading-icon {
-            display: inline-flex !important;
-            align-items: center !important;
-            line-height: 1 !important;
-            visibility: visible !important;
-            opacity: 1 !important;
-          }
-          
-          .banner-heading-icon svg {
-            display: block !important;
-            visibility: visible !important;
-            opacity: 1 !important;
+          .banner-branding-img {
+            max-width: 200px;
+            height: auto;
+            object-fit: contain;
           }
           
           
@@ -10460,13 +10395,34 @@ const TextSelector = {
     let lastScrollY = window.pageYOffset || document.documentElement.scrollTop;
     
     // Function to update button position on scroll (maintains relative position to selection)
+    // This works for both normal button state and spinner state
+    // Track consecutive zero-size rects to avoid premature cleanup during scroll
+    let zeroSizeRectCount = 0;
+    const MAX_ZERO_SIZE_RECTS = 3; // Allow up to 3 consecutive zero-size rects before cleanup
+    
     const updateButtonPosition = () => {
       try {
+        // Check if button wrapper still exists
+        if (!iconsWrapper || !iconsWrapper.parentNode) {
+          console.log('[TextSelector] updateButtonPosition: iconsWrapper no longer exists, skipping');
+          return;
+        }
+        
+        // Check if button is in loading state (spinner showing) - don't cleanup during loading
+        const magicBtn = iconsWrapper.querySelector('.vocab-text-magic-meaning-btn');
+        const isInLoadingState = magicBtn && magicBtn.classList.contains('magic-meaning-loading');
+        
+        console.log('[TextSelector] updateButtonPosition called - isInLoadingState:', isInLoadingState, 'textKey:', textKey);
+        
         // Check if range is still valid
         if (!range || !range.commonAncestorContainer || 
             !document.contains(range.commonAncestorContainer)) {
-          // Range is invalid, cleanup button
-          if (performCleanup) performCleanup();
+          console.log('[TextSelector] updateButtonPosition: Range is invalid');
+          // Range is invalid, cleanup button (but not if loading)
+          if (!isInLoadingState && performCleanup) {
+            console.log('[TextSelector] updateButtonPosition: Cleaning up due to invalid range');
+            performCleanup();
+          }
           return;
         }
         
@@ -10474,6 +10430,43 @@ const TextSelector = {
         const currentSelectionRect = range.getBoundingClientRect();
         const currentScrollX = window.pageXOffset || document.documentElement.scrollLeft;
         const currentScrollY = window.pageYOffset || document.documentElement.scrollTop;
+        
+        console.log('[TextSelector] updateButtonPosition: Selection rect:', {
+          width: currentSelectionRect.width,
+          height: currentSelectionRect.height,
+          left: currentSelectionRect.left,
+          top: currentSelectionRect.top
+        });
+        
+        // Check if selection rect is zero-size (might be temporary during scroll)
+        const isZeroSize = currentSelectionRect.width === 0 && currentSelectionRect.height === 0;
+        
+        if (isZeroSize) {
+          zeroSizeRectCount++;
+          console.log('[TextSelector] updateButtonPosition: Zero-size rect detected, count:', zeroSizeRectCount);
+          
+          // If button is in loading state, don't cleanup even if rect is zero
+          // This prevents spinner from disappearing during scroll on some websites
+          if (isInLoadingState) {
+            console.log('[TextSelector] updateButtonPosition: Button is loading, skipping cleanup despite zero-size rect');
+            // Still try to maintain last known position
+            if (iconsWrapper.style.left && iconsWrapper.style.top) {
+              // Keep current position, don't update
+              return;
+            }
+          } else if (zeroSizeRectCount >= MAX_ZERO_SIZE_RECTS) {
+            // Only cleanup if not loading and we've seen multiple consecutive zero-size rects
+            console.log('[TextSelector] updateButtonPosition: Cleaning up due to multiple zero-size rects');
+            if (performCleanup) performCleanup();
+            return;
+          } else {
+            // Reset counter if we get a valid rect again
+            zeroSizeRectCount = 0;
+          }
+        } else {
+          // Reset counter when we get a valid rect
+          zeroSizeRectCount = 0;
+        }
         
         // Calculate selection's position in document coordinates
         const selectionLeftInDoc = currentSelectionRect.left + currentScrollX;
@@ -10503,25 +10496,25 @@ const TextSelector = {
           newTop = currentScrollY + 10;
         }
         
-        // Update button position
+        // Update button position (using absolute positioning)
+        iconsWrapper.style.setProperty('position', 'absolute', 'important');
         iconsWrapper.style.setProperty('left', `${newLeft}px`, 'important');
         iconsWrapper.style.setProperty('top', `${newTop}px`, 'important');
         iconsWrapper.style.setProperty('right', 'auto', 'important');
         
+        console.log('[TextSelector] updateButtonPosition: Updated position to', newLeft, newTop);
+        
         // Update last scroll position for tracking
         lastScrollX = currentScrollX;
         lastScrollY = currentScrollY;
-        
-        // Also check if the selected text is still visible (for cleanup)
-        if (currentSelectionRect.width === 0 && currentSelectionRect.height === 0) {
-          // Selection is not visible, cleanup button
-          if (performCleanup) performCleanup();
-          return;
-        }
       } catch (error) {
         console.warn('[TextSelector] Error updating button position:', error);
-        // If error persists, cleanup button
-        if (performCleanup) performCleanup();
+        // If error persists and button is not loading, cleanup button
+        const magicBtn = iconsWrapper?.querySelector('.vocab-text-magic-meaning-btn');
+        const isInLoadingState = magicBtn && magicBtn.classList.contains('magic-meaning-loading');
+        if (!isInLoadingState && performCleanup) {
+          performCleanup();
+        }
       }
     };
     
@@ -10591,6 +10584,13 @@ const TextSelector = {
     
     // Define performCleanup function after handlers are created
     performCleanup = () => {
+      // Clean up fixed scroll handler if it exists (for spinner)
+      if (iconsWrapper && iconsWrapper._fixedScrollHandler) {
+        window.removeEventListener('scroll', iconsWrapper._fixedScrollHandler);
+        iconsWrapper._fixedScrollHandler = null;
+        iconsWrapper._fixedPosition = null;
+      }
+      
       // Remove button
       if (iconsWrapper && iconsWrapper.parentNode) {
         iconsWrapper.remove();
@@ -10645,13 +10645,30 @@ const TextSelector = {
         // Maintain relative position to selection when container scrolls
         // Use the same offset-based approach as the main scroll handler
         try {
+          // Check if button wrapper still exists
+          if (!iconsWrapper || !iconsWrapper.parentNode) {
+            return;
+          }
+          
+          // Check if button is in loading state (spinner showing)
+          const magicBtn = iconsWrapper.querySelector('.vocab-text-magic-meaning-btn');
+          const isInLoadingState = magicBtn && magicBtn.classList.contains('magic-meaning-loading');
+          
           if (!range || !range.commonAncestorContainer || 
               !document.contains(range.commonAncestorContainer)) {
+            // Don't update position if range is invalid, but don't cleanup (let main handler do it)
             return;
           }
           
           // Get current selection position
           const currentSelectionRect = range.getBoundingClientRect();
+          
+          // If selection rect is zero-size and button is loading, skip update but don't cleanup
+          if ((currentSelectionRect.width === 0 && currentSelectionRect.height === 0) && isInLoadingState) {
+            // Keep current position during loading state
+            return;
+          }
+          
           const currentScrollX = window.pageXOffset || document.documentElement.scrollLeft;
           const currentScrollY = window.pageYOffset || document.documentElement.scrollTop;
           
@@ -10915,11 +10932,21 @@ const TextSelector = {
         range.insertNode(highlight);
         console.log('[TextSelector] Used extractContents with block display (fallback) - block element spacing preserved');
       } else {
+        // For inline text (no block elements), ensure display stays inline to prevent line breaks
+        highlight.style.setProperty('display', 'inline', 'important');
         const extractedContents = range.extractContents();
         highlight.appendChild(extractedContents);
         range.insertNode(highlight);
       }
       console.log('[TextSelector] Used extractContents (fallback) - formatting preserved');
+    }
+    
+    // After wrapping, ensure inline text highlights remain inline (prevent newline after selection)
+    // Check if highlight contains only inline content (no block elements)
+    const hasBlockElements = highlight.querySelector('p, div, h1, h2, h3, h4, h5, h6, section, article, aside, header, footer, nav, main, blockquote, pre, address, ul, ol, li');
+    if (!hasBlockElements) {
+      // Force inline display for inline text to prevent line breaks
+      highlight.style.setProperty('display', 'inline', 'important');
     }
     
     // After wrapping, ensure all child elements with color classes or inline styles maintain their colors
@@ -11358,6 +11385,16 @@ const TextSelector = {
     // it will already be in disappearing state
     highlight.classList.add('underline-disappearing');
     
+    // Also add disappearing class to all child elements with green background (vocab-word-explained)
+    // This ensures the underline is removed from words with green background too
+    const explainedWords = highlight.querySelectorAll('.vocab-word-explained');
+    explainedWords.forEach(wordElement => {
+      // Ensure the underline is removed from these elements by explicitly setting text-decoration
+      wordElement.style.setProperty('text-decoration', 'none', 'important');
+      wordElement.style.setProperty('text-decoration-line', 'none', 'important');
+      wordElement.style.setProperty('text-decoration-color', 'transparent', 'important');
+    });
+    
     // Wait for green underline animation to complete before removing elements
     setTimeout(() => {
       // Remove icons wrapper
@@ -11365,9 +11402,23 @@ const TextSelector = {
         iconsWrapper.remove();
       }
       
-      // Remove the simplified class (green underline)
+      // Remove the simplified class (green underline) from the main highlight
       // After this, if purple underline is visible, it will already be fading out
       highlight.classList.remove('vocab-text-simplified', 'vocab-text-vanishing');
+      
+      // Explicitly remove underline from all child elements, especially those with green background
+      // This ensures the underline is completely removed regardless of green background
+      const allChildElements = highlight.querySelectorAll('*');
+      allChildElements.forEach(childElement => {
+        // Remove any text-decoration that might be inherited or applied
+        childElement.style.removeProperty('text-decoration');
+        childElement.style.removeProperty('text-decoration-line');
+        childElement.style.removeProperty('text-decoration-color');
+        childElement.style.removeProperty('text-decoration-style');
+        childElement.style.removeProperty('text-decoration-thickness');
+        // Also remove simplified class if it exists on child elements
+        childElement.classList.remove('vocab-text-simplified');
+      });
       
       // Continue with removal - purple underline should already be disappearing
       // Wait for purple underline to fade out before actually removing
@@ -11735,6 +11786,12 @@ const TextSelector = {
           wrapperBtn.innerHTML = this.createSpinnerIcon();
           wrapperBtn.disabled = true;
         }
+        
+        // Keep using absolute positioning - don't switch to fixed
+        // The normal scroll handler (updateButtonPosition) will continue to work
+        // We just need to make sure it doesn't skip when spinner is showing
+        // Actually, we removed the skip logic, so it should work now
+        
         // DO NOT REMOVE buttonWrapper - keep it visible with spinner during API call
         // It will be removed later when green book appears
       }
@@ -11769,10 +11826,8 @@ const TextSelector = {
         this.textToHighlights.set(textKey, highlight);
       }
       
-      // Show the purple dashed underline
-      highlight.style.removeProperty('text-decoration');
-      highlight.style.removeProperty('text-decoration-line');
-      highlight.classList.add('underline-appearing');
+      // Do NOT show purple underline - only green underline will appear when vocab-text-simplified class is added
+      // Keep underline hidden - it will only show when magic explain adds the simplified class
       
       // Add fast pulsating animation to the text with purple background
       highlight.classList.add('vocab-text-loading');
@@ -11924,14 +11979,14 @@ const TextSelector = {
     const style = document.createElement('style');
     style.id = styleId;
     style.textContent = `
-      /* Text highlight wrapper - Dashed underline that works across paragraphs */
+      /* Text highlight wrapper - No underline by default, only shown when magic explain is clicked */
       .vocab-text-highlight {
         position: relative;
-        text-decoration-line: underline;
-        text-decoration-style: dashed;
-        text-decoration-color: #B88AE6; /* Lighter purple - fully opaque */
-        text-decoration-thickness: 0.6px;
-        text-underline-offset: 2px;
+        text-decoration-line: none !important; /* No underline by default */
+        text-decoration-style: none !important;
+        text-decoration-color: transparent !important;
+        text-decoration-thickness: 0;
+        text-underline-offset: 0;
         cursor: text;
         overflow: visible;
         transition: text-decoration-color 0.3s ease-in-out, opacity 0.3s ease-in-out;
@@ -11981,22 +12036,25 @@ const TextSelector = {
         /* Block elements should maintain their original computed font sizes and margins, not inherit from the span */
       }
       
-      /* Smooth animation for underline appearance - 0.3s duration */
+      /* Smooth animation for underline appearance - 0.3s duration (not used anymore, kept for compatibility) */
       .vocab-text-highlight.underline-appearing {
-        text-decoration-color: transparent;
-        animation: underlineFadeIn 0.3s ease-in-out forwards;
+        text-decoration-color: transparent !important;
+        text-decoration-line: none !important;
+        /* No animation - underline should never appear for regular highlights */
       }
       
       /* Smooth animation for underline disappearance - same 0.3s duration */
       .vocab-text-highlight.underline-disappearing {
-        animation: underlineFadeOut 0.3s ease-in-out forwards;
+        text-decoration-color: transparent !important;
+        text-decoration-line: none !important;
+        animation: none; /* No animation needed since underline is always hidden */
       }
       
-      /* Prevent purple underline from appearing when simplified text is being removed */
-      /* Keep underline transparent during disappearing animation to avoid glitch */
+      /* Ensure underline stays hidden when simplified text is being removed */
       .vocab-text-highlight.underline-disappearing:not(.vocab-text-simplified) {
         text-decoration-color: transparent !important;
-        animation: none; /* Prevent animation from purple, keep it transparent */
+        text-decoration-line: none !important;
+        animation: none; /* Keep it transparent */
       }
       
       @keyframes underlineFadeIn {
@@ -12004,13 +12062,13 @@ const TextSelector = {
           text-decoration-color: transparent;
         }
         100% {
-          text-decoration-color: #B88AE6; /* Lighter purple - fully opaque */
+          text-decoration-color: transparent; /* Always transparent - no purple underline */
         }
       }
       
       @keyframes underlineFadeOut {
         0% {
-          text-decoration-color: #B88AE6; /* Lighter purple - fully opaque */
+          text-decoration-color: transparent;
         }
         100% {
           text-decoration-color: transparent;
@@ -12081,7 +12139,7 @@ const TextSelector = {
       
       /* Ensure elements with color classes maintain their colors AND the underline */
       /* DO NOT override color for these elements - let website's CSS apply */
-      /* BUT ensure the purple underline is preserved */
+      /* Ensure underline is preserved for special elements (for green underline when simplified) */
       .vocab-text-highlight a.user-orange,
       .vocab-text-highlight a.rated-user,
       .vocab-text-highlight a[class*="user-orange"],
@@ -12106,25 +12164,17 @@ const TextSelector = {
         /* Don't set color at all - let the website's CSS for these classes apply */
         /* The website's CSS should have the same or higher specificity */
         /* By not setting color here, the website's CSS will apply */
-        /* BUT preserve the purple underline from the parent highlight */
-        text-decoration: inherit !important; /* Inherit the purple underline from parent */
-        text-decoration-line: underline !important; /* Ensure underline is visible */
-        text-decoration-style: dashed !important; /* Ensure dashed style */
-        text-decoration-color: #B88AE6 !important; /* Ensure purple color */
-        text-decoration-thickness: 0.6px !important; /* Ensure thickness */
-        text-underline-offset: 2px !important; /* Ensure offset */
+        /* No underline by default - only green underline when simplified class is added */
+        text-decoration: none !important; /* No underline by default */
+        text-decoration-line: none !important;
       }
       
       /* Also ensure elements with inline color styles preserve the underline */
       .vocab-text-highlight [style*="color"],
       .vocab-text-highlight [style*="Color"] {
-        /* Preserve the purple underline even for elements with inline color styles */
-        text-decoration: inherit !important; /* Inherit the purple underline from parent */
-        text-decoration-line: underline !important; /* Ensure underline is visible */
-        text-decoration-style: dashed !important; /* Ensure dashed style */
-        text-decoration-color: #B88AE6 !important; /* Ensure purple color */
-        text-decoration-thickness: 0.6px !important; /* Ensure thickness */
-        text-underline-offset: 2px !important; /* Ensure offset */
+        /* No underline by default - only green underline when simplified class is added */
+        text-decoration: none !important; /* No underline by default */
+        text-decoration-line: none !important;
       }
       
       /* Ensure elements with inline color styles work - inline styles have highest specificity */
@@ -12669,16 +12719,42 @@ const TextSelector = {
       
       /* Dark green dashed underline for simplified texts - darker green */
       .vocab-text-simplified {
+        text-decoration-line: underline !important; /* Show underline when simplified */
         text-decoration-color: #16a34a !important; /* Darker green */
         text-decoration-style: dashed !important;
         text-decoration-thickness: 1.1px !important; /* Original thickness */
+        text-underline-offset: 2px !important; /* Offset for better visibility */
         transition: text-decoration-color 0.3s ease-out;
+      }
+      
+      /* Ensure words with green background inside simplified text still show the underline */
+      /* But allow underline to be removed when simplified class is removed */
+      .vocab-text-simplified .vocab-word-explained {
+        text-decoration: inherit !important; /* Inherit underline from parent */
+        text-decoration-line: inherit !important;
+        text-decoration-color: inherit !important;
+        text-decoration-style: inherit !important;
+        text-decoration-thickness: inherit !important;
+      }
+      
+      /* When simplified text is vanishing, ensure all child elements also remove underline */
+      .vocab-text-simplified.vocab-text-vanishing .vocab-word-explained,
+      .vocab-text-simplified.underline-disappearing .vocab-word-explained {
+        text-decoration-color: transparent !important;
+        text-decoration-line: none !important;
       }
       
       /* Vanishing animation for simplified text */
       .vocab-text-simplified.vocab-text-vanishing {
         text-decoration-color: transparent !important;
         transition: text-decoration-color 0.3s ease-out;
+      }
+      
+      /* When simplified class is removed, ensure underline is removed from all children */
+      .vocab-text-highlight:not(.vocab-text-simplified) .vocab-word-explained {
+        text-decoration: none !important;
+        text-decoration-line: none !important;
+        text-decoration-color: transparent !important;
       }
       
       /* Vanishing animation for icons wrapper */
@@ -26463,6 +26539,13 @@ const ButtonPanel = {
               // Remove from buttonWrapper (floating button on body) if it exists
               const buttonWrapper = TextSelector.buttonWrappers?.get(textKey);
               if (buttonWrapper) {
+                // Clean up fixed scroll handler if it exists
+                if (buttonWrapper._fixedScrollHandler) {
+                  window.removeEventListener('scroll', buttonWrapper._fixedScrollHandler);
+                  buttonWrapper._fixedScrollHandler = null;
+                  buttonWrapper._fixedPosition = null;
+                }
+                
                 // Clean up event listeners if they exist
                 if (buttonWrapper._cleanupHandlers) {
                   window.removeEventListener('scroll', buttonWrapper._cleanupHandlers.scroll);
@@ -26489,7 +26572,9 @@ const ButtonPanel = {
               }
             }
             
-            // Change underline to light green
+            // Change underline to light green - remove inline styles that hide underline
+            highlight.style.removeProperty('text-decoration');
+            highlight.style.removeProperty('text-decoration-line');
             highlight.classList.add('vocab-text-simplified');
             
             // Remove any existing cross buttons
@@ -26502,13 +26587,23 @@ const ButtonPanel = {
               existingGreenCross.remove();
             }
                 
-            // Create green cross button at top-left
+            // Reuse or create icons wrapper for book icon (book icon positioned at top-left)
+            let newIconsWrapper = highlight.querySelector('.vocab-text-icons-wrapper');
+            if (!newIconsWrapper) {
+              newIconsWrapper = document.createElement('div');
+              newIconsWrapper.className = 'vocab-text-icons-wrapper vocab-text-icons-wrapper-book';
+              newIconsWrapper.setAttribute('data-text-key', textKey);
+              highlight.appendChild(newIconsWrapper);
+            } else {
+              // Update class to include book wrapper class (magic button already removed above)
+              newIconsWrapper.className = 'vocab-text-icons-wrapper vocab-text-icons-wrapper-book';
+            }
+            
+            // Create green cross button and add it to the icons wrapper (near book icon at top-left)
             const greenCrossBtn = document.createElement('button');
             greenCrossBtn.className = 'vocab-text-remove-green-btn';
             greenCrossBtn.setAttribute('aria-label', 'Remove simplified text');
-            greenCrossBtn.style.position = 'absolute';
-            greenCrossBtn.style.top = '-10px';
-            greenCrossBtn.style.left = '-10px';
+            greenCrossBtn.style.position = 'relative';
             greenCrossBtn.style.width = '18px';
             greenCrossBtn.style.height = '18px';
             greenCrossBtn.style.background = '#FFFFFF';
@@ -26523,6 +26618,7 @@ const ButtonPanel = {
             greenCrossBtn.style.border = '1px solid #22c55e';
             greenCrossBtn.style.padding = '0';
             greenCrossBtn.style.boxSizing = 'border-box';
+            greenCrossBtn.style.margin = '0';
             greenCrossBtn.innerHTML = `
               <svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg" style="width: 10px; height: 10px;">
                 <path d="M2 2L10 10M10 2L2 10" stroke="#22c55e" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
@@ -26534,19 +26630,8 @@ const ButtonPanel = {
               console.log('[TextSelector] Green cross button clicked for simplified text:', textKey);
               TextSelector.removeFromSimplifiedTexts(textKey);
             });
-            highlight.appendChild(greenCrossBtn);
-                
-            // Reuse or create icons wrapper for book icon (book icon positioned at top-left)
-            let newIconsWrapper = highlight.querySelector('.vocab-text-icons-wrapper');
-            if (!newIconsWrapper) {
-              newIconsWrapper = document.createElement('div');
-              newIconsWrapper.className = 'vocab-text-icons-wrapper vocab-text-icons-wrapper-book';
-              newIconsWrapper.setAttribute('data-text-key', textKey);
-              highlight.appendChild(newIconsWrapper);
-            } else {
-              // Update class to include book wrapper class (magic button already removed above)
-              newIconsWrapper.className = 'vocab-text-icons-wrapper vocab-text-icons-wrapper-book';
-            }
+            // Add cross button to icons wrapper (before book button so it appears first/on top)
+            newIconsWrapper.insertBefore(greenCrossBtn, newIconsWrapper.firstChild);
             
             // Remove any existing book button
             const existingBookBtn = newIconsWrapper.querySelector('.vocab-text-book-btn');
@@ -26867,7 +26952,9 @@ const ButtonPanel = {
                       existingIconsWrapper.remove();
                     }
                 
-                // Change underline to light green
+                // Change underline to light green - remove inline styles that hide underline
+                highlight.style.removeProperty('text-decoration');
+                highlight.style.removeProperty('text-decoration-line');
                 highlight.classList.add('vocab-text-simplified');
                 
                 // Replace purple cross button with green cross button at top-left
