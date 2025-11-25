@@ -1477,6 +1477,243 @@ export default defineContentScript({
     }
     
     // Step 1: First check if Chrome extension is enabled
+    /**
+     * Show enable extension dialog (similar to preferred-language-modal)
+     * This dialog appears when extension is disabled from power button
+     */
+    function showEnableExtensionDialog() {
+      // Remove existing dialog if any
+      const existingDialog = document.getElementById('enable-extension-dialog');
+      if (existingDialog) {
+        existingDialog.remove();
+      }
+      
+      // Remove existing overlay if any
+      const existingOverlay = document.getElementById('enable-extension-overlay');
+      if (existingOverlay) {
+        existingOverlay.remove();
+      }
+      
+      // Create overlay (transparent, non-blocking)
+      const overlay = document.createElement('div');
+      overlay.id = 'enable-extension-overlay';
+      overlay.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-color: transparent;
+        z-index: 2147483647;
+        display: flex;
+        justify-content: flex-end;
+        align-items: flex-start;
+        pointer-events: auto;
+        opacity: 1;
+        isolation: isolate;
+      `;
+      
+      // Function to close dialog
+      function closeDialog() {
+        dialog.style.transform = 'translateX(100%)';
+        dialog.style.opacity = '0';
+        
+        setTimeout(() => {
+          overlay.remove();
+        }, 400);
+      }
+      
+      // Create dialog container (similar to preferred-language-modal)
+      const dialog = document.createElement('div');
+      dialog.id = 'enable-extension-dialog';
+      dialog.style.cssText = `
+        background-color: white !important;
+        border-radius: 30px;
+        padding: 40px;
+        max-width: 400px;
+        width: auto;
+        min-width: 300px;
+        height: auto;
+        max-height: calc(100vh - 100px);
+        display: flex;
+        flex-direction: column;
+        gap: 20px;
+        box-shadow: -10px 0 40px rgba(149, 39, 245, 0.3), -5px 0 20px rgba(149, 39, 245, 0.2);
+        user-select: none;
+        -webkit-user-select: none;
+        -moz-user-select: none;
+        -ms-user-select: none;
+        position: fixed;
+        top: 23px;
+        right: 20px;
+        transform: translateX(100%);
+        opacity: 0;
+        transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.4s ease;
+        will-change: transform, opacity;
+        overflow-y: visible;
+        overflow-x: visible;
+        pointer-events: auto;
+        z-index: 2147483648;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif !important;
+        font-size: 16px !important;
+        line-height: 1.5 !important;
+        color: #000 !important;
+      `;
+      
+      // Create arrow pointing upward (to home-options-container) - centered
+      const arrowContainer = document.createElement('div');
+      arrowContainer.style.cssText = `
+        position: absolute;
+        top: -20px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 0px;
+        height: 0px;
+        border-left: 15px solid transparent;
+        border-right: 15px solid transparent;
+        border-bottom: 20px solid white;
+        filter: drop-shadow(rgba(149, 39, 245, 0.2) 0px -2px 4px);
+      `;
+      dialog.appendChild(arrowContainer);
+      
+      // Heading
+      const heading = document.createElement('h2');
+      heading.style.cssText = `
+        margin: 0 !important;
+        font-size: 24px !important;
+        font-weight: 600 !important;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif !important;
+        color: #9527F5 !important;
+        user-select: none;
+        text-align: center;
+      `;
+      heading.textContent = 'Extension Disabled';
+      dialog.appendChild(heading);
+      
+      // Message with animated upward arrow
+      const message = document.createElement('p');
+      message.style.cssText = `
+        margin: 0 !important;
+        font-size: 16px !important;
+        font-weight: 400 !important;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif !important;
+        color: #000000 !important;
+        text-align: center;
+        line-height: 1.5;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+      `;
+      
+      // Create animated upward arrow icon
+      const arrowIcon = document.createElement('span');
+      arrowIcon.style.cssText = `
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        animation: arrowBounce 1.5s ease-in-out infinite;
+      `;
+      
+      // Add CSS animation for arrow bounce
+      if (!document.getElementById('enable-extension-arrow-animation')) {
+        const style = document.createElement('style');
+        style.id = 'enable-extension-arrow-animation';
+        style.textContent = `
+          @keyframes arrowBounce {
+            0%, 100% {
+              transform: translateY(0);
+            }
+            50% {
+              transform: translateY(-8px);
+            }
+          }
+        `;
+        document.head.appendChild(style);
+      }
+      
+      arrowIcon.innerHTML = `
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M12 4L12 20M12 4L6 10M12 4L18 10" stroke="#9527F5" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      `;
+      
+      const messageText = document.createTextNode('Here on the top you can enable the extension');
+      message.appendChild(arrowIcon);
+      message.appendChild(messageText);
+      dialog.appendChild(message);
+      
+      // Close button (X icon)
+      const closeButton = document.createElement('button');
+      closeButton.style.cssText = `
+        position: absolute;
+        top: 15px;
+        right: 15px;
+        width: 32px;
+        height: 32px;
+        border: none;
+        background: transparent;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 50%;
+        transition: background-color 0.2s;
+        padding: 0;
+      `;
+      closeButton.innerHTML = `
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M18 6L6 18M6 6L18 18" stroke="#666" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      `;
+      closeButton.addEventListener('click', closeDialog);
+      closeButton.addEventListener('mouseenter', () => {
+        closeButton.style.backgroundColor = '#f0f0f0';
+      });
+      closeButton.addEventListener('mouseleave', () => {
+        closeButton.style.backgroundColor = 'transparent';
+      });
+      dialog.appendChild(closeButton);
+      
+      // Append dialog to overlay
+      overlay.appendChild(dialog);
+      
+      // Append overlay to body
+      document.body.appendChild(overlay);
+      
+      // Trigger slide-in animation
+      setTimeout(() => {
+        dialog.style.transform = 'translateX(0)';
+        dialog.style.opacity = '1';
+      }, 10);
+      
+      // Close on overlay click (outside dialog)
+      overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) {
+          closeDialog();
+        }
+      });
+    }
+    
+    /**
+     * Hide enable extension dialog
+     */
+    function hideEnableExtensionDialog() {
+      const dialog = document.getElementById('enable-extension-dialog');
+      const overlay = document.getElementById('enable-extension-overlay');
+      
+      if (dialog) {
+        dialog.style.transform = 'translateX(100%)';
+        dialog.style.opacity = '0';
+      }
+      
+      if (overlay) {
+        setTimeout(() => {
+          overlay.remove();
+        }, 400);
+      }
+    }
+    
     // Step 2: If enabled, check preferred language from global storage
     // Step 3: Only show modal if extension is enabled AND language is not defined (none or dynamic)
     chrome.storage.local.get([GLOBAL_STORAGE_KEY]).then((result) => {
@@ -1895,9 +2132,70 @@ export default defineContentScript({
         bookmarkWordsTooltip.textContent = 'Bookmarks';
         bookmarkWordsBtn.appendChild(bookmarkWordsTooltip);
         
+        // Create Power button (toggle extension on/off)
+        const powerBtn = document.createElement('button');
+        powerBtn.className = 'home-options-menu-item';
+        powerBtn.id = 'home-options-power-btn';
+        // Power icon SVG (power symbol)
+        powerBtn.innerHTML = `
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="white" xmlns="http://www.w3.org/2000/svg">
+            <path d="M13 3h-2v10h2V3zm4.83 2.17l-1.42 1.42C17.99 7.86 19 9.81 19 12c0 3.87-3.13 7-7 7s-7-3.13-7-7c0-2.19 1.01-4.14 2.59-5.41L6.17 5.17C4.23 6.82 3 9.26 3 12c0 4.97 4.03 9 9 9s9-4.03 9-9c0-2.74-1.23-5.18-3.17-6.83z"/>
+          </svg>
+        `;
+        powerBtn.addEventListener('click', async (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          
+          // Close the menu
+          closeMenu();
+          
+          console.log('[Content Script] Power button clicked - toggling extension');
+          
+          // Get current extension state
+          const GLOBAL_STORAGE_KEY = 'is_extension_globally_enabled';
+          const result = await chrome.storage.local.get([GLOBAL_STORAGE_KEY]);
+          const currentState = result[GLOBAL_STORAGE_KEY] ?? true;
+          const newState = !currentState;
+          
+          // Save new state
+          await chrome.storage.local.set({ [GLOBAL_STORAGE_KEY]: newState });
+          console.log('[Content Script] Extension state toggled to:', newState);
+          
+          // Update extension state (this will trigger storage change listener)
+          if (newState) {
+            ButtonPanel.show();
+            WordSelector.enable();
+            TextSelector.enable();
+            if (window.pageTextContent) {
+              showCloseButton();
+            }
+            // Hide enable dialog if it exists
+            hideEnableExtensionDialog();
+          } else {
+            ButtonPanel.hide(true);
+            WordSelector.disable();
+            TextSelector.disable();
+            WordSelector.clearAll();
+            TextSelector.clearAll();
+            hideCloseButton();
+            // Show enable dialog
+            showEnableExtensionDialog();
+          }
+          
+          // Update banner visibility
+          BannerModule.updateVisibility(newState);
+        });
+        
+        // Add tooltip to Power button
+        const powerTooltip = document.createElement('div');
+        powerTooltip.className = 'home-options-menu-item-tooltip';
+        powerTooltip.textContent = 'Disable Extension';
+        powerBtn.appendChild(powerTooltip);
+        
         menu.appendChild(summariseBtn);
         menu.appendChild(settingsBtn);
         menu.appendChild(bookmarkWordsBtn);
+        menu.appendChild(powerBtn);
         
         container.appendChild(button);
         container.appendChild(menu);
