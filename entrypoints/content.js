@@ -6497,8 +6497,10 @@ const WordSelector = {
   /**
    * Close all open Ask AI modals
    * Called when word popup is closed to ensure Ask AI modals are also closed
+   * @param {string} normalizedWord - Optional normalized word to match modals
+   * @param {HTMLElement} wordElement - Optional word element for animation target (center of word)
    */
-  closeAllAskAIModals() {
+  closeAllAskAIModals(normalizedWord = null, wordElement = null) {
     const askAIModals = document.querySelectorAll('.word-web-search-modal');
     if (askAIModals.length === 0) {
       return; // No modals to close
@@ -6509,13 +6511,13 @@ const WordSelector = {
     askAIModals.forEach(modal => {
       // Save chat history before closing
       const modalWord = modal.getAttribute('data-word');
-      const normalizedWord = modalWord ? modalWord.toLowerCase() : '';
+      const modalNormalizedWord = modalWord ? modalWord.toLowerCase() : '';
       const chatHistoryJson = modal.getAttribute('data-chat-history') || '[]';
       const initialContext = modal.getAttribute('data-initial-context') || '';
       try {
         const chatHistory = JSON.parse(chatHistoryJson);
-        if (normalizedWord && this.explainedWords.has(normalizedWord)) {
-          const wordData = this.explainedWords.get(normalizedWord);
+        if (modalNormalizedWord && this.explainedWords.has(modalNormalizedWord)) {
+          const wordData = this.explainedWords.get(modalNormalizedWord);
           wordData.askAIChatHistory = chatHistory;
           wordData.askAIInitialContext = initialContext;
           console.log('[WordSelector] Saved chat history before closing Ask AI modal');
@@ -6530,7 +6532,9 @@ const WordSelector = {
         const askButton = wordPopup.querySelector('.vocab-word-popup-ask-button');
         if (askButton) {
           console.log('[WordSelector] Closing Ask AI modal with animation');
-          this.closeAskAIModalWithAnimation(modal, askButton);
+          // Use wordElement if provided and matches this modal's word, otherwise use null (animates to button center)
+          const targetWordElement = (wordElement && normalizedWord && modalNormalizedWord === normalizedWord) ? wordElement : null;
+          this.closeAskAIModalWithAnimation(modal, askButton, targetWordElement);
         } else {
           // Fallback: remove modal directly if button not found
           console.log('[WordSelector] Ask AI button not found, removing modal directly');
@@ -8342,6 +8346,13 @@ const WordSelector = {
       });
     }
     
+    // Get word element for animation before deleting from explainedWords
+    let wordElementForAnimation = null;
+    if (wordData.highlights && wordData.highlights.size > 0) {
+      // Get the first highlight element for animation target
+      wordElementForAnimation = Array.from(wordData.highlights)[0];
+    }
+    
     // Remove from explainedWords Map
     this.explainedWords.delete(normalizedWord);
     
@@ -8359,6 +8370,10 @@ const WordSelector = {
     
     // Hide any open popups for this word
     this.hideAllPopups();
+    
+    // Also close any open Ask AI modals when removing explained word
+    // Pass wordElementForAnimation so animation targets the word center instead of button center
+    this.closeAllAskAIModals(normalizedWord, wordElementForAnimation);
     
     console.log('[WordSelector] Explained word removed:', word);
     console.log('[WordSelector] Remaining explained words:', this.explainedWords.size);
