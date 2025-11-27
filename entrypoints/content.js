@@ -3577,6 +3577,24 @@ const WordSelector = {
                       }
                     }
                   }
+                  
+                  // If still not found, use the stored highlight reference from explainedWords map
+                  if (
+                    !wordElement &&
+                    this.explainedWords &&
+                    typeof this.explainedWords.has === 'function' &&
+                    this.explainedWords.has(normalizedWord)
+                  ) {
+                    const explainedEntry = this.explainedWords.get(normalizedWord);
+                    if (explainedEntry && explainedEntry.highlights && explainedEntry.highlights.size > 0) {
+                      for (const highlightElement of explainedEntry.highlights) {
+                        if (highlightElement && document.body.contains(highlightElement)) {
+                          wordElement = highlightElement;
+                          break;
+                        }
+                      }
+                    }
+                  }
                 }
                 
                 console.log('[WordSelector] Clicking outside both modals - closing Ask AI modal', {
