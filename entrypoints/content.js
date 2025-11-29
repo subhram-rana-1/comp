@@ -17584,75 +17584,16 @@ const ChatDialog = {
       micBtn.disabled = true;
     }
     
-    try {
-      // Call voice-to-text API
-      const transcribedText = await this.sendAudioToAPI(audioBlob);
-      
-      // Remove loading spinner
-      this.removeVoiceLoadingSpinner();
-      
-      // Enable mic button
-      if (micBtn) {
-        micBtn.disabled = false;
-      }
-      
-      if (transcribedText) {
-        // Display transcribed text in input field
-        const inputField = document.getElementById('vocab-chat-input');
-        if (inputField) {
-          inputField.value = transcribedText;
-          inputField.style.height = 'auto';
-          inputField.style.height = inputField.scrollHeight + 'px';
-        }
-        
-        // Automatically send the message
-        this.sendMessage();
-      }
-    } catch (error) {
-      console.error('[ChatDialog] Error processing audio:', error);
-      
-      // Remove loading spinner
-      this.removeVoiceLoadingSpinner();
-      
-      // Enable mic button
-      if (micBtn) {
-        micBtn.disabled = false;
-      }
-      
-      // Show error message
-      alert('Failed to transcribe audio. Please try again.');
+    // Remove loading spinner
+    this.removeVoiceLoadingSpinner();
+    
+    // Enable mic button
+    if (micBtn) {
+      micBtn.disabled = false;
     }
     
     // Clear audio chunks
     this.audioChunks = [];
-  },
-  
-  /**
-   * Send audio to voice-to-text API
-   * @param {Blob} audioBlob - Audio blob to send
-   * @returns {Promise<string>} Transcribed text
-   */
-  async sendAudioToAPI(audioBlob) {
-    console.log('[ChatDialog] Sending audio to API...');
-    
-    // Create FormData
-    const formData = new FormData();
-    formData.append('audio_file', audioBlob, 'recording.webm');
-    
-    try {
-      const response = await ApiService.voiceToText(formData);
-      
-      if (response.success && response.data && response.data.text) {
-        console.log('[ChatDialog] Transcription successful:', response.data.text);
-        return response.data.text;
-      } else {
-        console.error('[ChatDialog] API error:', response.error);
-        throw new Error(response.error || 'Failed to transcribe audio');
-      }
-    } catch (error) {
-      console.error('[ChatDialog] Error calling API:', error);
-      throw error;
-    }
   },
   
   /**
@@ -30348,101 +30289,11 @@ const ButtonPanel = {
     const isRegenerate = generateBtn && generateBtn.getAttribute('data-regenerate') === 'true';
     const tabId = generateBtn ? generateBtn.getAttribute('data-tab-id') : null;
     
-    // Show processing overlay
-    this.showProcessingOverlay();
+    // Hide processing overlay
+    this.hideProcessingOverlay();
     
-    try {
-      // Call the get-random-paragraph API
-      const response = await ApiService.getRandomParagraph({
-        topics: this.topicsModal.topics,
-        difficulty_level: this.topicsModal.difficulty,
-        word_count: this.topicsModal.wordCount
-      });
-      
-      if (response.success) {
-        console.log('[ButtonPanel] API response successful');
-        // Hide processing overlay
-        this.hideProcessingOverlay();
-        
-        if (isRegenerate && tabId) {
-          console.log('[ButtonPanel] Regenerating content for tab:', tabId);
-          // Update existing content using new data structure
-          const content = this.topicsModal.customContentModal.getContentByTabId(parseInt(tabId));
-          if (content) {
-            // Update content
-            content.content = response.data.text;
-            
-            // Update input data with current settings
-            content.input = {
-              topics: this.topicsModal.topics || [],
-              wordCount: this.topicsModal.wordCount || 100,
-              difficultyLevel: this.topicsModal.difficulty || 'HARD'
-            };
-            
-            // Update metadata with current settings
-            content.metadata = {
-              ...content.metadata,
-              topics: this.topicsModal.topics || [],
-              wordCount: this.topicsModal.wordCount || 100,
-              difficulty: this.topicsModal.difficulty || 'hard'
-            };
-            
-            // Update topicName if available
-            if (response.data.topicName) {
-              content.tabName = response.data.topicName;
-              content.metadata.topicName = response.data.topicName;
-              
-              // Update the tab title in DOM
-              const tabElement = this.topicsModal.customContentModal.modal.querySelector(`[data-tab-id="${tabId}"]`);
-              if (tabElement) {
-                const titleElement = tabElement.querySelector('.vocab-custom-content-tab-title');
-                if (titleElement) {
-                  this.setupTabTitleWithTooltip(titleElement, response.data.topicName);
-                }
-              }
-            }
-            
-            // Update the editor content
-            this.updateCustomContentEditor(response.data.text);
-            
-            console.log('[ButtonPanel] Content regenerated and stored:', content);
-          }
-        } else {
-          console.log('[ButtonPanel] Creating new tab with content');
-          // Show custom content modal with the response (new tab)
-          this.showCustomContentModal(response.data.text, 'topic', {
-            topics: this.topicsModal.topics,
-            wordCount: this.topicsModal.wordCount,
-            difficulty: this.topicsModal.difficulty,
-            topicName: response.data.topicName // Add topicName from API response
-          });
-        }
-        
-        // Reset generate button if it was regenerating
-        if (isRegenerate && generateBtn) {
-          generateBtn.textContent = 'Generate content';
-          generateBtn.removeAttribute('data-regenerate');
-          generateBtn.removeAttribute('data-tab-id');
-        }
-        
-        // Auto-close topics modal after successful generation
-        this.hideTopicsModal();
-      } else {
-        // Hide processing overlay
-        this.hideProcessingOverlay();
-        
-        // Show error message
-        alert(`Error generating story: ${response.error}`);
-      }
-    } catch (error) {
-      console.error('[ButtonPanel] Error generating story:', error);
-      
-      // Hide processing overlay
-      this.hideProcessingOverlay();
-      
-      // Show error message
-      alert(`Error generating story: ${error.message}`);
-    }
+    // Show error message - functionality removed
+    alert('Story generation functionality has been removed.');
   },
 
   /**
