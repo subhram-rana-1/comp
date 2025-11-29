@@ -1,0 +1,169 @@
+.container {
+  width: 480px;
+  min-height: 180px;
+  height: auto;
+  margin: 0;
+  padding: 20px 24px 20px 24px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+  background-color: white;
+  position: relative;
+  text-align: center;
+  box-sizing: border-box;
+  border: 1px solid #ccc;
+  box-shadow: none;
+  overflow: hidden;
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
+  animation: slideInFromRight 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes slideInFromRight {
+  0% {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  100% {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+.container.extensionOn {
+  border-color: #9527F5;
+  animation: slideInFromRight 0.3s cubic-bezier(0.4, 0, 0.2, 1), borderPulsate 1s ease-out 0.3s;
+}
+
+@keyframes borderPulsate {
+  0% {
+    border-color: #ccc;
+    box-shadow: none;
+  }
+  30% {
+    border-color: #9527F5;
+    box-shadow: 0 0 20px rgba(149, 39, 245, 0.8), 0 0 40px rgba(149, 39, 245, 0.5), 0 0 60px rgba(149, 39, 245, 0.3);
+  }
+  100% {
+    border-color: #9527F5;
+    box-shadow: none;
+  }
+}
+
+.toggleContainer {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 4px;
+  animation: fadeInUp 0.4s cubic-bezier(0.4, 0, 0.2, 1) 0.05s both;
+}
+
+.fingerPoint {
+  width: 20px;
+  height: 20px;
+  animation: pointAnimation 1.5s ease-in-out infinite;
+}
+
+@keyframes pointAnimation {
+  0%, 100% {
+    transform: translateX(0);
+  }
+  50% {
+    transform: translateX(8px);
+  }
+}
+
+.normalContent {
+  display: block;
+}
+
+.titleContainer {
+  margin: 40px 0 0 0;
+  animation: fadeInUp 0.4s cubic-bezier(0.4, 0, 0.2, 1) 0.15s both;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+@keyframes fadeInUp {
+  0% {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.brandingImg {
+  max-width: 250px;
+  width: 100%;
+  height: auto;
+  object-fit: contain;
+  margin-bottom: 8px;
+}
+
+.subtitle {
+  color: #B88AE6;
+  font-size: 16px;
+  font-weight: 400;
+  margin: 8px 0 0 0;
+  line-height: 1.4;
+  white-space: normal;
+  transition: color 0.3s ease;
+}
+
+.container.extensionOn .subtitle {
+  color: #666;
+}
+
+.instructions {
+  text-align: left;
+  margin: 20px 0 4px 0;
+  max-height: 0;
+  overflow: hidden;
+  opacity: 0;
+  transition: max-height 0.4s cubic-bezier(0.4, 0, 0.2, 1),
+              opacity 0.3s ease 0.1s,
+              margin 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.instructions.show {
+  max-height: 200px;
+  opacity: 1;
+  margin: 20px 0 4px 0;
+}
+
+.instructionItem {
+  font-size: 14px;
+  color: #333;
+  margin: 10px 0;
+  line-height: 1.6;
+  position: relative;
+  padding-left: 0;
+}
+
+.instructionItem::before {
+  content: "ⓘ";
+  color: #9527F5;
+  font-size: 16px;
+  font-weight: bold;
+  margin-right: 8px;
+  vertical-align: middle;
+  line-height: 1;
+}
+
+.highlight {
+  background-color: #d3d3d3;
+  color: #A3A3A3;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-weight: 500;
+  transition: all 0.3s ease;
+}
+
+.container.extensionOn .highlight {
+  background-color: #ede6ff;
+  color: #7a1fd9;
+}
+

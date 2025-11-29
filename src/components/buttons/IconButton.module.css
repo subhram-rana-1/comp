@@ -1,0 +1,72 @@
+.button {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 8px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.default {
+  background-color: transparent;
+}
+
+.default:hover:not(:disabled) {
+  background-color: rgba(0, 0, 0, 0.05);
+}
+
+.ghost {
+  background-color: transparent;
+}
+
+.ghost:hover:not(:disabled) {
+  background-color: rgba(149, 39, 245, 0.1);
+  transform: rotate(90deg);
+}
+
+.ghost:active:not(:disabled) {
+  transform: rotate(90deg) scale(0.95);
+}
+
+.purple {
+  background-color: transparent;
+}
+
+.purple:hover:not(:disabled) {
+  background-color: rgba(149, 39, 245, 0.1);
+}
+
+.purple:active:not(:disabled) {
+  background-color: rgba(149, 39, 245, 0.2);
+}
+
+.small {
+  width: 28px;
+  height: 28px;
+  padding: 4px;
+}
+
+.medium {
+  width: 36px;
+  height: 36px;
+  padding: 8px;
+}
+
+.large {
+  width: 44px;
+  height: 44px;
+  padding: 10px;
+}
+
+.button svg {
+  display: block;
+}
+
