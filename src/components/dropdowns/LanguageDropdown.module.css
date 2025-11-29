@@ -1,38 +1,38 @@
 .container {
-  position: relative;
-  width: 100%;
+  position: relative !important;
+  width: 100% !important;
 }
 
 .inputContainer {
-  position: relative;
-  width: 100%;
+  position: relative !important;
+  width: 100% !important;
 }
 
 .searchInput {
-  width: 100%;
+  width: 100% !important;
 }
 
 .iconContainer {
-  position: absolute;
-  right: 12px;
-  top: 50%;
-  transform: translateY(-50%);
-  pointer-events: none;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  position: absolute !important;
+  right: 12px !important;
+  top: 50% !important;
+  transform: translateY(-50%) !important;
+  pointer-events: none !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
 }
 
 .chevron {
-  transition: transform 0.2s ease;
+  transition: transform 0.2s ease !important;
 }
 
 .chevron.open {
-  transform: rotate(180deg);
+  transform: rotate(180deg) !important;
 }
 
 .dropdown {
-  position: fixed;
-  z-index: 2147483647;
+  position: fixed !important;
+  z-index: 2147483647 !important;
 }
 

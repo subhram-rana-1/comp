@@ -91,18 +91,47 @@ export const ContentScriptApp: React.FC = () => {
           languageCode = languageStore.language.toUpperCase();
         }
 
-        // Ensure position is valid
+        // Ensure position is valid - try to recalculate from highlight element if missing
         let position = data.position;
         if (!position) {
-          console.warn('[ContentScriptApp] Position missing, calculating fallback');
-          const scrollX = window.pageXOffset || document.documentElement.scrollLeft;
-          const scrollY = window.pageYOffset || document.documentElement.scrollTop;
-          position = {
-            x: scrollX + window.innerWidth / 2 - 200,
-            y: scrollY + 100,
-            width: 0,
-            height: 0,
-          };
+          console.warn('[ContentScriptApp] Position missing, attempting to recalculate from highlight element');
+          // Try to get position from the actual highlight element
+          const normalizedWord = word.toLowerCase().trim();
+          const wordData = wordSelector.explainedWords.get(normalizedWord);
+          if (wordData?.highlights) {
+            const highlight = Array.from(wordData.highlights)[0];
+            if (highlight) {
+              try {
+                const rect = highlight.getBoundingClientRect();
+                if (rect && (rect.width > 0 || rect.height > 0 || rect.left !== 0 || rect.top !== 0)) {
+                  const scrollX = window.pageXOffset || document.documentElement.scrollLeft;
+                  const scrollY = window.pageYOffset || document.documentElement.scrollTop;
+                  position = {
+                    x: rect.left + scrollX,
+                    y: rect.bottom + scrollY + 8, // 8px gap below word
+                    width: rect.width,
+                    height: rect.height,
+                  };
+                  console.log('[ContentScriptApp] Recalculated position from highlight:', position);
+                }
+              } catch (error) {
+                console.error('[ContentScriptApp] Error getting highlight position:', error);
+              }
+            }
+          }
+          
+          // Fallback if still no position
+          if (!position) {
+            console.warn('[ContentScriptApp] Position still missing, using fallback');
+            const scrollX = window.pageXOffset || document.documentElement.scrollLeft;
+            const scrollY = window.pageYOffset || document.documentElement.scrollTop;
+            position = {
+              x: scrollX + window.innerWidth / 2 - 200,
+              y: scrollY + 100,
+              width: 0,
+              height: 0,
+            };
+          }
         }
 
         console.log('[ContentScriptApp] Setting word meaning data and opening modal');

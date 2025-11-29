@@ -1,109 +1,109 @@
 .dialog {
-  max-width: 600px;
-  max-height: 700px;
+  max-width: 600px !important;
+  max-height: 700px !important;
 }
 
 .content {
-  padding: 20px;
-  display: flex;
-  flex-direction: column;
-  height: 100%;
+  padding: 20px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  height: 100% !important;
 }
 
 .searchContainer {
-  margin-bottom: 20px;
+  margin-bottom: 20px !important;
 }
 
 .bookmarksList {
-  flex: 1;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
+  flex: 1 !important;
+  overflow-y: auto !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 12px !important;
 }
 
 .emptyState {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 60px 20px;
-  text-align: center;
-  color: #999;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 60px 20px !important;
+  text-align: center !important;
+  color: #999 !important;
 }
 
 .emptyState svg {
-  margin-bottom: 16px;
-  opacity: 0.5;
+  margin-bottom: 16px !important;
+  opacity: 0.5 !important;
 }
 
 .emptyState p {
-  margin: 8px 0;
-  font-size: 16px;
+  margin: 8px 0 !important;
+  font-size: 16px !important;
 }
 
 .emptySubtext {
-  font-size: 14px;
-  color: #bbb;
+  font-size: 14px !important;
+  color: #bbb !important;
 }
 
 .bookmarkItem {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  padding: 15px;
-  background: #f9f9f9;
-  border: 1px solid #e0e0e0;
-  border-radius: 8px;
-  cursor: pointer;
-  transition: all 0.2s ease;
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: flex-start !important;
+  padding: 15px !important;
+  background: #f9f9f9 !important;
+  border: 1px solid #e0e0e0 !important;
+  border-radius: 8px !important;
+  cursor: pointer !important;
+  transition: all 0.2s ease !important;
 }
 
 .bookmarkItem:hover {
-  background: #f0f0f0;
-  border-color: #9527F5;
+  background: #f0f0f0 !important;
+  border-color: #9527F5 !important;
 }
 
 .bookmarkItem.selected {
-  background: #f5f0ff;
-  border-color: #9527F5;
+  background: #f5f0ff !important;
+  border-color: #9527F5 !important;
 }
 
 .bookmarkContent {
-  flex: 1;
+  flex: 1 !important;
 }
 
 .bookmarkWord {
-  font-size: 18px;
-  font-weight: 600;
-  color: #A020F0;
-  margin: 0 0 8px 0;
+  font-size: 18px !important;
+  font-weight: 600 !important;
+  color: #A020F0 !important;
+  margin: 0 0 8px 0 !important;
 }
 
 .bookmarkMeaning {
-  font-size: 14px;
-  color: #333;
-  line-height: 1.5;
-  margin: 0 0 8px 0;
+  font-size: 14px !important;
+  color: #333 !important;
+  line-height: 1.5 !important;
+  margin: 0 0 8px 0 !important;
 }
 
 .bookmarkMetadata {
-  margin-top: 12px;
-  padding-top: 12px;
-  border-top: 1px solid #e0e0e0;
+  margin-top: 12px !important;
+  padding-top: 12px !important;
+  border-top: 1px solid #e0e0e0 !important;
 }
 
 .bookmarkUrl,
 .bookmarkDate {
-  font-size: 12px;
-  color: #666;
-  margin: 4px 0;
-  line-height: 1.4;
+  font-size: 12px !important;
+  color: #666 !important;
+  margin: 4px 0 !important;
+  line-height: 1.4 !important;
 }
 
 .bookmarkUrl strong,
 .bookmarkDate strong {
-  color: #333;
-  margin-right: 6px;
+  color: #333 !important;
+  margin-right: 6px !important;
 }
 

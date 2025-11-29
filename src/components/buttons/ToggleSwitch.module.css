@@ -1,50 +1,50 @@
 .toggleSwitch {
-  position: relative;
-  display: inline-block;
-  width: 48px;
-  height: 26px;
+  position: relative !important;
+  display: inline-block !important;
+  width: 48px !important;
+  height: 26px !important;
 }
 
 .toggleSwitch input {
-  opacity: 0;
-  width: 0;
-  height: 0;
+  opacity: 0 !important;
+  width: 0 !important;
+  height: 0 !important;
 }
 
 .toggleSlider {
-  position: absolute;
-  cursor: pointer;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background-color: #ccc;
-  transition: 0.3s;
-  border-radius: 26px;
+  position: absolute !important;
+  cursor: pointer !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  background-color: #ccc !important;
+  transition: 0.3s !important;
+  border-radius: 26px !important;
 }
 
 .toggleSlider:before {
-  position: absolute;
-  content: "";
-  height: 20px;
-  width: 20px;
-  left: 3px;
-  bottom: 3px;
-  background-color: white;
-  transition: 0.3s;
-  border-radius: 50%;
+  position: absolute !important;
+  content: "" !important;
+  height: 20px !important;
+  width: 20px !important;
+  left: 3px !important;
+  bottom: 3px !important;
+  background-color: white !important;
+  transition: 0.3s !important;
+  border-radius: 50% !important;
 }
 
 .toggleSwitch input:checked + .toggleSlider {
-  background-color: #9527F5;
+  background-color: #9527F5 !important;
 }
 
 .toggleSwitch input:checked + .toggleSlider:before {
-  transform: translateX(22px);
+  transform: translateX(22px) !important;
 }
 
 .toggleSwitch input:disabled + .toggleSlider {
-  opacity: 0.5;
-  cursor: not-allowed;
+  opacity: 0.5 !important;
+  cursor: not-allowed !important;
 }
 

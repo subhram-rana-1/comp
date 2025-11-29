@@ -5,8 +5,8 @@
 
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { Sparkles, Bookmark, MessageCircle, Loader2, Check } from 'lucide-react';
-import { SpeakerIcon } from '../icons';
+import { Sparkles, Bookmark, MessageCircle, Check } from 'lucide-react';
+import { SpeakerIcon, LoadingSpinnerIcon } from '../icons';
 import { IconButton } from '../buttons';
 import { Tooltip } from '../shared';
 import { BookmarkWordsService } from '../../services';
@@ -119,6 +119,48 @@ export const WordMeaningDialog: React.FC<WordMeaningDialogProps> = ({
     console.log('[WordMeaningDialog] Pronunciation clicked for:', word);
   };
 
+  // Function to highlight the selected word in text
+  const highlightWord = (text: string, wordToHighlight: string): React.ReactNode => {
+    if (!wordToHighlight || !text) {
+      return text;
+    }
+
+    // Escape special regex characters in the word
+    const escapedWord = wordToHighlight.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    
+    // Create regex for case-insensitive whole-word matching
+    const regex = new RegExp(`\\b${escapedWord}\\b`, 'gi');
+    
+    // Split text by matches and create JSX elements
+    const parts: React.ReactNode[] = [];
+    let lastIndex = 0;
+    let match;
+    
+    while ((match = regex.exec(text)) !== null) {
+      // Add text before the match
+      if (match.index > lastIndex) {
+        parts.push(text.substring(lastIndex, match.index));
+      }
+      
+      // Add the highlighted word
+      parts.push(
+        <span key={match.index} className={styles.highlightedWord}>
+          {match[0]}
+        </span>
+      );
+      
+      lastIndex = regex.lastIndex;
+    }
+    
+    // Add remaining text after last match
+    if (lastIndex < text.length) {
+      parts.push(text.substring(lastIndex));
+    }
+    
+    // If no matches found, return original text
+    return parts.length > 0 ? parts : text;
+  };
+
   // Update position ref when position prop changes
   React.useEffect(() => {
     positionRef.current = position;
@@ -131,26 +173,44 @@ export const WordMeaningDialog: React.FC<WordMeaningDialogProps> = ({
       return;
     }
 
-    // Get current position from word highlight if available
-    let currentPosition = positionRef.current;
-    if (!currentPosition && wordSelector && word) {
+    // Always get position from actual highlight element first (ensures accuracy on scroll)
+    let currentPosition: { x: number; y: number; width: number; height: number } | undefined;
+    
+    if (wordSelector && word) {
       const normalizedWord = word.toLowerCase().trim();
       const wordData = wordSelector.explainedWords?.get(normalizedWord);
       if (wordData?.highlights) {
         const highlight = Array.from(wordData.highlights)[0];
         if (highlight) {
-          const rect = highlight.getBoundingClientRect();
-          const scrollX = window.pageXOffset || document.documentElement.scrollLeft;
-          const scrollY = window.pageYOffset || document.documentElement.scrollTop;
-          currentPosition = {
-            x: rect.left + scrollX,
-            y: rect.bottom + scrollY + 8,
-            width: rect.width,
-            height: rect.height,
-          };
-          positionRef.current = currentPosition;
-          console.log('[WordMeaningDialog] Got position from highlight:', currentPosition);
+          try {
+            const rect = highlight.getBoundingClientRect();
+            // Check if rect is valid
+            if (rect && (rect.width > 0 || rect.height > 0 || rect.left !== 0 || rect.top !== 0)) {
+              const scrollX = window.pageXOffset || document.documentElement.scrollLeft;
+              const scrollY = window.pageYOffset || document.documentElement.scrollTop;
+              currentPosition = {
+                x: rect.left + scrollX,
+                y: rect.bottom + scrollY + 8, // 8px gap below word
+                width: rect.width,
+                height: rect.height,
+              };
+              positionRef.current = currentPosition;
+              console.log('[WordMeaningDialog] Got fresh position from highlight:', currentPosition);
+            } else {
+              console.warn('[WordMeaningDialog] Invalid rect from highlight:', rect);
+            }
+          } catch (error) {
+            console.error('[WordMeaningDialog] Error getting highlight position:', error);
+          }
         }
+      }
+    }
+
+    // Fallback to stored position if highlight not found
+    if (!currentPosition) {
+      currentPosition = positionRef.current;
+      if (currentPosition) {
+        console.log('[WordMeaningDialog] Using stored position as fallback:', currentPosition);
       }
     }
 
@@ -251,11 +311,16 @@ export const WordMeaningDialog: React.FC<WordMeaningDialogProps> = ({
       updateModalPosition();
     };
 
+    // Listen to scroll events on window, document, and documentElement for comprehensive coverage
     window.addEventListener('scroll', handleScroll, true);
+    document.addEventListener('scroll', handleScroll, true);
+    document.documentElement.addEventListener('scroll', handleScroll, true);
     window.addEventListener('resize', handleResize);
 
     return () => {
       window.removeEventListener('scroll', handleScroll, true);
+      document.removeEventListener('scroll', handleScroll, true);
+      document.documentElement.removeEventListener('scroll', handleScroll, true);
       window.removeEventListener('resize', handleResize);
     };
   }, [isOpen, updateModalPosition]);
@@ -324,7 +389,7 @@ export const WordMeaningDialog: React.FC<WordMeaningDialogProps> = ({
         <div className={styles.content}>
           {/* Word and meaning */}
           <div className={styles.header}>
-            <p className={styles.meaning}>{meaning}</p>
+            <p className={styles.meaning}>{highlightWord(meaning, word)}</p>
           </div>
 
           {/* Examples */}
@@ -334,7 +399,7 @@ export const WordMeaningDialog: React.FC<WordMeaningDialogProps> = ({
               <ul className={styles.examplesList}>
                 {examples.map((example, index) => (
                   <li key={index} className={styles.exampleItem}>
-                    {example}
+                    {highlightWord(example, word)}
                   </li>
                 ))}
               </ul>
@@ -349,7 +414,9 @@ export const WordMeaningDialog: React.FC<WordMeaningDialogProps> = ({
                 <IconButton
                   icon={
                     isLoadingMoreExamples ? (
-                      <Loader2 size={20} strokeWidth={1.5} color="#9527F5" className={styles.spinner} />
+                      <span className={styles.spinner}>
+                        <LoadingSpinnerIcon width={20} height={20} stroke="#9527F5" />
+                      </span>
                     ) : showSuccessTick ? (
                       <Check size={20} strokeWidth={1.5} color="#10B981" />
                     ) : (

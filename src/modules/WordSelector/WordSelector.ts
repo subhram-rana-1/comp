@@ -512,7 +512,50 @@ export class WordSelector {
     const greenBtn = this.createRemoveExplainedButton(word);
     highlight.appendChild(greenBtn);
 
-    // Get highlight position for modal positioning
+    // Store word data temporarily (position will be updated after DOM settles)
+    const wordData: WordData = {
+      word: wordInfo.word,
+      meaning: wordInfo.meaning,
+      examples: wordInfo.examples || [],
+      highlights: new Set([highlight]),
+      shouldAllowFetchMoreExamples: true,
+      position: undefined, // Will be calculated after DOM updates
+    };
+
+    this.explainedWords.set(normalizedWord, wordData);
+
+    // Remove from selected words
+    this.selectedWords.delete(normalizedWord);
+
+    // Remove breathing animation after it completes
+    setTimeout(() => {
+      highlight.classList.remove('word-breathing');
+      highlight.classList.add('word-popup');
+      setTimeout(() => {
+        highlight.classList.remove('word-popup');
+      }, 600);
+    }, 800);
+
+    // Wait for DOM to update after making word green, then calculate position
+    // Use requestAnimationFrame to ensure DOM has been painted
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        // Double RAF ensures layout has been recalculated
+        this.calculateAndSetWordPosition(normalizedWord, highlight, wordData, word);
+      });
+    });
+  }
+
+  /**
+   * Calculate word position from highlight element and trigger onWordExplained callback
+   */
+  private calculateAndSetWordPosition(
+    normalizedWord: string,
+    highlight: HTMLElement,
+    wordData: WordData,
+    word: string
+  ): void {
+    // Get highlight position for modal positioning from the actual green highlight element
     let wordPosition: { x: number; y: number; width: number; height: number } | undefined;
     try {
       const rect = highlight.getBoundingClientRect();
@@ -526,7 +569,7 @@ export class WordSelector {
           width: rect.width,
           height: rect.height,
         };
-        console.log('[WordSelector] Calculated word position:', wordPosition);
+        console.log('[WordSelector] Calculated word position from green highlight:', wordPosition);
       } else {
         console.warn('[WordSelector] Invalid rect from getBoundingClientRect:', rect);
       }
@@ -547,29 +590,9 @@ export class WordSelector {
       console.warn('[WordSelector] Using fallback position:', wordPosition);
     }
 
-    // Store word data
-    const wordData: WordData = {
-      word: wordInfo.word,
-      meaning: wordInfo.meaning,
-      examples: wordInfo.examples || [],
-      highlights: new Set([highlight]),
-      shouldAllowFetchMoreExamples: true,
-      position: wordPosition,
-    };
-
+    // Update word data with calculated position
+    wordData.position = wordPosition;
     this.explainedWords.set(normalizedWord, wordData);
-
-    // Remove from selected words
-    this.selectedWords.delete(normalizedWord);
-
-    // Remove breathing animation after it completes
-    setTimeout(() => {
-      highlight.classList.remove('word-breathing');
-      highlight.classList.add('word-popup');
-      setTimeout(() => {
-        highlight.classList.remove('word-popup');
-      }, 600);
-    }, 800);
 
     console.log('[WordSelector] Calling onWordExplained callback for word:', word);
     console.log('[WordSelector] WordData:', wordData);

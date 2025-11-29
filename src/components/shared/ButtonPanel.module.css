@@ -1,84 +1,84 @@
 .container {
-  position: fixed;
-  z-index: 2147483646;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 10px;
+  position: fixed !important;
+  z-index: 2147483646 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  gap: 10px !important;
 }
 
 .button {
-  width: 40px;
-  height: 40px;
-  background: #9527F5;
-  border: none;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  box-shadow: 0 2px 8px rgba(149, 39, 245, 0.3);
-  transition: all 0.2s ease;
+  width: 40px !important;
+  height: 40px !important;
+  background: #9527F5 !important;
+  border: none !important;
+  border-radius: 50% !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  cursor: pointer !important;
+  box-shadow: 0 2px 8px rgba(149, 39, 245, 0.3) !important;
+  transition: all 0.2s ease !important;
 }
 
 .button:hover {
-  transform: scale(1.1);
-  box-shadow: 0 4px 12px rgba(149, 39, 245, 0.4);
+  transform: scale(1.1) !important;
+  box-shadow: 0 4px 12px rgba(149, 39, 245, 0.4) !important;
 }
 
 .button:active {
-  transform: scale(0.95);
+  transform: scale(0.95) !important;
 }
 
 .container.active .button {
-  background: #801ac8;
+  background: #801ac8 !important;
 }
 
 .menu {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  background: white;
-  border-radius: 12px;
-  padding: 8px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
-  min-width: 160px;
-  animation: slideDown 0.2s ease-out;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 8px !important;
+  background: white !important;
+  border-radius: 12px !important;
+  padding: 8px !important;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2) !important;
+  min-width: 160px !important;
+  animation: slideDown 0.2s ease-out !important;
 }
 
 @keyframes slideDown {
   from {
-    opacity: 0;
-    transform: translateY(-10px);
+    opacity: 0 !important;
+    transform: translateY(-10px) !important;
   }
   to {
-    opacity: 1;
-    transform: translateY(0);
+    opacity: 1 !important;
+    transform: translateY(0) !important;
   }
 }
 
 .menuItem {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 10px 12px;
-  border: none;
-  background: transparent;
-  border-radius: 8px;
-  cursor: pointer;
-  transition: background-color 0.2s ease;
-  text-align: left;
-  width: 100%;
-  color: #333;
-  font-size: 14px;
+  display: flex !important;
+  align-items: center !important;
+  gap: 12px !important;
+  padding: 10px 12px !important;
+  border: none !important;
+  background: transparent !important;
+  border-radius: 8px !important;
+  cursor: pointer !important;
+  transition: background-color 0.2s ease !important;
+  text-align: left !important;
+  width: 100% !important;
+  color: #333 !important;
+  font-size: 14px !important;
 }
 
 .menuItem:hover {
-  background: #f0f0f0;
+  background: #f0f0f0 !important;
 }
 
 .menuItemLabel {
-  flex: 1;
-  font-weight: 500;
+  flex: 1 !important;
+  font-weight: 500 !important;
 }
 
