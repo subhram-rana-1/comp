@@ -25,7 +25,7 @@ export const SparkleIcon: React.FC<SparkleIconProps> = ({
       <path
         d="M12 2L14.5 8.5L21 11L14.5 13.5L12 20L9.5 13.5L3 11L9.5 8.5L12 2Z"
         stroke={stroke}
-        strokeWidth="2"
+        strokeWidth="1.5"
         strokeLinecap="round"
         strokeLinejoin="round"
         fill="none"

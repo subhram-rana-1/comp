@@ -26,6 +26,7 @@ export interface WordData {
   shouldAllowFetchMoreExamples?: boolean;
   askAIChatHistory?: any[];
   askAIInitialContext?: string;
+  position?: { x: number; y: number; width: number; height: number };
 }
 
 export class WordSelector {
@@ -58,11 +59,13 @@ export class WordSelector {
 
   // Store bound handler for proper cleanup
   boundDoubleClickHandler: ((event: MouseEvent) => void) | null = null;
+  boundClickHandler: ((event: MouseEvent) => void) | null = null;
 
   // Callbacks
   onWordSelected?: (word: string) => void;
   onWordRemoved?: (word: string) => void;
   onWordExplained?: (word: string, data: WordData) => void;
+  onWordClick?: (word: string, data: WordData) => void;
 
   /**
    * Initialize word selector
@@ -70,8 +73,9 @@ export class WordSelector {
   async init(): Promise<void> {
     console.log('[WordSelector] Initializing...');
 
-    // Bind the handler once for proper cleanup
+    // Bind the handlers once for proper cleanup
     this.boundDoubleClickHandler = this.handleDoubleClick.bind(this);
+    this.boundClickHandler = this.handleClick.bind(this);
 
     // Inject styles for word highlights
     this.injectStyles();
@@ -155,6 +159,9 @@ export class WordSelector {
     if (this.boundDoubleClickHandler) {
       document.addEventListener('dblclick', this.boundDoubleClickHandler);
     }
+    if (this.boundClickHandler) {
+      document.addEventListener('click', this.boundClickHandler, true); // Use capture phase
+    }
     console.log('[WordSelector] Enabled');
   }
 
@@ -168,7 +175,41 @@ export class WordSelector {
     if (this.boundDoubleClickHandler) {
       document.removeEventListener('dblclick', this.boundDoubleClickHandler);
     }
+    if (this.boundClickHandler) {
+      document.removeEventListener('click', this.boundClickHandler, true);
+    }
     console.log('[WordSelector] Disabled');
+  }
+
+  /**
+   * Handle click event (for green words to toggle modal)
+   */
+  handleClick(event: MouseEvent): void {
+    if (!this.isEnabled) {
+      return;
+    }
+
+    // Only handle clicks on green explained words
+    const clickedHighlight = (event.target as Element).closest('.vocab-word-explained');
+    if (clickedHighlight) {
+      const word = clickedHighlight.getAttribute('data-word');
+      if (word) {
+        // Check if clicking on the remove button - if so, let it handle removal
+        const clickedOnRemoveBtn = (event.target as Element).closest('.vocab-word-remove-explained-btn');
+        if (clickedOnRemoveBtn) {
+          return; // Let the remove button handle it
+        }
+
+        // Otherwise, trigger word click callback to toggle modal
+        const normalizedWord = normalizeText(word);
+        const wordData = this.explainedWords.get(normalizedWord);
+        if (wordData) {
+          event.preventDefault();
+          event.stopPropagation();
+          this.onWordClick?.(word, wordData);
+        }
+      }
+    }
   }
 
   /**
@@ -184,9 +225,9 @@ export class WordSelector {
     if (clickedHighlight) {
       const word = clickedHighlight.getAttribute('data-word');
       if (word) {
-        if (clickedHighlight.classList.contains('vocab-word-explained')) {
-          this.removeExplainedWord(word);
-        } else {
+        // Don't handle green words here - they're handled by single click
+        if (!clickedHighlight.classList.contains('vocab-word-explained')) {
+          // Purple highlighted word - remove it
           this.removeWord(word);
         }
       }
@@ -280,9 +321,13 @@ export class WordSelector {
     }
     this.wordToHighlights.get(normalizedWord)!.add(highlight);
 
-    // Create and append remove button
-    const removeBtn = this.createRemoveButton(word);
-    highlight.appendChild(removeBtn);
+    // Don't create purple remove button here - it will only appear after API call completes
+    // If word is already explained, add green button instead
+    if (this.explainedWords.has(normalizedWord)) {
+      const greenBtn = this.createRemoveExplainedButton(word);
+      highlight.appendChild(greenBtn);
+    }
+    // Otherwise, no button until API call completes and handleWordExplanation adds the green button
   }
 
   /**
@@ -467,6 +512,41 @@ export class WordSelector {
     const greenBtn = this.createRemoveExplainedButton(word);
     highlight.appendChild(greenBtn);
 
+    // Get highlight position for modal positioning
+    let wordPosition: { x: number; y: number; width: number; height: number } | undefined;
+    try {
+      const rect = highlight.getBoundingClientRect();
+      // Check if rect is valid (not all zeros and has dimensions)
+      if (rect && (rect.width > 0 || rect.height > 0 || rect.left !== 0 || rect.top !== 0)) {
+        const scrollX = window.pageXOffset || document.documentElement.scrollLeft;
+        const scrollY = window.pageYOffset || document.documentElement.scrollTop;
+        wordPosition = {
+          x: rect.left + scrollX,
+          y: rect.bottom + scrollY + 8, // 8px gap below word
+          width: rect.width,
+          height: rect.height,
+        };
+        console.log('[WordSelector] Calculated word position:', wordPosition);
+      } else {
+        console.warn('[WordSelector] Invalid rect from getBoundingClientRect:', rect);
+      }
+    } catch (error) {
+      console.error('[WordSelector] Error getting highlight position:', error);
+    }
+    
+    // Fallback position if calculation failed
+    if (!wordPosition) {
+      const scrollX = window.pageXOffset || document.documentElement.scrollLeft;
+      const scrollY = window.pageYOffset || document.documentElement.scrollTop;
+      wordPosition = {
+        x: scrollX + window.innerWidth / 2 - 200,
+        y: scrollY + 100,
+        width: 0,
+        height: 0,
+      };
+      console.warn('[WordSelector] Using fallback position:', wordPosition);
+    }
+
     // Store word data
     const wordData: WordData = {
       word: wordInfo.word,
@@ -474,6 +554,7 @@ export class WordSelector {
       examples: wordInfo.examples || [],
       highlights: new Set([highlight]),
       shouldAllowFetchMoreExamples: true,
+      position: wordPosition,
     };
 
     this.explainedWords.set(normalizedWord, wordData);
@@ -490,7 +571,15 @@ export class WordSelector {
       }, 600);
     }, 800);
 
-    this.onWordExplained?.(word, wordData);
+    console.log('[WordSelector] Calling onWordExplained callback for word:', word);
+    console.log('[WordSelector] WordData:', wordData);
+    console.log('[WordSelector] onWordExplained callback exists:', !!this.onWordExplained);
+    if (this.onWordExplained) {
+      this.onWordExplained(word, wordData);
+      console.log('[WordSelector] onWordExplained callback completed');
+    } else {
+      console.warn('[WordSelector] onWordExplained callback is not set!');
+    }
   }
 
   /**

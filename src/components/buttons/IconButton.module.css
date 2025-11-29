@@ -3,7 +3,7 @@
   border: none;
   cursor: pointer;
   padding: 8px;
-  border-radius: 50%;
+  border-radius: 10px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -20,7 +20,7 @@
 }
 
 .default:hover:not(:disabled) {
-  background-color: rgba(0, 0, 0, 0.05);
+  background-color: var(--very-light-purple);
 }
 
 .ghost {
@@ -28,7 +28,7 @@
 }
 
 .ghost:hover:not(:disabled) {
-  background-color: rgba(149, 39, 245, 0.1);
+  background-color: var(--very-light-purple);
   transform: rotate(90deg);
 }
 
@@ -41,7 +41,7 @@
 }
 
 .purple:hover:not(:disabled) {
-  background-color: rgba(149, 39, 245, 0.1);
+  background-color: var(--very-light-purple);
 }
 
 .purple:active:not(:disabled) {
@@ -68,5 +68,11 @@
 
 .button svg {
   display: block;
+  transition: stroke 0.2s ease, stroke-width 0.2s ease;
+}
+
+.button:hover:not(:disabled) svg {
+  stroke: var(--purple);
+  stroke-width: 2.5;
 }
 

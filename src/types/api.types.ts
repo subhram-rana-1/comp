@@ -132,5 +132,6 @@ export interface MoreExplanationsResponse {
   examples?: string[];
   synonyms?: string[];
   antonyms?: string[];
+  shouldAllowFetchMoreExamples?: boolean;
 }
 

@@ -1,13 +1,32 @@
+.dialogContainer {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 2147483647;
+}
+
 .dialog {
   max-width: 400px;
+  background-color: white;
+  border-radius: 30px;
+  box-shadow: 0 8px 24px rgba(149, 39, 245, 0.15), 0 2px 8px rgba(0, 0, 0, 0.1) !important;
+  pointer-events: auto;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  position: absolute;
+  visibility: visible;
+  opacity: 1;
 }
 
 .content {
-  padding: 20px;
+  padding: 30px;
 }
 
 .header {
   margin-bottom: 20px;
+  margin-top: 0;
 }
 
 .word {
@@ -27,7 +46,7 @@
 .examplesSection {
   margin-top: 20px;
   padding-top: 20px;
-  border-top: 1px solid #e0e0e0;
+  border-top: 1px solid var(--very-light-purple);
 }
 
 .examplesHeading {
@@ -72,8 +91,6 @@
   display: flex;
   gap: 12px;
   margin-top: 20px;
-  padding-top: 20px;
-  border-top: 1px solid #e0e0e0;
   justify-content: flex-end;
   flex-wrap: wrap;
 }
@@ -84,5 +101,18 @@
 
 .bookmarked svg {
   fill: #A020F0;
+}
+
+.spinner {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
