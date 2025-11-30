@@ -1,0 +1,109 @@
+.dialog {
+  max-width: 600px !important;
+  max-height: 700px !important;
+}
+
+.content {
+  padding: 20px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  height: 100% !important;
+}
+
+.searchContainer {
+  margin-bottom: 20px !important;
+}
+
+.bookmarksList {
+  flex: 1 !important;
+  overflow-y: auto !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 12px !important;
+}
+
+.emptyState {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 60px 20px !important;
+  text-align: center !important;
+  color: #999 !important;
+}
+
+.emptyState svg {
+  margin-bottom: 16px !important;
+  opacity: 0.5 !important;
+}
+
+.emptyState p {
+  margin: 8px 0 !important;
+  font-size: 16px !important;
+}
+
+.emptySubtext {
+  font-size: 14px !important;
+  color: #bbb !important;
+}
+
+.bookmarkItem {
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: flex-start !important;
+  padding: 15px !important;
+  background: #f9f9f9 !important;
+  border: 1px solid #e0e0e0 !important;
+  border-radius: 8px !important;
+  cursor: pointer !important;
+  transition: all 0.2s ease !important;
+}
+
+.bookmarkItem:hover {
+  background: #f0f0f0 !important;
+  border-color: #9527F5 !important;
+}
+
+.bookmarkItem.selected {
+  background: #f5f0ff !important;
+  border-color: #9527F5 !important;
+}
+
+.bookmarkContent {
+  flex: 1 !important;
+}
+
+.bookmarkWord {
+  font-size: 18px !important;
+  font-weight: 600 !important;
+  color: #A020F0 !important;
+  margin: 0 0 8px 0 !important;
+}
+
+.bookmarkMeaning {
+  font-size: 14px !important;
+  color: #333 !important;
+  line-height: 1.5 !important;
+  margin: 0 0 8px 0 !important;
+}
+
+.bookmarkMetadata {
+  margin-top: 12px !important;
+  padding-top: 12px !important;
+  border-top: 1px solid #e0e0e0 !important;
+}
+
+.bookmarkUrl,
+.bookmarkDate {
+  font-size: 12px !important;
+  color: #666 !important;
+  margin: 4px 0 !important;
+  line-height: 1.4 !important;
+}
+
+.bookmarkUrl strong,
+.bookmarkDate strong {
+  color: #333 !important;
+  margin-right: 6px !important;
+}
+

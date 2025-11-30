@@ -1,8 +1,9 @@
 import { defineConfig } from 'wxt';
-import { getHostPermissions } from './core/config/buildConfig.js';
+import { getHostPermissions } from './src/config/buildConfig';
 import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
+import react from '@vitejs/plugin-react';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -11,6 +12,21 @@ const packageJson = JSON.parse(readFileSync(join(rootDir, 'package.json'), 'utf-
 
 export default defineConfig({
   publicDir: 'assets',
+  vite: () => ({
+    plugins: [react()],
+    resolve: {
+      alias: {
+        '@': join(rootDir, 'src'),
+        '@components': join(rootDir, 'src/components'),
+        '@services': join(rootDir, 'src/services'),
+        '@store': join(rootDir, 'src/store'),
+        '@types': join(rootDir, 'src/types'),
+        '@utils': join(rootDir, 'src/utils'),
+        '@hooks': join(rootDir, 'src/hooks'),
+        '@config': join(rootDir, 'src/config'),
+      },
+    },
+  }),
   manifest: {
     name: 'XplainO',
     version: packageJson.version,

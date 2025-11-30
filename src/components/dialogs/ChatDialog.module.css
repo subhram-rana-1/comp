@@ -1,0 +1,204 @@
+.dialogContainer {
+  position: fixed !important;
+  top: 50% !important;
+  left: 50% !important;
+  transform: translate(-50%, -50%) !important;
+  z-index: 2147483647 !important;
+  width: 90% !important;
+  max-width: 600px !important;
+  max-height: 80vh !important;
+  background: white !important;
+  border-radius: 16px !important;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2) !important;
+  animation: fadeInScale 0.3s ease-out !important;
+}
+
+@keyframes fadeInScale {
+  from {
+    opacity: 0 !important;
+    transform: translate(-50%, -50%) scale(0.95) !important;
+  }
+  to {
+    opacity: 1 !important;
+    transform: translate(-50%, -50%) scale(1) !important;
+  }
+}
+
+.dialogContent {
+  display: flex !important;
+  flex-direction: column !important;
+  height: 100% !important;
+  max-height: 80vh !important;
+  position: relative !important;
+}
+
+.collapseButton {
+  position: absolute !important;
+  top: 12px !important;
+  right: 12px !important;
+  width: 32px !important;
+  height: 32px !important;
+  background: transparent !important;
+  border: none !important;
+  cursor: pointer !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  border-radius: 50% !important;
+  transition: background-color 0.2s ease !important;
+  z-index: 10 !important;
+}
+
+.collapseButton:hover {
+  background-color: rgba(149, 39, 245, 0.1) !important;
+}
+
+.tabs {
+  margin: 15px !important;
+}
+
+.tabContent {
+  flex: 1 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  overflow: hidden !important;
+  margin: 0 15px 15px 15px !important;
+}
+
+.originalTextContent {
+  flex: 1 !important;
+  overflow-y: auto !important;
+  padding: 15px !important;
+  background: #f9f9f9 !important;
+  border-radius: 8px !important;
+}
+
+.originalText {
+  color: #333 !important;
+  line-height: 1.6 !important;
+  white-space: pre-wrap !important;
+}
+
+.simplifiedText {
+  color: #333 !important;
+  line-height: 1.6 !important;
+  white-space: pre-wrap !important;
+}
+
+.emptyText {
+  color: #999 !important;
+  text-align: center !important;
+  padding: 40px 20px !important;
+}
+
+.chatContent {
+  flex: 1 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  overflow: hidden !important;
+}
+
+.chatHistoryContainer {
+  flex: 1 !important;
+  overflow-y: auto !important;
+  padding: 15px !important;
+  background: #f9f9f9 !important;
+  border-radius: 8px !important;
+  margin-bottom: 15px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 12px !important;
+}
+
+.emptyChat {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center !important;
+  height: 100% !important;
+  color: #666 !important;
+  text-align: center !important;
+  padding: 40px 20px !important;
+}
+
+.possibleQuestions {
+  margin-top: 20px !important;
+  width: 100% !important;
+}
+
+.questionsLabel {
+  font-size: 14px !important;
+  font-weight: 600 !important;
+  color: #9527F5 !important;
+  margin-bottom: 12px !important;
+}
+
+.questionButton {
+  display: block !important;
+  width: 100% !important;
+  padding: 10px 15px !important;
+  margin-bottom: 8px !important;
+  background: white !important;
+  border: 1px solid #e0e0e0 !important;
+  border-radius: 8px !important;
+  text-align: left !important;
+  cursor: pointer !important;
+  transition: all 0.2s ease !important;
+  font-size: 14px !important;
+  color: #333 !important;
+}
+
+.questionButton:hover {
+  background: #f0f0f0 !important;
+  border-color: #9527F5 !important;
+  color: #9527F5 !important;
+}
+
+.chatMessage {
+  display: flex !important;
+  margin-bottom: 8px !important;
+}
+
+.userMessage {
+  justify-content: flex-end !important;
+}
+
+.userMessage .messageContent {
+  background: #9527F5 !important;
+  color: white !important;
+  padding: 10px 15px !important;
+  border-radius: 18px !important;
+  border-bottom-right-radius: 4px !important;
+  max-width: 80% !important;
+  word-wrap: break-word !important;
+}
+
+.assistantMessage {
+  justify-content: flex-start !important;
+}
+
+.assistantMessage .messageContent {
+  background: #e0e0e0 !important;
+  color: #333 !important;
+  padding: 10px 15px !important;
+  border-radius: 18px !important;
+  border-bottom-left-radius: 4px !important;
+  max-width: 80% !important;
+  word-wrap: break-word !important;
+}
+
+.messageContent {
+  line-height: 1.5 !important;
+  white-space: pre-wrap !important;
+}
+
+.loadingMessage {
+  display: flex !important;
+  justify-content: flex-start !important;
+  padding: 10px 0 !important;
+}
+
+.chatInputContainer {
+  flex-shrink: 0 !important;
+}
+

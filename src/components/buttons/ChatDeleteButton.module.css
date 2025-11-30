@@ -1,0 +1,23 @@
+.button {
+  background: transparent !important;
+  border: none !important;
+  cursor: pointer !important;
+  padding: 4px !important;
+  border-radius: 4px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  transition: all 0.2s ease !important;
+  opacity: 0 !important;
+}
+
+.button:hover {
+  background-color: rgba(149, 39, 245, 0.1) !important;
+  opacity: 1 !important;
+}
+
+.button:active {
+  background-color: rgba(149, 39, 245, 0.2) !important;
+  transform: scale(0.95) !important;
+}
+
