@@ -62,10 +62,7 @@ This will create a ZIP file ready for Chrome Web Store submission.
 - `assets/popup.js` - Toggle functionality JavaScript
 - `assets/logo_1-removebg.png` - Cat logo image
 - `core/services/` - Service files for API integration, word explanations, and text simplification
-  - `SimplifyService.js` - Handles `/api/v2/simplify` API calls for text simplification
-  - `SummariseService.js` - Handles `/api/v2/summarise` API calls for page summarisation
-  - `WordExplanationService.js` - Handles word explanation API calls
-  - `ApiService.js` - General API service for chat functionality
+  - `ApiService.js` - Centralized API service handling all API calls including chat functionality, text simplification (`/api/v2/simplify`), page summarisation (`/api/v2/summarise`), word explanations (`/api/v2/words-explanation`), and web search (`/api/v2/web-search-stream`)
 - `core/config/` - Configuration files for API and build settings
 - `wxt.config.ts` - WXT configuration file
 - `package.json` - Project dependencies and scripts
