@@ -45,3 +45,4 @@ export const BrandIconWhiteWithoutBg: React.FC<BrandIconWhiteWithoutBgProps> = (
 
 export default BrandIconWhiteWithoutBg;
 
+
