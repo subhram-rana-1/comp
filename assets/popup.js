@@ -1,4 +1,106 @@
 // ===================================
+// Payment Module - Handles payment status and UI
+// ===================================
+import PaymentService from '../core/services/PaymentService.js';
+import ExtPayConfig from '../core/config/extpayConfig.js';
+
+const PaymentManager = {
+  /**
+   * Update payment status UI
+   * @param {Object} user - User object from ExtPay
+   */
+  async updatePaymentStatusUI(user) {
+    const statusContainer = document.getElementById('paymentStatusContainer');
+    const statusBadge = document.getElementById('paymentStatusBadge');
+    const statusButton = document.getElementById('paymentStatusButton');
+    
+    if (!statusContainer || !statusBadge || !statusButton) {
+      return;
+    }
+
+    const isPaid = PaymentService.isSubscriptionActive(user);
+    const statusText = PaymentService.getSubscriptionStatusText(user);
+
+    // Update badge
+    statusBadge.textContent = statusText;
+    statusBadge.className = 'payment-status-badge';
+    
+    if (isPaid) {
+      statusBadge.classList.add('active');
+      statusButton.textContent = ExtPayConfig.UI_SETTINGS.messages.manageSubscription;
+      statusButton.onclick = async () => {
+        try {
+          await PaymentService.openSubscriptionManagement();
+        } catch (error) {
+          console.error('[Popup] Error opening subscription management:', error);
+        }
+      };
+    } else {
+      statusBadge.classList.add('expired');
+      statusButton.textContent = ExtPayConfig.UI_SETTINGS.messages.upgradeButton;
+      statusButton.onclick = async () => {
+        try {
+          await PaymentService.openPaymentPage();
+        } catch (error) {
+          console.error('[Popup] Error opening payment page:', error);
+        }
+      };
+    }
+
+    statusButton.style.display = 'block';
+    statusContainer.style.display = 'flex';
+  },
+
+  /**
+   * Show payment modal
+   */
+  showPaymentModal() {
+    const overlay = document.getElementById('paymentModalOverlay');
+    const modal = document.getElementById('paymentModal');
+    const closeButton = document.getElementById('paymentModalClose');
+    const upgradeButton = document.getElementById('paymentUpgradeButton');
+    const manageButton = document.getElementById('paymentManageButton');
+
+    if (!overlay || !modal) return;
+
+    overlay.style.display = 'flex';
+
+    closeButton?.addEventListener('click', () => {
+      overlay.style.display = 'none';
+    });
+
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) {
+        overlay.style.display = 'none';
+      }
+    });
+
+    upgradeButton?.addEventListener('click', async () => {
+      try {
+        await PaymentService.openPaymentPage();
+        overlay.style.display = 'none';
+      } catch (error) {
+        console.error('[Popup] Error opening payment page:', error);
+      }
+    });
+  },
+
+  /**
+   * Check payment status and update UI
+   */
+  async checkAndUpdatePaymentStatus() {
+    try {
+      const user = await PaymentService.getUser();
+      await this.updatePaymentStatusUI(user);
+      return PaymentService.isSubscriptionActive(user);
+    } catch (error) {
+      console.error('[Popup] Error checking payment status:', error);
+      return false;
+    }
+  }
+};
+
+// ===================================
 // Domain Manager Module - Handles domain extraction
 // ===================================
 const DomainManager = {
@@ -211,6 +313,9 @@ class PopupApp {
     // Always initialize toggle state immediately, regardless of content visibility
     // This ensures the toggle always reflects the saved state when popup opens
     await this.initializeToggle();
+    
+    // Check and update payment status
+    await PaymentManager.checkAndUpdatePaymentStatus();
   }
 
   /**
@@ -297,6 +402,18 @@ class PopupApp {
     console.log('[Popup] ===== TOGGLE CHANGED =====');
     console.log('[Popup] New toggle state:', isEnabled);
     console.log('[Popup] Toggle element:', toggleSwitch);
+    
+    // If trying to enable, check payment status first
+    if (isEnabled) {
+      const isPaid = await PaymentManager.checkAndUpdatePaymentStatus();
+      if (!isPaid) {
+        // Reset toggle to off and show payment modal
+        UIManager.setToggleState(false);
+        PaymentManager.showPaymentModal();
+        console.log('[Popup] Payment required - toggle reset to off');
+        return;
+      }
+    }
     
     // Update UI
     UIManager.updateUI(isEnabled);

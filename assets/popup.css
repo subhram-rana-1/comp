@@ -293,3 +293,37 @@ body.extension-on .highlight {
   color: #7a1fd9;
 }
 
+/* Payment Status Container */
+.payment-status-container {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  margin-bottom: 12px;
+  background-color: #f5f5f5;
+  border-radius: 8px;
+  gap: 12px;
+}
+
+.payment-status-button {
+  padding: 8px 16px;
+  border: none;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  background-color: #9527F5;
+  color: white;
+}
+
+.payment-status-button:hover {
+  background-color: #7a1fd9;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(149, 39, 245, 0.3);
+}
+
+.payment-status-button:active {
+  transform: translateY(0);
+}
+

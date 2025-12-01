@@ -1,0 +1,330 @@
+/**
+ * Payment UI Styles
+ * Styles for payment modals, overlays, and payment-related UI components
+ * Matches extension theme: #9527F5 purple
+ */
+
+/* Payment Modal Overlay */
+.payment-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000000;
+  animation: fadeIn 0.3s ease;
+  backdrop-filter: blur(4px);
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Payment Modal */
+.payment-modal {
+  background: white;
+  border-radius: 16px;
+  padding: 32px;
+  max-width: 480px;
+  width: 90%;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  animation: slideUp 0.3s ease;
+  position: relative;
+}
+
+@keyframes slideUp {
+  from {
+    transform: translateY(20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+/* Payment Modal Header */
+.payment-modal-header {
+  text-align: center;
+  margin-bottom: 24px;
+}
+
+.payment-modal-title {
+  font-size: 24px;
+  font-weight: 600;
+  color: #333;
+  margin: 0 0 8px 0;
+}
+
+.payment-modal-subtitle {
+  font-size: 16px;
+  color: #666;
+  margin: 0;
+  line-height: 1.5;
+}
+
+/* Payment Modal Body */
+.payment-modal-body {
+  margin-bottom: 24px;
+}
+
+.payment-status-message {
+  background-color: #f5f5f5;
+  border-left: 4px solid #9527F5;
+  padding: 16px;
+  border-radius: 8px;
+  margin-bottom: 20px;
+}
+
+.payment-status-message.paid {
+  background-color: #ede6ff;
+  border-left-color: #9527F5;
+}
+
+.payment-status-message.expired {
+  background-color: #fff3e0;
+  border-left-color: #ff9800;
+}
+
+.payment-status-message.canceled {
+  background-color: #ffebee;
+  border-left-color: #f44336;
+}
+
+.payment-status-text {
+  font-size: 14px;
+  color: #333;
+  margin: 0;
+  line-height: 1.6;
+}
+
+/* Payment Features List */
+.payment-features {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 24px 0;
+}
+
+.payment-features li {
+  padding: 12px 0;
+  padding-left: 32px;
+  position: relative;
+  font-size: 15px;
+  color: #333;
+  line-height: 1.6;
+}
+
+.payment-features li::before {
+  content: "✓";
+  position: absolute;
+  left: 0;
+  color: #9527F5;
+  font-weight: bold;
+  font-size: 18px;
+}
+
+/* Payment Buttons */
+.payment-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.payment-button {
+  padding: 14px 24px;
+  border: none;
+  border-radius: 8px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-align: center;
+  text-decoration: none;
+  display: inline-block;
+}
+
+.payment-button-primary {
+  background-color: #9527F5;
+  color: white;
+}
+
+.payment-button-primary:hover {
+  background-color: #7a1fd9;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(149, 39, 245, 0.4);
+}
+
+.payment-button-primary:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 6px rgba(149, 39, 245, 0.3);
+}
+
+.payment-button-secondary {
+  background-color: #f5f5f5;
+  color: #333;
+}
+
+.payment-button-secondary:hover {
+  background-color: #e0e0e0;
+}
+
+.payment-button-secondary:active {
+  background-color: #d0d0d0;
+}
+
+/* Close Button */
+.payment-close-button {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  background: none;
+  border: none;
+  font-size: 24px;
+  color: #999;
+  cursor: pointer;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  transition: all 0.2s ease;
+}
+
+.payment-close-button:hover {
+  background-color: #f5f5f5;
+  color: #333;
+}
+
+/* Payment Status Badge */
+.payment-status-badge {
+  display: inline-block;
+  padding: 6px 12px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.payment-status-badge.active {
+  background-color: #ede6ff;
+  color: #9527F5;
+}
+
+.payment-status-badge.expired {
+  background-color: #fff3e0;
+  color: #ff9800;
+}
+
+.payment-status-badge.canceled {
+  background-color: #ffebee;
+  color: #f44336;
+}
+
+/* Payment Loading State */
+.payment-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  color: #9527F5;
+}
+
+.payment-loading-spinner {
+  width: 20px;
+  height: 20px;
+  border: 3px solid #f3f3f3;
+  border-top: 3px solid #9527F5;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin-right: 12px;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* Payment Info Text */
+.payment-info-text {
+  font-size: 13px;
+  color: #666;
+  text-align: center;
+  margin-top: 16px;
+  line-height: 1.5;
+}
+
+/* Responsive Design */
+@media (max-width: 600px) {
+  .payment-modal {
+    padding: 24px;
+    width: 95%;
+  }
+
+  .payment-modal-title {
+    font-size: 20px;
+  }
+
+  .payment-modal-subtitle {
+    font-size: 14px;
+  }
+}
+
+/* Payment Prompt (Inline) */
+.payment-prompt {
+  background: linear-gradient(135deg, #ede6ff 0%, #f5f0ff 100%);
+  border: 2px solid #9527F5;
+  border-radius: 12px;
+  padding: 20px;
+  margin: 16px 0;
+  text-align: center;
+}
+
+.payment-prompt-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: #333;
+  margin: 0 0 8px 0;
+}
+
+.payment-prompt-text {
+  font-size: 14px;
+  color: #666;
+  margin: 0 0 16px 0;
+  line-height: 1.6;
+}
+
+.payment-prompt-button {
+  background-color: #9527F5;
+  color: white;
+  border: none;
+  padding: 12px 24px;
+  border-radius: 8px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.payment-prompt-button:hover {
+  background-color: #7a1fd9;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(149, 39, 245, 0.4);
+}
+
+.payment-prompt-button:active {
+  transform: translateY(0);
+}
+

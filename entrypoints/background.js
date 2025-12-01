@@ -7,7 +7,41 @@
  * Sends signals to content scripts to check and manage extension state
  */
 
-export default defineBackground(() => {
+import PaymentService from '../core/services/PaymentService.js';
+import ExtPayConfig from '../core/config/extpayConfig.js';
+import ExtPay from 'extpay';
+
+export default defineBackground(async () => {
+  // ===================================
+  // ExtPay Initialization
+  // ===================================
+  
+  // Initialize ExtPay with extension ID from environment variable
+  let extpay = null;
+  try {
+    const extensionId = ExtPayConfig.EXTENSION_ID;
+    extpay = ExtPay(extensionId);
+    console.log('[Background] ExtPay initialized with extension ID:', extensionId);
+  } catch (error) {
+    console.error('[Background] Error initializing ExtPay:', error);
+  }
+  
+  // Initialize PaymentService with extpay instance
+  if (extpay) {
+    PaymentService.setExtPayInstance(extpay);
+    
+    // Set up onPaid listener
+    if (extpay.onPaid) {
+      extpay.onPaid.addListener((user) => {
+        console.log('[Background] User paid!', user);
+        // Clear payment cache
+        PaymentService.clearCache();
+        // Notify all tabs about payment status change
+        handlePaymentStatusChanged(user);
+      });
+      console.log('[Background] onPaid listener set up');
+    }
+  }
 
 // ===================================
 // Tab Event Handlers
@@ -101,6 +135,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       handleExtensionDisabled(message.domain, sendResponse);
       return true;
       
+    case 'CHECK_PAYMENT_STATUS':
+      handlePaymentStatusCheck(sendResponse);
+      return true; // Keep message channel open for async response
+      
+    case 'PAYMENT_STATUS_CHANGED':
+      handlePaymentStatusChanged(message.user);
+      sendResponse({ success: true });
+      return false;
+      
     default:
       console.log('[Background] Unknown message type:', message.type);
       sendResponse({ success: false, error: 'Unknown message type' });
@@ -183,6 +226,63 @@ async function handleExtensionDisabled(domain, sendResponse) {
       success: false,
       error: error.message
     });
+  }
+}
+
+/**
+ * Handle payment status check request
+ * @param {Function} sendResponse - Response callback
+ */
+async function handlePaymentStatusCheck(sendResponse) {
+  try {
+    const isPaid = await PaymentService.checkPaymentStatus();
+    const user = await PaymentService.getUser();
+    
+    console.log('[Background] Payment status checked:', isPaid);
+    
+    sendResponse({
+      success: true,
+      isPaid: isPaid,
+      user: user
+    });
+  } catch (error) {
+    console.error('[Background] Error checking payment status:', error);
+    sendResponse({
+      success: false,
+      error: error.message,
+      isPaid: false
+    });
+  }
+}
+
+/**
+ * Handle payment status changed event
+ * @param {Object} user - User object from ExtPay
+ */
+async function handlePaymentStatusChanged(user) {
+  try {
+    console.log('[Background] Payment status changed:', user);
+    
+    // Clear payment cache
+    PaymentService.clearCache();
+    
+    // Notify all tabs about payment status change
+    const tabs = await chrome.tabs.query({});
+    for (const tab of tabs) {
+      if (tab?.id) {
+        try {
+          await chrome.tabs.sendMessage(tab.id, {
+            type: 'PAYMENT_STATUS_CHANGED',
+            user: user
+          });
+        } catch (error) {
+          // Tab might not have content script loaded, ignore
+          console.log(`[Background] Could not send payment status to tab ${tab.id}:`, error.message);
+        }
+      }
+    }
+  } catch (error) {
+    console.error('[Background] Error handling payment status change:', error);
   }
 }
 

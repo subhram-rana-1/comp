@@ -32,7 +32,7 @@ export default defineConfig({
     host_permissions: getHostPermissions(),
     web_accessible_resources: [
       {
-        resources: ['logo_1-removebg.png', 'branding-removebg.png', '*.png', '*.svg'],
+        resources: ['logo_1-removebg.png', 'branding-removebg.png', '*.png', '*.svg', 'payment-ui.css'],
         matches: ['<all_urls>']
       }
     ],
