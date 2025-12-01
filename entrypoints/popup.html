@@ -5,8 +5,49 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Sharpen english comprehension</title>
   <link rel="stylesheet" href="/popup.css">
+  <!-- Google Identity Services -->
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body>
+      <!-- Auth Section -->
+      <div class="auth-section" id="authSection">
+        <!-- Logged In View -->
+        <div class="auth-logged-in" id="authLoggedIn" style="display: none;">
+          <div class="auth-profile-container">
+            <img src="" alt="Profile" class="profile-picture" id="profilePicture">
+            <div class="auth-greeting" id="authGreeting">Hi User 🔆</div>
+          </div>
+          <button class="logout-button" id="logoutButton" title="Logout">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M9 21H5C4.46957 21 3.96086 20.7893 3.58579 20.4142C3.21071 20.0391 3 19.5304 3 19V5C3 4.46957 3.21071 3.96086 3.58579 3.58579C3.96086 3.21071 4.46957 3 5 3H9" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              <path d="M16 17L21 12L16 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              <path d="M21 12H9" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </button>
+        </div>
+
+        <!-- Logged Out View -->
+        <div class="auth-logged-out" id="authLoggedOut">
+          <div class="sign-in-modal" id="signInModal">
+            <p class="sign-in-text">Sign in to continue</p>
+            <div id="googleSignInButton"></div>
+          </div>
+        </div>
+
+        <!-- Auth Spinner -->
+        <div class="auth-spinner" id="authSpinner" style="display: none;">
+          <svg class="loader-spinner" width="24" height="24" viewBox="0 0 40 40" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="20" cy="20" r="18" fill="none" stroke="#9527F5" stroke-width="3" stroke-linecap="round" stroke-dasharray="113" stroke-dashoffset="56.5">
+              <animate attributeName="stroke-dasharray" dur="1.5s" values="0 113;56.5 56.5;0 113;0 113" repeatCount="indefinite"/>
+              <animate attributeName="stroke-dashoffset" dur="1.5s" values="0;-56.5;-113;-113" repeatCount="indefinite"/>
+            </circle>
+          </svg>
+        </div>
+      </div>
+
+      <!-- Toast Notification -->
+      <div class="toast-notification" id="toastNotification" style="display: none;"></div>
+
       <!-- Toggle Switch with Finger Icon -->
   <div class="toggle-container">
     <img src="/arrow-right.svg" alt="arrow" class="finger-point">
@@ -49,7 +90,7 @@
     </div>
   </div>
 
-  <script src="/popup.js"></script>
+  <script type="module" src="/popup.js"></script>
 </body>
 </html>
 

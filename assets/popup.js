@@ -1,4 +1,10 @@
 // ===================================
+// Import Auth Services
+// ===================================
+import AuthService from '../core/services/AuthService.js';
+import AuthApiService from '../core/services/AuthApiService.js';
+
+// ===================================
 // Domain Manager Module - Handles domain extraction
 // ===================================
 const DomainManager = {
@@ -72,6 +78,30 @@ const StorageManager = {
 };
 
 // ===================================
+// Toast Notification Manager
+// ===================================
+const ToastManager = {
+  /**
+   * Show a toast notification
+   * @param {string} message - Message to display
+   * @param {string} type - Type: 'success', 'error', 'info' (default: 'info')
+   * @param {number} duration - Duration in milliseconds (default: 3000)
+   */
+  show(message, type = 'info', duration = 3000) {
+    const toast = document.getElementById('toastNotification');
+    if (!toast) return;
+
+    toast.textContent = message;
+    toast.className = `toast-notification ${type}`;
+    toast.style.display = 'block';
+
+    setTimeout(() => {
+      toast.style.display = 'none';
+    }, duration);
+  }
+};
+
+// ===================================
 // UI Module - Handles UI Updates
 // ===================================
 const UIManager = {
@@ -83,6 +113,16 @@ const UIManager = {
   get title() { return document.querySelector('.title'); },
   get instructions() { return document.querySelector('.instructions'); },
   get fingerPoint() { return document.querySelector('.finger-point'); },
+  
+  // Auth UI elements
+  get authSection() { return document.getElementById('authSection'); },
+  get authLoggedIn() { return document.getElementById('authLoggedIn'); },
+  get authLoggedOut() { return document.getElementById('authLoggedOut'); },
+  get profilePicture() { return document.getElementById('profilePicture'); },
+  get authGreeting() { return document.getElementById('authGreeting'); },
+  get logoutButton() { return document.getElementById('logoutButton'); },
+  get googleSignInButton() { return document.getElementById('googleSignInButton'); },
+  get authSpinner() { return document.getElementById('authSpinner'); },
 
   /**
    * Update UI based on toggle state
@@ -125,6 +165,62 @@ const UIManager = {
     } else {
       console.error('[UIManager] Toggle switch not found!');
     }
+  },
+
+  /**
+   * Update auth UI based on login state
+   * @param {boolean} isLoggedIn - Whether user is logged in
+   * @param {Object|null} user - User data (name, picture_url)
+   */
+  updateAuthUI(isLoggedIn, user = null) {
+    const loggedInView = this.authLoggedIn;
+    const loggedOutView = this.authLoggedOut;
+    const spinner = this.authSpinner;
+
+    if (isLoggedIn && user) {
+      // Show logged-in view
+      if (loggedInView) loggedInView.style.display = 'flex';
+      if (loggedOutView) loggedOutView.style.display = 'none';
+      if (spinner) spinner.style.display = 'none';
+
+      // Update profile picture
+      if (this.profilePicture && user.picture_url) {
+        this.profilePicture.src = user.picture_url;
+        this.profilePicture.alt = user.name || 'Profile';
+      }
+
+      // Update greeting
+      if (this.authGreeting) {
+        const name = user.name || 'User';
+        this.authGreeting.textContent = `Hi ${name} 🔆`;
+      }
+    } else {
+      // Show logged-out view
+      if (loggedInView) loggedInView.style.display = 'none';
+      if (loggedOutView) loggedOutView.style.display = 'flex';
+      if (spinner) spinner.style.display = 'none';
+    }
+  },
+
+  /**
+   * Show auth spinner
+   */
+  showAuthSpinner() {
+    const spinner = this.authSpinner;
+    const loggedInView = this.authLoggedIn;
+    const loggedOutView = this.authLoggedOut;
+
+    if (spinner) spinner.style.display = 'flex';
+    if (loggedInView) loggedInView.style.display = 'none';
+    if (loggedOutView) loggedOutView.style.display = 'none';
+  },
+
+  /**
+   * Hide auth spinner
+   */
+  hideAuthSpinner() {
+    const spinner = this.authSpinner;
+    if (spinner) spinner.style.display = 'none';
   }
 };
 
@@ -136,6 +232,8 @@ class PopupApp {
   static loadingState = null;
   static normalContent = null;
   static toggleInitialized = false;
+  static authInitialized = false;
+  static googleSignInButtonRendered = false;
 
   /**
    * Check if the current tab is loading
@@ -143,10 +241,26 @@ class PopupApp {
   static async checkTabLoading() {
     try {
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-      // Tab is loading if status is 'loading'
-      return tab?.status === 'loading';
+      
+      // If no tab or no URL, assume not loading
+      if (!tab || !tab.url) {
+        return false;
+      }
+
+      // Special pages (chrome://, about:, etc.) are considered loaded
+      if (tab.url.startsWith('chrome://') || 
+          tab.url.startsWith('chrome-extension://') ||
+          tab.url.startsWith('about:') ||
+          tab.url.startsWith('edge://')) {
+        return false;
+      }
+
+      // Tab is loading only if status is explicitly 'loading'
+      // If status is 'complete' or undefined, consider it loaded
+      return tab.status === 'loading';
     } catch (error) {
       console.error('Error checking tab status:', error);
+      // On error, assume page is loaded to avoid blocking UI
       return false;
     }
   }
@@ -163,7 +277,8 @@ class PopupApp {
         // Show loading state
         this.loadingState.style.display = 'flex';
         this.normalContent.classList.remove('visible');
-        // Hide toggle button
+        // Hide toggle button only if we're sure it's loading
+        // But keep it visible for special pages or if status is unclear
         if (toggleContainer) {
           toggleContainer.style.display = 'none';
         }
@@ -175,6 +290,11 @@ class PopupApp {
         if (toggleContainer) {
           toggleContainer.style.display = 'flex';
         }
+      }
+    } else {
+      // If elements don't exist, ensure toggle is visible
+      if (toggleContainer) {
+        toggleContainer.style.display = 'flex';
       }
     }
   }
@@ -190,14 +310,36 @@ class PopupApp {
     // Check initial tab loading state
     await this.updateContentVisibility();
 
-    // Poll tab status every 200ms while loading
+    // Set a timeout fallback: after 2 seconds, always show content
+    // This ensures the toggle is always accessible even if status check fails
+    const fallbackTimeout = setTimeout(() => {
+      console.log('[Popup] Fallback timeout: showing content regardless of status');
+      if (this.loadingState) this.loadingState.style.display = 'none';
+      if (this.normalContent) this.normalContent.classList.add('visible');
+      const toggleContainer = document.querySelector('.toggle-container');
+      if (toggleContainer) toggleContainer.style.display = 'flex';
+    }, 2000);
+
+    // Poll tab status every 200ms while loading (max 10 seconds)
+    let pollCount = 0;
+    const maxPolls = 50; // 50 * 200ms = 10 seconds max
     const checkInterval = setInterval(async () => {
+      pollCount++;
       const isLoading = await this.checkTabLoading();
       await this.updateContentVisibility();
       
-      // Stop polling once page is loaded
-      if (!isLoading) {
+      // Stop polling once page is loaded or max polls reached
+      if (!isLoading || pollCount >= maxPolls) {
         clearInterval(checkInterval);
+        clearTimeout(fallbackTimeout);
+        // Ensure content is shown if we stopped due to max polls
+        if (pollCount >= maxPolls) {
+          console.log('[Popup] Max polls reached: showing content');
+          if (this.loadingState) this.loadingState.style.display = 'none';
+          if (this.normalContent) this.normalContent.classList.add('visible');
+          const toggleContainer = document.querySelector('.toggle-container');
+          if (toggleContainer) toggleContainer.style.display = 'flex';
+        }
       }
     }, 200);
 
@@ -205,12 +347,19 @@ class PopupApp {
     chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
       if (changeInfo.status === 'complete' || changeInfo.status === 'loading') {
         this.updateContentVisibility();
+        // Clear fallback timeout if status is complete
+        if (changeInfo.status === 'complete') {
+          clearTimeout(fallbackTimeout);
+        }
       }
     });
 
     // Always initialize toggle state immediately, regardless of content visibility
     // This ensures the toggle always reflects the saved state when popup opens
     await this.initializeToggle();
+
+    // Initialize auth
+    await this.initializeAuth();
   }
 
   /**
@@ -330,6 +479,231 @@ class PopupApp {
     }
     
     console.log('[Popup] ===== TOGGLE CHANGE HANDLED =====');
+  }
+
+  /**
+   * Initialize authentication
+   */
+  static async initializeAuth() {
+    try {
+      // Wait for Google Identity Services to load
+      await this.waitForGoogleIdentityServices();
+
+      // Check if user is logged in
+      const isLoggedIn = await AuthService.isLoggedIn();
+      let user = null;
+
+      if (isLoggedIn) {
+        user = await AuthService.getUser();
+        // Optionally verify token by calling profile endpoint
+        try {
+          const profileData = await AuthApiService.get('/profile');
+          if (profileData && profileData.user) {
+            user = profileData.user;
+            // Update stored user data
+            const accessToken = await AuthService.getAccessToken();
+            const refreshToken = await AuthService.getRefreshToken();
+            await AuthService.saveTokens(accessToken, refreshToken, user);
+          }
+        } catch (error) {
+          console.warn('[Popup] Could not fetch profile, using stored user data:', error);
+          // If profile fetch fails with auth error, user might not be logged in
+          if (error.message === 'SIGN_IN_REQUIRED' || error.message === 'TOKEN_REFRESH_FAILED') {
+            await AuthService.clearTokens();
+            user = null;
+          }
+        }
+      }
+
+      // Update UI
+      UIManager.updateAuthUI(isLoggedIn && user, user);
+
+      // Set up event handlers
+      if (!this.authInitialized) {
+        this.setupAuthEventHandlers();
+        this.authInitialized = true;
+      }
+
+      // Initialize Google Sign-In and render button if not logged in
+      if (!isLoggedIn || !user) {
+        await this.initializeAndRenderGoogleSignIn();
+      }
+
+      console.log('[Popup] Auth initialized, logged in:', isLoggedIn && !!user);
+    } catch (error) {
+      console.error('[Popup] Error initializing auth:', error);
+      // Show logged-out state on error
+      UIManager.updateAuthUI(false);
+      // Try to render sign-in button anyway
+      try {
+        await this.initializeAndRenderGoogleSignIn();
+      } catch (renderError) {
+        console.error('[Popup] Error rendering sign-in button:', renderError);
+      }
+    }
+  }
+
+  /**
+   * Wait for Google Identity Services to load
+   * @returns {Promise<void>}
+   */
+  static async waitForGoogleIdentityServices() {
+    return new Promise((resolve, reject) => {
+      // Check if already loaded
+      if (typeof google !== 'undefined' && google.accounts) {
+        resolve();
+        return;
+      }
+
+      // Wait for script to load (max 10 seconds)
+      let attempts = 0;
+      const maxAttempts = 100; // 10 seconds with 100ms intervals
+
+      const checkInterval = setInterval(() => {
+        attempts++;
+        if (typeof google !== 'undefined' && google.accounts) {
+          clearInterval(checkInterval);
+          resolve();
+        } else if (attempts >= maxAttempts) {
+          clearInterval(checkInterval);
+          reject(new Error('Google Identity Services failed to load'));
+        }
+      }, 100);
+    });
+  }
+
+  /**
+   * Initialize Google Sign-In and render button
+   */
+  static async initializeAndRenderGoogleSignIn() {
+    try {
+      const buttonElement = UIManager.googleSignInButton;
+      if (!buttonElement || this.googleSignInButtonRendered) return;
+
+      if (typeof google === 'undefined' || !google.accounts) {
+        console.warn('[Popup] Google Identity Services not loaded, cannot render button');
+        return;
+      }
+
+      // Import GOOGLE_CLIENT_ID
+      const { GOOGLE_CLIENT_ID } = await import('../core/config/authConfig.js');
+
+      // Initialize Google Sign-In with callback
+      google.accounts.id.initialize({
+        client_id: GOOGLE_CLIENT_ID,
+        callback: async (response) => {
+          await this.handleGoogleSignIn(response.credential);
+        }
+      });
+
+      // Render the button
+      google.accounts.id.renderButton(buttonElement, {
+        theme: 'outline',
+        size: 'large',
+        text: 'signin_with',
+        width: 300
+      });
+
+      this.googleSignInButtonRendered = true;
+      console.log('[Popup] Google Sign-In button rendered');
+    } catch (error) {
+      console.error('[Popup] Error initializing/rendering Google Sign-In button:', error);
+    }
+  }
+
+  /**
+   * Handle Google Sign-In callback
+   * @param {string} idToken - Google ID token
+   */
+  static async handleGoogleSignIn(idToken) {
+    try {
+      UIManager.showAuthSpinner();
+
+      const deviceId = await AuthService.getDeviceId();
+      const { DEVICE_INFO } = await import('../core/config/authConfig.js');
+      const ApiConfig = (await import('../core/config/apiConfig.js')).default;
+      const backendUrl = ApiConfig.getCurrentBaseUrl();
+
+      // Exchange id_token for backend tokens
+      const authResponse = await fetch(`${backendUrl}/auth/google`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          id_token: idToken,
+          device_id: deviceId,
+          device_info: DEVICE_INFO
+        }),
+        credentials: 'omit'
+      });
+
+      if (!authResponse.ok) {
+        const errorData = await authResponse.json().catch(() => ({}));
+        throw new Error(errorData.error || `Auth failed: ${authResponse.status}`);
+      }
+
+      const authData = await authResponse.json();
+      const { access_token, refresh_token, user } = authData;
+
+      // Save tokens and user data
+      await AuthService.saveTokens(access_token, refresh_token, user);
+
+      // Update UI
+      UIManager.updateAuthUI(true, user);
+      UIManager.hideAuthSpinner();
+
+      ToastManager.show('Signed in successfully!', 'success');
+
+      console.log('[Popup] Sign-in successful');
+    } catch (error) {
+      console.error('[Popup] Sign-in error:', error);
+      UIManager.updateAuthUI(false);
+      UIManager.hideAuthSpinner();
+      ToastManager.show('Sign-in failed. Please try again.', 'error', 5000);
+    }
+  }
+
+  /**
+   * Handle logout
+   */
+  static async handleLogout() {
+    try {
+      UIManager.showAuthSpinner();
+
+      await AuthService.logout();
+
+      // Update UI
+      UIManager.updateAuthUI(false);
+      UIManager.hideAuthSpinner();
+
+      // Re-render sign-in button
+      this.googleSignInButtonRendered = false;
+      await this.initializeAndRenderGoogleSignIn();
+
+      ToastManager.show('Logged out successfully', 'success');
+
+      console.log('[Popup] Logout successful');
+    } catch (error) {
+      console.error('[Popup] Logout error:', error);
+      // Clear UI anyway
+      UIManager.updateAuthUI(false);
+      UIManager.hideAuthSpinner();
+      ToastManager.show('Logout completed', 'info');
+    }
+  }
+
+  /**
+   * Set up auth event handlers
+   */
+  static setupAuthEventHandlers() {
+    // Logout button
+    const logoutButton = UIManager.logoutButton;
+    if (logoutButton) {
+      logoutButton.addEventListener('click', () => {
+        this.handleLogout();
+      });
+    }
   }
 }
 

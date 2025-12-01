@@ -293,3 +293,159 @@ body.extension-on .highlight {
   color: #7a1fd9;
 }
 
+/* ===================================
+   Auth Section Styles
+   =================================== */
+
+.auth-section {
+  margin-bottom: 16px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #e0e0e0;
+  animation: fadeInUp 0.4s cubic-bezier(0.4, 0, 0.2, 1) 0.05s both;
+}
+
+/* Logged In View */
+.auth-logged-in {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.auth-profile-container {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+}
+
+.profile-picture {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid #9527F5;
+  background-color: #f0f0f0;
+}
+
+.auth-greeting {
+  font-size: 16px;
+  font-weight: 600;
+  color: #333;
+  margin: 0;
+}
+
+.logout-button {
+  background: transparent;
+  border: 1px solid #ccc;
+  border-radius: 8px;
+  padding: 8px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  color: #666;
+  width: 36px;
+  height: 36px;
+}
+
+.logout-button:hover {
+  background-color: rgba(149, 39, 245, 0.1);
+  border-color: #9527F5;
+  color: #9527F5;
+  transform: scale(1.05);
+}
+
+.logout-button:active {
+  transform: scale(0.95);
+}
+
+.logout-button svg {
+  display: block;
+}
+
+/* Logged Out View */
+.auth-logged-out {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 80px;
+}
+
+.sign-in-modal {
+  text-align: center;
+  padding: 20px;
+  background-color: #f9f9f9;
+  border-radius: 12px;
+  border: 1px solid #e0e0e0;
+  width: 100%;
+  max-width: 300px;
+}
+
+.sign-in-text {
+  font-size: 14px;
+  color: #666;
+  margin: 0 0 16px 0;
+}
+
+#googleSignInButton {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+/* Auth Spinner */
+.auth-spinner {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 12px;
+}
+
+.auth-spinner .loader-spinner {
+  width: 24px;
+  height: 24px;
+}
+
+/* Toast Notification */
+.toast-notification {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  background-color: #333;
+  color: white;
+  padding: 12px 24px;
+  border-radius: 8px;
+  font-size: 14px;
+  z-index: 10000;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  animation: toastSlideUp 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  max-width: 90%;
+  text-align: center;
+}
+
+.toast-notification.success {
+  background-color: #4caf50;
+}
+
+.toast-notification.error {
+  background-color: #f44336;
+}
+
+.toast-notification.info {
+  background-color: #2196f3;
+}
+
+@keyframes toastSlideUp {
+  0% {
+    transform: translateX(-50%) translateY(20px);
+    opacity: 0;
+  }
+  100% {
+    transform: translateX(-50%) translateY(0);
+    opacity: 1;
+  }
+}
+

@@ -1564,6 +1564,10 @@ export default defineContentScript({
       console.log('[Content Script] Home options button hidden');
     }
     
+    // Make functions globally accessible for use outside defineContentScript scope
+    window.showCloseButton = showCloseButton;
+    window.hideCloseButton = hideCloseButton;
+    
     /**
      * Blur ask-about-page button (make it non-accessible while modal is visible)
      */
@@ -2753,7 +2757,11 @@ async function handleTabStateChange(domain, eventType, sendResponse) {
         TextSelector.enable();
         // Show home options button if pageTextContent is available
         if (window.pageTextContent) {
-          showCloseButton();
+          if (typeof window.showCloseButton === 'function') {
+            window.showCloseButton();
+          } else if (typeof showCloseButton === 'function') {
+            showCloseButton();
+          }
         }
       } else {
         ButtonPanel.hide(true); // Hide immediately when disabling
@@ -2762,7 +2770,11 @@ async function handleTabStateChange(domain, eventType, sendResponse) {
         WordSelector.clearAll();
         TextSelector.clearAll();
         // Hide home options button when extension is disabled
-        hideCloseButton();
+        if (typeof window.hideCloseButton === 'function') {
+          window.hideCloseButton();
+        } else if (typeof hideCloseButton === 'function') {
+          hideCloseButton();
+        }
         // Close chat dialog if it's open for ask-about-page context
         if (typeof ChatDialog !== 'undefined' && ChatDialog.isOpen && ChatDialog.currentTextKey) {
           const isPageGeneral = ChatDialog.currentTextKey === 'page-general' || ChatDialog.currentTextKey.startsWith('page-general');
