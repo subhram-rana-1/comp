@@ -5,8 +5,15 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Sharpen english comprehension</title>
   <link rel="stylesheet" href="/popup.css">
+  <link rel="stylesheet" href="/payment-ui.css">
 </head>
 <body>
+      <!-- Payment Status Indicator -->
+  <div class="payment-status-container" id="paymentStatusContainer" style="display: none;">
+    <div class="payment-status-badge" id="paymentStatusBadge">Checking...</div>
+    <button class="payment-status-button" id="paymentStatusButton" style="display: none;">Upgrade</button>
+  </div>
+
       <!-- Toggle Switch with Finger Icon -->
   <div class="toggle-container">
     <img src="/arrow-right.svg" alt="arrow" class="finger-point">
@@ -49,7 +56,31 @@
     </div>
   </div>
 
-  <script src="/popup.js"></script>
+  <!-- Payment Modal (hidden by default) -->
+  <div class="payment-overlay" id="paymentModalOverlay" style="display: none;">
+    <div class="payment-modal" id="paymentModal">
+      <button class="payment-close-button" id="paymentModalClose">×</button>
+      <div class="payment-modal-header">
+        <h2 class="payment-modal-title" id="paymentModalTitle">Subscription Required</h2>
+        <p class="payment-modal-subtitle" id="paymentModalSubtitle">Upgrade to unlock all features</p>
+      </div>
+      <div class="payment-modal-body">
+        <ul class="payment-features">
+          <li>AI-powered word explanations</li>
+          <li>Text simplification</li>
+          <li>Page summarization</li>
+          <li>Interactive chat with context</li>
+          <li>Multi-language support</li>
+        </ul>
+      </div>
+      <div class="payment-buttons">
+        <button class="payment-button payment-button-primary" id="paymentUpgradeButton">Upgrade Now</button>
+        <button class="payment-button payment-button-secondary" id="paymentManageButton" style="display: none;">Manage Subscription</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="/popup.js"></script>
 </body>
 </html>
 

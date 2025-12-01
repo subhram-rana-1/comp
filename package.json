@@ -11,6 +11,9 @@
     "build:firefox": "wxt build -b firefox",
     "zip": "node scripts/create-zip.js"
   },
+  "dependencies": {
+    "extpay": "^1.0.0"
+  },
   "devDependencies": {
     "wxt": "^0.19.0"
   }

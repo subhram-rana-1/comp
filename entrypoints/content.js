@@ -1,11 +1,72 @@
 import ApiService from '../core/services/ApiService.js';
 import BookmarkWordsService from '../core/services/BookmarkWordsService.js';
 import ApiConfig from '../core/config/apiConfig.js';
+import PaymentService from '../core/services/PaymentService.js';
+import PaymentUI from '../core/services/PaymentUI.js';
 
 export default defineContentScript({
   matches: ['<all_urls>'],
   
   async main() {
+    // Initialize payment UI styles
+    PaymentUI.injectStyles();
+    
+    // Payment check wrapper function
+    const checkPaymentAndShowUI = async (featureName = 'this feature') => {
+      const isPaid = await PaymentService.checkPaymentStatus();
+      if (!isPaid) {
+        PaymentUI.showPaymentModal({
+          title: 'Subscription Required',
+          message: `A subscription is required to use ${featureName}. Please upgrade to continue.`
+        });
+        return false;
+      }
+      return true;
+    };
+    
+    // Make payment check available globally
+    window.checkPaymentAndShowUI = checkPaymentAndShowUI;
+    
+    // Create payment-gated ApiService wrapper
+    const PaymentGatedApiService = {
+      async ask(...args) {
+        if (!(await checkPaymentAndShowUI('chat features'))) {
+          return () => {}; // Return no-op abort function
+        }
+        return ApiService.ask(...args);
+      },
+      async simplify(...args) {
+        if (!(await checkPaymentAndShowUI('text simplification'))) {
+          return () => {}; // Return no-op abort function
+        }
+        return ApiService.simplify(...args);
+      },
+      async summarise(...args) {
+        if (!(await checkPaymentAndShowUI('page summarization'))) {
+          return () => {}; // Return no-op abort function
+        }
+        return ApiService.summarise(...args);
+      },
+      async explainWords(...args) {
+        if (!(await checkPaymentAndShowUI('word explanations'))) {
+          return () => {}; // Return no-op abort function
+        }
+        return ApiService.explainWords(...args);
+      },
+      async search(...args) {
+        if (!(await checkPaymentAndShowUI('web search'))) {
+          return () => {}; // Return no-op abort function
+        }
+        return ApiService.search(...args);
+      }
+    };
+    
+    // Replace ApiService with payment-gated version for this content script
+    // Keep original available as ApiServiceOriginal if needed
+    window.ApiServiceOriginal = ApiService;
+    // Shadow ApiService in this scope with payment-gated version
+    const ApiService = PaymentGatedApiService;
+    
     // Add global debugging functions immediately
     window.debugExtension = {
       checkStorage: () => {
