@@ -17,6 +17,9 @@ class ApiConfig {
     return 'https://caten-production.up.railway.app';
   }
   
+  // Google OAuth Client ID
+  static GOOGLE_CLIENT_ID = '355884005048-76olfh4sp2o2uitojjeslpsaonvc7d2s.apps.googleusercontent.com';
+  
   // API Endpoints
   static ENDPOINTS = {
     ASK: '/api/v2/ask',
@@ -27,7 +30,8 @@ class ApiConfig {
     SUMMARISE: '/api/v2/summarise',
     WORDS_EXPLANATION: '/api/v2/words-explanation',
     TRANSLATE: '/api/v2/translate',
-    WEB_SEARCH_STREAM: '/api/v2/web-search-stream'
+    WEB_SEARCH_STREAM: '/api/v2/web-search-stream',
+    AUTH_LOGIN: '/api/auth/login'
   };
   
   // Helper method to get full URL for an endpoint
