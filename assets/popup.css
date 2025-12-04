@@ -390,41 +390,47 @@ body.extension-on .highlight {
 
 .user-profile-content {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   align-items: center;
-  gap: 16px;
+  justify-content: center;
+  gap: 12px;
   position: relative;
   width: 100%;
 }
 
+.user-picture-greeting-wrapper {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 12px;
+}
+
 .user-picture {
-  width: 64px;
-  height: 64px;
+  width: 44px;
+  height: 44px;
   border-radius: 50%;
-  border: 3px solid #9527F5;
+  border: none;
   object-fit: cover;
   box-shadow: 0 2px 8px rgba(149, 39, 245, 0.2);
+  flex-shrink: 0;
 }
 
 .user-greeting {
-  text-align: center;
+  text-align: left;
 }
 
 .greeting-text {
   margin: 0;
   font-size: 16px;
   font-weight: 500;
-  color: #333;
+  color: #9527F5;
   line-height: 1.4;
 }
 
 .logout-button {
-  position: absolute;
-  top: 0;
-  right: 0;
   background: transparent;
-  border: 2px solid #9527F5;
-  border-radius: 8px;
+  border: none;
+  border-radius: 50%;
   padding: 8px;
   cursor: pointer;
   display: flex;
@@ -433,6 +439,7 @@ body.extension-on .highlight {
   transition: all 0.2s ease;
   width: 36px;
   height: 36px;
+  flex-shrink: 0;
 }
 
 .logout-button:hover {

@@ -227,21 +227,23 @@ class PopupApp {
     
     if (this.loadingState && this.normalContent) {
       if (isLoading) {
-        // Show loading state
+        // Show loading state, hide normal content (branding + sign-in/user info)
         this.loadingState.style.display = 'flex';
         this.normalContent.classList.remove('visible');
         // Hide toggle button
         if (toggleContainer) {
           toggleContainer.style.display = 'none';
         }
+        console.log('[PopupApp] Showing loading state, hiding normal content');
       } else {
-        // Show normal content
+        // Show normal content (branding + sign-in/user info), hide loading state
         this.loadingState.style.display = 'none';
         this.normalContent.classList.add('visible');
         // Show toggle button
         if (toggleContainer) {
           toggleContainer.style.display = 'flex';
         }
+        console.log('[PopupApp] Showing normal content, hiding loading state');
       }
     }
   }
@@ -255,23 +257,11 @@ class PopupApp {
     // Get DOM elements
     this.loadingState = document.getElementById('loadingState');
     this.normalContent = document.getElementById('normalContent');
-    
+
     console.log('[PopupApp] DOM elements:', {
       loadingState: !!this.loadingState,
       normalContent: !!this.normalContent
     });
-
-    // Always show normal content (user profile should always be visible)
-    if (this.normalContent) {
-      this.normalContent.classList.add('visible');
-      console.log('[PopupApp] Normal content made visible');
-    }
-    
-    // Hide loading state initially (we'll show it only if needed)
-    if (this.loadingState) {
-      this.loadingState.style.display = 'none';
-      console.log('[PopupApp] Loading state hidden');
-    }
 
     // Initialize error banner
     ErrorBannerManager.init();
@@ -291,23 +281,17 @@ class PopupApp {
     console.log('[PopupApp] Initializing sign-in button...');
     UserProfileUIManager.initSignInButton();
 
-    // Check initial tab loading state (for informational purposes, but don't hide content)
-    const isLoading = await this.checkTabLoading();
-    console.log('[PopupApp] Tab loading state:', isLoading);
-    
-    // Show loading message only if tab is loading, but keep normal content visible
-    if (isLoading && this.loadingState) {
-      this.loadingState.style.display = 'flex';
-    }
+    // Initialize logout button
+    console.log('[PopupApp] Initializing logout button...');
+    UserProfileUIManager.initLogoutButton();
+
+    // Check initial tab loading state and update content visibility
+    await this.updateContentVisibility();
 
     // Poll tab status every 200ms while loading
     const checkInterval = setInterval(async () => {
       const isLoading = await this.checkTabLoading();
-      
-      // Update loading state visibility, but keep normal content visible
-      if (this.loadingState) {
-        this.loadingState.style.display = isLoading ? 'flex' : 'none';
-      }
+      await this.updateContentVisibility();
       
       // Stop polling once page is loaded
       if (!isLoading) {
@@ -319,10 +303,7 @@ class PopupApp {
     // Also listen for tab updates
     chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
       if (changeInfo.status === 'complete' || changeInfo.status === 'loading') {
-        const isLoading = changeInfo.status === 'loading';
-        if (this.loadingState) {
-          this.loadingState.style.display = isLoading ? 'flex' : 'none';
-        }
+        this.updateContentVisibility();
       }
     });
 
@@ -342,11 +323,8 @@ class PopupApp {
       const userAccountData = UserAccountManager.getUserAccountData();
       console.log('[PopupApp] updateUserProfileUI - userAccountData:', userAccountData);
       
-      // Ensure normal content is visible
-      if (this.normalContent && !this.normalContent.classList.contains('visible')) {
-        this.normalContent.classList.add('visible');
-        console.log('[PopupApp] Normal content made visible in updateUserProfileUI');
-      }
+      // Don't force normal content visibility here - let updateContentVisibility handle it
+      // Only update the UI state (sign-in vs user profile)
       
       if (!userAccountData || userAccountData.isLoggedIn !== true) {
         console.log('[PopupApp] User not logged in, showing sign-in button');
@@ -484,18 +462,22 @@ class PopupApp {
   }
 }
 
-// Fallback function to ensure sign-in button is visible
+// Fallback function to ensure sign-in button is visible (only if page is not loading)
 function ensureSignInVisible() {
+  const loadingState = document.getElementById('loadingState');
   const normalContent = document.getElementById('normalContent');
   const signinContainer = document.getElementById('signinContainer');
   const userInfoContainer = document.getElementById('userInfoContainer');
   
-  if (normalContent && !normalContent.classList.contains('visible')) {
+  // Only show normal content if page is not loading
+  const isLoading = loadingState && loadingState.style.display === 'flex';
+  
+  if (!isLoading && normalContent && !normalContent.classList.contains('visible')) {
     normalContent.classList.add('visible');
   }
   
-  // If user info is not showing, show sign-in by default
-  if (userInfoContainer && userInfoContainer.style.display !== 'flex') {
+  // If user info is not showing, show sign-in by default (only if not loading)
+  if (!isLoading && userInfoContainer && userInfoContainer.style.display !== 'flex') {
     if (signinContainer) {
       signinContainer.style.display = 'flex';
     }
@@ -549,16 +531,30 @@ setTimeout(() => {
 // ===================================
 // Configuration constants (inlined to avoid import issues)
 const AUTH_CONFIG = {
-  GOOGLE_CLIENT_ID: '355884005048-76olfh4sp2o2uitojjeslpsaonvc7d2s.apps.googleusercontent.com',
+  // ----------- IMPORTANT ----------- //
+    // Local testing :
+    //  1. Set GOOGLE_CLIENT_ID here = 355884005048-4bn6e6rbq9mfdrb2q43sthsejc88sbcc.apps.googleusercontent.com
+    //  2. Set "Item Id" in the cloude console project = whatever the extension id is after doing "Load unpacked" activity
+    // TO be able to publishm in chrome web store :
+    //  1. Set GOOGLE_CLIENT_ID here = 355884005048-76olfh4sp2o2uitojjeslpsaonvc7d2s.apps.googleusercontent.com
+    //  2. Set "Item Id" in the cloude console project = nmphalmbdmddagbllhjnfnmodfmbnlkp (get it from https://chromewebstore.google.com/ for your extension)
+  // ----------- IMPORTANT ----------- //
+  GOOGLE_CLIENT_ID: '355884005048-4bn6e6rbq9mfdrb2q43sthsejc88sbcc.apps.googleusercontent.com',
   BASE_URL: (() => {
     // Check for development environment
     if (typeof process !== 'undefined' && process.env.NODE_ENV === 'development') {
       return 'http://localhost:8000';
     }
-    // Default to production URL
-    return 'https://caten-production.up.railway.app';
+    
+    // TODO: Update to production URL
+    return 'http://localhost:8000';
+    // return 'https://caten-production.up.railway.app';
   })(),
-  AUTH_LOGIN_ENDPOINT: '/api/auth/login'
+  AUTH_LOGIN_ENDPOINT: '/api/auth/login',
+  // Get redirect URI using chrome.identity API
+  getRedirectUri: () => {
+    return chrome.identity.getRedirectURL();
+  }
 };
 
 // Import AuthService dynamically when needed
@@ -636,6 +632,47 @@ async function loadAuthService() {
             }
             return { success: false, error: errorMessage };
           }
+        },
+        logout: async (accessToken) => {
+          const url = `${AUTH_CONFIG.BASE_URL}/api/auth/logout`;
+          console.log('[AuthService] Sending logout request to:', url);
+          
+          try {
+            const response = await fetch(url, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json'
+              },
+              mode: 'cors',
+              body: JSON.stringify({
+                authVendor: 'GOOGLE',
+                accessToken: accessToken
+              })
+            });
+            
+            if (!response.ok) {
+              let errorMessage = `Logout failed: ${response.status} ${response.statusText}`;
+              try {
+                const errorData = await response.json();
+                if (errorData.error || errorData.message) {
+                  errorMessage = errorData.error || errorData.message;
+                }
+              } catch (e) {
+                console.warn('[AuthService] Could not parse error response:', e);
+              }
+              return { success: false, error: errorMessage };
+            }
+            
+            const data = await response.json();
+            return { success: true, data: data };
+          } catch (error) {
+            console.error('[AuthService] Error during logout:', error);
+            let errorMessage = error.message;
+            if (error.message.includes('Failed to fetch') || error.name === 'TypeError') {
+              errorMessage = 'Cannot connect to API server. Please check the backend server is running.';
+            }
+            return { success: false, error: errorMessage };
+          }
         }
       };
     }
@@ -695,19 +732,14 @@ const UserProfileUIManager = {
     console.log('[UserProfileUIManager] Showing sign-in UI');
     const signinContainer = document.getElementById('signinContainer');
     const userInfoContainer = document.getElementById('userInfoContainer');
-    const normalContent = document.getElementById('normalContent');
     
     console.log('[UserProfileUIManager] Containers found:', {
       signinContainer: !!signinContainer,
-      userInfoContainer: !!userInfoContainer,
-      normalContent: !!normalContent
+      userInfoContainer: !!userInfoContainer
     });
     
-    // Ensure normal content is visible
-    if (normalContent && !normalContent.classList.contains('visible')) {
-      normalContent.classList.add('visible');
-      console.log('[UserProfileUIManager] Normal content made visible');
-    }
+    // Don't force normal content visibility here - let updateContentVisibility handle it
+    // Only update the UI state (sign-in vs user profile)
     
     if (signinContainer) {
       signinContainer.style.display = 'flex';
@@ -750,13 +782,16 @@ const UserProfileUIManager = {
     if (userData && userData.user) {
       if (userPicture && userData.user.picture) {
         userPicture.src = userData.user.picture;
-        userPicture.alt = userData.user.name || 'User profile';
+        const displayName = userData.user.firstName || userData.user.name || 'User';
+        userPicture.alt = displayName;
         console.log('[UserProfileUIManager] User picture set:', userData.user.picture);
       }
       
-      if (greetingText && userData.user.name) {
-        greetingText.textContent = `Hello, ${userData.user.name}!`;
-        console.log('[UserProfileUIManager] Greeting set:', userData.user.name);
+      if (greetingText) {
+        // Use firstName if available, otherwise use name
+        const displayName = userData.user.firstName || userData.user.name || 'User';
+        greetingText.textContent = `${displayName} 👋`;
+        console.log('[UserProfileUIManager] Greeting set:', displayName);
       }
     }
   },
@@ -793,6 +828,63 @@ const UserProfileUIManager = {
     } else {
       console.error('[UserProfileUIManager] Sign-in button not found!');
     }
+  },
+
+  /**
+   * Initialize logout button click handler
+   */
+  initLogoutButton() {
+    const logoutButton = document.getElementById('logoutButton');
+    if (logoutButton) {
+      console.log('[UserProfileUIManager] Logout button found, attaching click handler');
+      
+      // Store the original SVG content
+      const originalSvg = logoutButton.innerHTML;
+      
+      // Create spinner SVG (purple color matching the theme)
+      const spinnerSvg = `
+        <svg width="32" height="32" viewBox="0 0 40 40" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="20" cy="20" r="18" fill="none" stroke="#9527F5" stroke-width="3" stroke-linecap="round" stroke-dasharray="113" stroke-dashoffset="56.5">
+            <animate attributeName="stroke-dasharray" dur="1.5s" values="0 113;56.5 56.5;0 113;0 113" repeatCount="indefinite"/>
+            <animate attributeName="stroke-dashoffset" dur="1.5s" values="0;-56.5;-113;-113" repeatCount="indefinite"/>
+          </circle>
+        </svg>
+      `;
+      
+      logoutButton.addEventListener('click', async (event) => {
+        event.preventDefault();
+        console.log('[UserProfileUIManager] Logout button clicked');
+        
+        try {
+          // Get access token from user account data
+          const userAccountData = UserAccountManager.getUserAccountData();
+          if (!userAccountData || !userAccountData.accessToken) {
+            throw new Error('Access token not found. Please sign in again.');
+          }
+          
+          // Disable button and show spinner
+          logoutButton.disabled = true;
+          logoutButton.style.cursor = 'not-allowed';
+          logoutButton.innerHTML = spinnerSvg;
+          
+          await AuthenticationManager.completeLogout(userAccountData.accessToken);
+          
+          // On success, the UI will be updated by updateUserProfileUI which will hide the logout button
+          // So we don't need to restore the button here
+        } catch (error) {
+          console.error('[UserProfileUIManager] Error in logout button handler:', error);
+          // Error is already shown by AuthenticationManager
+          
+          // Re-enable button and restore original icon on error
+          logoutButton.disabled = false;
+          logoutButton.style.cursor = 'pointer';
+          logoutButton.innerHTML = originalSvg;
+        }
+      });
+      console.log('[UserProfileUIManager] Logout button click handler attached');
+    } else {
+      console.error('[UserProfileUIManager] Logout button not found!');
+    }
   }
 };
 
@@ -816,9 +908,8 @@ const AuthenticationManager = {
       
       console.log('[Auth] Using Google Client ID:', clientId);
       
-      // We don't need Google Identity Services library for tab-based OAuth flow
-      // We'll construct the OAuth URL directly and open it in a new tab
-      console.log('[Auth] Starting OAuth tab flow...');
+      // Use chrome.identity.launchWebAuthFlow() for OAuth flow
+      console.log('[Auth] Starting OAuth flow with chrome.identity API...');
       await this.handleGoogleSignInPopup(clientId);
     } catch (error) {
       console.error('[Auth] Error initiating Google sign-in:', error);
@@ -834,148 +925,121 @@ const AuthenticationManager = {
   },
 
   /**
-   * Handle Google sign-in using new tab with OAuth flow
+   * Handle Google sign-in using chrome.identity.launchWebAuthFlow()
    * @param {string} clientId - Google OAuth client ID
    */
   async handleGoogleSignInPopup(clientId) {
-    return new Promise((resolve, reject) => {
+    try {
       // Generate state and nonce for security
       const state = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
       const nonce = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
       
       // Store state in chrome.storage for verification
-      chrome.storage.local.set({ 'oauth_state': state, 'oauth_nonce': nonce });
+      await chrome.storage.local.set({ 'oauth_state': state, 'oauth_nonce': nonce });
+      
+      // Get redirect URI using chrome.identity API
+      const redirectUri = AUTH_CONFIG.getRedirectUri();
+      console.log('[Auth] Using redirect URI:', redirectUri);
       
       // Create OAuth URL
       // Note: The redirect_uri must be registered in Google Cloud Console for your OAuth client
-      // Update this to match your registered redirect URI
-      // The code will monitor the tab for id_token in the URL, so any registered URI will work
-      const redirectUri = encodeURIComponent('http://localhost:8080/oauth-callback');
       const scope = 'openid email profile';
       const responseType = 'id_token';
       
       const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?` +
         `client_id=${encodeURIComponent(clientId)}&` +
-        `redirect_uri=${redirectUri}&` +
+        `redirect_uri=${encodeURIComponent(redirectUri)}&` +
         `response_type=${responseType}&` +
         `scope=${encodeURIComponent(scope)}&` +
         `state=${state}&` +
         `nonce=${nonce}`;
 
-      console.log('[Auth] Opening OAuth tab with URL:', authUrl);
+      console.log('[Auth] Launching OAuth flow with chrome.identity API...');
       
-      // Open OAuth flow in a new tab
-      chrome.tabs.create({ url: authUrl }, (tab) => {
-        if (chrome.runtime.lastError) {
-          const error = chrome.runtime.lastError.message;
-          console.error('[Auth] Error opening OAuth tab:', error);
-          console.error('[Auth] Chrome runtime error:', chrome.runtime.lastError);
-          chrome.storage.local.remove(['oauth_state', 'oauth_nonce']);
-          reject(new Error(`Failed to open OAuth tab: ${error}. Make sure the extension has 'tabs' permission.`));
-          return;
-        }
-        
-        if (!tab || !tab.id) {
-          console.error('[Auth] Tab creation failed - no tab returned');
-          chrome.storage.local.remove(['oauth_state', 'oauth_nonce']);
-          reject(new Error('Failed to create OAuth tab'));
-          return;
-        }
-        
-        console.log('[Auth] OAuth tab created successfully, tab ID:', tab.id);
-
-        const tabId = tab.id;
-        let tabClosed = false;
-        let resolved = false;
-
-        // Listen for tab updates to detect OAuth callback
-        const tabUpdateListener = async (updatedTabId, changeInfo, updatedTab) => {
-          if (updatedTabId !== tabId || !updatedTab.url || resolved) return;
+      // Use chrome.identity.launchWebAuthFlow() to open OAuth in a popup
+      const callbackUrl = await new Promise((resolve, reject) => {
+        chrome.identity.launchWebAuthFlow({
+          url: authUrl,
+          interactive: true
+        }, (callbackUrl) => {
+          if (chrome.runtime.lastError) {
+            const error = chrome.runtime.lastError.message;
+            console.error('[Auth] Error in OAuth flow:', error);
+            
+            // Clean up stored state
+            chrome.storage.local.remove(['oauth_state', 'oauth_nonce']);
+            
+            // Handle user cancellation
+            if (error.includes('OAuth2') || error.includes('canceled') || error.includes('cancelled')) {
+              reject(new Error('Sign-in was cancelled'));
+            } else {
+              reject(new Error(`OAuth flow failed: ${error}`));
+            }
+            return;
+          }
           
-          try {
-            const url = new URL(updatedTab.url);
-            
-            // Check if URL contains id_token (OAuth callback)
-            let idToken = null;
-            let returnedState = null;
-            
-            // Check hash fragment (common in OAuth implicit flow)
-            if (url.hash) {
-              const hashParams = new URLSearchParams(url.hash.substring(1));
-              idToken = hashParams.get('id_token');
-              returnedState = hashParams.get('state');
-            }
-            
-            // Check query params as fallback
-            if (!idToken) {
-              idToken = url.searchParams.get('id_token');
-              returnedState = url.searchParams.get('state');
-            }
-            
-            // Check for errors
-            if (!idToken) {
-              const error = url.searchParams.get('error') || (url.hash ? new URLSearchParams(url.hash.substring(1)).get('error') : null);
-              if (error) {
-                const errorDesc = url.searchParams.get('error_description') || (url.hash ? new URLSearchParams(url.hash.substring(1)).get('error_description') : null);
-                throw new Error(`OAuth error: ${error}${errorDesc ? ' - ' + errorDesc : ''}`);
-              }
-              // Not a callback URL yet, continue waiting
-              return;
-            }
-            
-            // Verify state
-            const stored = await chrome.storage.local.get(['oauth_state']);
-            if (stored.oauth_state && stored.oauth_state !== returnedState) {
-              throw new Error('OAuth state mismatch - possible security issue');
-            }
-
-            resolved = true;
-            
-            // Clean up
-            chrome.tabs.onUpdated.removeListener(tabUpdateListener);
-            chrome.tabs.onRemoved.removeListener(tabRemovedListener);
+          if (!callbackUrl) {
             chrome.storage.local.remove(['oauth_state', 'oauth_nonce']);
-            
-            // Close the OAuth tab
-            chrome.tabs.remove(tabId);
-            
-            // Call backend API with id_token
-            await this.completeSignIn(idToken);
-            resolve();
-          } catch (error) {
-            if (resolved) return;
-            resolved = true;
-            
-            console.error('[Auth] Error processing OAuth response:', error);
-            
-            // Clean up
-            chrome.tabs.onUpdated.removeListener(tabUpdateListener);
-            chrome.tabs.onRemoved.removeListener(tabRemovedListener);
-            chrome.storage.local.remove(['oauth_state', 'oauth_nonce']);
-            
-            // Close the OAuth tab
-            chrome.tabs.remove(tabId);
-            
-            reject(error);
+            reject(new Error('OAuth flow returned no callback URL'));
+            return;
           }
-        };
-
-        // Listen for tab removal (user closed it)
-        const tabRemovedListener = (removedTabId) => {
-          if (removedTabId === tabId && !tabClosed && !resolved) {
-            tabClosed = true;
-            resolved = true;
-            chrome.tabs.onUpdated.removeListener(tabUpdateListener);
-            chrome.tabs.onRemoved.removeListener(tabRemovedListener);
-            chrome.storage.local.remove(['oauth_state', 'oauth_nonce']);
-            reject(new Error('Sign-in was cancelled'));
-          }
-        };
-
-        chrome.tabs.onUpdated.addListener(tabUpdateListener);
-        chrome.tabs.onRemoved.addListener(tabRemovedListener);
+          
+          resolve(callbackUrl);
+        });
       });
-    });
+      
+      console.log('[Auth] OAuth callback URL received:', callbackUrl);
+      
+      // Parse the callback URL to extract id_token
+      const url = new URL(callbackUrl);
+      
+      let idToken = null;
+      let returnedState = null;
+      
+      // Check hash fragment (common in OAuth implicit flow)
+      if (url.hash) {
+        const hashParams = new URLSearchParams(url.hash.substring(1));
+        idToken = hashParams.get('id_token');
+        returnedState = hashParams.get('state');
+      }
+      
+      // Check query params as fallback
+      if (!idToken) {
+        idToken = url.searchParams.get('id_token');
+        returnedState = url.searchParams.get('state');
+      }
+      
+      // Check for errors in callback
+      if (!idToken) {
+        const error = url.searchParams.get('error') || (url.hash ? new URLSearchParams(url.hash.substring(1)).get('error') : null);
+        if (error) {
+          const errorDesc = url.searchParams.get('error_description') || (url.hash ? new URLSearchParams(url.hash.substring(1)).get('error_description') : null);
+          chrome.storage.local.remove(['oauth_state', 'oauth_nonce']);
+          throw new Error(`OAuth error: ${error}${errorDesc ? ' - ' + errorDesc : ''}`);
+        }
+        chrome.storage.local.remove(['oauth_state', 'oauth_nonce']);
+        throw new Error('No id_token found in OAuth callback');
+      }
+      
+      // Verify state
+      const stored = await chrome.storage.local.get(['oauth_state']);
+      if (stored.oauth_state && stored.oauth_state !== returnedState) {
+        chrome.storage.local.remove(['oauth_state', 'oauth_nonce']);
+        throw new Error('OAuth state mismatch - possible security issue');
+      }
+      
+      // Clean up stored state
+      await chrome.storage.local.remove(['oauth_state', 'oauth_nonce']);
+      
+      // Call backend API with id_token
+      await this.completeSignIn(idToken);
+      
+    } catch (error) {
+      console.error('[Auth] Error in handleGoogleSignInPopup:', error);
+      // Ensure cleanup on error
+      await chrome.storage.local.remove(['oauth_state', 'oauth_nonce']).catch(() => {});
+      throw error;
+    }
   },
 
   /**
@@ -1008,6 +1072,40 @@ const AuthenticationManager = {
     } catch (error) {
       console.error('[Auth] Error completing sign-in:', error);
       ErrorBannerManager.showError(error.message || 'Sign-in failed');
+      throw error;
+    }
+  },
+
+  /**
+   * Complete logout by calling backend API
+   * @param {string} accessToken - User access token
+   */
+  async completeLogout(accessToken) {
+    try {
+      const AuthServiceModule = await loadAuthService();
+      if (!AuthServiceModule) {
+        throw new Error('Failed to load AuthService');
+      }
+
+      const result = await AuthServiceModule.logout(accessToken);
+      
+      if (result.success && result.data) {
+        // Store the full API response (should have isLoggedIn: false)
+        await UserAccountManager.saveUserAccountData(result.data);
+        
+        // Update UI to show sign-in component
+        await PopupApp.updateUserProfileUI();
+        
+        // Hide any error banners
+        ErrorBannerManager.hideError();
+        
+        console.log('[Auth] Logout successful');
+      } else {
+        throw new Error(result.error || 'Logout failed');
+      }
+    } catch (error) {
+      console.error('[Auth] Error completing logout:', error);
+      ErrorBannerManager.showError(error.message || 'Logout failed');
       throw error;
     }
   }

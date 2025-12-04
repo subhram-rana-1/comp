@@ -27,7 +27,8 @@ export default defineConfig({
     permissions: [
       'storage',
       'tabs',
-      'activeTab'
+      'activeTab',
+      'identity'
     ],
     host_permissions: getHostPermissions(),
     web_accessible_resources: [
