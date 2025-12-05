@@ -732,11 +732,27 @@ const UserProfileUIManager = {
     console.log('[UserProfileUIManager] Showing sign-in UI');
     const signinContainer = document.getElementById('signinContainer');
     const userInfoContainer = document.getElementById('userInfoContainer');
+    const signinButton = document.getElementById('signinWithGoogle');
+    const textSpan = signinButton ? signinButton.querySelector('.signin-text') : null;
     
     console.log('[UserProfileUIManager] Containers found:', {
       signinContainer: !!signinContainer,
-      userInfoContainer: !!userInfoContainer
+      userInfoContainer: !!userInfoContainer,
+      signinButton: !!signinButton
     });
+    
+    // Reset sign-in button to original pill-shaped state (fixes bug after logout)
+    if (signinButton) {
+      signinButton.classList.remove('loading');
+      signinButton.style.height = '';
+      signinButton.style.width = '';
+      signinButton.style.opacity = '1';
+      signinButton.disabled = false;
+      signinButton.style.cursor = 'pointer';
+      if (textSpan) {
+        textSpan.style.display = '';
+      }
+    }
     
     // Don't force normal content visibility here - let updateContentVisibility handle it
     // Only update the UI state (sign-in vs user profile)
@@ -763,12 +779,14 @@ const UserProfileUIManager = {
     const userInfoContainer = document.getElementById('userInfoContainer');
     const userPicture = document.getElementById('userPicture');
     const greetingText = document.getElementById('greetingText');
+    const logoutButton = document.getElementById('logoutButton');
     
     console.log('[UserProfileUIManager] Elements found:', {
       signinContainer: !!signinContainer,
       userInfoContainer: !!userInfoContainer,
       userPicture: !!userPicture,
-      greetingText: !!greetingText
+      greetingText: !!greetingText,
+      logoutButton: !!logoutButton
     });
     
     if (signinContainer) signinContainer.style.display = 'none';
@@ -777,6 +795,19 @@ const UserProfileUIManager = {
       console.log('[UserProfileUIManager] User info container displayed');
     } else {
       console.error('[UserProfileUIManager] User info container not found!');
+    }
+    
+    // Reset logout button to original state (fixes glitch where spinner might be showing)
+    if (logoutButton) {
+      const originalSvg = `
+        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="transform: translateY(2px);">
+          <path d="M12 2V12" stroke="#9527F5" stroke-width="2" stroke-linecap="round"/>
+          <path d="M7 4.5C5.23 5.94 4 8.16 4 10.7C4 15.03 7.58 18.5 12 18.5C16.42 18.5 20 15.03 20 10.7C20 8.16 18.77 5.94 17 4.5" stroke="#9527F5" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+      `;
+      logoutButton.innerHTML = originalSvg;
+      logoutButton.disabled = false;
+      logoutButton.style.cursor = 'pointer';
     }
     
     if (userData && userData.user) {
@@ -790,7 +821,7 @@ const UserProfileUIManager = {
       if (greetingText) {
         // Use firstName if available, otherwise use name
         const displayName = userData.user.firstName || userData.user.name || 'User';
-        greetingText.textContent = `${displayName} 👋`;
+        greetingText.textContent = `Hello, ${displayName} !`;
         console.log('[UserProfileUIManager] Greeting set:', displayName);
       }
     }
@@ -807,21 +838,53 @@ const UserProfileUIManager = {
         event.preventDefault();
         console.log('[UserProfileUIManager] Sign-in button clicked');
         
+        // Get the text span element
+        const textSpan = signinButton.querySelector('.signin-text');
+        
         try {
           // Disable button during sign-in
           signinButton.disabled = true;
           signinButton.style.opacity = '0.6';
           signinButton.style.cursor = 'not-allowed';
           
+          // Get the current height of the button to preserve it
+          const currentHeight = signinButton.offsetHeight;
+          
+          // Immediately hide the text (no animation)
+          if (textSpan) {
+            textSpan.style.display = 'none';
+          }
+          
+          // Add loading class first to trigger CSS transitions
+          signinButton.classList.add('loading');
+          
+          // Use requestAnimationFrame to ensure the class is applied before setting dimensions
+          // This allows the CSS transitions to work smoothly
+          requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+              // Set the height and width after the class is applied, allowing smooth transition
+              signinButton.style.height = `${currentHeight}px`;
+              signinButton.style.width = `${currentHeight}px`;
+            });
+          });
+          
           await AuthenticationManager.initiateGoogleSignIn();
         } catch (error) {
           console.error('[UserProfileUIManager] Error in sign-in button handler:', error);
           // Error is already shown by AuthenticationManager
-        } finally {
-          // Re-enable button
+          
+          // Restore button to original state on error
+          signinButton.classList.remove('loading');
+          signinButton.style.height = '';
+          signinButton.style.width = '';
+          if (textSpan) {
+            textSpan.style.display = '';
+          }
           signinButton.disabled = false;
-          signinButton.style.opacity = '1';
           signinButton.style.cursor = 'pointer';
+        } finally {
+          // Note: We don't restore here on success because the UI will change to show user profile
+          // Only restore on error (handled in catch block)
         }
       });
       console.log('[UserProfileUIManager] Sign-in button click handler attached');
@@ -838,8 +901,19 @@ const UserProfileUIManager = {
     if (logoutButton) {
       console.log('[UserProfileUIManager] Logout button found, attaching click handler');
       
-      // Store the original SVG content
-      const originalSvg = logoutButton.innerHTML;
+      // Store the original SVG content from HTML template (not current state)
+      // This ensures we always have the correct original icon, even if button was in spinner state
+      const originalSvg = `
+        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="transform: translateY(2px);">
+          <path d="M12 2V12" stroke="#9527F5" stroke-width="2" stroke-linecap="round"/>
+          <path d="M7 4.5C5.23 5.94 4 8.16 4 10.7C4 15.03 7.58 18.5 12 18.5C16.42 18.5 20 15.03 20 10.7C20 8.16 18.77 5.94 17 4.5" stroke="#9527F5" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+      `;
+      
+      // Always reset button to original state on initialization (fixes glitch)
+      logoutButton.innerHTML = originalSvg;
+      logoutButton.disabled = false;
+      logoutButton.style.cursor = 'pointer';
       
       // Create spinner SVG (purple color matching the theme)
       const spinnerSvg = `
