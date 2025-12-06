@@ -641,12 +641,12 @@ async function loadAuthService() {
             const response = await fetch(url, {
               method: 'POST',
               headers: {
-                'Content-Type': 'application/json'
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${accessToken}`
               },
               mode: 'cors',
               body: JSON.stringify({
-                authVendor: 'GOOGLE',
-                accessToken: accessToken
+                authVendor: 'GOOGLE'
               })
             });
             
