@@ -15,6 +15,183 @@ class ApiService {
   static ENDPOINTS = ApiConfig.ENDPOINTS;
   
   /**
+   * Store X-Unauthenticated-User-Id header from response in chrome.storage.local
+   * @param {Response} response - Fetch response object
+   */
+  static async storeUnauthenticatedUserId(response) {
+    try {
+      // Try to get header with different case variations (HTTP headers are case-insensitive but Headers API might be case-sensitive)
+      let headerValue = response.headers.get('X-Unauthenticated-User-Id');
+      if (!headerValue) {
+        headerValue = response.headers.get('x-unauthenticated-user-id');
+      }
+      if (!headerValue) {
+        // Try to find it case-insensitively by iterating
+        for (const [key, value] of response.headers.entries()) {
+          if (key.toLowerCase() === 'x-unauthenticated-user-id') {
+            headerValue = value;
+            break;
+          }
+        }
+      }
+      
+      if (headerValue) {
+        console.log('[X-UNAUTH-RECEIVED] Received X-Unauthenticated-User-Id from API response:', headerValue);
+        console.log('[X-UNAUTH-RECEIVED] Storing in chrome.storage.local with key: x-unauthenticated-user-id');
+        await chrome.storage.local.set({ 'x-unauthenticated-user-id': headerValue });
+        console.log('[ApiService] ✓ Stored X-Unauthenticated-User-Id in chrome.storage.local:', headerValue);
+        
+        // Verify storage by reading it back immediately
+        const verifyResult = await chrome.storage.local.get(['x-unauthenticated-user-id']);
+        console.log('[X-UNAUTH-RECEIVED] Verification - Storage get result:', JSON.stringify(verifyResult));
+        if (verifyResult['x-unauthenticated-user-id'] === headerValue) {
+          console.log('[ApiService] ✓ Verified: X-Unauthenticated-User-Id successfully stored and retrievable');
+          console.log('[X-UNAUTH-RECEIVED] Stored value:', verifyResult['x-unauthenticated-user-id']);
+        } else {
+          console.warn('[ApiService] ⚠ Warning: Stored value does not match retrieved value. Stored:', headerValue, 'Retrieved:', verifyResult['x-unauthenticated-user-id']);
+        }
+      } else {
+        console.log('[ApiService] X-Unauthenticated-User-Id header not found in response');
+        console.log('[X-UNAUTH-RECEIVED] No X-Unauthenticated-User-Id header in response - checking all response headers:');
+        const allHeaders = {};
+        response.headers.forEach((value, key) => {
+          allHeaders[key] = value;
+        });
+        console.log('[X-UNAUTH-RECEIVED] All response headers:', JSON.stringify(allHeaders, null, 2));
+      }
+    } catch (error) {
+      console.warn('[ApiService] Error storing X-Unauthenticated-User-Id:', error);
+    }
+  }
+  
+  /**
+   * Get X-Unauthenticated-User-Id header value from chrome.storage.local for request headers
+   * @returns {Promise<Object>} Object with header key-value pair or empty object
+   */
+  static async getUnauthenticatedUserIdHeader() {
+    try {
+      console.log('[X-UNAUTH-SENDING] Attempting to retrieve X-Unauthenticated-User-Id from chrome.storage.local...');
+      const result = await chrome.storage.local.get(['x-unauthenticated-user-id']);
+      console.log('[X-UNAUTH-SENDING] Storage get result:', JSON.stringify(result));
+      const userId = result['x-unauthenticated-user-id'];
+      if (userId) {
+        console.log('[ApiService] ✓ Retrieved X-Unauthenticated-User-Id from chrome.storage.local:', userId);
+        console.log('[X-UNAUTH-SENDING] Sending X-Unauthenticated-User-Id in request header:', userId);
+        const headerObj = { 'X-Unauthenticated-User-Id': userId };
+        console.log('[X-UNAUTH-SENDING] Returning header object:', JSON.stringify(headerObj));
+        return headerObj;
+      } else {
+        console.log('[X-UNAUTH-SENDING] X-Unauthenticated-User-Id not found in chrome.storage.local - will not send header');
+        console.log('[X-UNAUTH-SENDING] Storage result was:', result);
+      }
+      return {};
+    } catch (error) {
+      console.warn('[ApiService] Error getting X-Unauthenticated-User-Id from storage:', error);
+      console.warn('[X-UNAUTH-SENDING] Error details:', error.message, error.stack);
+      return {};
+    }
+  }
+  
+  /**
+   * Centralized API error handler
+   * Validates error response payload structure and dispatches appropriate UI events
+   * @param {Response} response - Fetch response object
+   * @returns {Promise<Object>} Error object with {errorCode?, reason?, message, status}
+   */
+  static async handleApiError(response) {
+    const status = response.status;
+    let errorData = null;
+    let errorMessage = `API request failed: ${status} ${response.statusText}`;
+    
+    // PRIORITY: Always parse response body FIRST, before any UI decisions
+    // This ensures we check errorCode regardless of HTTP status (401, 429, etc.)
+    try {
+      const text = await response.text();
+      if (text) {
+        try {
+          errorData = JSON.parse(text);
+        } catch (parseError) {
+          console.warn('[ApiService] Error response is not valid JSON:', parseError);
+        }
+      }
+    } catch (readError) {
+      console.warn('[ApiService] Could not read error response body:', readError);
+    }
+    
+    // Check for errorCode FIRST, even if structure is not perfect
+    // This ensures LOGIN_REQUIRED is handled regardless of structure validity
+    if (errorData && typeof errorData === 'object' && typeof errorData.errorCode === 'string') {
+      const errorCode = errorData.errorCode;
+      const reason = errorData.reason || errorData.message || errorMessage;
+      
+      // LOGIN_REQUIRED takes priority - show login modal, NO error banner
+      if (errorCode === 'LOGIN_REQUIRED') {
+        console.log('[ApiService] LOGIN_REQUIRED error detected (status:', status, '), showing login modal');
+        
+        // Dispatch custom event for content script to show login modal
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('api-login-required', {
+            detail: { reason, status }
+          }));
+        }
+        
+        return {
+          errorCode: 'LOGIN_REQUIRED',
+          reason,
+          message: reason || 'Please sign in to continue',
+          status
+        };
+      }
+      
+      // REFRESH_TOKEN - TODO, but don't show error banner
+      if (errorCode === 'REFRESH_TOKEN') {
+        console.log('[ApiService] REFRESH_TOKEN error detected (status:', status, ')');
+        // TODO: Implement refresh token handling
+        
+        return {
+          errorCode: 'REFRESH_TOKEN',
+          reason,
+          message: reason || 'Token refresh required',
+          status
+        };
+      }
+      
+      // Other error codes with valid structure - show error banner with reason
+      console.log('[ApiService] Error with code:', errorCode, '(status:', status, '), showing error banner');
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('api-error-banner', {
+          detail: { message: reason || errorMessage, status, errorCode }
+        }));
+      }
+      
+      return {
+        errorCode,
+        reason,
+        message: reason || errorMessage,
+        status
+      };
+    }
+    
+    // No errorCode found or invalid structure - show error banner
+    // Only reach here if errorCode is not present in response body
+    console.log('[ApiService] Error response has no errorCode or invalid structure (status:', status, '), showing error banner');
+    const message = errorData?.error || errorData?.message || errorMessage;
+    
+    // Dispatch custom event for content script to handle
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('api-error-banner', {
+        detail: { message, status }
+      }));
+    }
+    
+    return {
+      message,
+      status,
+      errorData: errorData || {}
+    };
+  }
+  
+  /**
    * Ask a question with context and chat history (SSE streaming)
    * @param {Object} params - Request parameters
    * @param {string} params.initial_context - The original selected text
@@ -110,38 +287,58 @@ class ApiService {
       // Create abort controller for cancellation
       const abortController = new AbortController();
       
+      // Get X-Unauthenticated-User-Id header for request
+      const unauthenticatedUserIdHeader = await this.getUnauthenticatedUserIdHeader();
+      console.log('[X-UNAUTH-SENDING] Header object from getUnauthenticatedUserIdHeader():', JSON.stringify(unauthenticatedUserIdHeader));
+      
+      // Prepare request headers
+      const requestHeaders = {
+        'Content-Type': 'application/json',
+        'Accept': 'text/event-stream',
+        ...unauthenticatedUserIdHeader
+      };
+      
+      // Log request headers for debugging
+      console.log('[ApiService] Request headers being sent:', Object.keys(requestHeaders));
+      if (requestHeaders['X-Unauthenticated-User-Id']) {
+        console.log('[X-UNAUTH-SENDING] ✓ X-Unauthenticated-User-Id header included in request:', requestHeaders['X-Unauthenticated-User-Id']);
+        console.log('[X-UNAUTH-SENDING] Full request headers object:', JSON.stringify(requestHeaders, null, 2));
+      } else {
+        console.log('[X-UNAUTH-SENDING] ⚠ X-Unauthenticated-User-Id header NOT included in request');
+        console.log('[X-UNAUTH-SENDING] Full request headers object:', JSON.stringify(requestHeaders, null, 2));
+      }
+      
       const response = await fetch(url, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'text/event-stream'
-        },
+        headers: requestHeaders,
         mode: 'cors',
         body: JSON.stringify(requestBody),
         signal: abortController.signal
       });
       
+      // Store X-Unauthenticated-User-Id from response header
+      await this.storeUnauthenticatedUserId(response);
+      
       if (!response.ok) {
-        // Check for 429 rate limit error
-        if (response.status === 429) {
-          const error = new Error('Rate limit exceeded');
-          error.status = 429;
+        // Clone response for error handling (response body can only be read once)
+        const responseClone = response.clone();
+        const errorInfo = await this.handleApiError(responseClone);
+        
+        // If it's LOGIN_REQUIRED, the modal will be shown via event, but we still need to call onError
+        if (errorInfo.errorCode === 'LOGIN_REQUIRED') {
+          const error = new Error(errorInfo.message);
+          error.status = errorInfo.status;
+          error.errorCode = errorInfo.errorCode;
           if (onError) onError(error);
           return () => {};
         }
         
-        let errorMessage = `API request failed: ${response.status} ${response.statusText}`;
-        
-        // Provide more specific error messages for common status codes
-        if (response.status === 422) {
-          errorMessage = `API request failed: 422 Unprocessable Entity. This usually means the request data is too large or contains invalid characters. Try asking a shorter question or the content might be too long.`;
-        } else if (response.status === 413) {
-          errorMessage = `API request failed: 413 Payload Too Large. The content or question is too large for the API to process.`;
-        } else if (response.status === 400) {
-          errorMessage = `API request failed: 400 Bad Request. The request format might be invalid.`;
+        // For other errors, create error object and call onError
+        const error = new Error(errorInfo.message);
+        error.status = errorInfo.status;
+        if (errorInfo.errorCode) {
+          error.errorCode = errorInfo.errorCode;
         }
-        
-        const error = new Error(errorMessage);
         if (onError) onError(error);
         return () => {};
       }
@@ -379,37 +576,39 @@ class ApiService {
       // Create abort controller for cancellation
       const abortController = new AbortController();
       
+      // Get X-Unauthenticated-User-Id header for request
+      const unauthenticatedUserIdHeader = await this.getUnauthenticatedUserIdHeader();
+      
+      // Prepare request headers
+      const requestHeaders = {
+        'Content-Type': 'application/json',
+        'Accept': 'text/event-stream',
+        ...unauthenticatedUserIdHeader
+      };
+      
       // Make the SSE request
       const response = await fetch(url, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'text/event-stream'
-        },
+        headers: requestHeaders,
         body: JSON.stringify(textSegmentsWithLanguage),
         signal: abortController.signal
       });
       
+      // Store X-Unauthenticated-User-Id from response header
+      await this.storeUnauthenticatedUserId(response);
+      
       if (!response.ok) {
-        // Check for 429 rate limit error
-        if (response.status === 429) {
-          const error = new Error('Rate limit exceeded');
-          error.status = 429;
-          throw error;
-        }
+        // Clone response for error handling (response body can only be read once)
+        const responseClone = response.clone();
+        const errorInfo = await this.handleApiError(responseClone);
         
-        // Try to read error response body for more details
-        let errorMessage = `API request failed: ${response.status} ${response.statusText}`;
-        try {
-          const errorData = await response.json();
-          if (errorData.error || errorData.message) {
-            errorMessage = `API request failed: ${response.status} ${response.statusText}. ${errorData.error || errorData.message}`;
-          }
-        } catch (e) {
-          // If we can't parse the error response, use the default message
-          console.warn('[ApiService] Could not parse error response:', e);
+        // Create error object with error info
+        const error = new Error(errorInfo.message);
+        error.status = errorInfo.status;
+        if (errorInfo.errorCode) {
+          error.errorCode = errorInfo.errorCode;
         }
-        throw new Error(errorMessage);
+        throw error;
       }
       
       // Process the SSE stream
@@ -612,37 +811,39 @@ class ApiService {
         requestBody.languageCode = languageCode;
       }
       
+      // Get X-Unauthenticated-User-Id header for request
+      const unauthenticatedUserIdHeader = await this.getUnauthenticatedUserIdHeader();
+      
+      // Prepare request headers
+      const requestHeaders = {
+        'Content-Type': 'application/json',
+        'Accept': 'text/event-stream',
+        ...unauthenticatedUserIdHeader
+      };
+      
       // Make the SSE request
       const response = await fetch(url, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'text/event-stream'
-        },
+        headers: requestHeaders,
         body: JSON.stringify(requestBody),
         signal: abortController.signal
       });
       
+      // Store X-Unauthenticated-User-Id from response header
+      await this.storeUnauthenticatedUserId(response);
+      
       if (!response.ok) {
-        // Check for 429 rate limit error
-        if (response.status === 429) {
-          const error = new Error('Rate limit exceeded');
-          error.status = 429;
-          throw error;
-        }
+        // Clone response for error handling (response body can only be read once)
+        const responseClone = response.clone();
+        const errorInfo = await this.handleApiError(responseClone);
         
-        // Try to read error response body for more details
-        let errorMessage = `API request failed: ${response.status} ${response.statusText}`;
-        try {
-          const errorData = await response.json();
-          if (errorData.error || errorData.message) {
-            errorMessage = `API request failed: ${response.status} ${response.statusText}. ${errorData.error || errorData.message}`;
-          }
-        } catch (e) {
-          // If we can't parse the error response, use the default message
-          console.warn('[ApiService] Could not parse error response:', e);
+        // Create error object with error info
+        const error = new Error(errorInfo.message);
+        error.status = errorInfo.status;
+        if (errorInfo.errorCode) {
+          error.errorCode = errorInfo.errorCode;
         }
-        throw new Error(errorMessage);
+        throw error;
       }
       
       // Process the SSE stream
@@ -857,19 +1058,47 @@ class ApiService {
       // Create abort controller for cancellation
       const abortController = new AbortController();
       
+      // Get X-Unauthenticated-User-Id header for request
+      const unauthenticatedUserIdHeader = await this.getUnauthenticatedUserIdHeader();
+      
+      // Prepare request headers
+      const requestHeaders = {
+        'Content-Type': 'application/json',
+        'Accept': 'text/event-stream',
+        ...unauthenticatedUserIdHeader
+      };
+      
       const response = await fetch(url, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'text/event-stream'
-        },
+        headers: requestHeaders,
         mode: 'cors',
         body: JSON.stringify(requestBody),
         signal: abortController.signal
       });
       
+      // Store X-Unauthenticated-User-Id from response header
+      await this.storeUnauthenticatedUserId(response);
+      
       if (!response.ok) {
-        const error = new Error(`Web search request failed: ${response.status} ${response.statusText}`);
+        // Clone response for error handling (response body can only be read once)
+        const responseClone = response.clone();
+        const errorInfo = await this.handleApiError(responseClone);
+        
+        // If it's LOGIN_REQUIRED, the modal will be shown via event, but we still need to call onError
+        if (errorInfo.errorCode === 'LOGIN_REQUIRED') {
+          const error = new Error(errorInfo.message);
+          error.status = errorInfo.status;
+          error.errorCode = errorInfo.errorCode;
+          if (onError) onError(error);
+          return () => {};
+        }
+        
+        // For other errors, create error object and call onError
+        const error = new Error(errorInfo.message);
+        error.status = errorInfo.status;
+        if (errorInfo.errorCode) {
+          error.errorCode = errorInfo.errorCode;
+        }
         if (onError) onError(error);
         return () => {};
       }
@@ -1096,24 +1325,38 @@ class ApiService {
       // Create abort controller for cancellation
       const abortController = new AbortController();
       
+      // Get X-Unauthenticated-User-Id header for request
+      const unauthenticatedUserIdHeader = await this.getUnauthenticatedUserIdHeader();
+      
+      // Prepare request headers
+      const requestHeaders = {
+        'Content-Type': 'application/json',
+        ...unauthenticatedUserIdHeader
+      };
+      
       // Make the SSE request
       const response = await fetch(url, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
+        headers: requestHeaders,
         body: JSON.stringify(textSegmentsWithLanguage),
         signal: abortController.signal
       });
       
+      // Store X-Unauthenticated-User-Id from response header
+      await this.storeUnauthenticatedUserId(response);
+      
       if (!response.ok) {
-        // Check for 429 rate limit error
-        if (response.status === 429) {
-          const error = new Error('Rate limit exceeded');
-          error.status = 429;
-          throw error;
+        // Clone response for error handling (response body can only be read once)
+        const responseClone = response.clone();
+        const errorInfo = await this.handleApiError(responseClone);
+        
+        // Create error object with error info
+        const error = new Error(errorInfo.message);
+        error.status = errorInfo.status;
+        if (errorInfo.errorCode) {
+          error.errorCode = errorInfo.errorCode;
         }
-        throw new Error(`API request failed: ${response.status} ${response.statusText}`);
+        throw error;
       }
       
       // Process the SSE stream
@@ -1236,11 +1479,18 @@ class ApiService {
     try {
       console.log('[ApiService] Fetching more explanations for:', word);
       
+      // Get X-Unauthenticated-User-Id header for request
+      const unauthenticatedUserIdHeader = await this.getUnauthenticatedUserIdHeader();
+      
+      // Prepare request headers
+      const requestHeaders = {
+        'Content-Type': 'application/json',
+        ...unauthenticatedUserIdHeader
+      };
+      
       const response = await fetch(url, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
+        headers: requestHeaders,
         body: JSON.stringify({
           word: word,
           meaning: meaning,
@@ -1248,8 +1498,19 @@ class ApiService {
         })
       });
       
+      // Store X-Unauthenticated-User-Id from response header
+      await this.storeUnauthenticatedUserId(response);
+      
       if (!response.ok) {
-        throw new Error(`API request failed: ${response.status} ${response.statusText}`);
+        // Clone response for error handling (response body can only be read once)
+        const responseClone = response.clone();
+        const errorInfo = await this.handleApiError(responseClone);
+        
+        // Return error in the expected format
+        return {
+          success: false,
+          error: errorInfo.message
+        };
       }
       
       const data = await response.json();

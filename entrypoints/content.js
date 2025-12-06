@@ -2964,8 +2964,7 @@ const ErrorBanner = {
       .vocab-error-banner {
         position: fixed;
         top: 20px;
-        left: 50%;
-        transform: translateX(-50%);
+        right: 20px;
         z-index: 1000000;
         background: #ef4444;
         color: white;
@@ -2982,11 +2981,11 @@ const ErrorBanner = {
       @keyframes vocab-error-banner-slide-in {
         from {
           opacity: 0;
-          transform: translateX(-50%) translateY(-20px);
+          transform: translateX(20px) translateY(-20px);
         }
         to {
           opacity: 1;
-          transform: translateX(-50%) translateY(0);
+          transform: translateX(0) translateY(0);
         }
       }
       
@@ -3095,6 +3094,415 @@ const ErrorBanner = {
     document.head.appendChild(style);
   }
 };
+
+// ===================================
+// Login Modal Module - Shows login modal for authentication
+// ===================================
+const LoginModal = {
+  modalContainer: null,
+  overlay: null,
+  
+  /**
+   * Show login modal in center of screen
+   * @param {string} reason - Optional reason message
+   */
+  show(reason) {
+    // Remove existing modal if any
+    this.hide();
+    
+    // Create overlay
+    this.overlay = document.createElement('div');
+    this.overlay.id = 'login-modal-overlay';
+    this.overlay.style.cssText = `
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(0, 0, 0, 0.5);
+      z-index: 2147483647;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      pointer-events: auto;
+    `;
+    
+    // Create modal container
+    this.modalContainer = document.createElement('div');
+    this.modalContainer.id = 'login-modal';
+    this.modalContainer.style.cssText = `
+      background-color: white;
+      border-radius: 16px;
+      padding: 40px;
+      max-width: 400px;
+      width: 90%;
+      box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 24px;
+      position: relative;
+      animation: login-modal-fade-in 0.3s ease-out;
+    `;
+    
+    // Get branding image URL (from extension assets)
+    const brandingImageUrl = chrome.runtime.getURL('branding-removebg.png');
+    
+    // Modal content
+    this.modalContainer.innerHTML = `
+      <div style="text-align: center;">
+        <img src="${brandingImageUrl}" alt="XplainO" style="max-width: 200px; width: 100%; height: auto; margin-bottom: 16px;">
+      </div>
+      ${reason ? `<p style="color: #666; font-size: 14px; text-align: center; margin: 0;">${reason}</p>` : ''}
+      <button id="login-modal-google-signin" class="login-modal-signin-button">
+        <svg class="google-logo" width="18" height="18" viewBox="0 0 18 18" xmlns="http://www.w3.org/2000/svg" style="margin-right: 12px;">
+          <g fill="none" fill-rule="evenodd">
+            <path d="M17.64 9.2045c0-.6381-.0573-1.2518-.1636-1.8409H9v3.4814h4.8436c-.2086 1.125-.8427 2.0782-1.7959 2.7164v2.2581h2.9087c1.7028-1.5668 2.6836-3.874 2.6836-6.615z" fill="#4285F4"/>
+            <path d="M9 18c2.43 0 4.4673-.806 5.9564-2.1805l-2.9087-2.2581c-.8059.54-1.8368.859-3.0477.859-2.344 0-4.3282-1.5831-5.036-3.7104H.9574v2.3318C2.4382 15.9832 5.4822 18 9 18z" fill="#34A853"/>
+            <path d="M3.964 10.71c-.18-.54-.2822-1.1173-.2822-1.71s.1022-1.17.2823-1.71V4.9582H.9573C.3477 6.1732 0 7.5477 0 9s.348 2.8268.9573 4.0418l3.0067-2.3318z" fill="#FBBC05"/>
+            <path d="M9 3.5795c1.3214 0 2.5077.4541 3.4405 1.3459l2.5813-2.5814C13.4632.8918 11.426 0 9 0 5.4822 0 2.4382 2.0168.9573 4.9582L3.964 7.29C4.6718 5.1627 6.6559 3.5795 9 3.5795z" fill="#EA4335"/>
+          </g>
+        </svg>
+        <span>Sign in with Google</span>
+      </button>
+    `;
+    
+    // Append modal to overlay
+    this.overlay.appendChild(this.modalContainer);
+    
+    // Close modal when clicking overlay (but not modal itself)
+    this.overlay.addEventListener('click', (e) => {
+      if (e.target === this.overlay) {
+        this.hide();
+      }
+    });
+    
+    // Prevent modal clicks from closing
+    this.modalContainer.addEventListener('click', (e) => {
+      e.stopPropagation();
+    });
+    
+    // Add sign-in button handler
+    const signInButton = this.modalContainer.querySelector('#login-modal-google-signin');
+    if (signInButton) {
+      signInButton.addEventListener('click', () => {
+        this.handleGoogleSignIn();
+      });
+    }
+    
+    // Append to body
+    document.body.appendChild(this.overlay);
+    
+    // Inject styles if not already injected
+    this.injectStyles();
+  },
+  
+  /**
+   * Hide login modal
+   */
+  hide() {
+    if (this.overlay && this.overlay.parentNode) {
+      this.overlay.remove();
+      this.overlay = null;
+      this.modalContainer = null;
+    }
+  },
+  
+  /**
+   * Handle Google sign-in flow
+   */
+  async handleGoogleSignIn() {
+    try {
+      const signInButton = document.getElementById('login-modal-google-signin');
+      if (signInButton) {
+        signInButton.disabled = true;
+        signInButton.style.opacity = '0.6';
+        signInButton.style.cursor = 'not-allowed';
+      }
+      
+      const clientId = ApiConfig.GOOGLE_CLIENT_ID;
+      if (!clientId) {
+        throw new Error('Google Client ID not configured');
+      }
+      
+      // Generate state and nonce for security
+      const state = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+      const nonce = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+      
+      // Store state in chrome.storage for verification
+      await chrome.storage.local.set({ 'oauth_state': state, 'oauth_nonce': nonce });
+      
+      // Get redirect URI using chrome.identity API
+      const redirectUri = chrome.identity.getRedirectURL();
+      console.log('[LoginModal] Using redirect URI:', redirectUri);
+      
+      // Create OAuth URL
+      const scope = 'openid email profile';
+      const responseType = 'id_token';
+      
+      const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?` +
+        `client_id=${encodeURIComponent(clientId)}&` +
+        `redirect_uri=${encodeURIComponent(redirectUri)}&` +
+        `response_type=${responseType}&` +
+        `scope=${encodeURIComponent(scope)}&` +
+        `state=${state}&` +
+        `nonce=${nonce}`;
+
+      console.log('[LoginModal] Launching OAuth flow...');
+      
+      // Use chrome.identity.launchWebAuthFlow() to open OAuth in a popup
+      const callbackUrl = await new Promise((resolve, reject) => {
+        chrome.identity.launchWebAuthFlow({
+          url: authUrl,
+          interactive: true
+        }, (callbackUrl) => {
+          if (chrome.runtime.lastError) {
+            const error = chrome.runtime.lastError.message;
+            console.error('[LoginModal] Error in OAuth flow:', error);
+            
+            // Clean up stored state
+            chrome.storage.local.remove(['oauth_state', 'oauth_nonce']);
+            
+            // Handle user cancellation
+            if (error.includes('OAuth2') || error.includes('canceled') || error.includes('cancelled')) {
+              reject(new Error('Sign-in was cancelled'));
+            } else {
+              reject(new Error(`OAuth flow failed: ${error}`));
+            }
+            return;
+          }
+          
+          if (!callbackUrl) {
+            chrome.storage.local.remove(['oauth_state', 'oauth_nonce']);
+            reject(new Error('OAuth flow returned no callback URL'));
+            return;
+          }
+          
+          resolve(callbackUrl);
+        });
+      });
+      
+      console.log('[LoginModal] OAuth callback URL received:', callbackUrl);
+      
+      // Parse the callback URL to extract id_token
+      const url = new URL(callbackUrl);
+      
+      let idToken = null;
+      let returnedState = null;
+      
+      // Check hash fragment (common in OAuth implicit flow)
+      if (url.hash) {
+        const hashParams = new URLSearchParams(url.hash.substring(1));
+        idToken = hashParams.get('id_token');
+        returnedState = hashParams.get('state');
+      }
+      
+      // Check query params as fallback
+      if (!idToken) {
+        idToken = url.searchParams.get('id_token');
+        returnedState = url.searchParams.get('state');
+      }
+      
+      // Check for errors in callback
+      if (!idToken) {
+        const error = url.searchParams.get('error') || (url.hash ? new URLSearchParams(url.hash.substring(1)).get('error') : null);
+        if (error) {
+          const errorDesc = url.searchParams.get('error_description') || (url.hash ? new URLSearchParams(url.hash.substring(1)).get('error_description') : null);
+          chrome.storage.local.remove(['oauth_state', 'oauth_nonce']);
+          throw new Error(`OAuth error: ${error}${errorDesc ? ' - ' + errorDesc : ''}`);
+        }
+        chrome.storage.local.remove(['oauth_state', 'oauth_nonce']);
+        throw new Error('No id_token found in OAuth callback');
+      }
+      
+      // Verify state
+      const stored = await chrome.storage.local.get(['oauth_state']);
+      if (stored.oauth_state && stored.oauth_state !== returnedState) {
+        chrome.storage.local.remove(['oauth_state', 'oauth_nonce']);
+        throw new Error('OAuth state mismatch - possible security issue');
+      }
+      
+      // Clean up stored state
+      await chrome.storage.local.remove(['oauth_state', 'oauth_nonce']);
+      
+      // Call backend API with id_token
+      await this.completeSignIn(idToken);
+      
+    } catch (error) {
+      console.error('[LoginModal] Error in handleGoogleSignIn:', error);
+      
+      // Restore button state
+      const signInButton = document.getElementById('login-modal-google-signin');
+      if (signInButton) {
+        signInButton.disabled = false;
+        signInButton.style.opacity = '1';
+        signInButton.style.cursor = 'pointer';
+      }
+      
+      // Show error in banner
+      if (typeof ErrorBanner !== 'undefined') {
+        await ErrorBanner.show(error.message || 'Sign-in failed');
+      }
+      
+      // Ensure cleanup on error
+      await chrome.storage.local.remove(['oauth_state', 'oauth_nonce']).catch(() => {});
+    }
+  },
+  
+  /**
+   * Complete sign-in by calling backend API
+   * @param {string} idToken - Google OAuth id token
+   */
+  async completeSignIn(idToken) {
+    try {
+      // Import AuthService dynamically
+      const { default: AuthService } = await import('../core/services/AuthService.js');
+      
+      const result = await AuthService.login(idToken);
+      
+      if (result.success && result.data) {
+        // Store user account data
+        await chrome.storage.local.set({ 'userAccountData': result.data });
+        
+        // Hide modal
+        this.hide();
+        
+        // Hide any error banners
+        if (typeof ErrorBanner !== 'undefined') {
+          ErrorBanner.hide();
+        }
+        
+        console.log('[LoginModal] Sign-in successful');
+        
+        // Dispatch event to notify other parts of the extension
+        window.dispatchEvent(new CustomEvent('user-logged-in', {
+          detail: result.data
+        }));
+      } else {
+        throw new Error(result.error || 'Login failed');
+      }
+    } catch (error) {
+      console.error('[LoginModal] Error completing sign-in:', error);
+      if (typeof ErrorBanner !== 'undefined') {
+        await ErrorBanner.show(error.message || 'Sign-in failed');
+      }
+      throw error;
+    }
+  },
+  
+  /**
+   * Inject CSS styles for login modal
+   */
+  injectStyles() {
+    const styleId = 'login-modal-styles';
+    if (document.getElementById(styleId)) {
+      return; // Styles already injected
+    }
+    
+    const style = document.createElement('style');
+    style.id = styleId;
+    style.textContent = `
+      @keyframes login-modal-fade-in {
+        from {
+          opacity: 0;
+          transform: scale(0.95);
+        }
+        to {
+          opacity: 1;
+          transform: scale(1);
+        }
+      }
+      
+      .login-modal-signin-button {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 12px;
+        background-color: #f5f5f5;
+        border: none;
+        border-radius: 50px;
+        padding: 12px 24px;
+        font-size: 14px;
+        font-weight: 500;
+        color: #3c4043;
+        cursor: pointer;
+        transition: background-color 0.2s ease, box-shadow 0.2s ease;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+        min-width: 240px;
+      }
+      
+      .login-modal-signin-button:hover {
+        background-color: #f8f9fa;
+        box-shadow: 0 2px 8px rgba(149, 39, 245, 0.3);
+      }
+      
+      .login-modal-signin-button:active {
+        background-color: #e8eaed;
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+      }
+      
+      .login-modal-signin-button:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+      }
+      
+      .login-modal-signin-button .google-logo {
+        flex-shrink: 0;
+      }
+    `;
+    
+    document.head.appendChild(style);
+  }
+};
+
+// ===================================
+// API Error Handler Bridge - Routes API errors to appropriate UI components
+// ===================================
+const ApiErrorHandler = {
+  /**
+   * Initialize error handler - listens for API error events
+   */
+  init() {
+    // Listen for API error banner events
+    window.addEventListener('api-error-banner', (event) => {
+      const { message, status, errorCode } = event.detail;
+      
+      // IMPORTANT: Never show error banner for LOGIN_REQUIRED
+      // This is a safeguard in case errorCode is passed in the event detail
+      if (errorCode === 'LOGIN_REQUIRED') {
+        console.log('[ApiErrorHandler] Ignoring error banner event for LOGIN_REQUIRED');
+        return;
+      }
+      
+      console.log('[ApiErrorHandler] Showing error banner:', message);
+      
+      if (typeof ErrorBanner !== 'undefined') {
+        ErrorBanner.show(message || `API request failed: ${status || 'Unknown error'}`);
+      }
+    });
+    
+    // Listen for login required events
+    window.addEventListener('api-login-required', (event) => {
+      const { reason, status } = event.detail;
+      console.log('[ApiErrorHandler] Showing login modal:', reason);
+      
+      // IMPORTANT: Hide any existing error banners before showing login modal
+      // This prevents the red error banner from flashing before the modal appears
+      if (typeof ErrorBanner !== 'undefined') {
+        ErrorBanner.hide();
+      }
+      
+      if (typeof LoginModal !== 'undefined') {
+        LoginModal.show(reason || 'Please sign in to continue');
+      }
+    });
+    
+    console.log('[ApiErrorHandler] Error handler initialized');
+  }
+};
+
+// Initialize error handler when content script loads
+ApiErrorHandler.init();
 
 // ===================================
 // Position Manager Module - Handles saving and loading panel position
@@ -5028,13 +5436,24 @@ const WordSelector = {
             };
             
             const url = `${ApiConfig.getCurrentBaseUrl()}${ApiConfig.ENDPOINTS.TRANSLATE}`;
+            
+            // Get X-Unauthenticated-User-Id header for request
+            const unauthenticatedUserIdHeader = await ApiService.getUnauthenticatedUserIdHeader();
+            
+            // Prepare request headers
+            const requestHeaders = {
+              'Content-Type': 'application/json',
+              ...unauthenticatedUserIdHeader
+            };
+            
             const response = await fetch(url, {
               method: 'POST',
-              headers: {
-                'Content-Type': 'application/json'
-              },
+              headers: requestHeaders,
               body: JSON.stringify(payload)
             });
+            
+            // Store X-Unauthenticated-User-Id from response header
+            await ApiService.storeUnauthenticatedUserId(response);
             
             if (response.ok) {
               const data = await response.json();
@@ -5170,13 +5589,24 @@ const WordSelector = {
           
           // Call translate API
           const url = `${ApiConfig.getCurrentBaseUrl()}${ApiConfig.ENDPOINTS.TRANSLATE}`;
+          
+          // Get X-Unauthenticated-User-Id header for request
+          const unauthenticatedUserIdHeader = await ApiService.getUnauthenticatedUserIdHeader();
+          
+          // Prepare request headers
+          const requestHeaders = {
+            'Content-Type': 'application/json',
+            ...unauthenticatedUserIdHeader
+          };
+          
           const response = await fetch(url, {
             method: 'POST',
-            headers: {
-              'Content-Type': 'application/json'
-            },
+            headers: requestHeaders,
             body: JSON.stringify(payload)
           });
+          
+          // Store X-Unauthenticated-User-Id from response header
+          await ApiService.storeUnauthenticatedUserId(response);
           
           if (!response.ok) {
             throw new Error(`Translation API failed: ${response.status} ${response.statusText}`);
@@ -7851,16 +8281,26 @@ const WordSelector = {
     try {
       console.log('[WordSelector] Fetching pronunciation for:', word);
       
+      // Get X-Unauthenticated-User-Id header for request
+      const unauthenticatedUserIdHeader = await ApiService.getUnauthenticatedUserIdHeader();
+      
+      // Prepare request headers
+      const requestHeaders = {
+        'Content-Type': 'application/json',
+        ...unauthenticatedUserIdHeader
+      };
+      
       const response = await fetch(`${ApiConfig.BASE_URL}/api/v2/pronunciation`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: requestHeaders,
         body: JSON.stringify({ 
           word: word,
           voice: 'alloy' // Default voice
         })
       });
+      
+      // Store X-Unauthenticated-User-Id from response header
+      await ApiService.storeUnauthenticatedUserId(response);
       
       if (!response.ok) {
         if (response.status === 429) {
@@ -26182,14 +26622,25 @@ const ButtonPanel = {
       formData.append('file', file);
       
       console.log('[ButtonPanel] Making API call to:', ApiConfig.getUrl(ApiConfig.ENDPOINTS.PDF_TO_TEXT));
+      
+      // Get X-Unauthenticated-User-Id header for request
+      const unauthenticatedUserIdHeader = await ApiService.getUnauthenticatedUserIdHeader();
+      
+      // Prepare request headers
+      const requestHeaders = {
+        'Accept': 'application/json',
+        ...unauthenticatedUserIdHeader
+      };
+      
       // Make API call to process PDF
       const response = await fetch(ApiConfig.getUrl(ApiConfig.ENDPOINTS.PDF_TO_TEXT), {
         method: 'POST',
         body: formData,
-        headers: {
-          'Accept': 'application/json'
-        }
+        headers: requestHeaders
       });
+      
+      // Store X-Unauthenticated-User-Id from response header
+      await ApiService.storeUnauthenticatedUserId(response);
       
       console.log('[ButtonPanel] API response received, status:', response.status);
       
@@ -27251,10 +27702,23 @@ const ButtonPanel = {
       formData.append('file', file);
       
       console.log('[ButtonPanel] Making API call to image-to-text endpoint...');
+      
+      // Get X-Unauthenticated-User-Id header for request
+      const unauthenticatedUserIdHeader = await ApiService.getUnauthenticatedUserIdHeader();
+      
+      // Prepare request headers (FormData doesn't need Content-Type, browser sets it automatically)
+      const requestHeaders = {
+        ...unauthenticatedUserIdHeader
+      };
+      
       const response = await fetch(ApiConfig.getUrl(ApiConfig.ENDPOINTS.IMAGE_TO_TEXT), {
         method: 'POST',
-        body: formData
+        body: formData,
+        headers: requestHeaders
       });
+      
+      // Store X-Unauthenticated-User-Id from response header
+      await ApiService.storeUnauthenticatedUserId(response);
       
       console.log('[ButtonPanel] API response received:', response.status);
       
