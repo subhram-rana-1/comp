@@ -41,7 +41,8 @@ class ApiConfig {
     TRANSLATE: '/api/v2/translate',
     WEB_SEARCH_STREAM: '/api/v2/web-search-stream',
     AUTH_LOGIN: '/api/auth/login',
-    AUTH_LOGOUT: '/api/auth/logout'
+    AUTH_LOGOUT: '/api/auth/logout',
+    AUTH_REFRESH_TOKEN: '/api/auth/refresh-token'
   };
   
   // Helper method to get full URL for an endpoint

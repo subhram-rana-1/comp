@@ -101,6 +101,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       handleExtensionDisabled(message.domain, sendResponse);
       return true;
       
+    case 'OAUTH_GET_REDIRECT_URI':
+      handleOAuthGetRedirectUri(sendResponse);
+      return true; // Keep message channel open for async response
+      
+    case 'OAUTH_LAUNCH_FLOW':
+      handleOAuthLaunchFlow(message.authUrl, sendResponse);
+      return true; // Keep message channel open for async response
+      
     default:
       console.log('[Background] Unknown message type:', message.type);
       sendResponse({ success: false, error: 'Unknown message type' });
@@ -179,6 +187,92 @@ async function handleExtensionDisabled(domain, sendResponse) {
     });
   } catch (error) {
     console.error('[Background] Error handling extension disabled:', error);
+    sendResponse({
+      success: false,
+      error: error.message
+    });
+  }
+}
+
+/**
+ * Handle OAuth get redirect URI request
+ * @param {Function} sendResponse - Response callback
+ */
+function handleOAuthGetRedirectUri(sendResponse) {
+  try {
+    if (!chrome.identity || !chrome.identity.getRedirectURL) {
+      throw new Error('chrome.identity API is not available');
+    }
+    
+    const redirectUri = chrome.identity.getRedirectURL();
+    console.log('[Background] OAuth redirect URI:', redirectUri);
+    
+    sendResponse({
+      success: true,
+      redirectUri: redirectUri
+    });
+  } catch (error) {
+    console.error('[Background] Error getting OAuth redirect URI:', error);
+    sendResponse({
+      success: false,
+      error: error.message
+    });
+  }
+}
+
+/**
+ * Handle OAuth launch flow request
+ * @param {string} authUrl - The OAuth authorization URL
+ * @param {Function} sendResponse - Response callback
+ */
+function handleOAuthLaunchFlow(authUrl, sendResponse) {
+  try {
+    if (!chrome.identity || !chrome.identity.launchWebAuthFlow) {
+      throw new Error('chrome.identity API is not available');
+    }
+    
+    console.log('[Background] Launching OAuth flow with URL:', authUrl);
+    
+    chrome.identity.launchWebAuthFlow({
+      url: authUrl,
+      interactive: true
+    }, (callbackUrl) => {
+      if (chrome.runtime.lastError) {
+        const error = chrome.runtime.lastError.message;
+        console.error('[Background] Error in OAuth flow:', error);
+        
+        // Handle user cancellation
+        if (error.includes('OAuth2') || error.includes('canceled') || error.includes('cancelled')) {
+          sendResponse({
+            success: false,
+            error: 'Sign-in was cancelled',
+            cancelled: true
+          });
+        } else {
+          sendResponse({
+            success: false,
+            error: `OAuth flow failed: ${error}`
+          });
+        }
+        return;
+      }
+      
+      if (!callbackUrl) {
+        sendResponse({
+          success: false,
+          error: 'OAuth flow returned no callback URL'
+        });
+        return;
+      }
+      
+      console.log('[Background] OAuth callback URL received:', callbackUrl);
+      sendResponse({
+        success: true,
+        callbackUrl: callbackUrl
+      });
+    });
+  } catch (error) {
+    console.error('[Background] Error launching OAuth flow:', error);
     sendResponse({
       success: false,
       error: error.message

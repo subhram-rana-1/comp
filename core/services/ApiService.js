@@ -14,6 +14,285 @@ class ApiService {
   // API endpoints - use centralized config
   static ENDPOINTS = ApiConfig.ENDPOINTS;
   
+  // Access token storage (in-memory)
+  static _accessToken = null;
+  
+  /**
+   * Set access token for authenticated API calls
+   * @param {string} token - The access token
+   */
+  static setAccessToken(token) {
+    this._accessToken = token;
+    console.log('[ApiService] Access token set in memory');
+  }
+  
+  /**
+   * Get access token for authenticated API calls
+   * If not in memory, tries to load from storage
+   * @returns {Promise<string|null>} The access token or null
+   */
+  static async getAccessToken() {
+    // If token is in memory, return it
+    if (this._accessToken) {
+      return this._accessToken;
+    }
+    
+    // Try to load from storage
+    try {
+      const result = await chrome.storage.local.get(['xplaino_userAccountData']);
+      console.log('[ApiService] Storage get result keys:', Object.keys(result));
+      const userData = result['xplaino_userAccountData'];
+      console.log('[ApiService] UserData type:', typeof userData);
+      console.log('[ApiService] UserData is null/undefined:', userData === null || userData === undefined);
+      
+      if (userData) {
+        console.log('[ApiService] UserData keys:', Object.keys(userData));
+        console.log('[ApiService] UserData structure (first level):', JSON.stringify(Object.keys(userData).reduce((acc, key) => {
+          if (key === 'accessToken' || key === 'access_token') {
+            acc[key] = userData[key] ? userData[key].substring(0, 20) + '...' : null;
+          } else {
+            acc[key] = typeof userData[key];
+          }
+          return acc;
+        }, {}), null, 2));
+        
+        // Check for accessToken at top level
+        if (userData.accessToken || userData.access_token) {
+          const token = userData.accessToken || userData.access_token;
+          this._accessToken = token;
+          console.log('[ApiService] ✓ Access token loaded from storage (top level)');
+          return token;
+        } else {
+          console.warn('[ApiService] ⚠ Access token not found at top level of userData');
+          console.warn('[ApiService] Available keys:', Object.keys(userData));
+        }
+      } else {
+        console.warn('[ApiService] ⚠ userData is null or undefined');
+      }
+    } catch (error) {
+      console.warn('[ApiService] Error loading access token from storage:', error);
+      console.warn('[ApiService] Error details:', error.message, error.stack);
+    }
+    
+    return null;
+  }
+  
+  /**
+   * Load access token from chrome.storage.local
+   * @returns {Promise<void>}
+   */
+  static async loadAccessTokenFromStorage() {
+    try {
+      const result = await chrome.storage.local.get(['xplaino_userAccountData']);
+      console.log('[ApiService] Initialization - Storage get result keys:', Object.keys(result));
+      const userData = result['xplaino_userAccountData'];
+      console.log('[ApiService] Initialization - UserData type:', typeof userData);
+      console.log('[ApiService] Initialization - UserData is null/undefined:', userData === null || userData === undefined);
+      
+      if (userData) {
+        console.log('[ApiService] Initialization - UserData keys:', Object.keys(userData));
+        console.log('[ApiService] Initialization - UserData structure (first level):', JSON.stringify(Object.keys(userData).reduce((acc, key) => {
+          if (key === 'accessToken' || key === 'access_token') {
+            acc[key] = userData[key] ? userData[key].substring(0, 20) + '...' : null;
+          } else {
+            acc[key] = typeof userData[key];
+          }
+          return acc;
+        }, {}), null, 2));
+        
+        // Check for accessToken at top level
+        if (userData.accessToken || userData.access_token) {
+          const token = userData.accessToken || userData.access_token;
+          this._accessToken = token;
+          console.log('[ApiService] ✓ Access token loaded from storage on initialization (top level)');
+        } else {
+          console.warn('[ApiService] ⚠ No access token found at top level of userData on initialization');
+          console.warn('[ApiService] Available keys:', Object.keys(userData));
+        }
+      } else {
+        console.log('[ApiService] No user account data found in storage');
+      }
+    } catch (error) {
+      console.warn('[ApiService] Error loading access token from storage:', error);
+      console.warn('[ApiService] Error details:', error.message, error.stack);
+    }
+  }
+  
+  /**
+   * Clear access token
+   */
+  static clearAccessToken() {
+    this._accessToken = null;
+    console.log('[ApiService] Access token cleared from memory');
+  }
+  
+  /**
+   * Refresh access token using refresh token cookie
+   * @returns {Promise<Object>} Result object with {success: boolean, accessToken?: string, error?: string}
+   */
+  static async refreshToken() {
+    const url = `${this.BASE_URL}${this.ENDPOINTS.AUTH_REFRESH_TOKEN}`;
+    
+    try {
+      console.log('[ApiService] ===== REFRESH TOKEN REQUEST =====');
+      console.log('[ApiService] Refreshing token at:', url);
+      
+      // Get current access token for Authorization header
+      const currentAccessToken = await this.getAccessToken();
+      if (!currentAccessToken) {
+        console.warn('[ApiService] No current access token available for refresh request');
+        return {
+          success: false,
+          error: 'No access token available'
+        };
+      }
+      
+      // Prepare request headers
+      const requestHeaders = {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${currentAccessToken}`
+      };
+      
+      console.log('[ApiService] Making refresh token request with Authorization header');
+      
+      // Make the refresh token request
+      // credentials: 'include' ensures cookies (including refreshToken) are sent
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: requestHeaders,
+        mode: 'cors',
+        credentials: 'include' // This sends the refreshToken cookie (httpOnly)
+      });
+      
+      if (!response.ok) {
+        console.log('[ApiService] Refresh token request failed, status:', response.status);
+        
+        // Clone response for error handling
+        const responseClone = response.clone();
+        let errorData = null;
+        let errorCode = null;
+        
+        try {
+          const text = await response.text();
+          if (text) {
+            try {
+              errorData = JSON.parse(text);
+              // Check for errorCode in nested detail structure
+              if (errorData.detail && typeof errorData.detail === 'object' && typeof errorData.detail.errorCode === 'string') {
+                errorCode = errorData.detail.errorCode;
+              } else if (typeof errorData.errorCode === 'string') {
+                errorCode = errorData.errorCode;
+              }
+            } catch (parseError) {
+              console.warn('[ApiService] Could not parse refresh token error response:', parseError);
+            }
+          }
+        } catch (readError) {
+          console.warn('[ApiService] Could not read refresh token error response:', readError);
+        }
+        
+        // If errorCode is LOGIN_REQUIRED, dispatch event and return error
+        if (errorCode === 'LOGIN_REQUIRED') {
+          console.log('[ApiService] ===== LOGIN_REQUIRED IN REFRESH TOKEN =====');
+          const reason = errorData?.detail?.message || errorData?.detail?.reason || errorData?.message || 'Please sign in to continue';
+          
+          // Dispatch custom event for content script to show login modal
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('api-login-required', {
+              detail: { reason, status: response.status, apiEndpoint: 'AUTH_REFRESH_TOKEN' }
+            }));
+            console.log('[ApiService] ✓ api-login-required event dispatched from refresh token');
+          } else {
+            console.warn('[ApiService] ⚠ window is undefined, cannot dispatch event');
+          }
+          
+          return {
+            success: false,
+            error: 'LOGIN_REQUIRED',
+            errorCode: 'LOGIN_REQUIRED',
+            message: reason
+          };
+        }
+        
+        // Other errors
+        const errorMessage = errorData?.detail?.message || errorData?.message || `Refresh token failed: ${response.status} ${response.statusText}`;
+        console.error('[ApiService] Refresh token error:', errorMessage);
+        return {
+          success: false,
+          error: errorMessage,
+          status: response.status
+        };
+      }
+      
+      // Success - parse response
+      const data = await response.json();
+      console.log('[ApiService] Refresh token response received');
+      console.log('[ApiService] Response data keys:', Object.keys(data));
+      
+      // Extract access_token from response
+      const newAccessToken = data.access_token;
+      if (!newAccessToken) {
+        console.error('[ApiService] No access_token in refresh token response');
+        return {
+          success: false,
+          error: 'No access_token in refresh token response'
+        };
+      }
+      
+      console.log('[ApiService] New access token received (length:', newAccessToken.length, ')');
+      
+      // Update in-memory access token
+      this.setAccessToken(newAccessToken);
+      console.log('[ApiService] ✓ Access token updated in memory');
+      
+      // Update access token in chrome.storage.local
+      try {
+        const result = await chrome.storage.local.get(['xplaino_userAccountData']);
+        const userData = result['xplaino_userAccountData'];
+        
+        if (userData) {
+          // Update both accessToken and access_token for compatibility
+          userData.accessToken = newAccessToken;
+          userData.access_token = newAccessToken;
+          
+          // Save updated user data
+          await chrome.storage.local.set({ 'xplaino_userAccountData': userData });
+          console.log('[ApiService] ✓ Access token updated in chrome.storage.local');
+        } else {
+          console.warn('[ApiService] ⚠ No user account data found in storage, cannot update access token');
+        }
+      } catch (storageError) {
+        console.error('[ApiService] Error updating access token in storage:', storageError);
+        // Continue even if storage update fails - in-memory token is updated
+      }
+      
+      // Note: refreshToken cookie is automatically saved by the browser when credentials: 'include' is used
+      // No manual cookie handling needed
+      
+      console.log('[ApiService] ===== REFRESH TOKEN SUCCESS =====');
+      
+      return {
+        success: true,
+        accessToken: newAccessToken
+      };
+      
+    } catch (error) {
+      console.error('[ApiService] Error during token refresh:', error);
+      
+      let errorMessage = error.message;
+      if (error.message.includes('Failed to fetch') || error.name === 'TypeError') {
+        errorMessage = 'Cannot connect to API server. Please check:\n' +
+                      '1. Backend server is running at ' + this.BASE_URL + '\n' +
+                      '2. CORS is properly configured to allow requests from this origin';
+      }
+      
+      return {
+        success: false,
+        error: errorMessage
+      };
+    }
+  }
+  
   /**
    * Store X-Unauthenticated-User-Id header from response in chrome.storage.local
    * @param {Response} response - Fetch response object
@@ -65,6 +344,20 @@ class ApiService {
   }
   
   /**
+   * Add Authorization header to request headers if access token is available
+   * @param {Object} headers - Request headers object
+   */
+  static async addAuthorizationHeader(headers) {
+    const accessToken = await this.getAccessToken();
+    if (accessToken) {
+      headers['Authorization'] = `Bearer ${accessToken}`;
+      console.log('[ApiService] Authorization header added with access token');
+    } else {
+      console.log('[ApiService] No access token available, skipping Authorization header');
+    }
+  }
+  
+  /**
    * Get X-Unauthenticated-User-Id header value from chrome.storage.local for request headers
    * @returns {Promise<Object>} Object with header key-value pair or empty object
    */
@@ -96,44 +389,90 @@ class ApiService {
    * Centralized API error handler
    * Validates error response payload structure and dispatches appropriate UI events
    * @param {Response} response - Fetch response object
+   * @param {string} apiEndpoint - Optional API endpoint name (e.g., 'WORDS_EXPLANATION', 'SIMPLIFY')
    * @returns {Promise<Object>} Error object with {errorCode?, reason?, message, status}
    */
-  static async handleApiError(response) {
+  static async handleApiError(response, apiEndpoint = null) {
     const status = response.status;
     let errorData = null;
     let errorMessage = `API request failed: ${status} ${response.statusText}`;
     
     // PRIORITY: Always parse response body FIRST, before any UI decisions
     // This ensures we check errorCode regardless of HTTP status (401, 429, etc.)
+    let rawResponseText = null;
     try {
       const text = await response.text();
+      rawResponseText = text;
+      console.log('[ApiService] ===== ERROR RESPONSE DEBUG =====');
+      console.log('[ApiService] HTTP Status:', status);
+      console.log('[ApiService] Raw response text:', rawResponseText);
+      
       if (text) {
         try {
           errorData = JSON.parse(text);
+          console.log('[ApiService] Parsed errorData:', JSON.stringify(errorData, null, 2));
+          console.log('[ApiService] errorData type:', typeof errorData);
+          console.log('[ApiService] errorData.errorCode (direct):', errorData?.errorCode);
+          console.log('[ApiService] errorData.detail:', errorData?.detail);
+          console.log('[ApiService] errorData.detail?.errorCode (nested):', errorData?.detail?.errorCode);
         } catch (parseError) {
           console.warn('[ApiService] Error response is not valid JSON:', parseError);
+          console.warn('[ApiService] Failed to parse text:', text);
         }
+      } else {
+        console.log('[ApiService] Response text is empty');
       }
     } catch (readError) {
       console.warn('[ApiService] Could not read error response body:', readError);
     }
     
-    // Check for errorCode FIRST, even if structure is not perfect
-    // This ensures LOGIN_REQUIRED is handled regardless of structure validity
-    if (errorData && typeof errorData === 'object' && typeof errorData.errorCode === 'string') {
-      const errorCode = errorData.errorCode;
-      const reason = errorData.reason || errorData.message || errorMessage;
+    // Check for errorCode in multiple possible locations:
+    // 1. Direct: errorData.errorCode
+    // 2. Nested: errorData.detail.errorCode (common in FastAPI/Pydantic responses)
+    let errorCode = null;
+    let reason = null;
+    let errorCodePath = null;
+    
+    if (errorData && typeof errorData === 'object') {
+      // Check direct path first
+      if (typeof errorData.errorCode === 'string') {
+        errorCode = errorData.errorCode;
+        reason = errorData.reason || errorData.message || errorMessage;
+        errorCodePath = 'direct';
+        console.log('[ApiService] Found errorCode via direct path:', errorCode);
+      }
+      // Check nested detail path
+      else if (errorData.detail && typeof errorData.detail === 'object' && typeof errorData.detail.errorCode === 'string') {
+        errorCode = errorData.detail.errorCode;
+        reason = errorData.detail.reason || errorData.detail.message || errorData.message || errorMessage;
+        errorCodePath = 'nested (detail)';
+        console.log('[ApiService] Found errorCode via nested detail path:', errorCode);
+      }
+    }
+    
+    // If we found an errorCode, handle it
+    if (errorCode) {
+      console.log('[ApiService] Processing errorCode:', errorCode, '(found via', errorCodePath, 'path)');
+      console.log('[ApiService] Reason/message:', reason);
       
       // LOGIN_REQUIRED takes priority - show login modal, NO error banner
       if (errorCode === 'LOGIN_REQUIRED') {
-        console.log('[ApiService] LOGIN_REQUIRED error detected (status:', status, '), showing login modal');
+        console.log('[ApiService] ===== LOGIN_REQUIRED DETECTED =====');
+        console.log('[ApiService] Status:', status);
+        console.log('[ApiService] Reason:', reason);
+        console.log('[ApiService] Dispatching api-login-required event...');
         
         // Dispatch custom event for content script to show login modal
         if (typeof window !== 'undefined') {
           window.dispatchEvent(new CustomEvent('api-login-required', {
-            detail: { reason, status }
+            detail: { reason, status, apiEndpoint }
           }));
+          console.log('[ApiService] ✓ api-login-required event dispatched with apiEndpoint:', apiEndpoint);
+        } else {
+          console.warn('[ApiService] ⚠ window is undefined, cannot dispatch event');
         }
+        
+        console.log('[ApiService] ===== LOGIN_REQUIRED HANDLED =====');
         
         return {
           errorCode: 'LOGIN_REQUIRED',
@@ -141,6 +480,50 @@ class ApiService {
           message: reason || 'Please sign in to continue',
           status
         };
+      }
+      
+      // TOKEN_EXPIRED - automatically refresh token
+      if (errorCode === 'TOKEN_EXPIRED') {
+        console.log('[ApiService] ===== TOKEN_EXPIRED DETECTED =====');
+        console.log('[ApiService] Status:', status);
+        console.log('[ApiService] Attempting to refresh token...');
+        
+        // Attempt to refresh the token
+        const refreshResult = await this.refreshToken();
+        
+        if (refreshResult.success) {
+          console.log('[ApiService] ✓ Token refreshed successfully');
+          console.log('[ApiService] ===== TOKEN_REFRESHED =====');
+          
+          // Return special indicator that token was refreshed and request should be retried
+          return {
+            errorCode: 'TOKEN_REFRESHED',
+            shouldRetry: true,
+            message: 'Token refreshed successfully',
+            status
+          };
+        } else {
+          // Refresh failed - check if it's LOGIN_REQUIRED
+          if (refreshResult.errorCode === 'LOGIN_REQUIRED') {
+            console.log('[ApiService] Refresh token failed with LOGIN_REQUIRED');
+            // Login modal already dispatched in refreshToken()
+            return {
+              errorCode: 'LOGIN_REQUIRED',
+              reason: refreshResult.message || reason,
+              message: refreshResult.message || 'Please sign in to continue',
+              status: refreshResult.status || status
+            };
+          }
+          
+          // Other refresh errors
+          console.error('[ApiService] Token refresh failed:', refreshResult.error);
+          return {
+            errorCode: 'TOKEN_REFRESH_FAILED',
+            reason: refreshResult.error || reason,
+            message: refreshResult.error || 'Token refresh failed',
+            status: refreshResult.status || status
+          };
+        }
       }
       
       // REFRESH_TOKEN - TODO, but don't show error banner
@@ -174,8 +557,11 @@ class ApiService {
     
     // No errorCode found or invalid structure - show error banner
     // Only reach here if errorCode is not present in response body
-    console.log('[ApiService] Error response has no errorCode or invalid structure (status:', status, '), showing error banner');
-    const message = errorData?.error || errorData?.message || errorMessage;
+    console.log('[ApiService] ===== NO ERROR CODE FOUND =====');
+    console.log('[ApiService] Error response has no errorCode or invalid structure (status:', status, ')');
+    console.log('[ApiService] errorData structure:', JSON.stringify(errorData, null, 2));
+    const message = errorData?.error || errorData?.message || errorData?.detail?.message || errorMessage;
+    console.log('[ApiService] Extracted message:', message);
     
     // Dispatch custom event for content script to handle
     if (typeof window !== 'undefined') {
@@ -298,6 +684,9 @@ class ApiService {
         ...unauthenticatedUserIdHeader
       };
       
+      // Add Authorization header if access token is available
+      await this.addAuthorizationHeader(requestHeaders);
+      
       // Log request headers for debugging
       console.log('[ApiService] Request headers being sent:', Object.keys(requestHeaders));
       if (requestHeaders['X-Unauthenticated-User-Id']) {
@@ -308,7 +697,7 @@ class ApiService {
         console.log('[X-UNAUTH-SENDING] Full request headers object:', JSON.stringify(requestHeaders, null, 2));
       }
       
-      const response = await fetch(url, {
+      let response = await fetch(url, {
         method: 'POST',
         headers: requestHeaders,
         mode: 'cors',
@@ -322,25 +711,82 @@ class ApiService {
       if (!response.ok) {
         // Clone response for error handling (response body can only be read once)
         const responseClone = response.clone();
-        const errorInfo = await this.handleApiError(responseClone);
+        const errorInfo = await this.handleApiError(responseClone, 'ASK');
         
-        // If it's LOGIN_REQUIRED, the modal will be shown via event, but we still need to call onError
-        if (errorInfo.errorCode === 'LOGIN_REQUIRED') {
+        // If token was refreshed, retry the request once
+        if (errorInfo.errorCode === 'TOKEN_REFRESHED' && errorInfo.shouldRetry) {
+          console.log('[ApiService] Token refreshed, retrying ask() request...');
+          
+          // Retry the request with new token
+          try {
+            // Get updated headers (Authorization will have new token)
+            const retryUnauthenticatedUserIdHeader = await this.getUnauthenticatedUserIdHeader();
+            const retryRequestHeaders = {
+              'Content-Type': 'application/json',
+              'Accept': 'text/event-stream',
+              ...retryUnauthenticatedUserIdHeader
+            };
+            await this.addAuthorizationHeader(retryRequestHeaders);
+            
+            response = await fetch(url, {
+              method: 'POST',
+              headers: retryRequestHeaders,
+              mode: 'cors',
+              body: JSON.stringify(requestBody),
+              signal: abortController.signal
+            });
+            
+            // Store X-Unauthenticated-User-Id from retry response
+            await this.storeUnauthenticatedUserId(response);
+            
+            if (!response.ok) {
+              // Clone response for error handling
+              const retryResponseClone = response.clone();
+              const retryErrorInfo = await this.handleApiError(retryResponseClone, 'ASK');
+              
+              // If it's LOGIN_REQUIRED, the modal will be shown via event, but we still need to call onError
+              if (retryErrorInfo.errorCode === 'LOGIN_REQUIRED') {
+                const error = new Error(retryErrorInfo.message);
+                error.status = retryErrorInfo.status;
+                error.errorCode = retryErrorInfo.errorCode;
+                if (onError) onError(error);
+                return () => {};
+              }
+              
+              // For other errors, create error object and call onError
+              const error = new Error(retryErrorInfo.message);
+              error.status = retryErrorInfo.status;
+              if (retryErrorInfo.errorCode) {
+                error.errorCode = retryErrorInfo.errorCode;
+              }
+              if (onError) onError(error);
+              return () => {};
+            }
+          } catch (retryError) {
+            console.error('[ApiService] Error retrying ask() request after token refresh:', retryError);
+            const error = new Error(retryError.message || 'Request failed after token refresh');
+            if (onError) onError(error);
+            return () => {};
+          }
+        } else {
+          // If it's LOGIN_REQUIRED, the modal will be shown via event, but we still need to call onError
+          if (errorInfo.errorCode === 'LOGIN_REQUIRED') {
+            const error = new Error(errorInfo.message);
+            error.status = errorInfo.status;
+            error.errorCode = errorInfo.errorCode;
+            if (onError) onError(error);
+            return () => {};
+          }
+          
+          // For other errors, create error object and call onError
           const error = new Error(errorInfo.message);
           error.status = errorInfo.status;
-          error.errorCode = errorInfo.errorCode;
+          if (errorInfo.errorCode) {
+            error.errorCode = errorInfo.errorCode;
+          }
           if (onError) onError(error);
           return () => {};
         }
-        
-        // For other errors, create error object and call onError
-        const error = new Error(errorInfo.message);
-        error.status = errorInfo.status;
-        if (errorInfo.errorCode) {
-          error.errorCode = errorInfo.errorCode;
-        }
-        if (onError) onError(error);
-        return () => {};
       }
       
       // Process the SSE stream
@@ -586,8 +1032,11 @@ class ApiService {
         ...unauthenticatedUserIdHeader
       };
       
+      // Add Authorization header if access token is available
+      await this.addAuthorizationHeader(requestHeaders);
+      
       // Make the SSE request
-      const response = await fetch(url, {
+      let response = await fetch(url, {
         method: 'POST',
         headers: requestHeaders,
         body: JSON.stringify(textSegmentsWithLanguage),
@@ -600,15 +1049,59 @@ class ApiService {
       if (!response.ok) {
         // Clone response for error handling (response body can only be read once)
         const responseClone = response.clone();
-        const errorInfo = await this.handleApiError(responseClone);
+        const errorInfo = await this.handleApiError(responseClone, 'SIMPLIFY');
         
-        // Create error object with error info
-        const error = new Error(errorInfo.message);
-        error.status = errorInfo.status;
-        if (errorInfo.errorCode) {
-          error.errorCode = errorInfo.errorCode;
+        // If token was refreshed, retry the request once
+        if (errorInfo.errorCode === 'TOKEN_REFRESHED' && errorInfo.shouldRetry) {
+          console.log('[ApiService] Token refreshed, retrying simplify() request...');
+          
+          // Retry the request with new token
+          try {
+            // Get updated headers (Authorization will have new token)
+            const retryUnauthenticatedUserIdHeader = await this.getUnauthenticatedUserIdHeader();
+            const retryRequestHeaders = {
+              'Content-Type': 'application/json',
+              'Accept': 'text/event-stream',
+              ...retryUnauthenticatedUserIdHeader
+            };
+            await this.addAuthorizationHeader(retryRequestHeaders);
+            
+            response = await fetch(url, {
+              method: 'POST',
+              headers: retryRequestHeaders,
+              body: JSON.stringify(textSegmentsWithLanguage),
+              signal: abortController.signal
+            });
+            
+            // Store X-Unauthenticated-User-Id from retry response
+            await this.storeUnauthenticatedUserId(response);
+            
+            if (!response.ok) {
+              // Clone response for error handling
+              const retryResponseClone = response.clone();
+              const retryErrorInfo = await this.handleApiError(retryResponseClone, 'SIMPLIFY');
+              
+              // Create error object with error info
+              const error = new Error(retryErrorInfo.message);
+              error.status = retryErrorInfo.status;
+              if (retryErrorInfo.errorCode) {
+                error.errorCode = retryErrorInfo.errorCode;
+              }
+              throw error;
+            }
+          } catch (retryError) {
+            console.error('[ApiService] Error retrying simplify() request after token refresh:', retryError);
+            throw retryError;
+          }
+        } else {
+          // Create error object with error info
+          const error = new Error(errorInfo.message);
+          error.status = errorInfo.status;
+          if (errorInfo.errorCode) {
+            error.errorCode = errorInfo.errorCode;
+          }
+          throw error;
         }
-        throw error;
       }
       
       // Process the SSE stream
@@ -822,7 +1315,7 @@ class ApiService {
       };
       
       // Make the SSE request
-      const response = await fetch(url, {
+      let response = await fetch(url, {
         method: 'POST',
         headers: requestHeaders,
         body: JSON.stringify(requestBody),
@@ -835,15 +1328,59 @@ class ApiService {
       if (!response.ok) {
         // Clone response for error handling (response body can only be read once)
         const responseClone = response.clone();
-        const errorInfo = await this.handleApiError(responseClone);
+        const errorInfo = await this.handleApiError(responseClone, 'SUMMARISE');
         
-        // Create error object with error info
-        const error = new Error(errorInfo.message);
-        error.status = errorInfo.status;
-        if (errorInfo.errorCode) {
-          error.errorCode = errorInfo.errorCode;
+        // If token was refreshed, retry the request once
+        if (errorInfo.errorCode === 'TOKEN_REFRESHED' && errorInfo.shouldRetry) {
+          console.log('[ApiService] Token refreshed, retrying summarise() request...');
+          
+          // Retry the request with new token
+          try {
+            // Get updated headers (Authorization will have new token)
+            const retryUnauthenticatedUserIdHeader = await this.getUnauthenticatedUserIdHeader();
+            const retryRequestHeaders = {
+              'Content-Type': 'application/json',
+              'Accept': 'text/event-stream',
+              ...retryUnauthenticatedUserIdHeader
+            };
+            await this.addAuthorizationHeader(retryRequestHeaders);
+            
+            response = await fetch(url, {
+              method: 'POST',
+              headers: retryRequestHeaders,
+              body: JSON.stringify(requestBody),
+              signal: abortController.signal
+            });
+            
+            // Store X-Unauthenticated-User-Id from retry response
+            await this.storeUnauthenticatedUserId(response);
+            
+            if (!response.ok) {
+              // Clone response for error handling
+              const retryResponseClone = response.clone();
+              const retryErrorInfo = await this.handleApiError(retryResponseClone, 'SUMMARISE');
+              
+              // Create error object with error info
+              const error = new Error(retryErrorInfo.message);
+              error.status = retryErrorInfo.status;
+              if (retryErrorInfo.errorCode) {
+                error.errorCode = retryErrorInfo.errorCode;
+              }
+              throw error;
+            }
+          } catch (retryError) {
+            console.error('[ApiService] Error retrying summarise() request after token refresh:', retryError);
+            throw retryError;
+          }
+        } else {
+          // Create error object with error info
+          const error = new Error(errorInfo.message);
+          error.status = errorInfo.status;
+          if (errorInfo.errorCode) {
+            error.errorCode = errorInfo.errorCode;
+          }
+          throw error;
         }
-        throw error;
       }
       
       // Process the SSE stream
@@ -1068,7 +1605,10 @@ class ApiService {
         ...unauthenticatedUserIdHeader
       };
       
-      const response = await fetch(url, {
+      // Add Authorization header if access token is available
+      await this.addAuthorizationHeader(requestHeaders);
+      
+      let response = await fetch(url, {
         method: 'POST',
         headers: requestHeaders,
         mode: 'cors',
@@ -1082,25 +1622,82 @@ class ApiService {
       if (!response.ok) {
         // Clone response for error handling (response body can only be read once)
         const responseClone = response.clone();
-        const errorInfo = await this.handleApiError(responseClone);
+        const errorInfo = await this.handleApiError(responseClone, 'WEB_SEARCH_STREAM');
         
-        // If it's LOGIN_REQUIRED, the modal will be shown via event, but we still need to call onError
-        if (errorInfo.errorCode === 'LOGIN_REQUIRED') {
+        // If token was refreshed, retry the request once
+        if (errorInfo.errorCode === 'TOKEN_REFRESHED' && errorInfo.shouldRetry) {
+          console.log('[ApiService] Token refreshed, retrying search() request...');
+          
+          // Retry the request with new token
+          try {
+            // Get updated headers (Authorization will have new token)
+            const retryUnauthenticatedUserIdHeader = await this.getUnauthenticatedUserIdHeader();
+            const retryRequestHeaders = {
+              'Content-Type': 'application/json',
+              'Accept': 'text/event-stream',
+              ...retryUnauthenticatedUserIdHeader
+            };
+            await this.addAuthorizationHeader(retryRequestHeaders);
+            
+            response = await fetch(url, {
+              method: 'POST',
+              headers: retryRequestHeaders,
+              mode: 'cors',
+              body: JSON.stringify(requestBody),
+              signal: abortController.signal
+            });
+            
+            // Store X-Unauthenticated-User-Id from retry response
+            await this.storeUnauthenticatedUserId(response);
+            
+            if (!response.ok) {
+              // Clone response for error handling
+              const retryResponseClone = response.clone();
+              const retryErrorInfo = await this.handleApiError(retryResponseClone, 'WEB_SEARCH_STREAM');
+              
+              // If it's LOGIN_REQUIRED, the modal will be shown via event, but we still need to call onError
+              if (retryErrorInfo.errorCode === 'LOGIN_REQUIRED') {
+                const error = new Error(retryErrorInfo.message);
+                error.status = retryErrorInfo.status;
+                error.errorCode = retryErrorInfo.errorCode;
+                if (onError) onError(error);
+                return () => {};
+              }
+              
+              // For other errors, create error object and call onError
+              const error = new Error(retryErrorInfo.message);
+              error.status = retryErrorInfo.status;
+              if (retryErrorInfo.errorCode) {
+                error.errorCode = retryErrorInfo.errorCode;
+              }
+              if (onError) onError(error);
+              return () => {};
+            }
+          } catch (retryError) {
+            console.error('[ApiService] Error retrying search() request after token refresh:', retryError);
+            const error = new Error(retryError.message || 'Request failed after token refresh');
+            if (onError) onError(error);
+            return () => {};
+          }
+        } else {
+          // If it's LOGIN_REQUIRED, the modal will be shown via event, but we still need to call onError
+          if (errorInfo.errorCode === 'LOGIN_REQUIRED') {
+            const error = new Error(errorInfo.message);
+            error.status = errorInfo.status;
+            error.errorCode = errorInfo.errorCode;
+            if (onError) onError(error);
+            return () => {};
+          }
+          
+          // For other errors, create error object and call onError
           const error = new Error(errorInfo.message);
           error.status = errorInfo.status;
-          error.errorCode = errorInfo.errorCode;
+          if (errorInfo.errorCode) {
+            error.errorCode = errorInfo.errorCode;
+          }
           if (onError) onError(error);
           return () => {};
         }
-        
-        // For other errors, create error object and call onError
-        const error = new Error(errorInfo.message);
-        error.status = errorInfo.status;
-        if (errorInfo.errorCode) {
-          error.errorCode = errorInfo.errorCode;
-        }
-        if (onError) onError(error);
-        return () => {};
       }
       
       // Process the SSE stream
@@ -1334,8 +1931,22 @@ class ApiService {
         ...unauthenticatedUserIdHeader
       };
       
+      // Add Authorization header if access token is available
+      await this.addAuthorizationHeader(requestHeaders);
+      
+      // Log Authorization header for words-explanation API
+      if (requestHeaders['Authorization']) {
+        console.log('[SUBHRAM-LOGIN] Authorization header being sent in words-explanation API:', requestHeaders['Authorization']);
+        // Also log just the token part (without "Bearer ") for verification
+        const tokenPart = requestHeaders['Authorization'].replace('Bearer ', '');
+        console.log('[SUBHRAM-LOGIN] Access token value (first 30 chars):', tokenPart.substring(0, 30) + '...');
+        console.log('[SUBHRAM-LOGIN] Access token length:', tokenPart.length);
+      } else {
+        console.log('[SUBHRAM-LOGIN] ⚠ No Authorization header in words-explanation API request');
+      }
+      
       // Make the SSE request
-      const response = await fetch(url, {
+      let response = await fetch(url, {
         method: 'POST',
         headers: requestHeaders,
         body: JSON.stringify(textSegmentsWithLanguage),
@@ -1346,17 +1957,81 @@ class ApiService {
       await this.storeUnauthenticatedUserId(response);
       
       if (!response.ok) {
+        console.log('[ApiService] ===== WORDS-EXPLANATION API ERROR =====');
+        console.log('[ApiService] Response not OK, status:', response.status);
+        console.log('[ApiService] Response statusText:', response.statusText);
+        console.log('[ApiService] Calling handleApiError...');
+        
         // Clone response for error handling (response body can only be read once)
         const responseClone = response.clone();
-        const errorInfo = await this.handleApiError(responseClone);
+        const errorInfo = await this.handleApiError(responseClone, 'WORDS_EXPLANATION');
         
-        // Create error object with error info
-        const error = new Error(errorInfo.message);
-        error.status = errorInfo.status;
-        if (errorInfo.errorCode) {
-          error.errorCode = errorInfo.errorCode;
+        console.log('[ApiService] handleApiError returned:', JSON.stringify(errorInfo, null, 2));
+        console.log('[ApiService] errorInfo.errorCode:', errorInfo.errorCode);
+        console.log('[ApiService] errorInfo.message:', errorInfo.message);
+        console.log('[ApiService] errorInfo.status:', errorInfo.status);
+        
+        // If token was refreshed, retry the request once
+        if (errorInfo.errorCode === 'TOKEN_REFRESHED' && errorInfo.shouldRetry) {
+          console.log('[ApiService] Token refreshed, retrying explainWords() request...');
+          
+          // Retry the request with new token
+          try {
+            // Get updated headers (Authorization will have new token)
+            const retryUnauthenticatedUserIdHeader = await this.getUnauthenticatedUserIdHeader();
+            const retryRequestHeaders = {
+              'Content-Type': 'application/json',
+              ...retryUnauthenticatedUserIdHeader
+            };
+            await this.addAuthorizationHeader(retryRequestHeaders);
+            
+            response = await fetch(url, {
+              method: 'POST',
+              headers: retryRequestHeaders,
+              body: JSON.stringify(textSegmentsWithLanguage),
+              signal: abortController.signal
+            });
+            
+            // Store X-Unauthenticated-User-Id from retry response
+            await this.storeUnauthenticatedUserId(response);
+            
+            if (!response.ok) {
+              // Clone response for error handling
+              const retryResponseClone = response.clone();
+              const retryErrorInfo = await this.handleApiError(retryResponseClone, 'WORDS_EXPLANATION');
+              
+              // Create error object with error info
+              const error = new Error(retryErrorInfo.message);
+              error.status = retryErrorInfo.status;
+              if (retryErrorInfo.errorCode) {
+                error.errorCode = retryErrorInfo.errorCode;
+              }
+              throw error;
+            }
+          } catch (retryError) {
+            console.error('[ApiService] Error retrying explainWords() request after token refresh:', retryError);
+            throw retryError;
+          }
+        } else {
+          // Create error object with error info
+          const error = new Error(errorInfo.message);
+          error.status = errorInfo.status;
+          if (errorInfo.errorCode) {
+            error.errorCode = errorInfo.errorCode;
+            console.log('[ApiService] Setting error.errorCode to:', errorInfo.errorCode);
+          } else {
+            console.log('[ApiService] No errorCode in errorInfo');
+          }
+          
+          console.log('[ApiService] Throwing error with:', {
+            message: error.message,
+            status: error.status,
+            errorCode: error.errorCode
+          });
+          console.log('[ApiService] ===== WORDS-EXPLANATION ERROR HANDLED =====');
+          
+          throw error;
         }
-        throw error;
       }
       
       // Process the SSE stream
@@ -1430,8 +2105,19 @@ class ApiService {
           if (streamError.name === 'AbortError') {
             console.log('[ApiService] Request aborted');
           } else {
-            console.error('[ApiService] Stream processing error:', streamError);
-            if (onError) onError(streamError);
+            console.error('[ApiService] ===== STREAM PROCESSING ERROR =====');
+            console.error('[ApiService] Stream error during words-explanation:', streamError);
+            console.error('[ApiService] Stream error name:', streamError.name);
+            console.error('[ApiService] Stream error message:', streamError.message);
+            console.error('[ApiService] Stream error status:', streamError.status);
+            console.error('[ApiService] Stream error errorCode:', streamError.errorCode);
+            console.error('[ApiService] ===== STREAM ERROR DETAILS =====');
+            if (onError) {
+              console.log('[ApiService] Calling onError callback with streamError');
+              onError(streamError);
+            } else {
+              console.warn('[ApiService] No onError callback provided for stream error');
+            }
           }
         }
       };
@@ -1446,7 +2132,14 @@ class ApiService {
       };
       
     } catch (error) {
+      console.error('[ApiService] ===== EXPLAIN WORDS CATCH BLOCK =====');
       console.error('[ApiService] Error initiating word explanation request:', error);
+      console.error('[ApiService] Error name:', error.name);
+      console.error('[ApiService] Error message:', error.message);
+      console.error('[ApiService] Error status:', error.status);
+      console.error('[ApiService] Error errorCode:', error.errorCode);
+      console.error('[ApiService] Error stack:', error.stack);
+      console.error('[ApiService] Full error object:', JSON.stringify(error, Object.getOwnPropertyNames(error), 2));
       
       // Provide helpful error messages
       let errorMessage = error.message;
@@ -1457,9 +2150,28 @@ class ApiService {
                       '2. CORS is properly configured to allow requests from this origin';
       }
       
-      if (onError) {
-        onError(new Error(errorMessage));
+      console.log('[ApiService] Final errorMessage to pass to onError:', errorMessage);
+      console.log('[ApiService] Error has errorCode?', !!error.errorCode);
+      if (error.errorCode) {
+        console.log('[ApiService] Error errorCode value:', error.errorCode);
       }
+      
+      if (onError) {
+        console.log('[ApiService] Calling onError callback');
+        // Preserve errorCode if it exists
+        const errorToPass = new Error(errorMessage);
+        if (error.errorCode) {
+          errorToPass.errorCode = error.errorCode;
+          errorToPass.status = error.status;
+          console.log('[ApiService] Preserving errorCode in error passed to onError:', error.errorCode);
+        }
+        onError(errorToPass);
+        console.log('[ApiService] onError callback completed');
+      } else {
+        console.warn('[ApiService] No onError callback provided');
+      }
+      
+      console.error('[ApiService] ===== EXPLAIN WORDS ERROR HANDLED =====');
       
       // Return a no-op abort function
       return () => {};
@@ -1488,7 +2200,10 @@ class ApiService {
         ...unauthenticatedUserIdHeader
       };
       
-      const response = await fetch(url, {
+      // Add Authorization header if access token is available
+      await this.addAuthorizationHeader(requestHeaders);
+      
+      let response = await fetch(url, {
         method: 'POST',
         headers: requestHeaders,
         body: JSON.stringify({
@@ -1504,13 +2219,60 @@ class ApiService {
       if (!response.ok) {
         // Clone response for error handling (response body can only be read once)
         const responseClone = response.clone();
-        const errorInfo = await this.handleApiError(responseClone);
+        const errorInfo = await this.handleApiError(responseClone, 'WORDS_EXPLANATION');
         
-        // Return error in the expected format
-        return {
-          success: false,
-          error: errorInfo.message
-        };
+        // If token was refreshed, retry the request once
+        if (errorInfo.errorCode === 'TOKEN_REFRESHED' && errorInfo.shouldRetry) {
+          console.log('[ApiService] Token refreshed, retrying getMoreExplanations() request...');
+          
+          // Retry the request with new token
+          try {
+            // Get updated headers (Authorization will have new token)
+            const retryUnauthenticatedUserIdHeader = await this.getUnauthenticatedUserIdHeader();
+            const retryRequestHeaders = {
+              'Content-Type': 'application/json',
+              ...retryUnauthenticatedUserIdHeader
+            };
+            await this.addAuthorizationHeader(retryRequestHeaders);
+            
+            response = await fetch(url, {
+              method: 'POST',
+              headers: retryRequestHeaders,
+              body: JSON.stringify({
+                word: word,
+                meaning: meaning,
+                examples: examples
+              })
+            });
+            
+            // Store X-Unauthenticated-User-Id from retry response
+            await this.storeUnauthenticatedUserId(response);
+            
+            if (!response.ok) {
+              // Clone response for error handling
+              const retryResponseClone = response.clone();
+              const retryErrorInfo = await this.handleApiError(retryResponseClone, 'WORDS_EXPLANATION');
+              
+              // Return error in the expected format
+              return {
+                success: false,
+                error: retryErrorInfo.message
+              };
+            }
+          } catch (retryError) {
+            console.error('[ApiService] Error retrying getMoreExplanations() request after token refresh:', retryError);
+            return {
+              success: false,
+              error: retryError.message || 'Request failed after token refresh'
+            };
+          }
+        } else {
+          // Return error in the expected format
+          return {
+            success: false,
+            error: errorInfo.message
+          };
+        }
       }
       
       const data = await response.json();
