@@ -2966,11 +2966,12 @@ const ErrorBanner = {
         top: 20px;
         right: 20px;
         z-index: 1000000;
-        background: #ef4444;
-        color: white;
+        background: #fee2e2;
+        color: #dc2626;
+        border: 1px solid #dc2626;
         padding: 16px 20px;
         border-radius: 8px;
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        box-shadow: 0 4px 12px rgba(220, 38, 38, 0.15);
         animation: vocab-error-banner-slide-in 0.3s ease-out;
         max-width: 90%;
         width: auto;
@@ -2994,9 +2995,9 @@ const ErrorBanner = {
         top: 8px;
         left: 8px !important;
         right: auto !important;
-        background: rgba(255, 255, 255, 0.15);
-        border: 1px solid rgba(255, 255, 255, 0.3);
-        color: white;
+        background: rgba(220, 38, 38, 0.1);
+        border: 1px solid rgba(220, 38, 38, 0.3);
+        color: #dc2626;
         font-size: 16px;
         line-height: 1;
         cursor: pointer;
@@ -3016,12 +3017,13 @@ const ErrorBanner = {
       .vocab-error-banner-close svg {
         width: 16px;
         height: 16px;
+        stroke: #dc2626;
       }
       
       .vocab-error-banner-close:hover {
         opacity: 1;
-        background: rgba(255, 255, 255, 0.25);
-        border-color: rgba(255, 255, 255, 0.5);
+        background: rgba(220, 38, 38, 0.2);
+        border-color: rgba(220, 38, 38, 0.5);
       }
       
       .vocab-error-banner.minimized {
@@ -3056,7 +3058,7 @@ const ErrorBanner = {
         padding-top: 8px;
         padding-left: 0 !important;
         padding-right: 0 !important;
-        border-top: 1px solid rgba(255, 255, 255, 0.2);
+        border-top: 1px solid rgba(220, 38, 38, 0.2);
         margin-top: 8px;
         margin-left: 0 !important;
         margin-right: 0 !important;
@@ -3066,8 +3068,8 @@ const ErrorBanner = {
       
       .vocab-error-banner-dismiss {
         background: none !important;
-        border: 1px solid rgba(255, 255, 255, 0.5) !important;
-        color: white !important;
+        border: 1px solid rgba(220, 38, 38, 0.5) !important;
+        color: #dc2626 !important;
         font-size: 12px;
         font-weight: 500;
         cursor: pointer;
@@ -3086,8 +3088,8 @@ const ErrorBanner = {
       
       .vocab-error-banner-dismiss:hover {
         opacity: 1;
-        background: rgba(255, 255, 255, 0.1);
-        border-color: rgba(255, 255, 255, 0.8);
+        background: rgba(220, 38, 38, 0.1);
+        border-color: rgba(220, 38, 38, 0.8);
       }
     `;
     
@@ -10111,10 +10113,11 @@ const WordSelector = {
         position: fixed;
         top: 20px;
         right: 20px;
-        background: #ff4444;
-        color: white;
+        background: #fee2e2;
+        color: #dc2626;
+        border: 1px solid #dc2626;
         border-radius: 8px;
-        box-shadow: 0 4px 12px rgba(255, 68, 68, 0.3);
+        box-shadow: 0 4px 12px rgba(220, 38, 38, 0.3);
         z-index: 1000000;
         opacity: 0;
         transform: translateX(100%);
@@ -10149,7 +10152,7 @@ const WordSelector = {
       .vocab-error-close {
         background: none;
         border: none;
-        color: white;
+        color: #dc2626;
         font-size: 18px;
         font-weight: bold;
         cursor: pointer;
@@ -10165,7 +10168,7 @@ const WordSelector = {
       }
       
       .vocab-error-close:hover {
-        background: rgba(255, 255, 255, 0.2);
+        background: rgba(220, 38, 38, 0.2);
       }
     `;
     
@@ -10494,7 +10497,7 @@ const TextSelector = {
     // Create notification element
     const notification = document.createElement('div');
     notification.id = 'vocab-text-selector-notification';
-    notification.className = 'vocab-notification';
+    notification.className = 'vocab-notification vocab-notification-error';
     
     // Create close button
     const closeBtn = document.createElement('button');
@@ -10502,7 +10505,7 @@ const TextSelector = {
     closeBtn.setAttribute('aria-label', 'Close notification');
     closeBtn.innerHTML = `
       <svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M9 3L3 9M3 3l6 6" stroke="#9527F5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M9 3L3 9M3 3l6 6" stroke="#dc2626" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
       </svg>
     `;
     
@@ -13297,15 +13300,15 @@ const TextSelector = {
         position: fixed;
         top: 20px;
         right: 20px;
-        background: white;
-        color: #9527F5;
+        background: #fee2e2;
+        color: #dc2626;
         padding: 12px 40px 12px 20px;
         border-radius: 12px;
-        border: 1px solid #9527F5;
+        border: 1px solid #dc2626;
         font-size: 14px;
         font-weight: 500;
         font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-        box-shadow: 0 4px 12px rgba(149, 39, 245, 0.3);
+        box-shadow: 0 4px 12px rgba(220, 38, 38, 0.3);
         z-index: 9999999;
         opacity: 0;
         transform: translateX(400px);
@@ -13352,6 +13355,7 @@ const TextSelector = {
       .vocab-notification-close svg {
         pointer-events: none;
         display: block;
+        stroke: #dc2626;
       }
       
       /* Notification message text */
@@ -13361,9 +13365,9 @@ const TextSelector = {
       
       /* Notification types */
       .vocab-notification-error {
-        background: #ffebee;
-        color: #c62828;
-        border-left: 4px solid #c62828;
+        background: #fee2e2;
+        color: #dc2626;
+        border: 1px solid #dc2626;
       }
       
       .vocab-notification-success {
@@ -26563,9 +26567,11 @@ const ButtonPanel = {
     // Create close button
     const closeBtn = document.createElement('button');
     closeBtn.className = 'vocab-notification-close';
+    // Use red color for error type, otherwise use the default from CSS
+    const strokeColor = type === 'error' ? '#dc2626' : '#9527F5';
     closeBtn.innerHTML = `
       <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M9 3L3 9M3 3l6 6" stroke="#9527F5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M9 3L3 9M3 3l6 6" stroke="${strokeColor}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
       </svg>
     `;
     
