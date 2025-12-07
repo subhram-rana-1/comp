@@ -2971,7 +2971,7 @@ const ErrorBanner = {
         border: 1px solid #dc2626;
         padding: 16px 20px;
         border-radius: 8px;
-        box-shadow: 0 4px 12px rgba(220, 38, 38, 0.15);
+        box-shadow: none;
         animation: vocab-error-banner-slide-in 0.3s ease-out;
         max-width: 90%;
         width: auto;
@@ -4313,6 +4313,18 @@ const WordSelector = {
         } else {
           // Show error notification for other errors
           TextSelector.showNotification('Error getting word meaning. Please try again.');
+          
+          // Remove the purple highlight and word from selection on API failure
+          const normalizedWord = highlight.getAttribute('data-word')?.toLowerCase();
+          if (normalizedWord) {
+            // Remove the word completely (removes highlight and cleans up)
+            this.removeWord(normalizedWord);
+            console.log('[WordSelector] Removed word due to API error:', normalizedWord);
+          } else {
+            // Fallback: directly remove the highlight if we can't get the word
+            this.removeHighlight(highlight);
+            console.log('[WordSelector] Removed highlight directly due to API error');
+          }
         }
       }
     );
@@ -10117,7 +10129,7 @@ const WordSelector = {
         color: #dc2626;
         border: 1px solid #dc2626;
         border-radius: 8px;
-        box-shadow: 0 4px 12px rgba(220, 38, 38, 0.3);
+        box-shadow: none;
         z-index: 1000000;
         opacity: 0;
         transform: translateX(100%);
@@ -13308,7 +13320,7 @@ const TextSelector = {
         font-size: 14px;
         font-weight: 500;
         font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-        box-shadow: 0 4px 12px rgba(220, 38, 38, 0.3);
+        box-shadow: none;
         z-index: 9999999;
         opacity: 0;
         transform: translateX(400px);
@@ -13317,6 +13329,8 @@ const TextSelector = {
         display: flex;
         align-items: center;
         gap: 12px;
+        max-width: 400px;
+        word-wrap: break-word;
       }
       
       .vocab-notification.visible {
@@ -24722,18 +24736,108 @@ const ButtonPanel = {
       (error) => {
         console.error('[ButtonPanel] Error during single text simplification:', error);
         
-        // Remove loading animation on error
+        // Remove pulsating animation on error
+        if (highlight) {
         highlight.classList.remove('vocab-text-loading');
+          
+          // Remove data-processing-magic-meaning attribute
+          highlight.removeAttribute('data-processing-magic-meaning');
         
         // Remove purple spinner at book icon location on error
         const bookSpinnerWrapper = highlight.querySelector('.vocab-text-book-spinner-wrapper');
         if (bookSpinnerWrapper) {
           bookSpinnerWrapper.remove();
+          }
         }
         
-        // Hide spinner and restore button on error
-        // Restore magic-meaning button from loading state
-        TextSelector.restoreMagicMeaningButton(textKey);
+        // Remove spinner containers on document.body
+        const spinnerOnBody = window.safeQueryByDataTextKey('.vocab-magic-meaning-spinner-container', textKey);
+        if (spinnerOnBody) {
+          spinnerOnBody.remove();
+        }
+        
+        // Remove magic meaning button from buttonWrapper (floating button on body) if it exists
+        const buttonWrapper = TextSelector.buttonWrappers?.get(textKey);
+        if (buttonWrapper) {
+          // Clean up fixed scroll handler if it exists
+          if (buttonWrapper._fixedScrollHandler) {
+            window.removeEventListener('scroll', buttonWrapper._fixedScrollHandler);
+            buttonWrapper._fixedScrollHandler = null;
+            buttonWrapper._fixedPosition = null;
+          }
+          
+          // Clean up event listeners if they exist
+          if (buttonWrapper._cleanupHandlers) {
+            window.removeEventListener('scroll', buttonWrapper._cleanupHandlers.scroll);
+            window.removeEventListener('resize', buttonWrapper._cleanupHandlers.resize);
+            document.removeEventListener('mouseup', buttonWrapper._cleanupHandlers.cleanup);
+            document.removeEventListener('mousedown', buttonWrapper._cleanupHandlers.cleanup);
+            document.removeEventListener('selectionchange', buttonWrapper._cleanupHandlers.cleanup);
+            document.removeEventListener('touchend', buttonWrapper._cleanupHandlers.cleanup);
+          }
+          
+          // Remove buttonWrapper from DOM
+          if (buttonWrapper.parentNode) {
+            buttonWrapper.remove();
+          }
+          
+          // Remove from buttonWrappers map
+          TextSelector.buttonWrappers?.delete(textKey);
+        }
+        
+        // Remove magic meaning button from highlight's iconsWrapper if it exists
+        if (highlight) {
+          const iconsWrapper = highlight.querySelector('.vocab-text-icons-wrapper');
+          if (iconsWrapper) {
+            const magicBtn = iconsWrapper.querySelector('.vocab-text-magic-meaning-btn');
+            if (magicBtn) {
+              magicBtn.remove();
+            }
+            // Remove iconsWrapper if it's now empty
+            if (iconsWrapper.children.length === 0) {
+              iconsWrapper.remove();
+            }
+          }
+          
+          // Also check for magic button directly in highlight (fallback)
+          const magicBtnDirect = highlight.querySelector('.vocab-text-magic-meaning-btn');
+          if (magicBtnDirect) {
+            magicBtnDirect.remove();
+          }
+        }
+        
+        // Revert span element: remove highlight and restore original text
+        if (highlight) {
+          TextSelector.removeHighlight(highlight);
+        }
+        
+        // Clean up data structures
+        TextSelector.selectedTexts.delete(textKey);
+        TextSelector.textToHighlights.delete(textKey);
+        
+        // Update button states after cleanup
+        this.updateButtonStatesFromSelections();
+        
+        // Extract error message from error object (handle various error formats)
+        let errorMessage = 'Error simplifying text. Please try again.';
+        if (error) {
+          if (error.message) {
+            errorMessage = error.message;
+          } else if (error.reason) {
+            errorMessage = error.reason;
+          } else if (error.error?.message) {
+            errorMessage = error.error.message;
+          } else if (error.error?.reason) {
+            errorMessage = error.error.reason;
+          } else if (typeof error === 'string') {
+            errorMessage = error;
+          } else if (error.status && error.statusText) {
+            errorMessage = `API request failed: ${error.status} ${error.statusText}`;
+          }
+        }
+        
+        // Show error notification with actual error message
+        TextSelector.showNotification(errorMessage);
         
         // Mark simplify as completed (even on error) to allow button reset
         this.apiCompletionState.simplifyCompleted = true;
@@ -25292,16 +25396,98 @@ const ButtonPanel = {
           (error) => {
             console.error('[ButtonPanel] Error during text simplification:', error);
             
-            // Remove loading animation from all highlights
+            // Revert all changes for each textKey
             for (const textKey of textKeysToProcess) {
               const highlight = TextSelector.textToHighlights.get(textKey);
+              
+              // Remove pulsating animation
               if (highlight) {
                 highlight.classList.remove('vocab-text-loading');
+                
+                // Remove data-processing-magic-meaning attribute
+                highlight.removeAttribute('data-processing-magic-meaning');
+                
+                // Remove purple spinner at book icon location
+                const bookSpinnerWrapper = highlight.querySelector('.vocab-text-book-spinner-wrapper');
+                if (bookSpinnerWrapper) {
+                  bookSpinnerWrapper.remove();
+                }
               }
+              
+              // Remove spinner containers on document.body
+              const spinnerOnBody = window.safeQueryByDataTextKey('.vocab-magic-meaning-spinner-container', textKey);
+              if (spinnerOnBody) {
+                spinnerOnBody.remove();
+              }
+              
+              // Remove magic meaning button from buttonWrapper (floating button on body) if it exists
+              const buttonWrapper = TextSelector.buttonWrappers?.get(textKey);
+              if (buttonWrapper) {
+                // Clean up fixed scroll handler if it exists
+                if (buttonWrapper._fixedScrollHandler) {
+                  window.removeEventListener('scroll', buttonWrapper._fixedScrollHandler);
+                  buttonWrapper._fixedScrollHandler = null;
+                  buttonWrapper._fixedPosition = null;
+                }
+                
+                // Clean up event listeners if they exist
+                if (buttonWrapper._cleanupHandlers) {
+                  window.removeEventListener('scroll', buttonWrapper._cleanupHandlers.scroll);
+                  window.removeEventListener('resize', buttonWrapper._cleanupHandlers.resize);
+                  document.removeEventListener('mouseup', buttonWrapper._cleanupHandlers.cleanup);
+                  document.removeEventListener('mousedown', buttonWrapper._cleanupHandlers.cleanup);
+                  document.removeEventListener('selectionchange', buttonWrapper._cleanupHandlers.cleanup);
+                  document.removeEventListener('touchend', buttonWrapper._cleanupHandlers.cleanup);
+                }
+                
+                // Remove buttonWrapper from DOM
+                if (buttonWrapper.parentNode) {
+                  buttonWrapper.remove();
+                }
+                
+                // Remove from buttonWrappers map
+                TextSelector.buttonWrappers?.delete(textKey);
+              }
+              
+              // Remove magic meaning button from highlight's iconsWrapper if it exists
+              if (highlight) {
+                const iconsWrapper = highlight.querySelector('.vocab-text-icons-wrapper');
+                if (iconsWrapper) {
+                  const magicBtn = iconsWrapper.querySelector('.vocab-text-magic-meaning-btn');
+                  if (magicBtn) {
+                    magicBtn.remove();
+                  }
+                  // Remove iconsWrapper if it's now empty
+                  if (iconsWrapper.children.length === 0) {
+                    iconsWrapper.remove();
+                  }
+                }
+                
+                // Also check for magic button directly in highlight (fallback)
+                const magicBtnDirect = highlight.querySelector('.vocab-text-magic-meaning-btn');
+                if (magicBtnDirect) {
+                  magicBtnDirect.remove();
+                }
+              }
+              
+              // Revert span element: remove highlight and restore original text
+              if (highlight) {
+                TextSelector.removeHighlight(highlight);
+              }
+              
+              // Clean up data structures
+              TextSelector.selectedTexts.delete(textKey);
+              TextSelector.textToHighlights.delete(textKey);
             }
             
-            // Show error notification
-            TextSelector.showNotification('Error simplifying text. Please try again.');
+            // Update button states after cleanup
+            this.updateButtonStatesFromSelections();
+            
+            // Extract error message from error object
+            const errorMessage = error?.message || error?.reason || error?.error?.message || 'Error simplifying text. Please try again.';
+            
+            // Show error notification with actual error message
+            TextSelector.showNotification(errorMessage);
 
             // Mark simplify API as completed (even on error)
             this.apiCompletionState.simplifyCompleted = true;
