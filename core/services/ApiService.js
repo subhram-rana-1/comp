@@ -157,6 +157,9 @@ class ApiService {
       
       // Make the refresh token request
       // credentials: 'include' ensures cookies (including refreshToken) are sent
+      // NOTE: Browser will automatically send an OPTIONS preflight request before this POST
+      // because we're using credentials: 'include' and custom headers (Authorization, Content-Type)
+      // The backend MUST handle OPTIONS requests and return proper CORS headers
       const response = await fetch(url, {
         method: 'POST',
         headers: requestHeaders,
@@ -281,9 +284,16 @@ class ApiService {
       
       let errorMessage = error.message;
       if (error.message.includes('Failed to fetch') || error.name === 'TypeError') {
-        errorMessage = 'Cannot connect to API server. Please check:\n' +
-                      '1. Backend server is running at ' + this.BASE_URL + '\n' +
-                      '2. CORS is properly configured to allow requests from this origin';
+        errorMessage = 'Unable to connect to the API server for token refresh. This could be due to:\n' +
+                      '1. Backend server is not running at ' + this.BASE_URL + '\n' +
+                      '2. Network connectivity issues - check your internet connection\n' +
+                      '3. CORS configuration - ensure the backend allows requests from this origin\n' +
+                      '4. Firewall or security settings blocking the connection\n\n' +
+                      'Please verify the backend server is running and accessible.';
+      } else if (error.status) {
+        errorMessage = `Token refresh failed (${error.status}): ${error.message}`;
+      } else {
+        errorMessage = `Token refresh failed: ${error.message}`;
       }
       
       return {
@@ -713,80 +723,23 @@ class ApiService {
         const responseClone = response.clone();
         const errorInfo = await this.handleApiError(responseClone, 'ASK');
         
-        // If token was refreshed, retry the request once
-        if (errorInfo.errorCode === 'TOKEN_REFRESHED' && errorInfo.shouldRetry) {
-          console.log('[ApiService] Token refreshed, retrying ask() request...');
-          
-          // Retry the request with new token
-          try {
-            // Get updated headers (Authorization will have new token)
-            const retryUnauthenticatedUserIdHeader = await this.getUnauthenticatedUserIdHeader();
-            const retryRequestHeaders = {
-              'Content-Type': 'application/json',
-              'Accept': 'text/event-stream',
-              ...retryUnauthenticatedUserIdHeader
-            };
-            await this.addAuthorizationHeader(retryRequestHeaders);
-            
-            response = await fetch(url, {
-              method: 'POST',
-              headers: retryRequestHeaders,
-              mode: 'cors',
-              body: JSON.stringify(requestBody),
-              signal: abortController.signal
-            });
-            
-            // Store X-Unauthenticated-User-Id from retry response
-            await this.storeUnauthenticatedUserId(response);
-            
-            if (!response.ok) {
-              // Clone response for error handling
-              const retryResponseClone = response.clone();
-              const retryErrorInfo = await this.handleApiError(retryResponseClone, 'ASK');
-              
-              // If it's LOGIN_REQUIRED, the modal will be shown via event, but we still need to call onError
-              if (retryErrorInfo.errorCode === 'LOGIN_REQUIRED') {
-                const error = new Error(retryErrorInfo.message);
-                error.status = retryErrorInfo.status;
-                error.errorCode = retryErrorInfo.errorCode;
-                if (onError) onError(error);
-                return () => {};
-              }
-              
-              // For other errors, create error object and call onError
-              const error = new Error(retryErrorInfo.message);
-              error.status = retryErrorInfo.status;
-              if (retryErrorInfo.errorCode) {
-                error.errorCode = retryErrorInfo.errorCode;
-              }
-              if (onError) onError(error);
-              return () => {};
-            }
-          } catch (retryError) {
-            console.error('[ApiService] Error retrying ask() request after token refresh:', retryError);
-            const error = new Error(retryError.message || 'Request failed after token refresh');
-            if (onError) onError(error);
-            return () => {};
-          }
-        } else {
-          // If it's LOGIN_REQUIRED, the modal will be shown via event, but we still need to call onError
-          if (errorInfo.errorCode === 'LOGIN_REQUIRED') {
-            const error = new Error(errorInfo.message);
-            error.status = errorInfo.status;
-            error.errorCode = errorInfo.errorCode;
-            if (onError) onError(error);
-            return () => {};
-          }
-          
-          // For other errors, create error object and call onError
+        // If it's LOGIN_REQUIRED, the modal will be shown via event, but we still need to call onError
+        if (errorInfo.errorCode === 'LOGIN_REQUIRED') {
           const error = new Error(errorInfo.message);
           error.status = errorInfo.status;
-          if (errorInfo.errorCode) {
-            error.errorCode = errorInfo.errorCode;
-          }
+          error.errorCode = errorInfo.errorCode;
           if (onError) onError(error);
           return () => {};
         }
+        
+        // For other errors, create error object and call onError
+        const error = new Error(errorInfo.message);
+        error.status = errorInfo.status;
+        if (errorInfo.errorCode) {
+          error.errorCode = errorInfo.errorCode;
+        }
+        if (onError) onError(error);
+        return () => {};
       }
       
       // Process the SSE stream
@@ -1039,6 +992,8 @@ class ApiService {
       let response = await fetch(url, {
         method: 'POST',
         headers: requestHeaders,
+        mode: 'cors',
+        credentials: 'include',
         body: JSON.stringify(textSegmentsWithLanguage),
         signal: abortController.signal
       });
@@ -1051,57 +1006,13 @@ class ApiService {
         const responseClone = response.clone();
         const errorInfo = await this.handleApiError(responseClone, 'SIMPLIFY');
         
-        // If token was refreshed, retry the request once
-        if (errorInfo.errorCode === 'TOKEN_REFRESHED' && errorInfo.shouldRetry) {
-          console.log('[ApiService] Token refreshed, retrying simplify() request...');
-          
-          // Retry the request with new token
-          try {
-            // Get updated headers (Authorization will have new token)
-            const retryUnauthenticatedUserIdHeader = await this.getUnauthenticatedUserIdHeader();
-            const retryRequestHeaders = {
-              'Content-Type': 'application/json',
-              'Accept': 'text/event-stream',
-              ...retryUnauthenticatedUserIdHeader
-            };
-            await this.addAuthorizationHeader(retryRequestHeaders);
-            
-            response = await fetch(url, {
-              method: 'POST',
-              headers: retryRequestHeaders,
-              body: JSON.stringify(textSegmentsWithLanguage),
-              signal: abortController.signal
-            });
-            
-            // Store X-Unauthenticated-User-Id from retry response
-            await this.storeUnauthenticatedUserId(response);
-            
-            if (!response.ok) {
-              // Clone response for error handling
-              const retryResponseClone = response.clone();
-              const retryErrorInfo = await this.handleApiError(retryResponseClone, 'SIMPLIFY');
-              
-              // Create error object with error info
-              const error = new Error(retryErrorInfo.message);
-              error.status = retryErrorInfo.status;
-              if (retryErrorInfo.errorCode) {
-                error.errorCode = retryErrorInfo.errorCode;
-              }
-              throw error;
-            }
-          } catch (retryError) {
-            console.error('[ApiService] Error retrying simplify() request after token refresh:', retryError);
-            throw retryError;
-          }
-        } else {
-          // Create error object with error info
-          const error = new Error(errorInfo.message);
-          error.status = errorInfo.status;
-          if (errorInfo.errorCode) {
-            error.errorCode = errorInfo.errorCode;
-          }
-          throw error;
+        // Create error object with error info
+        const error = new Error(errorInfo.message);
+        error.status = errorInfo.status;
+        if (errorInfo.errorCode) {
+          error.errorCode = errorInfo.errorCode;
         }
+        throw error;
       }
       
       // Process the SSE stream
@@ -1214,9 +1125,15 @@ class ApiService {
               let errorMessage = streamError.message;
               
               if (streamError.message.includes('Failed to fetch') || streamError.name === 'TypeError') {
-                errorMessage = 'Cannot connect to API server. Please check:\n' +
-                              '1. Backend server is running at ' + this.BASE_URL + '\n' +
-                              '2. CORS is properly configured to allow requests from this origin';
+                errorMessage = 'Connection lost during simplification. This could be due to:\n' +
+                              '1. Backend server stopped responding at ' + this.BASE_URL + '\n' +
+                              '2. Network connectivity issues - check your internet connection\n' +
+                              '3. Request timeout - the server may be overloaded\n\n' +
+                              'Please try again or verify the backend server is running.';
+              } else if (streamError.status) {
+                errorMessage = `Simplify stream error (${streamError.status}): ${streamError.message}`;
+              } else {
+                errorMessage = `Simplify stream error: ${streamError.message}`;
               }
               
               onError(new Error(errorMessage));
@@ -1237,13 +1154,22 @@ class ApiService {
     } catch (error) {
       console.error('[ApiService] Error initiating simplify request:', error);
       
-      // Provide helpful error messages
+      // Provide helpful error messages with more context
       let errorMessage = error.message;
       
       if (error.message.includes('Failed to fetch') || error.name === 'TypeError') {
-        errorMessage = 'Cannot connect to API server. Please check:\n' +
-                      '1. Backend server is running at ' + this.BASE_URL + '\n' +
-                      '2. CORS is properly configured to allow requests from this origin';
+        errorMessage = 'Unable to connect to the simplification service. This could be due to:\n' +
+                      '1. Backend server is not running at ' + this.BASE_URL + '\n' +
+                      '2. Network connectivity issues - check your internet connection\n' +
+                      '3. CORS configuration - ensure the backend allows requests from this origin\n' +
+                      '4. Firewall or security settings blocking the connection\n\n' +
+                      'Please verify the backend server is running and accessible.';
+      } else if (error.status) {
+        // API error with status code
+        errorMessage = `Simplify request failed (${error.status}): ${error.message}`;
+      } else {
+        // Other errors
+        errorMessage = `Simplify request failed: ${error.message}`;
       }
       
       if (onError) {
@@ -1330,57 +1256,13 @@ class ApiService {
         const responseClone = response.clone();
         const errorInfo = await this.handleApiError(responseClone, 'SUMMARISE');
         
-        // If token was refreshed, retry the request once
-        if (errorInfo.errorCode === 'TOKEN_REFRESHED' && errorInfo.shouldRetry) {
-          console.log('[ApiService] Token refreshed, retrying summarise() request...');
-          
-          // Retry the request with new token
-          try {
-            // Get updated headers (Authorization will have new token)
-            const retryUnauthenticatedUserIdHeader = await this.getUnauthenticatedUserIdHeader();
-            const retryRequestHeaders = {
-              'Content-Type': 'application/json',
-              'Accept': 'text/event-stream',
-              ...retryUnauthenticatedUserIdHeader
-            };
-            await this.addAuthorizationHeader(retryRequestHeaders);
-            
-            response = await fetch(url, {
-              method: 'POST',
-              headers: retryRequestHeaders,
-              body: JSON.stringify(requestBody),
-              signal: abortController.signal
-            });
-            
-            // Store X-Unauthenticated-User-Id from retry response
-            await this.storeUnauthenticatedUserId(response);
-            
-            if (!response.ok) {
-              // Clone response for error handling
-              const retryResponseClone = response.clone();
-              const retryErrorInfo = await this.handleApiError(retryResponseClone, 'SUMMARISE');
-              
-              // Create error object with error info
-              const error = new Error(retryErrorInfo.message);
-              error.status = retryErrorInfo.status;
-              if (retryErrorInfo.errorCode) {
-                error.errorCode = retryErrorInfo.errorCode;
-              }
-              throw error;
-            }
-          } catch (retryError) {
-            console.error('[ApiService] Error retrying summarise() request after token refresh:', retryError);
-            throw retryError;
-          }
-        } else {
-          // Create error object with error info
-          const error = new Error(errorInfo.message);
-          error.status = errorInfo.status;
-          if (errorInfo.errorCode) {
-            error.errorCode = errorInfo.errorCode;
-          }
-          throw error;
+        // Create error object with error info
+        const error = new Error(errorInfo.message);
+        error.status = errorInfo.status;
+        if (errorInfo.errorCode) {
+          error.errorCode = errorInfo.errorCode;
         }
+        throw error;
       }
       
       // Process the SSE stream
@@ -1624,80 +1506,23 @@ class ApiService {
         const responseClone = response.clone();
         const errorInfo = await this.handleApiError(responseClone, 'WEB_SEARCH_STREAM');
         
-        // If token was refreshed, retry the request once
-        if (errorInfo.errorCode === 'TOKEN_REFRESHED' && errorInfo.shouldRetry) {
-          console.log('[ApiService] Token refreshed, retrying search() request...');
-          
-          // Retry the request with new token
-          try {
-            // Get updated headers (Authorization will have new token)
-            const retryUnauthenticatedUserIdHeader = await this.getUnauthenticatedUserIdHeader();
-            const retryRequestHeaders = {
-              'Content-Type': 'application/json',
-              'Accept': 'text/event-stream',
-              ...retryUnauthenticatedUserIdHeader
-            };
-            await this.addAuthorizationHeader(retryRequestHeaders);
-            
-            response = await fetch(url, {
-              method: 'POST',
-              headers: retryRequestHeaders,
-              mode: 'cors',
-              body: JSON.stringify(requestBody),
-              signal: abortController.signal
-            });
-            
-            // Store X-Unauthenticated-User-Id from retry response
-            await this.storeUnauthenticatedUserId(response);
-            
-            if (!response.ok) {
-              // Clone response for error handling
-              const retryResponseClone = response.clone();
-              const retryErrorInfo = await this.handleApiError(retryResponseClone, 'WEB_SEARCH_STREAM');
-              
-              // If it's LOGIN_REQUIRED, the modal will be shown via event, but we still need to call onError
-              if (retryErrorInfo.errorCode === 'LOGIN_REQUIRED') {
-                const error = new Error(retryErrorInfo.message);
-                error.status = retryErrorInfo.status;
-                error.errorCode = retryErrorInfo.errorCode;
-                if (onError) onError(error);
-                return () => {};
-              }
-              
-              // For other errors, create error object and call onError
-              const error = new Error(retryErrorInfo.message);
-              error.status = retryErrorInfo.status;
-              if (retryErrorInfo.errorCode) {
-                error.errorCode = retryErrorInfo.errorCode;
-              }
-              if (onError) onError(error);
-              return () => {};
-            }
-          } catch (retryError) {
-            console.error('[ApiService] Error retrying search() request after token refresh:', retryError);
-            const error = new Error(retryError.message || 'Request failed after token refresh');
-            if (onError) onError(error);
-            return () => {};
-          }
-        } else {
-          // If it's LOGIN_REQUIRED, the modal will be shown via event, but we still need to call onError
-          if (errorInfo.errorCode === 'LOGIN_REQUIRED') {
-            const error = new Error(errorInfo.message);
-            error.status = errorInfo.status;
-            error.errorCode = errorInfo.errorCode;
-            if (onError) onError(error);
-            return () => {};
-          }
-          
-          // For other errors, create error object and call onError
+        // If it's LOGIN_REQUIRED, the modal will be shown via event, but we still need to call onError
+        if (errorInfo.errorCode === 'LOGIN_REQUIRED') {
           const error = new Error(errorInfo.message);
           error.status = errorInfo.status;
-          if (errorInfo.errorCode) {
-            error.errorCode = errorInfo.errorCode;
-          }
+          error.errorCode = errorInfo.errorCode;
           if (onError) onError(error);
           return () => {};
         }
+        
+        // For other errors, create error object and call onError
+        const error = new Error(errorInfo.message);
+        error.status = errorInfo.status;
+        if (errorInfo.errorCode) {
+          error.errorCode = errorInfo.errorCode;
+        }
+        if (onError) onError(error);
+        return () => {};
       }
       
       // Process the SSE stream
@@ -1949,6 +1774,8 @@ class ApiService {
       let response = await fetch(url, {
         method: 'POST',
         headers: requestHeaders,
+        mode: 'cors',
+        credentials: 'include',
         body: JSON.stringify(textSegmentsWithLanguage),
         signal: abortController.signal
       });
@@ -1971,67 +1798,24 @@ class ApiService {
         console.log('[ApiService] errorInfo.message:', errorInfo.message);
         console.log('[ApiService] errorInfo.status:', errorInfo.status);
         
-        // If token was refreshed, retry the request once
-        if (errorInfo.errorCode === 'TOKEN_REFRESHED' && errorInfo.shouldRetry) {
-          console.log('[ApiService] Token refreshed, retrying explainWords() request...');
-          
-          // Retry the request with new token
-          try {
-            // Get updated headers (Authorization will have new token)
-            const retryUnauthenticatedUserIdHeader = await this.getUnauthenticatedUserIdHeader();
-            const retryRequestHeaders = {
-              'Content-Type': 'application/json',
-              ...retryUnauthenticatedUserIdHeader
-            };
-            await this.addAuthorizationHeader(retryRequestHeaders);
-            
-            response = await fetch(url, {
-              method: 'POST',
-              headers: retryRequestHeaders,
-              body: JSON.stringify(textSegmentsWithLanguage),
-              signal: abortController.signal
-            });
-            
-            // Store X-Unauthenticated-User-Id from retry response
-            await this.storeUnauthenticatedUserId(response);
-            
-            if (!response.ok) {
-              // Clone response for error handling
-              const retryResponseClone = response.clone();
-              const retryErrorInfo = await this.handleApiError(retryResponseClone, 'WORDS_EXPLANATION');
-              
-              // Create error object with error info
-              const error = new Error(retryErrorInfo.message);
-              error.status = retryErrorInfo.status;
-              if (retryErrorInfo.errorCode) {
-                error.errorCode = retryErrorInfo.errorCode;
-              }
-              throw error;
-            }
-          } catch (retryError) {
-            console.error('[ApiService] Error retrying explainWords() request after token refresh:', retryError);
-            throw retryError;
-          }
+        // Create error object with error info
+        const error = new Error(errorInfo.message);
+        error.status = errorInfo.status;
+        if (errorInfo.errorCode) {
+          error.errorCode = errorInfo.errorCode;
+          console.log('[ApiService] Setting error.errorCode to:', errorInfo.errorCode);
         } else {
-          // Create error object with error info
-          const error = new Error(errorInfo.message);
-          error.status = errorInfo.status;
-          if (errorInfo.errorCode) {
-            error.errorCode = errorInfo.errorCode;
-            console.log('[ApiService] Setting error.errorCode to:', errorInfo.errorCode);
-          } else {
-            console.log('[ApiService] No errorCode in errorInfo');
-          }
-          
-          console.log('[ApiService] Throwing error with:', {
-            message: error.message,
-            status: error.status,
-            errorCode: error.errorCode
-          });
-          console.log('[ApiService] ===== WORDS-EXPLANATION ERROR HANDLED =====');
-          
-          throw error;
+          console.log('[ApiService] No errorCode in errorInfo');
         }
+        
+        console.log('[ApiService] Throwing error with:', {
+          message: error.message,
+          status: error.status,
+          errorCode: error.errorCode
+        });
+        console.log('[ApiService] ===== WORDS-EXPLANATION ERROR HANDLED =====');
+        
+        throw error;
       }
       
       // Process the SSE stream
@@ -2114,7 +1898,28 @@ class ApiService {
             console.error('[ApiService] ===== STREAM ERROR DETAILS =====');
             if (onError) {
               console.log('[ApiService] Calling onError callback with streamError');
-              onError(streamError);
+              // Provide more helpful error messages
+              let errorMessage = streamError.message;
+              
+              if (streamError.message.includes('Failed to fetch') || streamError.name === 'TypeError') {
+                errorMessage = 'Connection lost during word explanation. This could be due to:\n' +
+                              '1. Backend server stopped responding at ' + this.BASE_URL + '\n' +
+                              '2. Network connectivity issues - check your internet connection\n' +
+                              '3. Request timeout - the server may be overloaded\n\n' +
+                              'Please try again or verify the backend server is running.';
+              } else if (streamError.status) {
+                errorMessage = `Word explanation stream error (${streamError.status}): ${streamError.message}`;
+              } else {
+                errorMessage = `Word explanation stream error: ${streamError.message}`;
+              }
+              
+              // Preserve errorCode if it exists
+              const errorToPass = new Error(errorMessage);
+              if (streamError.errorCode) {
+                errorToPass.errorCode = streamError.errorCode;
+                errorToPass.status = streamError.status;
+              }
+              onError(errorToPass);
             } else {
               console.warn('[ApiService] No onError callback provided for stream error');
             }
@@ -2141,13 +1946,25 @@ class ApiService {
       console.error('[ApiService] Error stack:', error.stack);
       console.error('[ApiService] Full error object:', JSON.stringify(error, Object.getOwnPropertyNames(error), 2));
       
-      // Provide helpful error messages
+      // Provide helpful error messages with more context
       let errorMessage = error.message;
       
       if (error.message.includes('Failed to fetch') || error.name === 'TypeError') {
-        errorMessage = 'Cannot connect to API server. Please check:\n' +
-                      '1. Backend server is running at ' + this.BASE_URL + '\n' +
-                      '2. CORS is properly configured to allow requests from this origin';
+        errorMessage = 'Unable to connect to the word explanation service. This could be due to:\n' +
+                      '1. Backend server is not running at ' + this.BASE_URL + '\n' +
+                      '2. Network connectivity issues - check your internet connection\n' +
+                      '3. CORS configuration - ensure the backend allows requests from this origin\n' +
+                      '4. Firewall or security settings blocking the connection\n\n' +
+                      'Please verify the backend server is running and accessible.';
+      } else if (error.status) {
+        // API error with status code
+        errorMessage = `Word explanation request failed (${error.status}): ${error.message}`;
+      } else if (error.errorCode) {
+        // Error with error code (preserve it)
+        errorMessage = `Word explanation request failed: ${error.message}`;
+      } else {
+        // Other errors
+        errorMessage = `Word explanation request failed: ${error.message}`;
       }
       
       console.log('[ApiService] Final errorMessage to pass to onError:', errorMessage);
@@ -2221,58 +2038,11 @@ class ApiService {
         const responseClone = response.clone();
         const errorInfo = await this.handleApiError(responseClone, 'WORDS_EXPLANATION');
         
-        // If token was refreshed, retry the request once
-        if (errorInfo.errorCode === 'TOKEN_REFRESHED' && errorInfo.shouldRetry) {
-          console.log('[ApiService] Token refreshed, retrying getMoreExplanations() request...');
-          
-          // Retry the request with new token
-          try {
-            // Get updated headers (Authorization will have new token)
-            const retryUnauthenticatedUserIdHeader = await this.getUnauthenticatedUserIdHeader();
-            const retryRequestHeaders = {
-              'Content-Type': 'application/json',
-              ...retryUnauthenticatedUserIdHeader
-            };
-            await this.addAuthorizationHeader(retryRequestHeaders);
-            
-            response = await fetch(url, {
-              method: 'POST',
-              headers: retryRequestHeaders,
-              body: JSON.stringify({
-                word: word,
-                meaning: meaning,
-                examples: examples
-              })
-            });
-            
-            // Store X-Unauthenticated-User-Id from retry response
-            await this.storeUnauthenticatedUserId(response);
-            
-            if (!response.ok) {
-              // Clone response for error handling
-              const retryResponseClone = response.clone();
-              const retryErrorInfo = await this.handleApiError(retryResponseClone, 'WORDS_EXPLANATION');
-              
-              // Return error in the expected format
-              return {
-                success: false,
-                error: retryErrorInfo.message
-              };
-            }
-          } catch (retryError) {
-            console.error('[ApiService] Error retrying getMoreExplanations() request after token refresh:', retryError);
-            return {
-              success: false,
-              error: retryError.message || 'Request failed after token refresh'
-            };
-          }
-        } else {
-          // Return error in the expected format
-          return {
-            success: false,
-            error: errorInfo.message
-          };
-        }
+        // Return error in the expected format
+        return {
+          success: false,
+          error: errorInfo.message
+        };
       }
       
       const data = await response.json();
