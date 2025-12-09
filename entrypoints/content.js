@@ -14074,7 +14074,7 @@ const TextSelector = {
         max-width: 28px !important; /* Ensure maximum width */
         max-height: 28px !important; /* Ensure maximum height */
         aspect-ratio: 1 / 1 !important; /* Force perfect square/circle */
-        background: #FFFFFF !important; /* Non-transparent white background */
+        background:rgb(255, 255, 255) !important; /* Non-transparent white background */
         border: none !important; /* No border */
         border-radius: 50% !important; /* Circular shape */
         display: flex !important;
@@ -17589,6 +17589,33 @@ const ChatDialog = {
               stack: error.stack
             });
             
+            // Check if it's a LOGIN_REQUIRED error - don't show error message in chat container
+            if (error.errorCode === 'LOGIN_REQUIRED') {
+              console.log('[ChatDialog] LOGIN_REQUIRED error detected, skipping chat message (login modal will be shown via event)');
+              // Still need to reset button and clear abort function
+              abortFunction = null;
+              
+              // Reset button
+              const summariseBtnOnError = document.getElementById('vocab-chat-summarise-page-btn');
+              if (summariseBtnOnError) {
+                summariseBtnOnError.disabled = false;
+                summariseBtnOnError.classList.remove('disabled', 'loading');
+                summariseBtnOnError.innerHTML = originalContent;
+                
+                // Update click handler back to handleSummarisePage
+                summariseBtnOnError.replaceWith(summariseBtnOnError.cloneNode(true));
+                const newBtn = document.getElementById('vocab-chat-summarise-page-btn');
+                newBtn.addEventListener('click', (e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  e.stopImmediatePropagation();
+                  console.log('[ChatDialog] Summarise button clicked!');
+                  this.handleSummarisePage();
+                }, true);
+              }
+              return;
+            }
+            
             // Check if it's a 429 rate limit error
             const isRateLimit = error.status === 429 || 
                                error.message.includes('429') || 
@@ -18678,6 +18705,12 @@ const ChatDialog = {
             streamingMessageBubble.remove();
           }
           
+          // Check if it's a LOGIN_REQUIRED error - don't show error message in chat container
+          if (error.errorCode === 'LOGIN_REQUIRED') {
+            console.log('[ChatDialog] LOGIN_REQUIRED error detected, skipping chat message (login modal will be shown via event)');
+            return;
+          }
+          
           // Handle error case - check if we're still in the same chat
           const errorMessage = `⚠️ **Error:**\n\n${error.message || 'Failed to get response from server'}`;
         
@@ -18748,6 +18781,12 @@ const ChatDialog = {
             console.log('[ChatDialog] Stopped pulsating animation and restored normal state for text selection');
           }
         }
+      }
+      
+      // Check if it's a LOGIN_REQUIRED error - don't show error message in chat container
+      if (error.errorCode === 'LOGIN_REQUIRED') {
+        console.log('[ChatDialog] LOGIN_REQUIRED error detected in catch block, skipping chat message (login modal will be shown via event)');
+        return;
       }
       
       // Handle error case - check if we're still in the same chat

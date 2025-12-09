@@ -917,7 +917,15 @@ class ApiService {
       }
       
       if (onError) {
-        onError(new Error(errorMessage));
+        // Preserve errorCode and status from the original error
+        const newError = new Error(errorMessage);
+        if (error.errorCode) {
+          newError.errorCode = error.errorCode;
+        }
+        if (error.status) {
+          newError.status = error.status;
+        }
+        onError(newError);
       }
       
       // Return a no-op abort function
@@ -1400,7 +1408,15 @@ class ApiService {
       }
       
       if (onError) {
-        onError(new Error(errorMessage));
+        // Preserve errorCode and status from the original error
+        const newError = new Error(errorMessage);
+        if (error.errorCode) {
+          newError.errorCode = error.errorCode;
+        }
+        if (error.status) {
+          newError.status = error.status;
+        }
+        onError(newError);
       }
       
       // Return a no-op abort function
