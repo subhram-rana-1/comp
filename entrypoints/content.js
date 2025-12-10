@@ -93,6 +93,229 @@ export default defineContentScript({
       window.language = 'WEBSITE_LANGUAGE';
     });
     
+    /**
+     * Handle OAuth callback after redirect
+     * Checks URL for OAuth parameters, extracts id_token, calls login API, and performs post-login actions
+     */
+    async function handleOAuthCallback() {
+      try {
+        const currentUrl = window.location.href;
+        const url = new URL(currentUrl);
+        
+        let idToken = null;
+        let returnedState = null;
+        
+        // Check hash fragment (common in OAuth implicit flow)
+        if (url.hash) {
+          const hashParams = new URLSearchParams(url.hash.substring(1));
+          idToken = hashParams.get('id_token');
+          returnedState = hashParams.get('state');
+        }
+        
+        // Check query params as fallback
+        if (!idToken) {
+          idToken = url.searchParams.get('id_token');
+          returnedState = url.searchParams.get('state');
+        }
+        
+        // If no id_token found, this is not an OAuth callback
+        if (!idToken) {
+          return;
+        }
+        
+        console.log('[OAuthCallback] OAuth callback detected in URL');
+        
+        // Check for errors in callback
+        const error = url.searchParams.get('error') || (url.hash ? new URLSearchParams(url.hash.substring(1)).get('error') : null);
+        if (error) {
+          const errorDesc = url.searchParams.get('error_description') || (url.hash ? new URLSearchParams(url.hash.substring(1)).get('error_description') : null);
+          chrome.storage.local.remove(['oauth_state', 'oauth_nonce']);
+          console.error('[OAuthCallback] OAuth error:', error, errorDesc);
+          
+          // Show error banner if available
+          if (typeof ErrorBanner !== 'undefined') {
+            await ErrorBanner.show(`OAuth error: ${error}${errorDesc ? ' - ' + errorDesc : ''}`);
+          }
+          
+          // Clean up URL
+          const cleanUrl = url.origin + url.pathname;
+          window.history.replaceState({}, document.title, cleanUrl);
+          return;
+        }
+        
+        // Verify state
+        const stored = await chrome.storage.local.get(['oauth_state']);
+        if (stored.oauth_state && stored.oauth_state !== returnedState) {
+          chrome.storage.local.remove(['oauth_state', 'oauth_nonce']);
+          console.error('[OAuthCallback] OAuth state mismatch - possible security issue');
+          
+          // Show error banner if available
+          if (typeof ErrorBanner !== 'undefined') {
+            await ErrorBanner.show('OAuth state mismatch - possible security issue');
+          }
+          
+          // Clean up URL
+          const cleanUrl = url.origin + url.pathname;
+          window.history.replaceState({}, document.title, cleanUrl);
+          return;
+        }
+        
+        // Clean up stored state
+        await chrome.storage.local.remove(['oauth_state', 'oauth_nonce']);
+        
+        console.log('[OAuthCallback] Calling login API with id_token...');
+        
+        // Import AuthService dynamically
+        const { default: AuthService } = await import('../core/services/AuthService.js');
+        
+        // Call backend API with id_token
+        const result = await AuthService.login(idToken);
+        
+        if (result.success && result.data) {
+          // Log the structure before storing
+          console.log('[OAuthCallback] Login API response data structure:', JSON.stringify(result.data, null, 2));
+          console.log('[OAuthCallback] AccessToken in response:', result.data.accessToken || result.data.access_token ? 'FOUND' : 'NOT FOUND');
+          console.log('[OAuthCallback] RefreshToken in response:', result.data.refreshToken ? 'FOUND' : 'NOT FOUND');
+          console.log('[OAuthCallback] RefreshTokenExpiresAt in response:', result.data.refreshTokenExpiresAt ? 'FOUND' : 'NOT FOUND');
+          
+          // Store user account data directly - NO wrapping, NO nesting
+          // Store result.data directly as the value for xplaino_userAccountData key
+          const dataToStore = result.data; // Direct assignment, no transformation
+          await chrome.storage.local.set({ 'xplaino_userAccountData': dataToStore });
+          
+          // Extract access token from response
+          const accessToken = result.data.accessToken || result.data.access_token;
+          
+          // Store access token in ApiService memory
+          if (accessToken) {
+            const { default: ApiService } = await import('../core/services/ApiService.js');
+            ApiService.setAccessToken(accessToken);
+            console.log('[OAuthCallback] Access token stored in ApiService memory');
+          }
+          
+          // Extract refreshToken and refreshTokenExpiresAt from response body
+          const refreshToken = result.data.refreshToken;
+          const refreshTokenExpiresAt = result.data.refreshTokenExpiresAt;
+          
+          if (refreshToken) {
+            console.log('[OAuthCallback] ✓ RefreshToken found in response body (length:', refreshToken.length, ')');
+          } else {
+            console.warn('[OAuthCallback] ⚠ RefreshToken not found in response body');
+          }
+          
+          if (refreshTokenExpiresAt) {
+            console.log('[OAuthCallback] ✓ RefreshTokenExpiresAt found in response body:', refreshTokenExpiresAt);
+          } else {
+            console.warn('[OAuthCallback] ⚠ RefreshTokenExpiresAt not found in response body');
+          }
+          
+          // Store exact login API response in xplaino-user-auth-info for access token retrieval
+          // The response body already contains refreshToken and refreshTokenExpiresAt
+          const authInfoToStore = {
+            ...dataToStore
+          };
+          
+          await chrome.storage.local.set({ 'xplaino-user-auth-info': authInfoToStore });
+          console.log('[OAuthCallback] Stored login response in xplaino-user-auth-info');
+          
+          // Validate: Read back immediately to verify structure
+          const verifyResult = await chrome.storage.local.get(['xplaino_userAccountData']);
+          const storedData = verifyResult['xplaino_userAccountData'];
+          console.log('[OAuthCallback] Verification - Stored data structure:', JSON.stringify(storedData, null, 2));
+          console.log('[OAuthCallback] Verification - AccessToken accessible:', storedData?.accessToken || storedData?.access_token ? 'YES' : 'NO');
+          if (storedData?.accessToken) {
+            console.log('[OAuthCallback] Verification - AccessToken value (first 20 chars):', storedData.accessToken.substring(0, 20) + '...');
+          } else if (storedData?.access_token) {
+            console.log('[OAuthCallback] Verification - AccessToken value (first 20 chars):', storedData.access_token.substring(0, 20) + '...');
+          }
+          
+          // Validate xplaino-user-auth-info storage
+          const authInfoResult = await chrome.storage.local.get(['xplaino-user-auth-info']);
+          const authInfoData = authInfoResult['xplaino-user-auth-info'];
+          console.log('[OAuthCallback] Verification - xplaino-user-auth-info stored:', authInfoData ? 'YES' : 'NO');
+          if (authInfoData?.accessToken) {
+            console.log('[OAuthCallback] Verification - AccessToken in xplaino-user-auth-info (first 20 chars):', authInfoData.accessToken.substring(0, 20) + '...');
+          }
+          if (authInfoData?.refreshToken) {
+            console.log('[OAuthCallback] Verification - RefreshToken in xplaino-user-auth-info (length):', authInfoData.refreshToken.length);
+          }
+          if (authInfoData?.refreshTokenExpiresAt) {
+            console.log('[OAuthCallback] Verification - RefreshTokenExpiresAt in xplaino-user-auth-info:', authInfoData.refreshTokenExpiresAt);
+          }
+          
+          console.log('[OAuthCallback] Sign-in successful');
+          
+          // Hide any error banners
+          if (typeof ErrorBanner !== 'undefined') {
+            ErrorBanner.hide();
+          }
+          
+          // Hide login modal if it's open
+          if (typeof LoginModal !== 'undefined') {
+            LoginModal.hide();
+          }
+          
+          // Dispatch event to notify other parts of the extension
+          window.dispatchEvent(new CustomEvent('user-logged-in', {
+            detail: result.data
+          }));
+          
+          // Clean up URL by removing OAuth parameters
+          // Remove hash fragment if it contains OAuth params
+          let cleanUrl = url.origin + url.pathname;
+          
+          // Clean up query params
+          if (url.search) {
+            const searchParams = new URLSearchParams(url.search);
+            searchParams.delete('id_token');
+            searchParams.delete('state');
+            const cleanSearch = searchParams.toString();
+            if (cleanSearch) {
+              cleanUrl += '?' + cleanSearch;
+            }
+          }
+          
+          window.history.replaceState({}, document.title, cleanUrl);
+          
+          console.log('[OAuthCallback] OAuth callback handled successfully');
+        } else {
+          throw new Error(result.error || 'Login failed');
+        }
+      } catch (error) {
+        console.error('[OAuthCallback] Error handling OAuth callback:', error);
+        
+        // Show error banner if available
+        if (typeof ErrorBanner !== 'undefined') {
+          await ErrorBanner.show(error.message || 'Sign-in failed');
+        }
+        
+        // Clean up URL
+        try {
+          const url = new URL(window.location.href);
+          const cleanUrl = url.origin + url.pathname;
+          window.history.replaceState({}, document.title, cleanUrl);
+        } catch (e) {
+          console.warn('[OAuthCallback] Could not clean up URL:', e);
+        }
+        
+        // Ensure cleanup on error
+        await chrome.storage.local.remove(['oauth_state', 'oauth_nonce']).catch(() => {});
+      }
+    }
+    
+    // Load access token from storage on initialization
+    (async () => {
+      try {
+        const { default: ApiService } = await import('../core/services/ApiService.js');
+        await ApiService.loadAccessTokenFromStorage();
+      } catch (error) {
+        console.warn('[Content Script] Error loading access token on initialization:', error);
+      }
+    })();
+    
+    // Handle OAuth callback early in initialization
+    handleOAuthCallback();
+    
     // Comprehensive languages list with native names
     const TOP_LANGUAGES = [
       'English', // English
@@ -2636,6 +2859,18 @@ export default defineContentScript({
         // Update banner visibility
         BannerModule.updateVisibility(isEnabled);
         }
+        
+        // Check if user account data changed (user logged in)
+        if (changes['xplaino_userAccountData']) {
+          const newValue = changes['xplaino_userAccountData'].newValue;
+          if (newValue && newValue.isLoggedIn === true) {
+            // User just logged in, hide modal
+            if (typeof LoginModal !== 'undefined') {
+              console.log('[Content Script] User account data updated with isLoggedIn=true, hiding login modal');
+              LoginModal.hide();
+            }
+          }
+        }
       }
     });
     
@@ -2964,14 +3199,14 @@ const ErrorBanner = {
       .vocab-error-banner {
         position: fixed;
         top: 20px;
-        left: 50%;
-        transform: translateX(-50%);
+        right: 20px;
         z-index: 1000000;
-        background: #ef4444;
-        color: white;
+        background: #fee2e2;
+        color: #dc2626;
+        border: 1px solid #dc2626;
         padding: 16px 20px;
         border-radius: 8px;
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        box-shadow: none;
         animation: vocab-error-banner-slide-in 0.3s ease-out;
         max-width: 90%;
         width: auto;
@@ -2982,11 +3217,11 @@ const ErrorBanner = {
       @keyframes vocab-error-banner-slide-in {
         from {
           opacity: 0;
-          transform: translateX(-50%) translateY(-20px);
+          transform: translateX(20px) translateY(-20px);
         }
         to {
           opacity: 1;
-          transform: translateX(-50%) translateY(0);
+          transform: translateX(0) translateY(0);
         }
       }
       
@@ -2995,9 +3230,9 @@ const ErrorBanner = {
         top: 8px;
         left: 8px !important;
         right: auto !important;
-        background: rgba(255, 255, 255, 0.15);
-        border: 1px solid rgba(255, 255, 255, 0.3);
-        color: white;
+        background: rgba(220, 38, 38, 0.1);
+        border: 1px solid rgba(220, 38, 38, 0.3);
+        color: #dc2626;
         font-size: 16px;
         line-height: 1;
         cursor: pointer;
@@ -3017,12 +3252,13 @@ const ErrorBanner = {
       .vocab-error-banner-close svg {
         width: 16px;
         height: 16px;
+        stroke: #dc2626;
       }
       
       .vocab-error-banner-close:hover {
         opacity: 1;
-        background: rgba(255, 255, 255, 0.25);
-        border-color: rgba(255, 255, 255, 0.5);
+        background: rgba(220, 38, 38, 0.2);
+        border-color: rgba(220, 38, 38, 0.5);
       }
       
       .vocab-error-banner.minimized {
@@ -3057,7 +3293,7 @@ const ErrorBanner = {
         padding-top: 8px;
         padding-left: 0 !important;
         padding-right: 0 !important;
-        border-top: 1px solid rgba(255, 255, 255, 0.2);
+        border-top: 1px solid rgba(220, 38, 38, 0.2);
         margin-top: 8px;
         margin-left: 0 !important;
         margin-right: 0 !important;
@@ -3067,8 +3303,8 @@ const ErrorBanner = {
       
       .vocab-error-banner-dismiss {
         background: none !important;
-        border: 1px solid rgba(255, 255, 255, 0.5) !important;
-        color: white !important;
+        border: 1px solid rgba(220, 38, 38, 0.5) !important;
+        color: #dc2626 !important;
         font-size: 12px;
         font-weight: 500;
         cursor: pointer;
@@ -3087,14 +3323,763 @@ const ErrorBanner = {
       
       .vocab-error-banner-dismiss:hover {
         opacity: 1;
-        background: rgba(255, 255, 255, 0.1);
-        border-color: rgba(255, 255, 255, 0.8);
+        background: rgba(220, 38, 38, 0.1);
+        border-color: rgba(220, 38, 38, 0.8);
       }
     `;
     
     document.head.appendChild(style);
   }
 };
+
+// ===================================
+// Login Modal Module - Shows login modal for authentication
+// ===================================
+const LoginModal = {
+  modalContainer: null,
+  overlay: null,
+  
+  /**
+   * Get dynamic description based on API name
+   * @param {string} apiName - API endpoint name
+   * @returns {string} Description message
+   */
+  getDescriptionForApi(apiName) {
+    if (!apiName) {
+      return 'Please sign in to continue';
+    }
+    
+    const apiNameUpper = apiName.toUpperCase();
+    const apiNameLower = apiName.toLowerCase();
+    
+    // Map API names to descriptions
+    if (apiNameUpper === 'WORDS_EXPLANATION' || apiNameLower === 'words-explanation' || apiNameLower.includes('word')) {
+      return 'Please sign in to get word meanings';
+    } else if (apiNameUpper === 'SIMPLIFY' || apiNameLower === 'simplify') {
+      return 'Please sign in to simplify text';
+    } else if (apiNameUpper === 'SUMMARISE' || apiNameLower === 'summarise' || apiNameLower === 'summarize') {
+      return 'Please sign in to summarise content';
+    } else if (apiNameUpper === 'ASK' || apiNameLower === 'ask') {
+      return 'Please sign in to ask questions';
+    } else if (apiNameUpper === 'TRANSLATE' || apiNameLower === 'translate') {
+      return 'Please sign in to translate text';
+    } else if (apiNameUpper === 'WEB_SEARCH_STREAM' || apiNameLower === 'web-search' || apiNameLower.includes('search')) {
+      return 'Please sign in to search the web';
+    } else {
+      return 'Please sign in to continue';
+    }
+  },
+  
+  /**
+   * Show login modal in center of screen
+   * @param {string} reason - Optional reason message (deprecated, use apiName instead)
+   * @param {string} apiName - API endpoint name to determine dynamic description
+   */
+  show(reason, apiName) {
+    console.log('[LoginModal] ===== SHOW CALLED =====');
+    console.log('[LoginModal] Reason:', reason);
+    console.log('[LoginModal] ApiName:', apiName);
+    console.log('[LoginModal] Current overlay:', this.overlay);
+    console.log('[LoginModal] Current modalContainer:', this.modalContainer);
+    
+    // Remove existing modal if any
+    this.hide();
+    
+    // Get dynamic description based on API name
+    const description = apiName ? this.getDescriptionForApi(apiName) : (reason || 'Please sign in to continue');
+    console.log('[LoginModal] Using description:', description);
+    
+    // Inject styles first to ensure keyframes are available
+    this.injectStyles();
+    
+    // Create overlay with initial state
+    this.overlay = document.createElement('div');
+    this.overlay.id = 'login-modal-overlay';
+    this.overlay.style.cssText = `
+      position: fixed !important;
+      top: 0 !important;
+      left: 0 !important;
+      width: 100% !important;
+      height: 100% !important;
+      background-color: rgba(0, 0, 0, 0.5) !important;
+      z-index: 2147483647 !important;
+      display: flex !important;
+      justify-content: center !important;
+      align-items: center !important;
+      pointer-events: auto !important;
+      opacity: 0 !important;
+      transition: opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+    `;
+    
+    // Create modal container with initial state
+    this.modalContainer = document.createElement('div');
+    this.modalContainer.id = 'login-modal';
+    this.modalContainer.style.cssText = `
+      background-color: white !important;
+      border-radius: 30px !important;
+      padding: 40px !important;
+      max-width: 400px !important;
+      width: 90% !important;
+      box-shadow: 0 10px 40px rgba(149, 39, 245, 0.3), 0 0 0 1px rgba(149, 39, 245, 0.1) !important;
+      display: flex !important;
+      flex-direction: column !important;
+      align-items: center !important;
+      gap: 24px !important;
+      position: relative !important;
+      opacity: 0 !important;
+      transform: scale(0.9) translateY(-10px) !important;
+      transition: opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1), transform 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+    `;
+    
+    // Get branding image URL (from extension assets)
+    const brandingImageUrl = chrome.runtime.getURL('branding-removebg.png');
+    
+    // Modal content with close button
+    this.modalContainer.innerHTML = `
+      <button id="login-modal-close" class="login-modal-close-button" aria-label="Close">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M18 6L6 18M6 6L18 18" stroke="#9527F5" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </button>
+      <div style="text-align: center !important;">
+        <img src="${brandingImageUrl}" alt="XplainO" style="max-width: 200px !important; width: 100% !important; height: auto !important; margin-bottom: 16px !important;">
+      </div>
+      <p class="login-modal-description" style="color: #666 !important; font-size: 16px !important; font-weight: 400 !important; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif !important; font-style: normal !important; text-align: center !important; margin: 0 !important; padding: 0 !important; line-height: 1.5 !important; letter-spacing: normal !important; text-decoration: none !important; text-transform: none !important; text-shadow: none !important; font-variant: normal !important; font-stretch: normal !important;">${description}</p>
+      <button id="login-modal-google-signin" class="login-modal-signin-button">
+        <svg class="google-logo" width="18" height="18" viewBox="0 0 18 18" xmlns="http://www.w3.org/2000/svg" style="margin-right: 12px !important;">
+          <g fill="none" fill-rule="evenodd">
+            <path d="M17.64 9.2045c0-.6381-.0573-1.2518-.1636-1.8409H9v3.4814h4.8436c-.2086 1.125-.8427 2.0782-1.7959 2.7164v2.2581h2.9087c1.7028-1.5668 2.6836-3.874 2.6836-6.615z" fill="#4285F4"/>
+            <path d="M9 18c2.43 0 4.4673-.806 5.9564-2.1805l-2.9087-2.2581c-.8059.54-1.8368.859-3.0477.859-2.344 0-4.3282-1.5831-5.036-3.7104H.9574v2.3318C2.4382 15.9832 5.4822 18 9 18z" fill="#34A853"/>
+            <path d="M3.964 10.71c-.18-.54-.2822-1.1173-.2822-1.71s.1022-1.17.2823-1.71V4.9582H.9573C.3477 6.1732 0 7.5477 0 9s.348 2.8268.9573 4.0418l3.0067-2.3318z" fill="#FBBC05"/>
+            <path d="M9 3.5795c1.3214 0 2.5077.4541 3.4405 1.3459l2.5813-2.5814C13.4632.8918 11.426 0 9 0 5.4822 0 2.4382 2.0168.9573 4.9582L3.964 7.29C4.6718 5.1627 6.6559 3.5795 9 3.5795z" fill="#EA4335"/>
+          </g>
+        </svg>
+        <span>Sign in with Google</span>
+      </button>
+    `;
+    
+    // Append modal to overlay
+    this.overlay.appendChild(this.modalContainer);
+    
+    // Store references for event handlers
+    const overlay = this.overlay;
+    const modalContainer = this.modalContainer;
+    const loginModalInstance = this;
+    
+    // Single click handler for modal container using event delegation
+    modalContainer.addEventListener('click', function(e) {
+      // Handle close button click
+      if (e.target.closest('#login-modal-close')) {
+        e.stopPropagation();
+        loginModalInstance.hide();
+        return;
+      }
+      
+      // Handle sign-in button click
+      if (e.target.closest('#login-modal-google-signin')) {
+        loginModalInstance.handleGoogleSignIn();
+        return;
+      }
+      
+      // Prevent all other modal clicks from bubbling to overlay
+      e.stopPropagation();
+    });
+    
+    // Close modal when clicking outside the modal (on the overlay)
+    overlay.addEventListener('click', function(e) {
+      // If the click is not inside the modal container, close the modal
+      const modal = document.getElementById('login-modal');
+      if (modal && !modal.contains(e.target)) {
+        loginModalInstance.hide();
+      }
+    });
+    
+    // Append to body first
+    document.body.appendChild(this.overlay);
+    
+    // Use requestAnimationFrame to trigger animation after DOM is ready
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        // Trigger animation by changing to final state
+        this.overlay.style.setProperty('opacity', '1', 'important');
+        this.modalContainer.style.setProperty('opacity', '1', 'important');
+        this.modalContainer.style.setProperty('transform', 'scale(1) translateY(0)', 'important');
+        console.log('[LoginModal] Overlay appended to body');
+        console.log('[LoginModal] Overlay element:', this.overlay);
+        console.log('[LoginModal] ModalContainer element:', this.modalContainer);
+        console.log('[LoginModal] ===== SHOW COMPLETE =====');
+      });
+    });
+  },
+  
+  /**
+   * Hide login modal
+   */
+  hide() {
+    console.log('[LoginModal] ===== HIDE CALLED =====');
+    
+    // Find overlay and modal from DOM instead of relying on this references
+    const overlay = document.getElementById('login-modal-overlay');
+    const modalContainer = document.getElementById('login-modal');
+    
+    console.log('[LoginModal] Overlay found in DOM:', !!overlay);
+    console.log('[LoginModal] ModalContainer found in DOM:', !!modalContainer);
+    
+    if (overlay && overlay.parentNode) {
+      // Set transition for smooth closing
+      if (modalContainer) {
+        modalContainer.style.setProperty('transition', 'opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1), transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)', 'important');
+      }
+      overlay.style.setProperty('transition', 'opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1)', 'important');
+      
+      // Trigger fade-out by changing to initial state
+      requestAnimationFrame(() => {
+        if (modalContainer) {
+          modalContainer.style.setProperty('opacity', '0', 'important');
+          modalContainer.style.setProperty('transform', 'scale(0.9) translateY(-10px)', 'important');
+        }
+        overlay.style.setProperty('opacity', '0', 'important');
+      });
+      
+      // Remove from DOM after animation completes
+      setTimeout(() => {
+        const overlayToRemove = document.getElementById('login-modal-overlay');
+        if (overlayToRemove && overlayToRemove.parentNode) {
+          console.log('[LoginModal] Removing overlay from DOM');
+          overlayToRemove.remove();
+        }
+        // Clear references
+        this.overlay = null;
+        this.modalContainer = null;
+        console.log('[LoginModal] Overlay and modalContainer cleared');
+      }, 300);
+    } else {
+      console.log('[LoginModal] No overlay to remove or overlay not in DOM');
+      // Clear references anyway
+      this.overlay = null;
+      this.modalContainer = null;
+    }
+  },
+  
+  /**
+   * Handle Google sign-in flow
+   */
+  async handleGoogleSignIn() {
+    try {
+      const signInButton = document.getElementById('login-modal-google-signin');
+      if (signInButton) {
+        signInButton.disabled = true;
+        signInButton.style.opacity = '0.6';
+        signInButton.style.cursor = 'not-allowed';
+      }
+      
+      const clientId = ApiConfig.GOOGLE_CLIENT_ID;
+      if (!clientId) {
+        throw new Error('Google Client ID not configured');
+      }
+      
+      // Generate state and nonce for security
+      const state = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+      const nonce = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+      
+      // Store state in chrome.storage for verification
+      await chrome.storage.local.set({ 'oauth_state': state, 'oauth_nonce': nonce });
+      
+      // Get redirect URI using message passing to background script
+      const redirectUriResponse = await new Promise((resolve, reject) => {
+        chrome.runtime.sendMessage(
+          { type: 'OAUTH_GET_REDIRECT_URI' },
+          (response) => {
+            if (chrome.runtime.lastError) {
+              reject(new Error(chrome.runtime.lastError.message));
+              return;
+            }
+            if (!response || !response.success) {
+              reject(new Error(response?.error || 'Failed to get redirect URI'));
+              return;
+            }
+            resolve(response.redirectUri);
+          }
+        );
+      });
+      
+      const redirectUri = redirectUriResponse;
+      console.log('[LoginModal] Using redirect URI:', redirectUri);
+      
+      // Create OAuth URL
+      const scope = 'openid email profile';
+      const responseType = 'id_token';
+      
+      const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?` +
+        `client_id=${encodeURIComponent(clientId)}&` +
+        `redirect_uri=${encodeURIComponent(redirectUri)}&` +
+        `response_type=${responseType}&` +
+        `scope=${encodeURIComponent(scope)}&` +
+        `state=${state}&` +
+        `nonce=${nonce}`;
+
+      console.log('[LoginModal] Launching OAuth flow...');
+      
+      // Use message passing to background script for OAuth flow
+      const callbackUrlResponse = await new Promise((resolve, reject) => {
+        chrome.runtime.sendMessage(
+          { type: 'OAUTH_LAUNCH_FLOW', authUrl: authUrl },
+          (response) => {
+            if (chrome.runtime.lastError) {
+              // Clean up stored state
+              chrome.storage.local.remove(['oauth_state', 'oauth_nonce']);
+              reject(new Error(chrome.runtime.lastError.message));
+              return;
+            }
+            if (!response || !response.success) {
+              // Clean up stored state
+              chrome.storage.local.remove(['oauth_state', 'oauth_nonce']);
+              reject(new Error(response?.error || 'OAuth flow failed'));
+              return;
+            }
+            resolve(response.callbackUrl);
+          }
+        );
+      });
+      
+      const callbackUrl = callbackUrlResponse;
+      
+      console.log('[LoginModal] OAuth callback URL received:', callbackUrl);
+      
+      // Parse the callback URL to extract id_token
+      const url = new URL(callbackUrl);
+      
+      let idToken = null;
+      let returnedState = null;
+      
+      // Check hash fragment (common in OAuth implicit flow)
+      if (url.hash) {
+        const hashParams = new URLSearchParams(url.hash.substring(1));
+        idToken = hashParams.get('id_token');
+        returnedState = hashParams.get('state');
+      }
+      
+      // Check query params as fallback
+      if (!idToken) {
+        idToken = url.searchParams.get('id_token');
+        returnedState = url.searchParams.get('state');
+      }
+      
+      // Check for errors in callback
+      if (!idToken) {
+        const error = url.searchParams.get('error') || (url.hash ? new URLSearchParams(url.hash.substring(1)).get('error') : null);
+        if (error) {
+          const errorDesc = url.searchParams.get('error_description') || (url.hash ? new URLSearchParams(url.hash.substring(1)).get('error_description') : null);
+          chrome.storage.local.remove(['oauth_state', 'oauth_nonce']);
+          throw new Error(`OAuth error: ${error}${errorDesc ? ' - ' + errorDesc : ''}`);
+        }
+        chrome.storage.local.remove(['oauth_state', 'oauth_nonce']);
+        throw new Error('No id_token found in OAuth callback');
+      }
+      
+      // Verify state
+      const stored = await chrome.storage.local.get(['oauth_state']);
+      if (stored.oauth_state && stored.oauth_state !== returnedState) {
+        chrome.storage.local.remove(['oauth_state', 'oauth_nonce']);
+        throw new Error('OAuth state mismatch - possible security issue');
+      }
+      
+      // Clean up stored state
+      await chrome.storage.local.remove(['oauth_state', 'oauth_nonce']);
+      
+      // Call backend API with id_token
+      await this.completeSignIn(idToken);
+      
+    } catch (error) {
+      console.error('[LoginModal] Error in handleGoogleSignIn:', error);
+      
+      // Restore button state
+      const signInButton = document.getElementById('login-modal-google-signin');
+      if (signInButton) {
+        signInButton.disabled = false;
+        signInButton.style.opacity = '1';
+        signInButton.style.cursor = 'pointer';
+      }
+      
+      // Show error in banner
+      if (typeof ErrorBanner !== 'undefined') {
+        await ErrorBanner.show(error.message || 'Sign-in failed');
+      }
+      
+      // Ensure cleanup on error
+      await chrome.storage.local.remove(['oauth_state', 'oauth_nonce']).catch(() => {});
+    }
+  },
+  
+  /**
+   * Complete sign-in by calling backend API
+   * @param {string} idToken - Google OAuth id token
+   */
+  async completeSignIn(idToken) {
+    try {
+      // Import AuthService dynamically
+      const { default: AuthService } = await import('../core/services/AuthService.js');
+      
+      const result = await AuthService.login(idToken);
+      
+      if (result.success && result.data) {
+        // Log the structure before storing
+        console.log('[LoginModal] Login API response data structure:', JSON.stringify(result.data, null, 2));
+        console.log('[LoginModal] AccessToken in response:', result.data.accessToken || result.data.access_token ? 'FOUND' : 'NOT FOUND');
+        console.log('[LoginModal] RefreshToken in response:', result.data.refreshToken ? 'FOUND' : 'NOT FOUND');
+        console.log('[LoginModal] RefreshTokenExpiresAt in response:', result.data.refreshTokenExpiresAt ? 'FOUND' : 'NOT FOUND');
+        
+        // Store user account data directly - NO wrapping, NO nesting
+        // Store result.data directly as the value for xplaino_userAccountData key
+        const dataToStore = result.data; // Direct assignment, no transformation
+        await chrome.storage.local.set({ 'xplaino_userAccountData': dataToStore });
+        
+        // Extract access token from response
+        const accessToken = result.data.accessToken || result.data.access_token;
+        
+        // Store access token in ApiService memory
+        if (accessToken) {
+          const { default: ApiService } = await import('../core/services/ApiService.js');
+          ApiService.setAccessToken(accessToken);
+          console.log('[LoginModal] Access token stored in ApiService memory');
+        }
+        
+        // Extract refreshToken and refreshTokenExpiresAt from response body
+        const refreshToken = result.data.refreshToken;
+        const refreshTokenExpiresAt = result.data.refreshTokenExpiresAt;
+        
+        if (refreshToken) {
+          console.log('[LoginModal] ✓ RefreshToken found in response body (length:', refreshToken.length, ')');
+        } else {
+          console.warn('[LoginModal] ⚠ RefreshToken not found in response body');
+        }
+        
+        if (refreshTokenExpiresAt) {
+          console.log('[LoginModal] ✓ RefreshTokenExpiresAt found in response body:', refreshTokenExpiresAt);
+        } else {
+          console.warn('[LoginModal] ⚠ RefreshTokenExpiresAt not found in response body');
+        }
+        
+        // Store exact login API response in xplaino-user-auth-info for access token retrieval
+        // The response body already contains refreshToken and refreshTokenExpiresAt
+        const authInfoToStore = {
+          ...dataToStore
+        };
+        
+        await chrome.storage.local.set({ 'xplaino-user-auth-info': authInfoToStore });
+        console.log('[LoginModal] Stored login response in xplaino-user-auth-info');
+        
+        // Validate: Read back immediately to verify structure
+        const verifyResult = await chrome.storage.local.get(['xplaino_userAccountData']);
+        const storedData = verifyResult['xplaino_userAccountData'];
+        console.log('[LoginModal] Verification - Stored data structure:', JSON.stringify(storedData, null, 2));
+        console.log('[LoginModal] Verification - AccessToken accessible:', storedData?.accessToken || storedData?.access_token ? 'YES' : 'NO');
+        if (storedData?.accessToken) {
+          console.log('[LoginModal] Verification - AccessToken value (first 20 chars):', storedData.accessToken.substring(0, 20) + '...');
+        } else if (storedData?.access_token) {
+          console.log('[LoginModal] Verification - AccessToken value (first 20 chars):', storedData.access_token.substring(0, 20) + '...');
+        }
+        
+        // Validate xplaino-user-auth-info storage
+        const authInfoResult = await chrome.storage.local.get(['xplaino-user-auth-info']);
+        const authInfoData = authInfoResult['xplaino-user-auth-info'];
+        console.log('[LoginModal] Verification - xplaino-user-auth-info stored:', authInfoData ? 'YES' : 'NO');
+        if (authInfoData?.accessToken) {
+          console.log('[LoginModal] Verification - AccessToken in xplaino-user-auth-info (first 20 chars):', authInfoData.accessToken.substring(0, 20) + '...');
+        }
+        if (authInfoData?.refreshToken) {
+          console.log('[LoginModal] Verification - RefreshToken in xplaino-user-auth-info (length):', authInfoData.refreshToken.length);
+        }
+        if (authInfoData?.refreshTokenExpiresAt) {
+          console.log('[LoginModal] Verification - RefreshTokenExpiresAt in xplaino-user-auth-info:', authInfoData.refreshTokenExpiresAt);
+        }
+        
+        // Hide modal
+        this.hide();
+        
+        // Hide any error banners
+        if (typeof ErrorBanner !== 'undefined') {
+          ErrorBanner.hide();
+        }
+        
+        console.log('[LoginModal] Sign-in successful');
+        
+        // Dispatch event to notify other parts of the extension
+        window.dispatchEvent(new CustomEvent('user-logged-in', {
+          detail: result.data
+        }));
+      } else {
+        throw new Error(result.error || 'Login failed');
+      }
+    } catch (error) {
+      console.error('[LoginModal] Error completing sign-in:', error);
+      if (typeof ErrorBanner !== 'undefined') {
+        await ErrorBanner.show(error.message || 'Sign-in failed');
+      }
+      throw error;
+    }
+  },
+  
+  /**
+   * Inject CSS styles for login modal
+   */
+  injectStyles() {
+    const styleId = 'login-modal-styles';
+    if (document.getElementById(styleId)) {
+      return; // Styles already injected
+    }
+    
+    const style = document.createElement('style');
+    style.id = styleId;
+    style.textContent = `
+      @keyframes login-modal-overlay-fade-in {
+        from {
+          opacity: 0 !important;
+        }
+        to {
+          opacity: 1 !important;
+        }
+      }
+      
+      @keyframes login-modal-overlay-fade-out {
+        from {
+          opacity: 1 !important;
+        }
+        to {
+          opacity: 0 !important;
+        }
+      }
+      
+      @keyframes login-modal-fade-in {
+        from {
+          opacity: 0 !important;
+          transform: scale(0.9) translateY(-10px) !important;
+        }
+        to {
+          opacity: 1 !important;
+          transform: scale(1) translateY(0) !important;
+        }
+      }
+      
+      @keyframes login-modal-fade-out {
+        from {
+          opacity: 1 !important;
+          transform: scale(1) translateY(0) !important;
+        }
+        to {
+          opacity: 0 !important;
+          transform: scale(0.9) translateY(-10px) !important;
+        }
+      }
+      
+      .login-modal-close-button {
+        position: absolute !important;
+        top: 16px !important;
+        right: 16px !important;
+        background: none !important;
+        border: none !important;
+        cursor: pointer !important;
+        padding: 8px !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        width: 32px !important;
+        height: 32px !important;
+        border-radius: 50% !important;
+        transition: background-color 0.2s ease !important;
+        z-index: 1 !important;
+      }
+      
+      .login-modal-close-button:hover {
+        background-color: rgba(149, 39, 245, 0.1) !important;
+      }
+      
+      .login-modal-close-button:active {
+        background-color: rgba(149, 39, 245, 0.2) !important;
+      }
+      
+      .login-modal-close-button svg {
+        width: 24px !important;
+        height: 24px !important;
+      }
+      
+      .login-modal-signin-button {
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        gap: 12px !important;
+        background-color: #f5f5f5 !important;
+        border: none !important;
+        border-radius: 50px !important;
+        padding: 12px 24px !important;
+        font-size: 14px !important;
+        font-weight: 500 !important;
+        color: #3c4043 !important;
+        cursor: pointer !important;
+        transition: background-color 0.2s ease, box-shadow 0.2s ease !important;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif !important;
+        min-width: 240px !important;
+      }
+      
+      .login-modal-signin-button:hover {
+        background-color: #f8f9fa !important;
+        box-shadow: 0 2px 8px rgba(149, 39, 245, 0.3) !important;
+      }
+      
+      .login-modal-signin-button:active {
+        background-color: #e8eaed !important;
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1) !important;
+      }
+      
+      .login-modal-signin-button:disabled {
+        opacity: 0.6 !important;
+        cursor: not-allowed !important;
+      }
+      
+      .login-modal-signin-button .google-logo {
+        flex-shrink: 0 !important;
+      }
+      
+      .login-modal-description {
+        color: #666 !important;
+        font-size: 16px !important;
+        font-weight: 400 !important;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif !important;
+        font-style: normal !important;
+        text-align: center !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        line-height: 1.5 !important;
+        letter-spacing: normal !important;
+        text-decoration: none !important;
+        text-transform: none !important;
+        text-shadow: none !important;
+        font-variant: normal !important;
+        font-stretch: normal !important;
+        text-rendering: optimizeLegibility !important;
+        -webkit-font-smoothing: antialiased !important;
+        -moz-osx-font-smoothing: grayscale !important;
+      }
+    `;
+    
+    document.head.appendChild(style);
+  }
+};
+
+// ===================================
+// API Error Handler Bridge - Routes API errors to appropriate UI components
+// ===================================
+const ApiErrorHandler = {
+  /**
+   * Initialize error handler - listens for API error events
+   */
+  init() {
+    // Listen for API error banner events
+    // DISABLED: Error banner functionality removed per user request
+    // All errors should be handled by showing login modal for LOGIN_REQUIRED or other appropriate UI
+    window.addEventListener('api-error-banner', (event) => {
+      const { message, status, errorCode } = event.detail;
+      
+      console.log('[ApiErrorHandler] api-error-banner event received but ErrorBanner is disabled');
+      console.log('[ApiErrorHandler] Event details:', { message, status, errorCode });
+      
+      // IMPORTANT: Never show error banner for LOGIN_REQUIRED
+      // This is a safeguard in case errorCode is passed in the event detail
+      if (errorCode === 'LOGIN_REQUIRED') {
+        console.log('[ApiErrorHandler] LOGIN_REQUIRED detected in error banner event - should show login modal instead');
+        // Show login modal instead
+        if (typeof LoginModal !== 'undefined') {
+          LoginModal.show('Please sign in to continue', null);
+        }
+        return;
+      }
+      
+      // For all other errors, do not show error banner
+      // Error banner functionality has been removed
+      console.log('[ApiErrorHandler] Error banner event ignored - ErrorBanner functionality disabled');
+    });
+    
+    // Listen for login required events
+    window.addEventListener('api-login-required', (event) => {
+      console.log('[ApiErrorHandler] ===== api-login-required EVENT RECEIVED =====');
+      const { reason, status, apiEndpoint } = event.detail;
+      console.log('[ApiErrorHandler] Event detail:', event.detail);
+      console.log('[ApiErrorHandler] Reason:', reason);
+      console.log('[ApiErrorHandler] Status:', status);
+      console.log('[ApiErrorHandler] ApiEndpoint:', apiEndpoint);
+      console.log('[ApiErrorHandler] Showing login modal:', reason);
+      
+      // IMPORTANT: Hide any existing error banners before showing login modal
+      // This prevents the red error banner from flashing before the modal appears
+      if (typeof ErrorBanner !== 'undefined') {
+        console.log('[ApiErrorHandler] Hiding any existing error banners');
+        ErrorBanner.hide();
+      } else {
+        console.log('[ApiErrorHandler] ErrorBanner is undefined');
+      }
+      
+      if (typeof LoginModal !== 'undefined') {
+        console.log('[ApiErrorHandler] LoginModal is defined, calling LoginModal.show() with apiEndpoint:', apiEndpoint);
+        LoginModal.show(reason || 'Please sign in to continue', apiEndpoint);
+        console.log('[ApiErrorHandler] LoginModal.show() called');
+      } else {
+        console.error('[ApiErrorHandler] ⚠️ LoginModal is undefined! Cannot show login modal');
+      }
+      console.log('[ApiErrorHandler] ===== api-login-required EVENT HANDLED =====');
+    });
+    
+    // Listen for successful login to hide modal
+    window.addEventListener('user-logged-in', (event) => {
+      console.log('[ApiErrorHandler] user-logged-in event received, hiding login modal');
+      if (typeof LoginModal !== 'undefined') {
+        LoginModal.hide();
+      }
+    });
+    
+    console.log('[ApiErrorHandler] Error handler initialized');
+  }
+};
+
+// Initialize error handler when content script loads
+ApiErrorHandler.init();
+
+// ===================================
+// Login Modal Auto-Close on Page Load
+// ===================================
+/**
+ * Check on page load if user is logged in and hide modal if visible
+ */
+async function checkAndHideLoginModalOnLoad() {
+  try {
+    const result = await chrome.storage.local.get(['xplaino_userAccountData']);
+    const userData = result['xplaino_userAccountData'];
+    
+    if (userData && userData.isLoggedIn === true) {
+      // User is logged in, hide modal if it's visible
+      const overlay = document.getElementById('login-modal-overlay');
+      if (overlay && typeof LoginModal !== 'undefined') {
+        console.log('[Content Script] User is logged in, hiding login modal on page load');
+        LoginModal.hide();
+      }
+    }
+  } catch (error) {
+    console.error('[Content Script] Error checking login state on page load:', error);
+  }
+}
+
+// Check on page load if user is logged in and hide modal
+if (document.readyState === 'complete') {
+  checkAndHideLoginModalOnLoad();
+} else {
+  window.addEventListener('load', checkAndHideLoginModalOnLoad);
+  // Also check when DOM is ready (in case load event already fired)
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', checkAndHideLoginModalOnLoad);
+  } else {
+    // DOM already ready, check immediately
+    checkAndHideLoginModalOnLoad();
+  }
+}
 
 // ===================================
 // Position Manager Module - Handles saving and loading panel position
@@ -3174,11 +4159,25 @@ const WordSelector = {
   // Store bound handler for proper cleanup
   boundDoubleClickHandler: null,
   
+  // Track pending words (words with magic button but no API call yet)
+  pendingWords: new Map(), // Map of normalizedWord -> {word, range, highlight}
+  
+  // Track button wrappers for magic meaning buttons
+  wordButtonWrappers: new Map(), // Map of normalizedWord -> button wrapper element
+  
+  // Inline purple logo SVG content (no fetch needed)
+  purpleLogoSvgContent: `<svg xmlns="http://www.w3.org/2000/svg" width="293" height="277" viewBox="0 0 293 277"><g><path d="M 186.57 204.25 C187.92,206.31 188.69,207.96 188.26,207.91 C187.84,207.85 184.19,205.88 180.15,203.51 C161.17,192.42 147.56,192.19 128.25,202.64 C123.71,205.10 120.00,206.74 119.99,206.30 C119.99,205.86 122.22,201.00 124.95,195.50 C134.11,177.05 134.05,168.68 124.63,149.75 C121.69,143.84 119.51,139.00 119.80,139.00 C120.08,139.00 125.31,141.46 131.41,144.46 C145.26,151.27 150.99,152.43 160.47,150.30 C168.62,148.48 173.88,146.34 182.13,141.50 C185.42,139.58 188.26,138.00 188.46,138.00 C188.65,138.00 186.82,141.49 184.38,145.75 C173.12,165.50 172.39,176.08 181.04,194.11 C182.73,197.63 185.21,202.19 186.57,204.25 ZM 126.41 199.85 C127.40,201.46 128.35,201.30 131.27,199.00 C132.67,197.90 134.53,197.00 135.41,197.00 C136.28,197.00 137.00,196.60 137.00,196.11 C137.00,193.77 161.30,192.53 167.00,194.57 C170.73,195.91 174.93,196.94 176.39,196.87 C176.88,196.85 177.63,197.41 178.07,198.11 C180.06,201.34 177.37,189.80 174.78,184.02 C172.34,178.57 171.98,176.74 172.51,172.52 C173.45,165.02 175.89,155.79 177.39,154.04 C179.16,151.98 179.94,148.52 178.98,146.96 C178.39,146.01 176.88,146.44 172.80,148.74 C168.46,151.19 165.76,151.92 158.95,152.45 C154.27,152.82 148.49,152.67 146.00,152.13 C136.90,150.13 132.44,148.63 130.06,146.80 C127.93,145.15 127.52,145.11 126.77,146.44 C126.20,147.47 126.81,149.54 128.61,152.73 C131.43,157.71 131.80,159.51 132.64,172.24 C133.06,178.62 132.77,181.01 130.97,185.74 C129.78,188.91 128.84,192.58 128.90,193.89 C128.95,195.20 128.26,196.82 127.35,197.49 C126.44,198.15 126.01,199.21 126.41,199.85 ZM 150.15 242.32 C147.37,244.57 121.03,243.49 112.82,240.78 C105.12,238.24 93.05,229.53 89.27,223.79 C80.49,210.46 78.00,195.19 81.57,176.50 C82.40,172.10 83.30,167.15 83.55,165.50 C83.80,163.84 85.12,161.68 86.50,160.67 C88.18,159.43 89.00,157.87 89.00,155.89 C89.00,154.04 90.08,151.75 91.93,149.72 C96.79,144.37 100.91,138.25 100.18,137.44 C99.81,137.02 100.02,136.98 100.66,137.34 C101.35,137.74 102.96,136.18 104.66,133.47 C106.22,130.98 108.52,128.68 109.77,128.36 C111.01,128.04 112.92,126.64 114.02,125.25 C115.11,123.87 116.00,123.03 116.00,123.40 C116.00,124.15 117.85,122.76 121.85,119.00 C123.31,117.63 125.40,116.01 126.50,115.40 C134.97,110.72 138.51,109.00 141.76,107.99 C143.82,107.35 146.92,106.19 148.65,105.41 C150.38,104.64 153.08,103.99 154.65,103.99 C156.22,103.98 159.86,103.35 162.75,102.58 C165.65,101.81 168.80,101.33 169.75,101.51 C170.71,101.70 171.84,101.88 172.25,101.92 C172.66,101.97 173.00,102.38 173.00,102.85 C173.00,103.32 169.74,103.99 165.75,104.34 C129.65,107.47 93.23,139.14 84.01,175.41 C81.65,184.69 81.35,198.99 83.36,206.50 C87.73,222.85 102.75,236.93 119.65,240.51 C146.77,246.26 177.44,234.65 200.50,209.90 C228.52,179.84 232.86,139.22 210.34,117.88 C202.12,110.07 195.47,106.92 182.00,104.43 L 175.50 103.22 L 181.07 103.11 C189.32,102.95 200.71,106.97 206.25,112.00 C207.77,113.38 209.20,114.28 209.43,114.00 C209.67,113.72 210.92,115.07 212.21,117.00 C213.49,118.93 215.55,120.94 216.77,121.49 C218.16,122.10 219.23,123.70 219.61,125.74 C219.95,127.53 220.55,129.00 220.96,129.00 C221.36,129.00 222.93,134.00 224.44,140.11 C226.74,149.43 227.07,152.36 226.48,158.36 C226.10,162.29 225.14,167.30 224.36,169.50 C223.58,171.70 222.68,175.52 222.36,178.00 C222.04,180.48 221.18,183.18 220.46,184.00 C219.74,184.82 217.76,188.29 216.07,191.69 C214.39,195.09 212.54,198.17 211.96,198.52 C211.39,198.88 209.80,200.94 208.44,203.10 C205.21,208.21 194.10,219.30 186.50,225.00 C183.20,227.47 180.27,229.72 180.00,230.00 C178.26,231.75 163.42,238.20 158.00,239.57 C154.43,240.48 150.89,241.71 150.15,242.32 ZM 173.96 258.56 C165.33,260.73 160.70,261.25 147.50,261.52 C147.11,261.53 146.72,261.54 146.35,261.54 C137.70,261.72 133.80,261.81 129.96,261.38 C126.63,261.01 123.35,260.26 117.06,258.86 C105.19,256.23 96.80,253.10 86.03,247.31 C63.46,235.16 43.99,215.04 33.82,193.35 C31.72,188.87 30.00,184.88 30.00,184.48 C30.00,182.36 33.11,186.88 36.03,193.25 C38.93,199.57 42.32,205.39 44.03,207.00 C44.33,207.27 46.23,210.04 48.27,213.14 C55.35,223.96 69.06,236.14 81.00,242.24 C84.03,243.78 88.30,246.15 90.50,247.51 C92.70,248.86 95.42,249.97 96.55,249.98 C97.68,249.99 99.03,250.39 99.55,250.87 C100.07,251.35 102.75,252.52 105.50,253.47 C108.25,254.43 111.40,255.56 112.50,255.98 C118.27,258.21 126.62,259.24 139.35,259.29 C153.54,259.35 171.76,257.71 175.50,256.02 C179.32,254.31 192.84,250.00 194.42,250.00 C195.29,250.00 196.00,249.55 196.00,249.00 C196.00,248.45 196.83,248.00 197.85,248.00 C198.86,248.00 200.73,247.10 202.00,246.00 C203.27,244.90 204.70,244.00 205.17,244.00 C206.01,244.00 213.99,239.10 215.00,237.96 C215.27,237.65 217.22,236.10 219.32,234.53 C228.30,227.78 245.00,209.40 245.00,206.25 C245.00,204.64 251.67,198.34 252.50,199.17 C253.55,200.22 240.48,217.65 233.06,225.08 C215.89,242.28 197.68,252.60 173.96,258.56 ZM 264.62 165.64 C263.82,169.41 262.71,173.62 262.15,175.00 C261.24,177.23 261.12,176.99 261.06,172.81 C261.03,170.23 261.48,167.82 262.06,167.46 C262.66,167.09 262.85,165.57 262.48,163.93 C262.07,162.05 262.40,160.27 263.43,158.80 C264.67,157.02 265.00,153.70 265.00,142.84 C265.00,134.77 264.59,128.86 264.00,128.50 C263.45,128.16 263.00,126.14 263.00,124.00 C263.00,121.86 262.55,119.84 262.00,119.50 C261.45,119.16 261.00,117.52 261.00,115.86 C261.00,112.50 257.53,103.11 252.35,92.50 C247.05,81.61 244.24,77.38 239.61,73.29 C237.25,71.20 234.75,68.38 234.06,67.00 C232.48,63.87 223.27,55.00 221.61,55.00 C220.93,55.00 219.05,53.59 217.44,51.87 C215.82,50.16 211.84,47.47 208.58,45.92 C205.33,44.36 202.41,42.67 202.08,42.17 C201.31,40.97 191.42,36.00 189.78,35.99 C189.08,35.99 187.15,35.27 185.50,34.39 C183.85,33.51 179.35,32.19 175.50,31.45 C171.65,30.72 166.70,29.56 164.50,28.88 C162.30,28.21 153.30,27.38 144.50,27.03 L 128.50 26.40 L 143.64 26.20 C165.93,25.90 183.58,29.87 202.17,39.36 C234.18,55.70 257.14,85.95 264.46,121.47 C266.58,131.70 266.66,156.00 264.62,165.64 ZM 37.96 88.90 C37.90,91.26 34.52,97.19 33.71,96.37 C32.72,95.39 40.21,81.82 46.19,73.75 C52.52,65.20 65.30,53.27 75.00,46.84 C83.17,41.43 98.17,33.91 104.51,32.06 C114.11,29.25 118.82,28.14 123.50,27.58 L 128.50 26.98 L 123.50 28.56 C120.75,29.43 117.03,30.39 115.24,30.68 C113.45,30.98 111.73,31.62 111.43,32.11 C111.13,32.60 109.59,33.00 108.00,33.00 C106.41,33.00 104.86,33.42 104.55,33.92 C104.23,34.43 102.74,35.12 101.23,35.45 C96.02,36.59 74.10,48.76 70.18,52.68 C69.43,53.43 67.62,54.67 66.16,55.44 C63.21,56.98 55.00,65.29 55.00,66.73 C55.00,67.23 53.09,69.47 50.75,71.71 C45.30,76.93 42.00,81.00 42.00,82.50 C42.00,83.16 41.10,84.50 40.00,85.50 C38.90,86.50 37.98,88.03 37.96,88.90 ZM 27.43 168.50 C27.71,170.15 27.59,172.05 27.17,172.73 C25.56,175.33 22.99,157.67 23.00,144.00 C23.00,129.27 24.51,119.30 28.55,107.25 C31.64,98.05 32.92,95.52 32.97,98.56 C32.99,99.69 32.34,101.49 31.53,102.56 C30.72,103.63 30.05,105.75 30.03,107.29 C30.01,108.82 29.38,111.07 28.62,112.29 C27.86,113.50 27.19,116.44 27.13,118.81 C27.06,121.17 26.57,123.94 26.02,124.96 C24.28,128.22 24.53,157.64 26.36,163.63 C26.67,164.66 27.15,166.85 27.43,168.50 ZM 28.98 176.97 C29.61,178.14 29.98,180.06 29.81,181.23 C29.57,182.90 29.22,182.56 28.16,179.60 C26.66,175.42 27.21,173.66 28.98,176.97 Z" fill="rgb(135,89,231)"/><path d="M 264.62 165.64 C264.71,165.24 264.79,164.81 264.86,164.36 C264.03,170.01 262.75,174.56 260.94,178.50 C258.97,182.82 253.81,195.61 253.28,197.50 C253.15,197.99 252.90,198.61 252.56,199.31 C252.55,199.25 252.53,199.20 252.50,199.17 C251.67,198.34 245.00,204.64 245.00,206.25 C245.00,209.40 228.30,227.78 219.32,234.53 C217.22,236.10 215.27,237.65 215.00,237.96 C213.99,239.10 206.01,244.00 205.17,244.00 C204.70,244.00 203.27,244.90 202.00,246.00 C200.73,247.10 198.86,248.00 197.85,248.00 C196.83,248.00 196.00,248.45 196.00,249.00 C196.00,249.55 195.29,250.00 194.42,250.00 C192.84,250.00 179.32,254.31 175.50,256.02 C171.76,257.71 153.54,259.35 139.35,259.29 C126.62,259.24 118.27,258.21 112.50,255.98 C111.40,255.56 108.25,254.43 105.50,253.47 C102.75,252.52 100.07,251.35 99.55,250.87 C99.03,250.39 97.68,249.99 96.55,249.98 C95.42,249.97 92.70,248.86 90.50,247.51 C88.30,246.15 84.03,243.78 81.00,242.24 C69.06,236.14 55.35,223.96 48.27,213.14 C46.23,210.04 44.33,207.27 44.03,207.00 C42.32,205.39 38.93,199.57 36.03,193.25 C33.11,186.88 30.00,182.36 30.00,184.48 C30.00,184.50 30.00,184.52 30.01,184.55 C29.67,183.62 29.33,182.67 29.01,181.72 C29.44,182.56 29.65,182.34 29.81,181.23 C29.98,180.06 29.61,178.14 28.98,176.97 C27.81,174.78 27.18,174.81 27.31,176.28 C26.94,174.99 26.58,173.67 26.24,172.34 C26.57,173.02 26.88,173.19 27.17,172.73 C27.59,172.05 27.71,170.15 27.43,168.50 C27.15,166.85 26.67,164.66 26.36,163.63 C24.53,157.64 24.28,128.22 26.02,124.96 C26.57,123.94 27.06,121.17 27.13,118.81 C27.19,116.44 27.86,113.50 28.62,112.29 C29.38,111.07 30.01,108.82 30.03,107.29 C30.05,105.75 30.72,103.63 31.53,102.56 C32.34,101.49 32.99,99.69 32.97,98.56 C32.95,97.29 32.72,96.99 32.22,97.75 C34.88,91.68 38.05,85.87 41.69,80.37 C37.06,87.69 32.96,95.63 33.71,96.37 C34.52,97.19 37.90,91.26 37.96,88.90 C37.98,88.03 38.90,86.50 40.00,85.50 C41.10,84.50 42.00,83.16 42.00,82.50 C42.00,81.00 45.30,76.93 50.75,71.71 C53.09,69.47 55.00,67.23 55.00,66.73 C55.00,65.29 63.21,56.98 66.16,55.44 C67.62,54.67 69.43,53.43 70.18,52.68 C74.10,48.76 96.02,36.59 101.23,35.45 C102.74,35.12 104.23,34.43 104.55,33.92 C104.86,33.42 106.41,33.00 108.00,33.00 C109.59,33.00 111.13,32.60 111.43,32.11 C111.73,31.62 113.45,30.98 115.24,30.68 C117.03,30.39 120.75,29.43 123.50,28.56 L 128.50 26.98 L 123.50 27.58 C122.86,27.66 122.21,27.74 121.55,27.85 C122.18,27.72 122.83,27.60 123.50,27.48 C125.71,27.07 128.41,26.75 131.39,26.52 L 144.50 27.03 C153.30,27.38 162.30,28.21 164.50,28.88 C166.70,29.56 171.65,30.72 175.50,31.45 C179.35,32.19 183.85,33.51 185.50,34.39 C187.15,35.27 189.08,35.99 189.78,35.99 C191.42,36.00 201.31,40.97 202.08,42.17 C202.41,42.67 205.33,44.36 208.58,45.92 C211.84,47.47 215.82,50.16 217.44,51.87 C219.05,53.59 220.93,55.00 221.61,55.00 C223.27,55.00 232.48,63.87 234.06,67.00 C234.75,68.38 237.25,71.20 239.61,73.29 C244.24,77.38 247.05,81.61 252.35,92.50 C257.53,103.11 261.00,112.50 261.00,115.86 C261.00,117.52 261.45,119.16 262.00,119.50 C262.55,119.84 263.00,121.86 263.00,124.00 C263.00,126.14 263.45,128.16 264.00,128.50 C264.59,128.86 265.00,134.77 265.00,142.84 C265.00,153.70 264.67,157.02 263.43,158.80 C262.40,160.27 262.07,162.05 262.48,163.93 C262.85,165.57 262.66,167.09 262.06,167.46 C261.48,167.82 261.03,170.23 261.06,172.81 C261.12,176.99 261.24,177.23 262.15,175.00 C262.71,173.62 263.82,169.41 264.62,165.64 ZM 150.15 242.32 C150.89,241.71 154.43,240.48 158.00,239.57 C163.42,238.20 178.26,231.75 180.00,230.00 C180.27,229.72 183.20,227.47 186.50,225.00 C194.10,219.30 205.21,208.21 208.44,203.10 C209.80,200.94 211.39,198.88 211.96,198.52 C212.54,198.17 214.39,195.09 216.07,191.69 C217.76,188.29 219.74,184.82 220.46,184.00 C221.18,183.18 222.04,180.48 222.36,178.00 C222.68,175.52 223.58,171.70 224.36,169.50 C225.14,167.30 226.10,162.29 226.48,158.36 C227.07,152.36 226.74,149.43 224.44,140.11 C222.93,134.00 221.36,129.00 220.96,129.00 C220.55,129.00 219.95,127.53 219.61,125.74 C219.23,123.70 218.16,122.10 216.77,121.49 C215.55,120.94 213.49,118.93 212.21,117.00 C210.92,115.07 209.67,113.72 209.43,114.00 C209.20,114.28 207.77,113.38 206.25,112.00 C200.71,106.97 189.32,102.95 181.07,103.11 L 175.50 103.22 L 182.00 104.43 C183.55,104.71 185.01,105.01 186.39,105.32 C179.01,104.15 167.70,104.10 159.37,105.18 C161.49,104.80 163.62,104.52 165.75,104.34 C169.74,103.99 173.00,103.32 173.00,102.85 C173.00,102.38 172.66,101.97 172.25,101.92 C171.84,101.88 170.71,101.70 169.75,101.51 C168.80,101.33 165.65,101.81 162.75,102.58 C159.86,103.35 156.22,103.98 154.65,103.99 C153.08,103.99 150.38,104.64 148.65,105.41 C146.92,106.19 143.82,107.35 141.76,107.99 C138.51,109.00 134.97,110.72 126.50,115.40 C125.40,116.01 123.31,117.63 121.85,119.00 C117.85,122.76 116.00,124.15 116.00,123.40 C116.00,123.03 115.11,123.87 114.02,125.25 C112.92,126.64 111.01,128.04 109.77,128.36 C108.52,128.68 106.22,130.98 104.66,133.47 C102.96,136.18 101.35,137.74 100.66,137.34 C100.02,136.98 99.81,137.02 100.18,137.44 C100.91,138.25 96.79,144.37 91.93,149.72 C90.08,151.75 89.00,154.04 89.00,155.89 C89.00,157.87 88.18,159.43 86.50,160.67 C85.12,161.68 83.80,163.84 83.55,165.50 C83.30,167.15 82.40,172.10 81.57,176.50 C78.00,195.19 80.49,210.46 89.27,223.79 C93.05,229.53 105.12,238.24 112.82,240.78 C121.03,243.49 147.37,244.57 150.15,242.32 ZM 126.41 199.85 C126.01,199.21 126.44,198.15 127.35,197.49 C128.26,196.82 128.95,195.20 128.90,193.89 C128.84,192.58 129.78,188.91 130.97,185.74 C132.77,181.01 133.06,178.62 132.64,172.24 C131.80,159.51 131.43,157.71 128.61,152.73 C126.81,149.54 126.20,147.47 126.77,146.44 C127.52,145.11 127.93,145.15 130.06,146.80 C132.44,148.63 136.90,150.13 146.00,152.13 C148.49,152.67 154.27,152.82 158.95,152.45 C165.76,151.92 168.46,151.19 172.80,148.74 C176.88,146.44 178.39,146.01 178.98,146.96 C179.94,148.52 179.16,151.98 177.39,154.04 C175.89,155.79 173.45,165.02 172.51,172.52 C171.98,176.74 172.34,178.57 174.78,184.02 C177.37,189.80 180.06,201.34 178.07,198.11 C177.63,197.41 176.88,196.85 176.39,196.87 C174.93,196.94 170.73,195.91 167.00,194.57 C161.30,192.53 137.00,193.77 137.00,196.11 C137.00,196.60 136.28,197.00 135.41,197.00 C134.53,197.00 132.67,197.90 131.27,199.00 C128.35,201.30 127.40,201.46 126.41,199.85 ZM 172.63 28.75 C163.61,26.87 154.14,26.06 143.64,26.20 L 134.16 26.33 C145.30,25.68 159.32,26.10 167.14,27.58 C168.97,27.93 170.80,28.32 172.63,28.75 ZM 228.50 57.72 C221.32,51.08 213.28,45.32 204.53,40.60 C209.11,43.00 213.43,45.63 217.36,48.44 C221.09,51.10 224.85,54.25 228.50,57.72 ZM 60.38 228.90 C68.13,236.07 76.82,242.35 86.03,247.31 C87.96,248.35 89.81,249.30 91.62,250.18 C80.11,244.77 69.53,237.58 60.38,228.90 ZM 26.16 115.27 C23.90,124.10 23.00,132.63 23.00,144.00 C22.99,150.47 23.57,157.83 24.34,163.52 C22.49,151.60 22.48,133.21 24.49,122.70 C24.97,120.19 25.53,117.71 26.16,115.27 ZM 84.01 175.41 C85.99,167.64 89.21,160.08 93.41,152.96 C87.65,162.81 83.83,173.43 82.52,184.14 C82.85,181.01 83.35,178.01 84.01,175.41 ZM 264.29 120.66 C262.80,113.67 260.70,106.89 258.05,100.38 C261.04,107.51 263.04,113.90 264.29,120.66 ZM 140.00 241.68 C161.31,239.75 183.14,228.53 200.50,209.90 C183.07,228.60 161.30,239.80 140.00,241.68 ZM 30.80 186.63 C31.50,188.30 32.60,190.74 33.82,193.35 C35.68,197.31 37.84,201.22 40.28,205.03 C36.45,199.16 33.35,193.13 30.80,186.63 ZM 91.41 222.38 C92.45,223.67 93.60,224.97 94.85,226.28 C99.00,230.63 104.02,234.30 109.26,236.91 C102.33,233.53 96.13,228.46 91.41,222.38 ZM 82.03 194.28 C82.15,199.82 82.76,204.50 84.03,208.73 C83.78,207.99 83.56,207.25 83.36,206.50 C82.51,203.34 82.08,198.97 82.03,194.28 ZM 94.54 36.12 C90.34,38.10 85.69,40.51 81.54,42.86 C84.75,40.97 88.08,39.20 91.51,37.55 C92.56,37.05 93.57,36.57 94.54,36.12 ZM 114.43 29.32 C111.89,29.95 108.89,30.78 105.12,31.88 C108.01,30.92 111.00,30.10 114.43,29.32 ZM 233.07 225.08 C228.30,229.85 223.46,234.09 218.45,237.85 C223.46,234.09 228.30,229.85 233.06,225.08 C236.08,222.06 240.04,217.38 243.60,212.82 C240.17,217.29 236.36,221.78 233.07,225.08 ZM 254.48 92.46 C253.05,89.57 251.51,86.75 249.86,83.99 C251.59,86.83 253.14,89.65 254.46,92.41 ZM 193.87 107.42 C196.36,108.29 198.59,109.29 200.71,110.50 C198.70,109.38 196.50,108.41 193.87,107.42 ZM 64.30 55.05 C61.88,57.13 59.47,59.33 57.17,61.55 C59.45,59.30 61.83,57.13 64.30,55.05 ZM 266.06 140.25 C266.00,137.36 265.88,134.52 265.70,131.86 C265.90,134.52 266.01,137.30 266.06,140.25 ZM 28.81 106.47 C28.73,106.73 28.64,106.99 28.55,107.25 C28.10,108.59 27.68,109.91 27.29,111.20 C27.77,109.61 28.27,108.04 28.81,106.47 Z" fill="rgb(140,82,253)"/><path d="M 0.00 138.50 L 0.00 0.00 L 146.50 0.00 L 293.00 0.00 L 293.00 138.50 L 293.00 277.00 L 146.50 277.00 L 0.00 277.00 L 0.00 138.50 ZM 173.96 258.56 C197.68,252.60 215.88,242.29 233.07,225.08 C241.01,217.12 251.99,202.15 253.28,197.50 C253.81,195.61 258.97,182.82 260.94,178.50 C264.53,170.67 266.06,160.42 266.08,143.97 C266.12,123.24 263.37,111.03 254.46,92.41 C246.88,76.57 231.91,58.82 217.36,48.44 C203.63,38.64 185.29,31.03 167.14,27.58 C156.45,25.56 134.19,25.51 123.50,27.48 C109.20,30.12 102.77,32.14 91.51,37.55 C55.90,54.64 31.61,85.50 24.49,122.70 C22.26,134.39 22.52,155.82 25.03,167.26 C30.21,190.79 39.11,207.05 56.84,225.39 C72.90,242.02 94.01,253.75 117.06,258.86 C130.92,261.94 130.20,261.88 147.50,261.52 C160.70,261.25 165.33,260.73 173.96,258.56 ZM 119.18 240.47 C110.62,238.61 101.59,233.35 94.85,226.28 C85.39,216.36 82.03,207.51 82.01,192.41 C81.96,155.66 113.09,117.95 153.00,106.42 C162.24,103.75 183.26,103.73 191.00,106.39 C199.89,109.44 204.05,111.91 210.34,117.88 C232.86,139.22 228.52,179.84 200.50,209.90 C177.39,234.70 146.35,246.37 119.18,240.47 ZM 186.57 204.25 C185.21,202.19 182.73,197.63 181.04,194.11 C172.39,176.08 173.12,165.50 184.38,145.75 C186.82,141.49 188.65,138.00 188.46,138.00 C188.26,138.00 185.42,139.58 182.13,141.50 C173.88,146.34 168.62,148.48 160.47,150.30 C150.99,152.43 145.26,151.27 131.41,144.46 C125.31,141.46 120.08,139.00 119.80,139.00 C119.51,139.00 121.69,143.84 124.63,149.75 C134.05,168.68 134.11,177.05 124.95,195.50 C122.22,201.00 119.99,205.86 119.99,206.30 C120.00,206.74 123.71,205.10 128.25,202.64 C147.56,192.19 161.17,192.42 180.15,203.51 C184.19,205.88 187.84,207.85 188.26,207.91 C188.69,207.96 187.92,206.31 186.57,204.25 Z" fill="rgb(254,254,254)"/></g></svg>`,
+  
   /**
    * Initialize word selector
    */
   async init() {
     console.log('[WordSelector] Initializing...');
+    
+    // SVG is now inline, no fetch needed
+    console.log('[WordSelector] Purple logo SVG available inline');
+    // Update any existing buttons
+    this.updateAllMagicMeaningButtons();
     
     // Bind the handler once for proper cleanup
     this.boundDoubleClickHandler = this.handleDoubleClick.bind(this);
@@ -3475,86 +4474,96 @@ const WordSelector = {
       return;
     }
     
-    // Get the selected text
-    const selection = window.getSelection();
-    const selectedText = selection.toString().trim();
+    // IMPORTANT: Don't prevent default - let Chrome's default double-click selection work
+    // This allows the yellow highlight to appear naturally
+    // Use setTimeout to process after Chrome's default behavior completes
+    setTimeout(() => {
+      // Get the selected text after Chrome's default selection
+      const selection = window.getSelection();
+      const selectedText = selection.toString().trim();
     
-    console.log('[WordSelector] ===== DOUBLE CLICK EVENT =====');
-    console.log('[WordSelector] Selected text:', selectedText);
-    
-    // Check if a word was selected
-    if (!selectedText || selectedText.length === 0) {
-      console.log('[WordSelector] No text selected');
-      return;
-    }
-    
-    // Only process single words (no spaces)
-    if (/\s/.test(selectedText)) {
-      console.log('[WordSelector] Multiple words selected, skipping');
-      return;
-    }
-    
-    // Get the range and validate
-    if (selection.rangeCount === 0) {
-      console.log('[WordSelector] No valid range');
-      return;
-    }
-    
-    const range = selection.getRangeAt(0);
-    
-    // IMPORTANT: Also validate the selection range itself
-    // This ensures the selected text is not from extension UI
-    if (!this.isSelectionAllowed(range)) {
-      console.log('[WordSelector] Selection not allowed - range is in extension UI');
-      selection.removeAllRanges();
-      return;
-    }
-    
-    const normalizedWord = selectedText.toLowerCase();
-    console.log('[WordSelector] Original word:', selectedText);
-    console.log('[WordSelector] Normalized word:', normalizedWord);
-    
-    // Check if word is already explained (green) - if so, deselect it
-    if (this.explainedWords.has(normalizedWord)) {
-      // Check if clicking on the green highlight itself
-      const clickedHighlight = event.target.closest('.vocab-word-explained');
-      if (clickedHighlight) {
-        // Allow deselection of green highlights
-        this.removeExplainedWord(selectedText);
-        selection.removeAllRanges();
-        console.log('[WordSelector] Explained word deselected:', selectedText);
+      console.log('[WordSelector] ===== DOUBLE CLICK EVENT =====');
+      console.log('[WordSelector] Selected text:', selectedText);
+      
+      // Check if a word was selected
+      if (!selectedText || selectedText.length === 0) {
+        console.log('[WordSelector] No text selected');
         return;
       }
-    }
-    
-    // Check if word is already selected (purple) - if so, deselect it
-    if (this.isWordSelected(normalizedWord)) {
-      this.removeWord(selectedText);
-      selection.removeAllRanges();
-      console.log('[WordSelector] Word deselected:', selectedText);
-      return;
-    }
-    
-    // Add word to selected set (O(1) operation)
-    this.addWord(selectedText);
-    
-    // Highlight the word
-    this.highlightRange(range, selectedText);
-    
-    // Clear the selection
-    selection.removeAllRanges();
-    
-    console.log('[WordSelector] ✓ Word selected:', selectedText);
-    console.log('[WordSelector] ✓ Normalized word stored:', normalizedWord);
-    console.log('[WordSelector] ✓ Total selected words:', this.selectedWords.size);
-    
-    // Get the highlight element that was just created
-    const highlights = this.wordToHighlights.get(normalizedWord);
-    const highlight = highlights ? Array.from(highlights)[highlights.size - 1] : null;
-    
-    // Immediately trigger API call for this word
-    // Pass the highlight element directly to avoid timing issues
-    this.processWordExplanation(selectedText, normalizedWord, highlight);
+      
+      // Only process single words (no spaces)
+      if (/\s/.test(selectedText)) {
+        console.log('[WordSelector] Multiple words selected, skipping');
+        return;
+      }
+      
+      // Get the range and validate
+      if (selection.rangeCount === 0) {
+        console.log('[WordSelector] No valid range');
+        return;
+      }
+      
+      const range = selection.getRangeAt(0);
+      
+      // IMPORTANT: Also validate the selection range itself
+      // This ensures the selected text is not from extension UI
+      if (!this.isSelectionAllowed(range)) {
+        console.log('[WordSelector] Selection not allowed - range is in extension UI');
+        selection.removeAllRanges();
+        return;
+      }
+      
+      const normalizedWord = selectedText.toLowerCase();
+      console.log('[WordSelector] Original word:', selectedText);
+      console.log('[WordSelector] Normalized word:', normalizedWord);
+      
+      // Check if word is already explained (green) - if so, deselect it
+      if (this.explainedWords.has(normalizedWord)) {
+        // Check if clicking on the green highlight itself
+        const clickedHighlight = event.target.closest('.vocab-word-explained');
+        if (clickedHighlight) {
+          // Allow deselection of green highlights
+          this.removeExplainedWord(selectedText);
+          selection.removeAllRanges();
+          console.log('[WordSelector] Explained word deselected:', selectedText);
+          return;
+        }
+      }
+      
+      // Check if word is already selected (purple) - if so, deselect it
+      if (this.isWordSelected(normalizedWord)) {
+        this.removeWord(selectedText);
+        selection.removeAllRanges();
+        console.log('[WordSelector] Word deselected:', selectedText);
+        return;
+      }
+      
+      // Add word to selected set (O(1) operation)
+      this.addWord(selectedText);
+      
+      // Create span without background color (no vocab-word-highlight class initially)
+      const highlight = this.createWordSpanWithoutBackground(range, selectedText, normalizedWord);
+      
+      // Clear the selection AFTER creating the span (allows Chrome's default highlight to show first)
+      // Use a small delay to ensure Chrome's default behavior completes
+      setTimeout(() => {
+        selection.removeAllRanges();
+      }, 50);
+      
+      console.log('[WordSelector] ✓ Word selected:', selectedText);
+      console.log('[WordSelector] ✓ Normalized word stored:', normalizedWord);
+      console.log('[WordSelector] ✓ Total selected words:', this.selectedWords.size);
+      
+      // Store pending word data
+      this.pendingWords.set(normalizedWord, {
+        word: selectedText,
+        range: range.cloneRange(),
+        highlight: highlight
+      });
+      
+      // Show magic meaning button above the word
+      this.showWordMagicMeaningButton(highlight, selectedText, normalizedWord);
+    }, 0); // Process after Chrome's default double-click behavior
   },
   
   /**
@@ -3868,6 +4877,13 @@ const WordSelector = {
       // onError callback
       async (error) => {
         console.error('[WordSelector] Error during word explanation:', error);
+        console.log('[WordSelector] Error details:', {
+          status: error.status,
+          errorCode: error.errorCode,
+          message: error.message
+        });
+        
+        const normalizedWord = highlight.getAttribute('data-word')?.toLowerCase();
         
         // Remove pulsating animation on error
         highlight.classList.remove('vocab-word-loading');
@@ -3875,34 +4891,72 @@ const WordSelector = {
         // Hide loading spinner on error
         this.hideLoadingSpinner(highlight);
         
-        // Check if it's a 429 rate limit error
-        if (error.status === 429 || error.message.includes('429') || error.message.includes('Rate limit')) {
-          // Show error banner
+        // Check if it's a LOGIN_REQUIRED error FIRST (regardless of status code)
+        // This takes precedence over 429 rate limit errors
+        // Even if status is 429, if errorCode is LOGIN_REQUIRED, show login modal instead of error banner
+        if (error.errorCode === 'LOGIN_REQUIRED') {
+          console.log('[WordSelector] LOGIN_REQUIRED error detected (status:', error.status, '), showing login modal - NOT showing error banner');
+          
+          // Hide any existing error banners first
           if (typeof ErrorBanner !== 'undefined') {
-            await ErrorBanner.show('You are requesting too fast, please retry after few seconds');
+            ErrorBanner.hide();
+            console.log('[WordSelector] Hid any existing error banners');
           }
           
-          // Remove purple BZG (background/cross button) - restore to normal selected state
-          // Remove any purple cross button that might have been added
-          const purpleBtn = highlight.querySelector('.vocab-word-remove-btn');
-          if (purpleBtn) {
-            purpleBtn.remove();
+          // Show login modal (centered) - do NOT show error banner
+          if (typeof LoginModal !== 'undefined') {
+            LoginModal.show('Please sign in to get word meanings', 'WORDS_EXPLANATION');
+          } else {
+            console.warn('[WordSelector] LoginModal is not available');
           }
           
-          // Remove any purple background classes
-          highlight.classList.remove('vocab-word-loading', 'vocab-word-explained');
+          // Revert - remove highlight and clean up
+          if (normalizedWord) {
+            // Clean up any remaining pending data or button wrappers
+            this.pendingWords.delete(normalizedWord);
+            this.hideWordMagicMeaningButton(normalizedWord);
+            // Remove the word (which will remove the highlight)
+            this.removeWord(normalizedWord);
+          }
           
-          // Restore the purple cross button (normal selected state)
-          // Check if word is still in selectedWords
-          const normalizedWord = highlight.getAttribute('data-word')?.toLowerCase();
-          if (normalizedWord && this.selectedWords.has(normalizedWord)) {
-            // Re-add the purple cross button for normal selected state
-            const removeBtn = this.createRemoveButton(normalizedWord);
-            highlight.appendChild(removeBtn);
+          return;
+        }
+        
+        // Check if it's a 429 rate limit error (but NOT LOGIN_REQUIRED)
+        // Explicitly check that errorCode is NOT LOGIN_REQUIRED to prevent showing error banner for LOGIN_REQUIRED
+        const isRateLimit = (error.status === 429 || error.message?.includes('429') || error.message?.includes('Rate limit'));
+        const isNotLoginRequired = error.errorCode !== 'LOGIN_REQUIRED';
+        
+        if (isRateLimit && isNotLoginRequired) {
+          console.log('[WordSelector] 429 rate limit error detected (NOT LOGIN_REQUIRED)');
+          // Error banner functionality removed - just show notification
+          TextSelector.showNotification('You are requesting too fast, please retry after few seconds');
+          
+          // Revert - remove highlight and clean up
+          if (normalizedWord) {
+            // Clean up any remaining pending data or button wrappers
+            this.pendingWords.delete(normalizedWord);
+            this.hideWordMagicMeaningButton(normalizedWord);
+            // Remove the word (which will remove the highlight)
+            this.removeWord(normalizedWord);
           }
         } else {
           // Show error notification for other errors
           TextSelector.showNotification('Error getting word meaning. Please try again.');
+          
+          // Revert - remove highlight and clean up
+          if (normalizedWord) {
+            // Clean up any remaining pending data or button wrappers
+            this.pendingWords.delete(normalizedWord);
+            this.hideWordMagicMeaningButton(normalizedWord);
+            // Remove the word (which will remove the highlight)
+            this.removeWord(normalizedWord);
+            console.log('[WordSelector] Removed word due to API error:', normalizedWord);
+          } else {
+            // Fallback: directly remove the highlight if we can't get the word
+            this.removeHighlight(highlight);
+            console.log('[WordSelector] Removed highlight directly due to API error');
+          }
         }
       }
     );
@@ -4181,6 +5235,74 @@ const WordSelector = {
   },
   
   /**
+   * Create word span without background color (for magic button state)
+   * @param {Range} range - The range to wrap
+   * @param {string} word - The original word
+   * @param {string} normalizedWord - The normalized word (lowercase)
+   * @returns {HTMLElement} The created span element
+   */
+  createWordSpanWithoutBackground(range, word, normalizedWord) {
+    console.log('[WordSelector] ===== CREATING WORD SPAN WITHOUT BACKGROUND =====');
+    console.log('[WordSelector] Original word:', word);
+    console.log('[WordSelector] Normalized word:', normalizedWord);
+    
+    // Capture CSS properties BEFORE wrapping to preserve them
+    const cssProperties = this.getRangeCSSProperties(range);
+    console.log('[WordSelector] Captured CSS properties before wrapping:', cssProperties);
+    
+    // Create span wrapper without background color class
+    const span = document.createElement('span');
+    span.className = 'vocab-word-span-pending'; // Neutral class, no background
+    span.setAttribute('data-word', normalizedWord);
+    span.setAttribute('data-highlight-id', `word-span-${this.highlightIdCounter++}`);
+    
+    // Ensure the span doesn't interfere with child formatting
+    // Match the exact style approach from highlightRange
+    span.style.setProperty('display', 'inline', 'important');
+    span.style.setProperty('position', 'relative', 'important');
+    // Ensure no overflow clipping that would hide the button
+    span.style.setProperty('overflow', 'visible', 'important');
+    // Ensure no margins or padding that could cause layout shifts
+    span.style.setProperty('margin', '0', 'important');
+    span.style.setProperty('padding', '0', 'important');
+    span.style.setProperty('vertical-align', 'baseline', 'important');
+    
+    console.log('[WordSelector] Word span element created with data-word:', normalizedWord);
+    
+    // Wrap the selected range
+    try {
+      const rangeClone = range.cloneContents();
+      const hasFormattingElements = rangeClone.querySelector('b, strong, em, i, u, span, font, h1, h2, h3, h4, h5, h6');
+      
+      if (hasFormattingElements) {
+        console.log('[WordSelector] Range contains formatting elements - using extractContents');
+        const extractedContents = range.extractContents();
+        span.appendChild(extractedContents);
+        range.insertNode(span);
+        console.log('[WordSelector] Used extractContents - formatting preserved');
+      } else {
+        range.surroundContents(span);
+        console.log('[WordSelector] Used surroundContents - formatting preserved');
+      }
+    } catch (error) {
+      console.warn('[WordSelector] surroundContents failed, using extractContents:', error);
+      const extractedContents = range.extractContents();
+      span.appendChild(extractedContents);
+      range.insertNode(span);
+      console.log('[WordSelector] Used extractContents (fallback) - formatting preserved');
+    }
+    
+    // Preserve CSS properties
+    this.preserveTextNodeStyles(span, cssProperties);
+    console.log('[WordSelector] Applied CSS properties to preserve font size, style, and color');
+    
+    // Store the span in our map (but don't add to wordToHighlights yet - only after API call succeeds)
+    // We'll track it in pendingWords instead
+    
+    return span;
+  },
+  
+  /**
    * Create a remove button for the highlight
    * @param {string} word - The word this button will remove
    * @returns {HTMLElement}
@@ -4209,6 +5331,281 @@ const WordSelector = {
     return `
       <svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
         <path d="M2 2L10 10M10 2L2 10" stroke="#9527F5" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    `;
+  },
+  
+  /**
+   * Show magic meaning button above word span
+   * @param {HTMLElement} span - The word span element
+   * @param {string} word - The original word
+   * @param {string} normalizedWord - The normalized word
+   */
+  showWordMagicMeaningButton(span, word, normalizedWord) {
+    // Remove any existing button first
+    this.hideWordMagicMeaningButton(normalizedWord);
+    
+    // Create button container (similar to spinner container position)
+    const buttonContainer = document.createElement('div');
+    buttonContainer.className = 'vocab-word-magic-button-container';
+    buttonContainer.setAttribute('data-word', normalizedWord);
+    
+    // Create and add magic meaning button
+    const magicBtn = this.createWordMagicMeaningButton(word, normalizedWord);
+    // Remove breathing class temporarily and add appearing animation
+    magicBtn.classList.remove('magic-meaning-breathing');
+    magicBtn.classList.add('magic-meaning-appearing');
+    buttonContainer.appendChild(magicBtn);
+    
+    // Append to span
+    span.appendChild(buttonContainer);
+    // Remove appearing class after animation completes and restore breathing animation
+    setTimeout(() => {
+      magicBtn.classList.remove('magic-meaning-appearing');
+      magicBtn.classList.add('magic-meaning-breathing');
+    }, 200);
+    
+    // Store button wrapper
+    this.wordButtonWrappers.set(normalizedWord, buttonContainer);
+    
+    console.log('[WordSelector] Magic meaning button shown for word:', normalizedWord);
+    console.log('[WordSelector] Button container:', buttonContainer);
+    console.log('[WordSelector] Span element:', span);
+    
+    // Ensure button is visible after DOM update
+    // Use requestAnimationFrame to ensure layout is complete
+    requestAnimationFrame(() => {
+      if (buttonContainer && buttonContainer.parentNode) {
+        // Force a reflow to ensure button is positioned correctly
+        void buttonContainer.offsetHeight;
+        console.log('[WordSelector] Button container position verified');
+      }
+    });
+    
+    // Add global click handler to remove button and span on outside click
+    // Use setTimeout to avoid immediate removal when button is created
+    setTimeout(() => {
+      const handleGlobalClick = (event) => {
+        // Check if button container still exists
+        if (!buttonContainer || !buttonContainer.parentNode) {
+          document.removeEventListener('click', handleGlobalClick);
+          return;
+        }
+        
+        // Check if click is on the magic button or its container
+        if (event.target && (
+          event.target.closest('.vocab-word-magic-button-container') ||
+          event.target.closest('.vocab-word-magic-meaning-btn')
+        )) {
+          // Click is on the button - don't remove it
+          return;
+        }
+        
+        // Check if button is in loading state (spinner showing)
+        const btn = buttonContainer.querySelector('.vocab-word-magic-meaning-btn');
+        if (btn && btn.classList.contains('magic-meaning-loading')) {
+          // Button is in loading state - don't remove it
+          return;
+        }
+        
+        // Click is outside - remove button and span
+        console.log('[WordSelector] Outside click detected, removing magic button and span');
+        this.removeWordMagicButtonAndSpan(normalizedWord);
+        document.removeEventListener('click', handleGlobalClick);
+      };
+      
+      // Add click handler with small delay to let button click handler execute first
+      setTimeout(() => {
+        document.addEventListener('click', handleGlobalClick);
+      }, 10);
+    }, 10);
+  },
+  
+  /**
+   * Hide magic meaning button
+   * @param {string} normalizedWord - The normalized word
+   */
+  hideWordMagicMeaningButton(normalizedWord) {
+    const buttonContainer = this.wordButtonWrappers.get(normalizedWord);
+    if (buttonContainer && buttonContainer.parentNode) {
+      const magicBtn = buttonContainer.querySelector('.vocab-word-magic-meaning-btn');
+      if (magicBtn) {
+        // Add disappearing animation
+        magicBtn.classList.remove('magic-meaning-breathing');
+        magicBtn.classList.add('magic-meaning-disappearing');
+        // Force a reflow to ensure animation starts
+        void magicBtn.offsetHeight;
+        // Remove after animation completes - don't delete from map until after removal
+        setTimeout(() => {
+          if (buttonContainer && buttonContainer.parentNode) {
+            buttonContainer.remove();
+          }
+          // Delete from map after removal
+          this.wordButtonWrappers.delete(normalizedWord);
+        }, 200);
+        // Return early to prevent immediate deletion from map
+        return;
+      } else {
+        // If button not found, remove immediately
+        buttonContainer.remove();
+      }
+    }
+    // Only delete from map if we didn't schedule a delayed removal
+    this.wordButtonWrappers.delete(normalizedWord);
+  },
+  
+  /**
+   * Remove magic button and span (cleanup on outside click)
+   * @param {string} normalizedWord - The normalized word
+   */
+  removeWordMagicButtonAndSpan(normalizedWord) {
+    // Remove button
+    this.hideWordMagicMeaningButton(normalizedWord);
+    
+    // Remove span
+    const pendingData = this.pendingWords.get(normalizedWord);
+    if (pendingData && pendingData.highlight) {
+      const span = pendingData.highlight;
+      if (span.parentNode) {
+        // Replace span with its text content
+        const parent = span.parentNode;
+        const textNode = document.createTextNode(span.textContent);
+        parent.replaceChild(textNode, span);
+        parent.normalize();
+      }
+    }
+    
+    // Clean up pending data
+    this.pendingWords.delete(normalizedWord);
+    this.selectedWords.delete(normalizedWord);
+    
+    console.log('[WordSelector] Removed magic button and span for word:', normalizedWord);
+  },
+  
+  /**
+   * Create magic meaning button for word
+   * @param {string} word - The original word
+   * @param {string} normalizedWord - The normalized word
+   * @returns {HTMLElement}
+   */
+  createWordMagicMeaningButton(word, normalizedWord) {
+    const btn = document.createElement('button');
+    btn.className = 'vocab-word-magic-meaning-btn magic-meaning-breathing';
+    btn.setAttribute('aria-label', 'Get magic meaning');
+    btn.setAttribute('data-word', normalizedWord);
+    
+    // Use inline purple logo SVG (always available, no fetch needed)
+    const iconHtml = this.createWordMagicMeaningIcon();
+    btn.innerHTML = iconHtml;
+    console.log('[WordSelector] Magic button icon set, length:', iconHtml.length);
+    
+    // Add click handler
+    btn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      
+      console.log('[WordSelector] Magic-meaning button clicked for:', normalizedWord);
+      
+      // Get pending data
+      const pendingData = this.pendingWords.get(normalizedWord);
+      if (!pendingData) {
+        console.warn('[WordSelector] No pending data found for word:', normalizedWord);
+        return;
+      }
+      
+      const span = pendingData.highlight;
+      
+      // Change button to spinner state
+      btn.classList.add('magic-meaning-loading');
+      btn.classList.remove('magic-meaning-breathing');
+      btn.innerHTML = this.createWordSpinnerIcon();
+      btn.disabled = true;
+      
+      // Convert span to proper highlight with purple background and pulsating animation
+      span.classList.remove('vocab-word-span-pending');
+      span.classList.add('vocab-word-highlight', 'vocab-word-loading');
+      
+      // Remove magic button container (spinner will replace it)
+      const buttonContainer = this.wordButtonWrappers.get(normalizedWord);
+      if (buttonContainer && buttonContainer.parentNode) {
+        buttonContainer.remove();
+      }
+      this.wordButtonWrappers.delete(normalizedWord);
+      
+      // Store in wordToHighlights map
+      if (!this.wordToHighlights.has(normalizedWord)) {
+        this.wordToHighlights.set(normalizedWord, new Set());
+      }
+      this.wordToHighlights.get(normalizedWord).add(span);
+      
+      // Clean up pending data (no longer needed)
+      this.pendingWords.delete(normalizedWord);
+      
+      // Show loading spinner above the word
+      this.showLoadingSpinner(span);
+      
+      // Make API call
+      this.processWordExplanation(word, normalizedWord, span);
+    });
+    
+    return btn;
+  },
+  
+  /**
+   * Create magic meaning icon SVG (same as TextSelector)
+   * @returns {string} SVG markup
+   */
+  createWordMagicMeaningIcon() {
+    // Use cached SVG content (same as home-options-btn but purple)
+    if (this.purpleLogoSvgContent) {
+      // Create a temporary container to parse and modify the SVG
+      const tempDiv = document.createElement('div');
+      tempDiv.innerHTML = this.purpleLogoSvgContent;
+      const svgElement = tempDiv.querySelector('svg');
+      if (svgElement) {
+        // Set size attributes
+        svgElement.setAttribute('width', '20');
+        svgElement.setAttribute('height', '20');
+        svgElement.setAttribute('viewBox', '0 0 293 277'); // Preserve original viewBox
+        svgElement.style.display = 'block';
+        svgElement.style.pointerEvents = 'none';
+        svgElement.style.visibility = 'visible';
+        svgElement.style.opacity = '1';
+        // Return the modified SVG HTML
+        return svgElement.outerHTML;
+      }
+    }
+    // If SVG not loaded yet, return empty placeholder
+    // The button will be updated when SVG loads via updateAllMagicMeaningButtons()
+    return '<div style="width: 20px; height: 20px; background: transparent;"></div>';
+  },
+  
+  /**
+   * Update all existing magic meaning buttons with loaded SVG
+   */
+  updateAllMagicMeaningButtons() {
+    if (!this.purpleLogoSvgContent) return;
+    
+    // Find all word magic meaning buttons
+    const buttons = document.querySelectorAll('.vocab-word-magic-meaning-btn');
+    buttons.forEach(btn => {
+      if (!btn.classList.contains('magic-meaning-loading')) {
+        btn.innerHTML = this.createWordMagicMeaningIcon();
+      }
+    });
+  },
+  
+  /**
+   * Create spinner icon SVG for loading state (same as TextSelector)
+   * @returns {string} SVG markup
+   */
+  createWordSpinnerIcon() {
+    return `
+      <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="9" cy="9" r="7" stroke="#9527F5" stroke-width="0.8" stroke-linecap="round" stroke-dasharray="14 30" opacity="0.15"/>
+        <circle cx="9" cy="9" r="7" stroke="#9527F5" stroke-width="2.5" stroke-linecap="round" stroke-dasharray="14 30" stroke-dashoffset="6" opacity="1">
+          <animateTransform attributeName="transform" type="rotate" from="0 9 9" to="360 9 9" dur="1s" repeatCount="indefinite"/>
+        </circle>
       </svg>
     `;
   },
@@ -5028,13 +6425,24 @@ const WordSelector = {
             };
             
             const url = `${ApiConfig.getCurrentBaseUrl()}${ApiConfig.ENDPOINTS.TRANSLATE}`;
+            
+            // Get X-Unauthenticated-User-Id header for request
+            const unauthenticatedUserIdHeader = await ApiService.getUnauthenticatedUserIdHeader();
+            
+            // Prepare request headers
+            const requestHeaders = {
+              'Content-Type': 'application/json',
+              ...unauthenticatedUserIdHeader
+            };
+            
             const response = await fetch(url, {
               method: 'POST',
-              headers: {
-                'Content-Type': 'application/json'
-              },
+              headers: requestHeaders,
               body: JSON.stringify(payload)
             });
+            
+            // Store X-Unauthenticated-User-Id from response header
+            await ApiService.storeUnauthenticatedUserId(response);
             
             if (response.ok) {
               const data = await response.json();
@@ -5170,13 +6578,24 @@ const WordSelector = {
           
           // Call translate API
           const url = `${ApiConfig.getCurrentBaseUrl()}${ApiConfig.ENDPOINTS.TRANSLATE}`;
+          
+          // Get X-Unauthenticated-User-Id header for request
+          const unauthenticatedUserIdHeader = await ApiService.getUnauthenticatedUserIdHeader();
+          
+          // Prepare request headers
+          const requestHeaders = {
+            'Content-Type': 'application/json',
+            ...unauthenticatedUserIdHeader
+          };
+          
           const response = await fetch(url, {
             method: 'POST',
-            headers: {
-              'Content-Type': 'application/json'
-            },
+            headers: requestHeaders,
             body: JSON.stringify(payload)
           });
+          
+          // Store X-Unauthenticated-User-Id from response header
+          await ApiService.storeUnauthenticatedUserId(response);
           
           if (!response.ok) {
             throw new Error(`Translation API failed: ${response.status} ${response.statusText}`);
@@ -7851,27 +9270,92 @@ const WordSelector = {
     try {
       console.log('[WordSelector] Fetching pronunciation for:', word);
       
-      const response = await fetch(`${ApiConfig.BASE_URL}/api/v2/pronunciation`, {
-        method: 'POST',
-        headers: {
+      // Retry logic wrapper
+      let retryCount = 0;
+      const maxRetries = 1; // Only retry once to avoid infinite loops
+      
+      const makeRequest = async () => {
+        // Get fresh headers for each request attempt (token may have been refreshed)
+        const currentHeaders = {
           'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ 
-          word: word,
-          voice: 'alloy' // Default voice
-        })
-      });
+          ...(await ApiService.getUnauthenticatedUserIdHeader())
+        };
+        
+        // Add Authorization header if access token is available
+        await ApiService.addAuthorizationHeader(currentHeaders);
+        
+        return await fetch(`${ApiConfig.BASE_URL}/api/v2/pronunciation`, {
+          method: 'POST',
+          headers: currentHeaders,
+          mode: 'cors',
+          credentials: 'include',
+          body: JSON.stringify({ 
+            word: word,
+            voice: 'alloy' // Default voice
+          })
+        });
+      };
+      
+      let response = await makeRequest();
+      
+      // Store X-Unauthenticated-User-Id from response header
+      await ApiService.storeUnauthenticatedUserId(response);
       
       if (!response.ok) {
-        if (response.status === 429) {
-          throw new Error('Too many requests. Please wait a moment and try again.');
-        } else if (response.status === 400) {
-          const errorData = await response.json();
-          throw new Error(`Invalid request: ${errorData.detail}`);
-        } else if (response.status === 500) {
-          throw new Error('Server error. Please try again later.');
+        // Clone response for error handling (response body can only be read once)
+        const responseClone = response.clone();
+        const errorInfo = await ApiService.handleApiError(responseClone, 'PRONUNCIATION');
+        
+        // Check if token was refreshed and we should retry
+        if (errorInfo.errorCode === 'TOKEN_REFRESHED' && errorInfo.shouldRetry && retryCount < maxRetries) {
+          console.log('[WordSelector] Token refreshed, retrying pronunciation request (attempt', retryCount + 1, ')');
+          retryCount++;
+          
+          // Retry the request with the new token
+          response = await makeRequest();
+          await ApiService.storeUnauthenticatedUserId(response);
+          
+          // Check if retry also failed
+          if (!response.ok) {
+            const retryResponseClone = response.clone();
+            const retryErrorInfo = await ApiService.handleApiError(retryResponseClone, 'PRONUNCIATION');
+            
+            // Handle specific error cases
+            if (retryErrorInfo.errorCode === 'LOGIN_REQUIRED') {
+              throw new Error(retryErrorInfo.message || 'Please sign in to continue');
+            } else if (response.status === 429) {
+              throw new Error('Too many requests. Please wait a moment and try again.');
+            } else if (response.status === 400) {
+              try {
+                const errorData = await response.json();
+                throw new Error(`Invalid request: ${errorData.detail || retryErrorInfo.message}`);
+              } catch (e) {
+                throw new Error(retryErrorInfo.message || `Invalid request`);
+              }
+            } else if (response.status === 500) {
+              throw new Error('Server error. Please try again later.');
+            } else {
+              throw new Error(retryErrorInfo.message || `HTTP ${response.status}: ${response.statusText}`);
+            }
+          }
         } else {
-          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+          // Handle specific error cases
+          if (errorInfo.errorCode === 'LOGIN_REQUIRED') {
+            throw new Error(errorInfo.message || 'Please sign in to continue');
+          } else if (response.status === 429) {
+            throw new Error('Too many requests. Please wait a moment and try again.');
+          } else if (response.status === 400) {
+            try {
+              const errorData = await response.json();
+              throw new Error(`Invalid request: ${errorData.detail || errorInfo.message}`);
+            } catch (e) {
+              throw new Error(errorInfo.message || `Invalid request`);
+            }
+          } else if (response.status === 500) {
+            throw new Error('Server error. Please try again later.');
+          } else {
+            throw new Error(errorInfo.message || `HTTP ${response.status}: ${response.statusText}`);
+          }
         }
       }
       
@@ -8239,6 +9723,142 @@ const WordSelector = {
         border-top-color: #9527F5;
         border-radius: 50%;
         animation: vocab-spinner-rotate 0.8s linear infinite;
+      }
+      
+      /* Word span without background (pending state before API call) */
+      /* Must match .vocab-word-highlight exactly except for background color and box-decoration-break */
+      .vocab-word-span-pending {
+        position: relative;
+        display: inline;
+        /* No background color - transparent */
+        padding: 0;
+        border-radius: 0;
+        border: none;
+        transition: none;
+        cursor: default;
+        line-height: inherit;
+        /* Don't use box-decoration-break since there's no background to break */
+        /* This prevents layout issues and line breaks */
+        /* DO NOT set font properties - preserve all formatting from child elements */
+        /* Child elements (bold, italic, spans with different font sizes) will maintain their formatting */
+        /* Text nodes will inherit naturally from their original parent context */
+      }
+      
+      /* Magic meaning button container - positioned above the word */
+      .vocab-word-magic-button-container {
+        position: absolute;
+        top: -28px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 32px;
+        height: 32px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 2147483647; /* Maximum z-index to ensure visibility */
+        pointer-events: auto;
+        /* Ensure button is not clipped by parent overflow */
+        visibility: visible;
+        opacity: 1;
+      }
+      
+      /* Magic meaning button */
+      .vocab-word-magic-meaning-btn {
+        width: 28px;
+        height: 28px;
+        background-color: #FFFFFF;
+        border: none;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        padding: 0;
+        box-shadow: 0 2px 8px rgba(149, 39, 245, 0.4);
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+        pointer-events: auto;
+      }
+      
+      .vocab-word-magic-meaning-btn:hover {
+        box-shadow: 0 2px 8px rgba(149, 39, 245, 0.4);
+      }
+      
+      .vocab-word-magic-meaning-btn:active {
+        transform: scale(0.9);
+      }
+      
+      .vocab-word-magic-meaning-btn img,
+      .vocab-word-magic-meaning-btn svg {
+        width: 20px !important;
+        height: 20px !important;
+        pointer-events: none !important;
+        object-fit: contain !important;
+        display: block !important;
+        flex-shrink: 0 !important;
+        max-width: 20px !important;
+        max-height: 20px !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+        position: relative !important;
+        z-index: 1 !important;
+      }
+      
+      .vocab-word-magic-meaning-btn svg path {
+        visibility: visible !important;
+        opacity: 1 !important;
+        display: block !important;
+      }
+      
+      /* Breathing animation for magic button */
+      .magic-meaning-breathing {
+        animation: magicButtonBreathing 3s ease-in-out infinite;
+      }
+      
+      @keyframes magicButtonBreathing {
+        0%, 100% {
+          transform: scale(1);
+        }
+        50% {
+          transform: scale(1.1);
+        }
+      }
+      
+      /* Appearing animation for word button */
+      @keyframes magicWordButtonAppear {
+        from {
+          transform: scale(0);
+        }
+        to {
+          transform: scale(1);
+        }
+      }
+      
+      /* Disappearing animation for word button */
+      @keyframes magicWordButtonDisappear {
+        from {
+          transform: scale(1);
+        }
+        to {
+          transform: scale(0);
+        }
+      }
+      
+      .vocab-word-magic-meaning-btn.magic-meaning-appearing {
+        animation: magicWordButtonAppear 0.2s ease-out forwards;
+      }
+      
+      .vocab-word-magic-meaning-btn.magic-meaning-disappearing {
+        animation: magicWordButtonDisappear 0.2s ease-in forwards;
+      }
+      
+      /* Loading state for magic button */
+      .magic-meaning-loading {
+        animation: none !important; /* Disable breathing animation during loading */
+      }
+      
+      .magic-meaning-loading img {
+        width: 18px;
+        height: 18px;
       }
       
       /* Green background for explained words */
@@ -9671,10 +11291,11 @@ const WordSelector = {
         position: fixed;
         top: 20px;
         right: 20px;
-        background: #ff4444;
-        color: white;
+        background: #fee2e2;
+        color: #dc2626;
+        border: 1px solid #dc2626;
         border-radius: 8px;
-        box-shadow: 0 4px 12px rgba(255, 68, 68, 0.3);
+        box-shadow: none;
         z-index: 1000000;
         opacity: 0;
         transform: translateX(100%);
@@ -9709,7 +11330,7 @@ const WordSelector = {
       .vocab-error-close {
         background: none;
         border: none;
-        color: white;
+        color: #dc2626;
         font-size: 18px;
         font-weight: bold;
         cursor: pointer;
@@ -9725,7 +11346,7 @@ const WordSelector = {
       }
       
       .vocab-error-close:hover {
-        background: rgba(255, 255, 255, 0.2);
+        background: rgba(220, 38, 38, 0.2);
       }
     `;
     
@@ -9767,11 +11388,19 @@ const TextSelector = {
   // Store bound handler for proper cleanup
   boundMouseUpHandler: null,
   
+  // Inline purple logo SVG content (no fetch needed)
+  purpleLogoSvgContent: `<svg xmlns="http://www.w3.org/2000/svg" width="293" height="277" viewBox="0 0 293 277"><g><path d="M 186.57 204.25 C187.92,206.31 188.69,207.96 188.26,207.91 C187.84,207.85 184.19,205.88 180.15,203.51 C161.17,192.42 147.56,192.19 128.25,202.64 C123.71,205.10 120.00,206.74 119.99,206.30 C119.99,205.86 122.22,201.00 124.95,195.50 C134.11,177.05 134.05,168.68 124.63,149.75 C121.69,143.84 119.51,139.00 119.80,139.00 C120.08,139.00 125.31,141.46 131.41,144.46 C145.26,151.27 150.99,152.43 160.47,150.30 C168.62,148.48 173.88,146.34 182.13,141.50 C185.42,139.58 188.26,138.00 188.46,138.00 C188.65,138.00 186.82,141.49 184.38,145.75 C173.12,165.50 172.39,176.08 181.04,194.11 C182.73,197.63 185.21,202.19 186.57,204.25 ZM 126.41 199.85 C127.40,201.46 128.35,201.30 131.27,199.00 C132.67,197.90 134.53,197.00 135.41,197.00 C136.28,197.00 137.00,196.60 137.00,196.11 C137.00,193.77 161.30,192.53 167.00,194.57 C170.73,195.91 174.93,196.94 176.39,196.87 C176.88,196.85 177.63,197.41 178.07,198.11 C180.06,201.34 177.37,189.80 174.78,184.02 C172.34,178.57 171.98,176.74 172.51,172.52 C173.45,165.02 175.89,155.79 177.39,154.04 C179.16,151.98 179.94,148.52 178.98,146.96 C178.39,146.01 176.88,146.44 172.80,148.74 C168.46,151.19 165.76,151.92 158.95,152.45 C154.27,152.82 148.49,152.67 146.00,152.13 C136.90,150.13 132.44,148.63 130.06,146.80 C127.93,145.15 127.52,145.11 126.77,146.44 C126.20,147.47 126.81,149.54 128.61,152.73 C131.43,157.71 131.80,159.51 132.64,172.24 C133.06,178.62 132.77,181.01 130.97,185.74 C129.78,188.91 128.84,192.58 128.90,193.89 C128.95,195.20 128.26,196.82 127.35,197.49 C126.44,198.15 126.01,199.21 126.41,199.85 ZM 150.15 242.32 C147.37,244.57 121.03,243.49 112.82,240.78 C105.12,238.24 93.05,229.53 89.27,223.79 C80.49,210.46 78.00,195.19 81.57,176.50 C82.40,172.10 83.30,167.15 83.55,165.50 C83.80,163.84 85.12,161.68 86.50,160.67 C88.18,159.43 89.00,157.87 89.00,155.89 C89.00,154.04 90.08,151.75 91.93,149.72 C96.79,144.37 100.91,138.25 100.18,137.44 C99.81,137.02 100.02,136.98 100.66,137.34 C101.35,137.74 102.96,136.18 104.66,133.47 C106.22,130.98 108.52,128.68 109.77,128.36 C111.01,128.04 112.92,126.64 114.02,125.25 C115.11,123.87 116.00,123.03 116.00,123.40 C116.00,124.15 117.85,122.76 121.85,119.00 C123.31,117.63 125.40,116.01 126.50,115.40 C134.97,110.72 138.51,109.00 141.76,107.99 C143.82,107.35 146.92,106.19 148.65,105.41 C150.38,104.64 153.08,103.99 154.65,103.99 C156.22,103.98 159.86,103.35 162.75,102.58 C165.65,101.81 168.80,101.33 169.75,101.51 C170.71,101.70 171.84,101.88 172.25,101.92 C172.66,101.97 173.00,102.38 173.00,102.85 C173.00,103.32 169.74,103.99 165.75,104.34 C129.65,107.47 93.23,139.14 84.01,175.41 C81.65,184.69 81.35,198.99 83.36,206.50 C87.73,222.85 102.75,236.93 119.65,240.51 C146.77,246.26 177.44,234.65 200.50,209.90 C228.52,179.84 232.86,139.22 210.34,117.88 C202.12,110.07 195.47,106.92 182.00,104.43 L 175.50 103.22 L 181.07 103.11 C189.32,102.95 200.71,106.97 206.25,112.00 C207.77,113.38 209.20,114.28 209.43,114.00 C209.67,113.72 210.92,115.07 212.21,117.00 C213.49,118.93 215.55,120.94 216.77,121.49 C218.16,122.10 219.23,123.70 219.61,125.74 C219.95,127.53 220.55,129.00 220.96,129.00 C221.36,129.00 222.93,134.00 224.44,140.11 C226.74,149.43 227.07,152.36 226.48,158.36 C226.10,162.29 225.14,167.30 224.36,169.50 C223.58,171.70 222.68,175.52 222.36,178.00 C222.04,180.48 221.18,183.18 220.46,184.00 C219.74,184.82 217.76,188.29 216.07,191.69 C214.39,195.09 212.54,198.17 211.96,198.52 C211.39,198.88 209.80,200.94 208.44,203.10 C205.21,208.21 194.10,219.30 186.50,225.00 C183.20,227.47 180.27,229.72 180.00,230.00 C178.26,231.75 163.42,238.20 158.00,239.57 C154.43,240.48 150.89,241.71 150.15,242.32 ZM 173.96 258.56 C165.33,260.73 160.70,261.25 147.50,261.52 C147.11,261.53 146.72,261.54 146.35,261.54 C137.70,261.72 133.80,261.81 129.96,261.38 C126.63,261.01 123.35,260.26 117.06,258.86 C105.19,256.23 96.80,253.10 86.03,247.31 C63.46,235.16 43.99,215.04 33.82,193.35 C31.72,188.87 30.00,184.88 30.00,184.48 C30.00,182.36 33.11,186.88 36.03,193.25 C38.93,199.57 42.32,205.39 44.03,207.00 C44.33,207.27 46.23,210.04 48.27,213.14 C55.35,223.96 69.06,236.14 81.00,242.24 C84.03,243.78 88.30,246.15 90.50,247.51 C92.70,248.86 95.42,249.97 96.55,249.98 C97.68,249.99 99.03,250.39 99.55,250.87 C100.07,251.35 102.75,252.52 105.50,253.47 C108.25,254.43 111.40,255.56 112.50,255.98 C118.27,258.21 126.62,259.24 139.35,259.29 C153.54,259.35 171.76,257.71 175.50,256.02 C179.32,254.31 192.84,250.00 194.42,250.00 C195.29,250.00 196.00,249.55 196.00,249.00 C196.00,248.45 196.83,248.00 197.85,248.00 C198.86,248.00 200.73,247.10 202.00,246.00 C203.27,244.90 204.70,244.00 205.17,244.00 C206.01,244.00 213.99,239.10 215.00,237.96 C215.27,237.65 217.22,236.10 219.32,234.53 C228.30,227.78 245.00,209.40 245.00,206.25 C245.00,204.64 251.67,198.34 252.50,199.17 C253.55,200.22 240.48,217.65 233.06,225.08 C215.89,242.28 197.68,252.60 173.96,258.56 ZM 264.62 165.64 C263.82,169.41 262.71,173.62 262.15,175.00 C261.24,177.23 261.12,176.99 261.06,172.81 C261.03,170.23 261.48,167.82 262.06,167.46 C262.66,167.09 262.85,165.57 262.48,163.93 C262.07,162.05 262.40,160.27 263.43,158.80 C264.67,157.02 265.00,153.70 265.00,142.84 C265.00,134.77 264.59,128.86 264.00,128.50 C263.45,128.16 263.00,126.14 263.00,124.00 C263.00,121.86 262.55,119.84 262.00,119.50 C261.45,119.16 261.00,117.52 261.00,115.86 C261.00,112.50 257.53,103.11 252.35,92.50 C247.05,81.61 244.24,77.38 239.61,73.29 C237.25,71.20 234.75,68.38 234.06,67.00 C232.48,63.87 223.27,55.00 221.61,55.00 C220.93,55.00 219.05,53.59 217.44,51.87 C215.82,50.16 211.84,47.47 208.58,45.92 C205.33,44.36 202.41,42.67 202.08,42.17 C201.31,40.97 191.42,36.00 189.78,35.99 C189.08,35.99 187.15,35.27 185.50,34.39 C183.85,33.51 179.35,32.19 175.50,31.45 C171.65,30.72 166.70,29.56 164.50,28.88 C162.30,28.21 153.30,27.38 144.50,27.03 L 128.50 26.40 L 143.64 26.20 C165.93,25.90 183.58,29.87 202.17,39.36 C234.18,55.70 257.14,85.95 264.46,121.47 C266.58,131.70 266.66,156.00 264.62,165.64 ZM 37.96 88.90 C37.90,91.26 34.52,97.19 33.71,96.37 C32.72,95.39 40.21,81.82 46.19,73.75 C52.52,65.20 65.30,53.27 75.00,46.84 C83.17,41.43 98.17,33.91 104.51,32.06 C114.11,29.25 118.82,28.14 123.50,27.58 L 128.50 26.98 L 123.50 28.56 C120.75,29.43 117.03,30.39 115.24,30.68 C113.45,30.98 111.73,31.62 111.43,32.11 C111.13,32.60 109.59,33.00 108.00,33.00 C106.41,33.00 104.86,33.42 104.55,33.92 C104.23,34.43 102.74,35.12 101.23,35.45 C96.02,36.59 74.10,48.76 70.18,52.68 C69.43,53.43 67.62,54.67 66.16,55.44 C63.21,56.98 55.00,65.29 55.00,66.73 C55.00,67.23 53.09,69.47 50.75,71.71 C45.30,76.93 42.00,81.00 42.00,82.50 C42.00,83.16 41.10,84.50 40.00,85.50 C38.90,86.50 37.98,88.03 37.96,88.90 ZM 27.43 168.50 C27.71,170.15 27.59,172.05 27.17,172.73 C25.56,175.33 22.99,157.67 23.00,144.00 C23.00,129.27 24.51,119.30 28.55,107.25 C31.64,98.05 32.92,95.52 32.97,98.56 C32.99,99.69 32.34,101.49 31.53,102.56 C30.72,103.63 30.05,105.75 30.03,107.29 C30.01,108.82 29.38,111.07 28.62,112.29 C27.86,113.50 27.19,116.44 27.13,118.81 C27.06,121.17 26.57,123.94 26.02,124.96 C24.28,128.22 24.53,157.64 26.36,163.63 C26.67,164.66 27.15,166.85 27.43,168.50 ZM 28.98 176.97 C29.61,178.14 29.98,180.06 29.81,181.23 C29.57,182.90 29.22,182.56 28.16,179.60 C26.66,175.42 27.21,173.66 28.98,176.97 Z" fill="rgb(135,89,231)"/><path d="M 264.62 165.64 C264.71,165.24 264.79,164.81 264.86,164.36 C264.03,170.01 262.75,174.56 260.94,178.50 C258.97,182.82 253.81,195.61 253.28,197.50 C253.15,197.99 252.90,198.61 252.56,199.31 C252.55,199.25 252.53,199.20 252.50,199.17 C251.67,198.34 245.00,204.64 245.00,206.25 C245.00,209.40 228.30,227.78 219.32,234.53 C217.22,236.10 215.27,237.65 215.00,237.96 C213.99,239.10 206.01,244.00 205.17,244.00 C204.70,244.00 203.27,244.90 202.00,246.00 C200.73,247.10 198.86,248.00 197.85,248.00 C196.83,248.00 196.00,248.45 196.00,249.00 C196.00,249.55 195.29,250.00 194.42,250.00 C192.84,250.00 179.32,254.31 175.50,256.02 C171.76,257.71 153.54,259.35 139.35,259.29 C126.62,259.24 118.27,258.21 112.50,255.98 C111.40,255.56 108.25,254.43 105.50,253.47 C102.75,252.52 100.07,251.35 99.55,250.87 C99.03,250.39 97.68,249.99 96.55,249.98 C95.42,249.97 92.70,248.86 90.50,247.51 C88.30,246.15 84.03,243.78 81.00,242.24 C69.06,236.14 55.35,223.96 48.27,213.14 C46.23,210.04 44.33,207.27 44.03,207.00 C42.32,205.39 38.93,199.57 36.03,193.25 C33.11,186.88 30.00,182.36 30.00,184.48 C30.00,184.50 30.00,184.52 30.01,184.55 C29.67,183.62 29.33,182.67 29.01,181.72 C29.44,182.56 29.65,182.34 29.81,181.23 C29.98,180.06 29.61,178.14 28.98,176.97 C27.81,174.78 27.18,174.81 27.31,176.28 C26.94,174.99 26.58,173.67 26.24,172.34 C26.57,173.02 26.88,173.19 27.17,172.73 C27.59,172.05 27.71,170.15 27.43,168.50 C27.15,166.85 26.67,164.66 26.36,163.63 C24.53,157.64 24.28,128.22 26.02,124.96 C26.57,123.94 27.06,121.17 27.13,118.81 C27.19,116.44 27.86,113.50 28.62,112.29 C29.38,111.07 30.01,108.82 30.03,107.29 C30.05,105.75 30.72,103.63 31.53,102.56 C32.34,101.49 32.99,99.69 32.97,98.56 C32.95,97.29 32.72,96.99 32.22,97.75 C34.88,91.68 38.05,85.87 41.69,80.37 C37.06,87.69 32.96,95.63 33.71,96.37 C34.52,97.19 37.90,91.26 37.96,88.90 C37.98,88.03 38.90,86.50 40.00,85.50 C41.10,84.50 42.00,83.16 42.00,82.50 C42.00,81.00 45.30,76.93 50.75,71.71 C53.09,69.47 55.00,67.23 55.00,66.73 C55.00,65.29 63.21,56.98 66.16,55.44 C67.62,54.67 69.43,53.43 70.18,52.68 C74.10,48.76 96.02,36.59 101.23,35.45 C102.74,35.12 104.23,34.43 104.55,33.92 C104.86,33.42 106.41,33.00 108.00,33.00 C109.59,33.00 111.13,32.60 111.43,32.11 C111.73,31.62 113.45,30.98 115.24,30.68 C117.03,30.39 120.75,29.43 123.50,28.56 L 128.50 26.98 L 123.50 27.58 C122.86,27.66 122.21,27.74 121.55,27.85 C122.18,27.72 122.83,27.60 123.50,27.48 C125.71,27.07 128.41,26.75 131.39,26.52 L 144.50 27.03 C153.30,27.38 162.30,28.21 164.50,28.88 C166.70,29.56 171.65,30.72 175.50,31.45 C179.35,32.19 183.85,33.51 185.50,34.39 C187.15,35.27 189.08,35.99 189.78,35.99 C191.42,36.00 201.31,40.97 202.08,42.17 C202.41,42.67 205.33,44.36 208.58,45.92 C211.84,47.47 215.82,50.16 217.44,51.87 C219.05,53.59 220.93,55.00 221.61,55.00 C223.27,55.00 232.48,63.87 234.06,67.00 C234.75,68.38 237.25,71.20 239.61,73.29 C244.24,77.38 247.05,81.61 252.35,92.50 C257.53,103.11 261.00,112.50 261.00,115.86 C261.00,117.52 261.45,119.16 262.00,119.50 C262.55,119.84 263.00,121.86 263.00,124.00 C263.00,126.14 263.45,128.16 264.00,128.50 C264.59,128.86 265.00,134.77 265.00,142.84 C265.00,153.70 264.67,157.02 263.43,158.80 C262.40,160.27 262.07,162.05 262.48,163.93 C262.85,165.57 262.66,167.09 262.06,167.46 C261.48,167.82 261.03,170.23 261.06,172.81 C261.12,176.99 261.24,177.23 262.15,175.00 C262.71,173.62 263.82,169.41 264.62,165.64 ZM 150.15 242.32 C150.89,241.71 154.43,240.48 158.00,239.57 C163.42,238.20 178.26,231.75 180.00,230.00 C180.27,229.72 183.20,227.47 186.50,225.00 C194.10,219.30 205.21,208.21 208.44,203.10 C209.80,200.94 211.39,198.88 211.96,198.52 C212.54,198.17 214.39,195.09 216.07,191.69 C217.76,188.29 219.74,184.82 220.46,184.00 C221.18,183.18 222.04,180.48 222.36,178.00 C222.68,175.52 223.58,171.70 224.36,169.50 C225.14,167.30 226.10,162.29 226.48,158.36 C227.07,152.36 226.74,149.43 224.44,140.11 C222.93,134.00 221.36,129.00 220.96,129.00 C220.55,129.00 219.95,127.53 219.61,125.74 C219.23,123.70 218.16,122.10 216.77,121.49 C215.55,120.94 213.49,118.93 212.21,117.00 C210.92,115.07 209.67,113.72 209.43,114.00 C209.20,114.28 207.77,113.38 206.25,112.00 C200.71,106.97 189.32,102.95 181.07,103.11 L 175.50 103.22 L 182.00 104.43 C183.55,104.71 185.01,105.01 186.39,105.32 C179.01,104.15 167.70,104.10 159.37,105.18 C161.49,104.80 163.62,104.52 165.75,104.34 C169.74,103.99 173.00,103.32 173.00,102.85 C173.00,102.38 172.66,101.97 172.25,101.92 C171.84,101.88 170.71,101.70 169.75,101.51 C168.80,101.33 165.65,101.81 162.75,102.58 C159.86,103.35 156.22,103.98 154.65,103.99 C153.08,103.99 150.38,104.64 148.65,105.41 C146.92,106.19 143.82,107.35 141.76,107.99 C138.51,109.00 134.97,110.72 126.50,115.40 C125.40,116.01 123.31,117.63 121.85,119.00 C117.85,122.76 116.00,124.15 116.00,123.40 C116.00,123.03 115.11,123.87 114.02,125.25 C112.92,126.64 111.01,128.04 109.77,128.36 C108.52,128.68 106.22,130.98 104.66,133.47 C102.96,136.18 101.35,137.74 100.66,137.34 C100.02,136.98 99.81,137.02 100.18,137.44 C100.91,138.25 96.79,144.37 91.93,149.72 C90.08,151.75 89.00,154.04 89.00,155.89 C89.00,157.87 88.18,159.43 86.50,160.67 C85.12,161.68 83.80,163.84 83.55,165.50 C83.30,167.15 82.40,172.10 81.57,176.50 C78.00,195.19 80.49,210.46 89.27,223.79 C93.05,229.53 105.12,238.24 112.82,240.78 C121.03,243.49 147.37,244.57 150.15,242.32 ZM 126.41 199.85 C126.01,199.21 126.44,198.15 127.35,197.49 C128.26,196.82 128.95,195.20 128.90,193.89 C128.84,192.58 129.78,188.91 130.97,185.74 C132.77,181.01 133.06,178.62 132.64,172.24 C131.80,159.51 131.43,157.71 128.61,152.73 C126.81,149.54 126.20,147.47 126.77,146.44 C127.52,145.11 127.93,145.15 130.06,146.80 C132.44,148.63 136.90,150.13 146.00,152.13 C148.49,152.67 154.27,152.82 158.95,152.45 C165.76,151.92 168.46,151.19 172.80,148.74 C176.88,146.44 178.39,146.01 178.98,146.96 C179.94,148.52 179.16,151.98 177.39,154.04 C175.89,155.79 173.45,165.02 172.51,172.52 C171.98,176.74 172.34,178.57 174.78,184.02 C177.37,189.80 180.06,201.34 178.07,198.11 C177.63,197.41 176.88,196.85 176.39,196.87 C174.93,196.94 170.73,195.91 167.00,194.57 C161.30,192.53 137.00,193.77 137.00,196.11 C137.00,196.60 136.28,197.00 135.41,197.00 C134.53,197.00 132.67,197.90 131.27,199.00 C128.35,201.30 127.40,201.46 126.41,199.85 ZM 172.63 28.75 C163.61,26.87 154.14,26.06 143.64,26.20 L 134.16 26.33 C145.30,25.68 159.32,26.10 167.14,27.58 C168.97,27.93 170.80,28.32 172.63,28.75 ZM 228.50 57.72 C221.32,51.08 213.28,45.32 204.53,40.60 C209.11,43.00 213.43,45.63 217.36,48.44 C221.09,51.10 224.85,54.25 228.50,57.72 ZM 60.38 228.90 C68.13,236.07 76.82,242.35 86.03,247.31 C87.96,248.35 89.81,249.30 91.62,250.18 C80.11,244.77 69.53,237.58 60.38,228.90 ZM 26.16 115.27 C23.90,124.10 23.00,132.63 23.00,144.00 C22.99,150.47 23.57,157.83 24.34,163.52 C22.49,151.60 22.48,133.21 24.49,122.70 C24.97,120.19 25.53,117.71 26.16,115.27 ZM 84.01 175.41 C85.99,167.64 89.21,160.08 93.41,152.96 C87.65,162.81 83.83,173.43 82.52,184.14 C82.85,181.01 83.35,178.01 84.01,175.41 ZM 264.29 120.66 C262.80,113.67 260.70,106.89 258.05,100.38 C261.04,107.51 263.04,113.90 264.29,120.66 ZM 140.00 241.68 C161.31,239.75 183.14,228.53 200.50,209.90 C183.07,228.60 161.30,239.80 140.00,241.68 ZM 30.80 186.63 C31.50,188.30 32.60,190.74 33.82,193.35 C35.68,197.31 37.84,201.22 40.28,205.03 C36.45,199.16 33.35,193.13 30.80,186.63 ZM 91.41 222.38 C92.45,223.67 93.60,224.97 94.85,226.28 C99.00,230.63 104.02,234.30 109.26,236.91 C102.33,233.53 96.13,228.46 91.41,222.38 ZM 82.03 194.28 C82.15,199.82 82.76,204.50 84.03,208.73 C83.78,207.99 83.56,207.25 83.36,206.50 C82.51,203.34 82.08,198.97 82.03,194.28 ZM 94.54 36.12 C90.34,38.10 85.69,40.51 81.54,42.86 C84.75,40.97 88.08,39.20 91.51,37.55 C92.56,37.05 93.57,36.57 94.54,36.12 ZM 114.43 29.32 C111.89,29.95 108.89,30.78 105.12,31.88 C108.01,30.92 111.00,30.10 114.43,29.32 ZM 233.07 225.08 C228.30,229.85 223.46,234.09 218.45,237.85 C223.46,234.09 228.30,229.85 233.06,225.08 C236.08,222.06 240.04,217.38 243.60,212.82 C240.17,217.29 236.36,221.78 233.07,225.08 ZM 254.48 92.46 C253.05,89.57 251.51,86.75 249.86,83.99 C251.59,86.83 253.14,89.65 254.46,92.41 ZM 193.87 107.42 C196.36,108.29 198.59,109.29 200.71,110.50 C198.70,109.38 196.50,108.41 193.87,107.42 ZM 64.30 55.05 C61.88,57.13 59.47,59.33 57.17,61.55 C59.45,59.30 61.83,57.13 64.30,55.05 ZM 266.06 140.25 C266.00,137.36 265.88,134.52 265.70,131.86 C265.90,134.52 266.01,137.30 266.06,140.25 ZM 28.81 106.47 C28.73,106.73 28.64,106.99 28.55,107.25 C28.10,108.59 27.68,109.91 27.29,111.20 C27.77,109.61 28.27,108.04 28.81,106.47 Z" fill="rgb(140,82,253)"/><path d="M 0.00 138.50 L 0.00 0.00 L 146.50 0.00 L 293.00 0.00 L 293.00 138.50 L 293.00 277.00 L 146.50 277.00 L 0.00 277.00 L 0.00 138.50 ZM 173.96 258.56 C197.68,252.60 215.88,242.29 233.07,225.08 C241.01,217.12 251.99,202.15 253.28,197.50 C253.81,195.61 258.97,182.82 260.94,178.50 C264.53,170.67 266.06,160.42 266.08,143.97 C266.12,123.24 263.37,111.03 254.46,92.41 C246.88,76.57 231.91,58.82 217.36,48.44 C203.63,38.64 185.29,31.03 167.14,27.58 C156.45,25.56 134.19,25.51 123.50,27.48 C109.20,30.12 102.77,32.14 91.51,37.55 C55.90,54.64 31.61,85.50 24.49,122.70 C22.26,134.39 22.52,155.82 25.03,167.26 C30.21,190.79 39.11,207.05 56.84,225.39 C72.90,242.02 94.01,253.75 117.06,258.86 C130.92,261.94 130.20,261.88 147.50,261.52 C160.70,261.25 165.33,260.73 173.96,258.56 ZM 119.18 240.47 C110.62,238.61 101.59,233.35 94.85,226.28 C85.39,216.36 82.03,207.51 82.01,192.41 C81.96,155.66 113.09,117.95 153.00,106.42 C162.24,103.75 183.26,103.73 191.00,106.39 C199.89,109.44 204.05,111.91 210.34,117.88 C232.86,139.22 228.52,179.84 200.50,209.90 C177.39,234.70 146.35,246.37 119.18,240.47 ZM 186.57 204.25 C185.21,202.19 182.73,197.63 181.04,194.11 C172.39,176.08 173.12,165.50 184.38,145.75 C186.82,141.49 188.65,138.00 188.46,138.00 C188.26,138.00 185.42,139.58 182.13,141.50 C173.88,146.34 168.62,148.48 160.47,150.30 C150.99,152.43 145.26,151.27 131.41,144.46 C125.31,141.46 120.08,139.00 119.80,139.00 C119.51,139.00 121.69,143.84 124.63,149.75 C134.05,168.68 134.11,177.05 124.95,195.50 C122.22,201.00 119.99,205.86 119.99,206.30 C120.00,206.74 123.71,205.10 128.25,202.64 C147.56,192.19 161.17,192.42 180.15,203.51 C184.19,205.88 187.84,207.85 188.26,207.91 C188.69,207.96 187.92,206.31 186.57,204.25 Z" fill="rgb(254,254,254)"/></g></svg>`,
+  
   /**
    * Initialize text selector
    */
   async init() {
     console.log('[TextSelector] Initializing...');
+    
+    // SVG is now inline, no fetch needed
+    console.log('[TextSelector] Purple logo SVG available inline');
+    // Update any existing buttons
+    this.updateAllMagicMeaningButtons();
     
     // Bind the handler once for proper cleanup
     this.boundMouseUpHandler = this.handleMouseUp.bind(this);
@@ -10054,7 +11683,7 @@ const TextSelector = {
     // Create notification element
     const notification = document.createElement('div');
     notification.id = 'vocab-text-selector-notification';
-    notification.className = 'vocab-notification';
+    notification.className = 'vocab-notification vocab-notification-error';
     
     // Create close button
     const closeBtn = document.createElement('button');
@@ -10062,7 +11691,7 @@ const TextSelector = {
     closeBtn.setAttribute('aria-label', 'Close notification');
     closeBtn.innerHTML = `
       <svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M9 3L3 9M3 3l6 6" stroke="#9527F5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M9 3L3 9M3 3l6 6" stroke="#dc2626" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
       </svg>
     `;
     
@@ -10238,7 +11867,15 @@ const TextSelector = {
     
     // Create and add magic meaning button
     const magicBtn = this.createMagicMeaningButton(textKey);
+    // Remove breathing class temporarily and add appearing animation
+    magicBtn.classList.remove('magic-meaning-breathing');
+    magicBtn.classList.add('magic-meaning-appearing');
     iconsWrapper.appendChild(magicBtn);
+    // Remove appearing class after animation completes and restore breathing animation
+    setTimeout(() => {
+      magicBtn.classList.remove('magic-meaning-appearing');
+      magicBtn.classList.add('magic-meaning-breathing');
+    }, 200);
     
     // Position button absolutely relative to document (so it scrolls with page)
     iconsWrapper.style.setProperty('position', 'absolute', 'important');
@@ -10621,9 +12258,23 @@ const TextSelector = {
         iconsWrapper._fixedPosition = null;
       }
       
-      // Remove button
+      // Remove button with disappearing animation
       if (iconsWrapper && iconsWrapper.parentNode) {
-        iconsWrapper.remove();
+        const magicBtn = iconsWrapper.querySelector('.vocab-text-magic-meaning-btn');
+        if (magicBtn) {
+          // Add disappearing animation
+          magicBtn.classList.remove('magic-meaning-breathing');
+          magicBtn.classList.add('magic-meaning-disappearing');
+          // Remove after animation completes
+          setTimeout(() => {
+            if (iconsWrapper && iconsWrapper.parentNode) {
+              iconsWrapper.remove();
+            }
+          }, 200);
+        } else {
+          // If button not found, remove immediately
+          iconsWrapper.remove();
+        }
       }
       
       // Clean up event listeners
@@ -11019,10 +12670,18 @@ const TextSelector = {
       
       // Create and add magic meaning button
       const magicBtn = this.createMagicMeaningButton(textKey);
+      // Remove breathing class temporarily and add appearing animation
+      magicBtn.classList.remove('magic-meaning-breathing');
+      magicBtn.classList.add('magic-meaning-appearing');
       iconsWrapper.appendChild(magicBtn);
       
       // Append wrapper to highlight
       highlight.appendChild(iconsWrapper);
+      // Remove appearing class after animation completes and restore breathing animation
+      setTimeout(() => {
+        magicBtn.classList.remove('magic-meaning-appearing');
+        magicBtn.classList.add('magic-meaning-breathing');
+      }, 200);
       
       // Position icons relative to highlight - on the left side, outside text content
       iconsWrapper.style.setProperty('position', 'absolute', 'important');
@@ -11783,7 +13442,11 @@ const TextSelector = {
     btn.className = 'vocab-text-magic-meaning-btn magic-meaning-breathing';
     btn.setAttribute('aria-label', 'Get magic meaning');
     btn.setAttribute('data-text-key', textKey);
-    btn.innerHTML = this.createMagicMeaningIcon();
+    
+    // Use inline purple logo SVG (always available, no fetch needed)
+    const iconHtml = this.createMagicMeaningIcon();
+    btn.innerHTML = iconHtml;
+    console.log('[TextSelector] Magic button icon set, length:', iconHtml.length);
     
     // Add click handler
     btn.addEventListener('click', (e) => {
@@ -11918,13 +13581,42 @@ const TextSelector = {
    * @returns {string} SVG markup
    */
   createMagicMeaningIcon() {
-    return `
-      <svg width="24" height="24" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M14 0L17 8L25 11L17 14L14 22L11 14L3 11L11 8L14 0Z" fill="#FFFFFF"/>
-        <path d="M22 16L23.5 20L27.5 21.5L23.5 23L22 27L20.5 23L16.5 21.5L20.5 20L22 16Z" fill="#FFFFFF"/>
-        <path d="M8 21L9.5 24.5L13 26L9.5 27.5L8 31L6.5 27.5L3 26L6.5 24.5L8 21Z" fill="#FFFFFF"/>
-      </svg>
-    `;
+    // Use cached SVG content (same as home-options-btn but purple)
+    if (this.purpleLogoSvgContent) {
+      // Create a temporary container to parse and modify the SVG
+      const tempDiv = document.createElement('div');
+      tempDiv.innerHTML = this.purpleLogoSvgContent;
+      const svgElement = tempDiv.querySelector('svg');
+      if (svgElement) {
+        // Set size attributes
+        svgElement.setAttribute('width', '20');
+        svgElement.setAttribute('height', '20');
+        svgElement.setAttribute('viewBox', '0 0 293 277'); // Preserve original viewBox
+        svgElement.style.display = 'block';
+        svgElement.style.pointerEvents = 'none';
+        svgElement.style.visibility = 'visible';
+        svgElement.style.opacity = '1';
+        // Return the modified SVG HTML
+        return svgElement.outerHTML;
+      }
+    }
+    // Fallback: return empty placeholder that will be updated when SVG loads
+    return '<div style="width: 20px; height: 20px; background: transparent;"></div>';
+  },
+  
+  /**
+   * Update all existing magic meaning buttons with loaded SVG
+   */
+  updateAllMagicMeaningButtons() {
+    if (!this.purpleLogoSvgContent) return;
+    
+    // Find all text magic meaning buttons
+    const buttons = document.querySelectorAll('.vocab-text-magic-meaning-btn');
+    buttons.forEach(btn => {
+      if (!btn.classList.contains('magic-meaning-loading')) {
+        btn.innerHTML = this.createMagicMeaningIcon();
+      }
+    });
   },
   
   /**
@@ -12495,35 +14187,35 @@ const TextSelector = {
         visibility: visible !important; /* Ensure visible during animation */
       }
       
-      /* Magic-meaning button - Purple sparkle icon with light purple opaque background */
+      /* Magic-meaning button - White background with logo icon */
       .vocab-text-magic-meaning-btn {
         position: relative !important;
-        width: 32px !important;
-        height: 32px !important;
-        min-width: 32px !important; /* Ensure minimum width */
-        min-height: 32px !important; /* Ensure minimum height */
-        max-width: 32px !important; /* Ensure maximum width */
-        max-height: 32px !important; /* Ensure maximum height */
+        width: 28px !important;
+        height: 28px !important;
+        min-width: 28px !important; /* Ensure minimum width */
+        min-height: 28px !important; /* Ensure minimum height */
+        max-width: 28px !important; /* Ensure maximum width */
+        max-height: 28px !important; /* Ensure maximum height */
         aspect-ratio: 1 / 1 !important; /* Force perfect square/circle */
-        background: #9527F5 !important; /* Solid purple background */
-        border: 1px solid #FFFFFF !important; /* White border */
+        background:rgb(255, 255, 255) !important; /* Non-transparent white background */
+        border: none !important; /* No border */
         border-radius: 50% !important; /* Circular shape */
         display: flex !important;
         align-items: center;
         justify-content: center;
         cursor: pointer !important;
-        opacity: 0.95;
+        opacity: 1;
         transition: opacity 0.2s ease, transform 0.15s ease, background-color 0.2s ease;
         padding: 0 !important;
         flex-shrink: 0;
         box-sizing: border-box !important; /* Include border in width/height */
-        box-shadow: 0 2px 4px rgba(149, 39, 245, 0.2); /* Subtle purple shadow for depth */
+        box-shadow: 0 2px 8px rgba(149, 39, 245, 0.4) !important; /* Purple shadow */
         margin: 0 !important; /* No margin */
       }
       
       /* Magic-meaning button continuous breathing animation */
       .vocab-text-magic-meaning-btn.magic-meaning-breathing {
-        animation: magicMeaningBreathingContinuous 2s ease-in-out infinite;
+        animation: magicMeaningBreathingContinuous 3s ease-in-out infinite;
       }
       
       @keyframes magicMeaningBreathingContinuous {
@@ -12531,28 +14223,68 @@ const TextSelector = {
           transform: scale(1);
         }
         50% {
-          transform: scale(1.15);
+          transform: scale(1.1);
         }
+      }
+      
+      /* Appearing animation */
+      @keyframes magicMeaningAppear {
+        from {
+          transform: scale(0);
+        }
+        to {
+          transform: scale(1);
+        }
+      }
+      
+      /* Disappearing animation */
+      @keyframes magicMeaningDisappear {
+        from {
+          transform: scale(1);
+        }
+        to {
+          transform: scale(0);
+        }
+      }
+      
+      .vocab-text-magic-meaning-btn.magic-meaning-appearing {
+        animation: magicMeaningAppear 0.2s ease-out forwards;
+      }
+      
+      .vocab-text-magic-meaning-btn.magic-meaning-disappearing {
+        animation: magicMeaningDisappear 0.2s ease-in forwards;
       }
       
       .vocab-text-magic-meaning-btn:hover {
         opacity: 1;
-        background-color: #7c3aed !important; /* Slightly darker purple on hover */
-        border-color: #FFFFFF !important; /* Keep white border on hover */
-        animation: magicMeaningBreathingContinuous 2s ease-in-out infinite; /* Keep breathing on hover */
+        background-color: #FFFFFF !important; /* Keep white background on hover */
+        animation: magicMeaningBreathingContinuous 3s ease-in-out infinite; /* Keep breathing on hover */
       }
       
       .vocab-text-magic-meaning-btn:active {
         transform: scale(0.9);
       }
       
+      .vocab-text-magic-meaning-btn img,
       .vocab-text-magic-meaning-btn svg {
-        pointer-events: none;
-        display: block;
-        width: 22px;
-        height: 22px;
-        filter: none; /* No filter needed for white icon on purple background */
-        transform: translateY(-1px);
+        pointer-events: none !important;
+        display: block !important;
+        width: 20px !important;
+        height: 20px !important;
+        object-fit: contain !important;
+        flex-shrink: 0 !important;
+        max-width: 20px !important;
+        max-height: 20px !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+        position: relative !important;
+        z-index: 1 !important;
+      }
+      
+      .vocab-text-magic-meaning-btn svg path {
+        visibility: visible !important;
+        opacity: 1 !important;
+        display: block !important;
       }
       
       /* Loading state - white background with purple border and spinning icon */
@@ -12564,7 +14296,7 @@ const TextSelector = {
         opacity: 1 !important;
       }
       
-      .vocab-text-magic-meaning-btn.magic-meaning-loading svg {
+      .vocab-text-magic-meaning-btn.magic-meaning-loading img {
         width: 18px;
         height: 18px;
         filter: none;
@@ -12857,15 +14589,15 @@ const TextSelector = {
         position: fixed;
         top: 20px;
         right: 20px;
-        background: white;
-        color: #9527F5;
+        background: #fee2e2;
+        color: #dc2626;
         padding: 12px 40px 12px 20px;
         border-radius: 12px;
-        border: 1px solid #9527F5;
+        border: 1px solid #dc2626;
         font-size: 14px;
         font-weight: 500;
         font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-        box-shadow: 0 4px 12px rgba(149, 39, 245, 0.3);
+        box-shadow: none;
         z-index: 9999999;
         opacity: 0;
         transform: translateX(400px);
@@ -12874,6 +14606,8 @@ const TextSelector = {
         display: flex;
         align-items: center;
         gap: 12px;
+        max-width: 400px;
+        word-wrap: break-word;
       }
       
       .vocab-notification.visible {
@@ -12912,6 +14646,7 @@ const TextSelector = {
       .vocab-notification-close svg {
         pointer-events: none;
         display: block;
+        stroke: #dc2626;
       }
       
       /* Notification message text */
@@ -12921,9 +14656,9 @@ const TextSelector = {
       
       /* Notification types */
       .vocab-notification-error {
-        background: #ffebee;
-        color: #c62828;
-        border-left: 4px solid #c62828;
+        background: #fee2e2;
+        color: #dc2626;
+        border: 1px solid #dc2626;
       }
       
       .vocab-notification-success {
@@ -15706,13 +17441,23 @@ const ChatDialog = {
     // Store original content (with icon)
     const originalContent = summariseBtn.innerHTML;
     
-    // Change button to "Stop" instead of showing spinner
-    summariseBtn.disabled = false;
-    summariseBtn.classList.remove('disabled', 'loading');
-    summariseBtn.innerHTML = 'Stop';
+    // Hide the original button and create a separate stop button above summary container
+    summariseBtn.style.display = 'none';
     
     // Store abort function reference
     let abortFunction = null;
+    
+    // Create stop button above summary container
+    let stopButton = document.getElementById('vocab-chat-stop-summarise-btn');
+    if (!stopButton) {
+      stopButton = document.createElement('button');
+      stopButton.id = 'vocab-chat-stop-summarise-btn';
+      stopButton.className = 'vocab-chat-stop-summarise-btn';
+      stopButton.innerHTML = 'Stop';
+      stopButton.style.display = 'block';
+    } else {
+      stopButton.style.display = 'block';
+    }
     
     // Add click handler for Stop button
     const stopHandler = (e) => {
@@ -15727,13 +17472,15 @@ const ChatDialog = {
         abortFunction = null;
       }
       
-      // Get the current button and replace it
+      // Hide stop button
+      const stopBtn = document.getElementById('vocab-chat-stop-summarise-btn');
+      if (stopBtn) {
+        stopBtn.style.display = 'none';
+      }
+      
+      // Get the original summarise button and show it
       const currentBtn = document.getElementById('vocab-chat-summarise-page-btn');
       if (!currentBtn) return;
-      
-      currentBtn.replaceWith(currentBtn.cloneNode(true));
-      const newBtn = document.getElementById('vocab-chat-summarise-page-btn');
-      if (!newBtn) return;
       
       // Check if we have accumulated summary to save
       if (this.pageSummary && this.pageSummary.trim().length > 0) {
@@ -15760,41 +17507,57 @@ const ChatDialog = {
         }
         
         // Change button to "Clear summary"
-        newBtn.disabled = false;
-        newBtn.classList.remove('disabled', 'loading');
-        newBtn.innerHTML = 'Clear summary';
-        newBtn.style.display = 'block';
+        currentBtn.disabled = false;
+        currentBtn.classList.remove('disabled', 'loading');
+        currentBtn.innerHTML = 'Clear summary';
+        currentBtn.style.display = 'block';
         
         // Update click handler to clear summary
-        newBtn.addEventListener('click', (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          e.stopImmediatePropagation();
-          console.log('[ChatDialog] Clear summary button clicked!');
-          this.clearSummary();
-        }, true);
+        currentBtn.replaceWith(currentBtn.cloneNode(true));
+        const newBtn = document.getElementById('vocab-chat-summarise-page-btn');
+        if (newBtn) {
+          newBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            e.stopImmediatePropagation();
+            console.log('[ChatDialog] Clear summary button clicked!');
+            this.clearSummary();
+          }, true);
+        }
       } else {
         // No accumulated summary, reset to original state
-        newBtn.disabled = false;
-        newBtn.classList.remove('disabled', 'loading');
-        newBtn.innerHTML = originalContent;
-        newBtn.style.display = 'block';
+        // Remove typing indicator if it exists
+        const summaryContainer = document.getElementById('vocab-chat-page-summary-container');
+        if (summaryContainer) {
+          summaryContainer.innerHTML = '';
+        }
+        
+        currentBtn.disabled = false;
+        currentBtn.classList.remove('disabled', 'loading');
+        currentBtn.innerHTML = originalContent;
+        currentBtn.style.display = 'block';
         
         // Update click handler back to handleSummarisePage
-        newBtn.addEventListener('click', (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          e.stopImmediatePropagation();
-          console.log('[ChatDialog] Summarise button clicked!');
-          this.handleSummarisePage();
-        }, true);
+        currentBtn.replaceWith(currentBtn.cloneNode(true));
+        const newBtn = document.getElementById('vocab-chat-summarise-page-btn');
+        if (newBtn) {
+          newBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            e.stopImmediatePropagation();
+            console.log('[ChatDialog] Summarise button clicked!');
+            this.handleSummarisePage();
+          }, true);
+        }
       }
     };
     
-    // Replace button to add new click handler
-    summariseBtn.replaceWith(summariseBtn.cloneNode(true));
-    const stopBtn = document.getElementById('vocab-chat-summarise-page-btn');
-    stopBtn.addEventListener('click', stopHandler, true);
+    // Add click handler to stop button
+    stopButton.replaceWith(stopButton.cloneNode(true));
+    const stopBtn = document.getElementById('vocab-chat-stop-summarise-btn');
+    if (stopBtn) {
+      stopBtn.addEventListener('click', stopHandler, true);
+    }
     
     try {
       // Parse pageTextContent to get the text
@@ -15835,6 +17598,34 @@ const ChatDialog = {
             summaryContainer.className = 'vocab-chat-page-summary-container';
             buttonContainer.parentNode.insertBefore(summaryContainer, buttonContainer);
           }
+          
+          // Insert stop button above summary container if it doesn't exist
+          let stopBtn = document.getElementById('vocab-chat-stop-summarise-btn');
+          if (!stopBtn) {
+            stopBtn = document.createElement('button');
+            stopBtn.id = 'vocab-chat-stop-summarise-btn';
+            stopBtn.className = 'vocab-chat-stop-summarise-btn';
+            stopBtn.innerHTML = 'Stop';
+            stopBtn.style.display = 'block';
+            summaryContainer.parentNode.insertBefore(stopBtn, summaryContainer);
+          } else {
+            // Move stop button above summary container if it exists elsewhere
+            if (stopBtn.parentNode !== summaryContainer.parentNode || stopBtn.nextSibling !== summaryContainer) {
+              summaryContainer.parentNode.insertBefore(stopBtn, summaryContainer);
+            }
+            stopBtn.style.display = 'block';
+          }
+        }
+        
+        // Show 3-dot typing indicator while waiting for first event
+        if (summaryContainer) {
+          summaryContainer.innerHTML = `
+            <div class="vocab-chat-typing-indicator">
+              <span class="vocab-chat-typing-dot"></span>
+              <span class="vocab-chat-typing-dot"></span>
+              <span class="vocab-chat-typing-dot"></span>
+            </div>
+          `;
         }
         
         // Call ApiService with SSE callbacks
@@ -15855,13 +17646,13 @@ const ChatDialog = {
                 // Store accumulated summary in global variable during streaming
                 window.pageSummary = eventData.accumulated;
                 
-                // Show summary container on first chunk
+                // Show summary container on first chunk (remove spinner)
                 if (summaryContainer && !summaryShown) {
                   summaryShown = true;
                   console.log('[ChatDialog] Showing summary container on first chunk');
                 }
                 
-                // Update summary UI in real-time
+                // Update summary UI in real-time (spinner will be replaced by content)
                 if (summaryContainer) {
                   summaryContainer.innerHTML = `
                     <h3 class="vocab-chat-page-summary-header">Page summary</h3>
@@ -15927,6 +17718,12 @@ const ChatDialog = {
                 this.renderPageSummaryWithQuestions(summaryContainer);
               }
               
+              // Hide stop button after completion
+              const stopBtnAfterComplete = document.getElementById('vocab-chat-stop-summarise-btn');
+              if (stopBtnAfterComplete) {
+                stopBtnAfterComplete.style.display = 'none';
+              }
+              
               // Change button to "Clear summary" after completion
               const summariseBtnAfterComplete = document.getElementById('vocab-chat-summarise-page-btn');
               if (summariseBtnAfterComplete) {
@@ -15941,13 +17738,15 @@ const ChatDialog = {
                 // Update click handler to clear summary
                 summariseBtnAfterComplete.replaceWith(summariseBtnAfterComplete.cloneNode(true));
                 const newBtn = document.getElementById('vocab-chat-summarise-page-btn');
-                newBtn.addEventListener('click', (e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  e.stopImmediatePropagation();
-                  console.log('[ChatDialog] Clear summary button clicked!');
-                  this.clearSummary();
-                }, true);
+                if (newBtn) {
+                  newBtn.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    e.stopImmediatePropagation();
+                    console.log('[ChatDialog] Clear summary button clicked!');
+                    this.clearSummary();
+                  }, true);
+                }
                 
                 console.log('[ChatDialog] Button changed to "Clear summary" after completion');
               }
@@ -15966,6 +17765,12 @@ const ChatDialog = {
               console.log('[ChatDialog] Summarise request was aborted by user');
               // Don't show error message for user-initiated cancellation
               // The stop handler already handles button state and saving accumulated summary
+              // Remove typing indicator if no accumulated summary (stop handler will handle if there is summary)
+              if (!this.pageSummary || this.pageSummary.trim().length === 0) {
+                if (summaryContainer) {
+                  summaryContainer.innerHTML = '';
+                }
+              }
               abortFunction = null;
               return;
             }
@@ -15976,6 +17781,47 @@ const ChatDialog = {
               name: error.name,
               stack: error.stack
             });
+            
+            // Check if it's a LOGIN_REQUIRED error - don't show error message in chat container
+            if (error.errorCode === 'LOGIN_REQUIRED') {
+              console.log('[ChatDialog] LOGIN_REQUIRED error detected, skipping chat message (login modal will be shown via event)');
+              // Still need to reset button and clear abort function
+              abortFunction = null;
+              
+              // Remove spinner if it exists
+              if (summaryContainer) {
+                summaryContainer.innerHTML = '';
+              }
+              
+              // Hide stop button
+              const stopBtnOnError = document.getElementById('vocab-chat-stop-summarise-btn');
+              if (stopBtnOnError) {
+                stopBtnOnError.style.display = 'none';
+              }
+              
+              // Reset button
+              const summariseBtnOnError = document.getElementById('vocab-chat-summarise-page-btn');
+              if (summariseBtnOnError) {
+                summariseBtnOnError.disabled = false;
+                summariseBtnOnError.classList.remove('disabled', 'loading');
+                summariseBtnOnError.innerHTML = originalContent;
+                summariseBtnOnError.style.display = 'block';
+                
+                // Update click handler back to handleSummarisePage
+                summariseBtnOnError.replaceWith(summariseBtnOnError.cloneNode(true));
+                const newBtn = document.getElementById('vocab-chat-summarise-page-btn');
+                if (newBtn) {
+                  newBtn.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    e.stopImmediatePropagation();
+                    console.log('[ChatDialog] Summarise button clicked!');
+                    this.handleSummarisePage();
+                  }, true);
+                }
+              }
+              return;
+            }
             
             // Check if it's a 429 rate limit error
             const isRateLimit = error.status === 429 || 
@@ -15994,23 +17840,32 @@ const ChatDialog = {
             // Clear abort function reference
             abortFunction = null;
             
+            // Hide stop button
+            const stopBtnOnError = document.getElementById('vocab-chat-stop-summarise-btn');
+            if (stopBtnOnError) {
+              stopBtnOnError.style.display = 'none';
+            }
+            
             // Reset button
             const summariseBtnOnError = document.getElementById('vocab-chat-summarise-page-btn');
             if (summariseBtnOnError) {
               summariseBtnOnError.disabled = false;
               summariseBtnOnError.classList.remove('disabled', 'loading');
               summariseBtnOnError.innerHTML = originalContent;
+              summariseBtnOnError.style.display = 'block';
               
               // Update click handler back to handleSummarisePage
               summariseBtnOnError.replaceWith(summariseBtnOnError.cloneNode(true));
               const newBtn = document.getElementById('vocab-chat-summarise-page-btn');
-              newBtn.addEventListener('click', (e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                e.stopImmediatePropagation();
-                console.log('[ChatDialog] Summarise button clicked!');
-                this.handleSummarisePage();
-              }, true);
+              if (newBtn) {
+                newBtn.addEventListener('click', (e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  e.stopImmediatePropagation();
+                  console.log('[ChatDialog] Summarise button clicked!');
+                  this.handleSummarisePage();
+                }, true);
+              }
             }
           }
         );
@@ -16039,23 +17894,32 @@ const ChatDialog = {
         // Clear abort function reference
         abortFunction = null;
         
+        // Hide stop button
+        const stopBtnOnCatchError = document.getElementById('vocab-chat-stop-summarise-btn');
+        if (stopBtnOnCatchError) {
+          stopBtnOnCatchError.style.display = 'none';
+        }
+        
         // Reset button
         const summariseBtnOnCatchError = document.getElementById('vocab-chat-summarise-page-btn');
         if (summariseBtnOnCatchError) {
           summariseBtnOnCatchError.disabled = false;
           summariseBtnOnCatchError.classList.remove('disabled', 'loading');
           summariseBtnOnCatchError.innerHTML = originalContent;
+          summariseBtnOnCatchError.style.display = 'block';
           
           // Update click handler back to handleSummarisePage
           summariseBtnOnCatchError.replaceWith(summariseBtnOnCatchError.cloneNode(true));
           const newBtn = document.getElementById('vocab-chat-summarise-page-btn');
-          newBtn.addEventListener('click', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            e.stopImmediatePropagation();
-            console.log('[ChatDialog] Summarise button clicked!');
-            this.handleSummarisePage();
-          }, true);
+          if (newBtn) {
+            newBtn.addEventListener('click', (e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              e.stopImmediatePropagation();
+              console.log('[ChatDialog] Summarise button clicked!');
+              this.handleSummarisePage();
+            }, true);
+          }
         }
       }
     } catch (error) {
@@ -16063,6 +17927,12 @@ const ChatDialog = {
       
       // Clear abort function reference
       abortFunction = null;
+      
+      // Hide stop button
+      const stopBtnOnParseError = document.getElementById('vocab-chat-stop-summarise-btn');
+      if (stopBtnOnParseError) {
+        stopBtnOnParseError.style.display = 'none';
+      }
       
       // Show error message in chat
       this.addMessageToChat('ai', `⚠️ **Error:**\n\nFailed to parse page content. ${error.message || 'Please try again.'}`);
@@ -16073,17 +17943,20 @@ const ChatDialog = {
         summariseBtnOnParseError.disabled = false;
         summariseBtnOnParseError.classList.remove('disabled', 'loading');
         summariseBtnOnParseError.innerHTML = originalContent;
+        summariseBtnOnParseError.style.display = 'block';
         
         // Update click handler back to handleSummarisePage
         summariseBtnOnParseError.replaceWith(summariseBtnOnParseError.cloneNode(true));
         const newBtn = document.getElementById('vocab-chat-summarise-page-btn');
-        newBtn.addEventListener('click', (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          e.stopImmediatePropagation();
-          console.log('[ChatDialog] Summarise button clicked!');
-          this.handleSummarisePage();
-        }, true);
+        if (newBtn) {
+          newBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            e.stopImmediatePropagation();
+            console.log('[ChatDialog] Summarise button clicked!');
+            this.handleSummarisePage();
+          }, true);
+        }
       }
     }
   },
@@ -16686,6 +18559,20 @@ const ChatDialog = {
               
               console.log('[ChatDialog] Saved stopped response to chat history for textKey:', requestTextKey);
             }
+          } else {
+            // No accumulated text - remove the streaming message bubble (with typing indicator)
+            const chatContainer = document.getElementById('vocab-chat-messages');
+            if (chatContainer) {
+              const lastAiMessage = chatContainer.querySelector('.vocab-chat-message-ai:last-child');
+              if (lastAiMessage) {
+                const messageContent = lastAiMessage.querySelector('.vocab-chat-message-content');
+                // Check if it's showing the typing indicator
+                if (messageContent && messageContent.querySelector('.vocab-chat-typing-indicator')) {
+                  lastAiMessage.remove();
+                  console.log('[ChatDialog] Removed streaming message bubble with typing indicator (no content received)');
+                }
+              }
+            }
           }
           
           // Clear abort function, accumulated text, and requestTextKey
@@ -17066,6 +18953,12 @@ const ChatDialog = {
             streamingMessageBubble.remove();
           }
           
+          // Check if it's a LOGIN_REQUIRED error - don't show error message in chat container
+          if (error.errorCode === 'LOGIN_REQUIRED') {
+            console.log('[ChatDialog] LOGIN_REQUIRED error detected, skipping chat message (login modal will be shown via event)');
+            return;
+          }
+          
           // Handle error case - check if we're still in the same chat
           const errorMessage = `⚠️ **Error:**\n\n${error.message || 'Failed to get response from server'}`;
         
@@ -17136,6 +19029,12 @@ const ChatDialog = {
             console.log('[ChatDialog] Stopped pulsating animation and restored normal state for text selection');
           }
         }
+      }
+      
+      // Check if it's a LOGIN_REQUIRED error - don't show error message in chat container
+      if (error.errorCode === 'LOGIN_REQUIRED') {
+        console.log('[ChatDialog] LOGIN_REQUIRED error detected in catch block, skipping chat message (login modal will be shown via event)');
+        return;
       }
       
       // Handle error case - check if we're still in the same chat
@@ -17297,7 +19196,14 @@ const ChatDialog = {
     
     const messageContent = document.createElement('div');
     messageContent.className = 'vocab-chat-message-content';
-    messageContent.innerHTML = ''; // Start empty
+    // Show 3-dot typing indicator while waiting for first event
+    messageContent.innerHTML = `
+      <div class="vocab-chat-typing-indicator">
+        <span class="vocab-chat-typing-dot"></span>
+        <span class="vocab-chat-typing-dot"></span>
+        <span class="vocab-chat-typing-dot"></span>
+      </div>
+    `;
     
     messageBubble.appendChild(messageContent);
     chatContainer.appendChild(messageBubble);
@@ -17318,6 +19224,18 @@ const ChatDialog = {
    */
   updateStreamingMessage(messageContent, accumulatedText, possibleQuestions = undefined) {
     if (!messageContent) return;
+    
+    // Show typing indicator if no content yet, otherwise show the content
+    if (!accumulatedText || accumulatedText.trim().length === 0) {
+      messageContent.innerHTML = `
+        <div class="vocab-chat-typing-indicator">
+          <span class="vocab-chat-typing-dot"></span>
+          <span class="vocab-chat-typing-dot"></span>
+          <span class="vocab-chat-typing-dot"></span>
+        </div>
+      `;
+      return;
+    }
     
     // Update the content with markdown rendering
     messageContent.innerHTML = this.renderMarkdown(accumulatedText);
@@ -19496,6 +21414,47 @@ const ChatDialog = {
         padding: 0;
       }
       
+      .vocab-chat-typing-indicator {
+        display: flex;
+        align-items: center;
+        justify-content: flex-start;
+        padding: 12px 16px;
+        gap: 4px;
+      }
+      
+      .vocab-chat-typing-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background-color: #9527F5;
+        display: inline-block;
+        animation: vocab-chat-typing-bounce 1.4s infinite ease-in-out;
+        opacity: 0.4;
+      }
+      
+      .vocab-chat-typing-dot:nth-child(1) {
+        animation-delay: -0.32s;
+      }
+      
+      .vocab-chat-typing-dot:nth-child(2) {
+        animation-delay: -0.16s;
+      }
+      
+      .vocab-chat-typing-dot:nth-child(3) {
+        animation-delay: 0;
+      }
+      
+      @keyframes vocab-chat-typing-bounce {
+        0%, 80%, 100% {
+          transform: scale(0.8);
+          opacity: 0.4;
+        }
+        40% {
+          transform: scale(1);
+          opacity: 1;
+        }
+      }
+      
       .vocab-chat-page-summary-header {
         text-align: center;
         color: #9527F5;
@@ -19716,6 +21675,33 @@ const ChatDialog = {
         padding-right: 0;
         width: 100%;
         box-sizing: border-box;
+      }
+      
+      .vocab-chat-stop-summarise-btn {
+        background: #ef4444 !important;
+        color: white !important;
+        border: none !important;
+        border-radius: 12px !important;
+        padding: 10px 20px !important;
+        font-size: 14px !important;
+        font-weight: 500 !important;
+        cursor: pointer !important;
+        margin: 16px !important;
+        margin-bottom: 8px !important;
+        display: block !important;
+        width: calc(100% - 32px) !important;
+        box-sizing: border-box !important;
+        transition: all 0.2s ease !important;
+      }
+      
+      .vocab-chat-stop-summarise-btn:hover {
+        background: #dc2626 !important;
+        transform: translateY(-1px) !important;
+        box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3) !important;
+      }
+      
+      .vocab-chat-stop-summarise-btn:active {
+        transform: translateY(0) scale(0.95) !important;
       }
       
       .vocab-chat-simplify-more-btn {
@@ -24278,18 +26264,108 @@ const ButtonPanel = {
       (error) => {
         console.error('[ButtonPanel] Error during single text simplification:', error);
         
-        // Remove loading animation on error
+        // Remove pulsating animation on error
+        if (highlight) {
         highlight.classList.remove('vocab-text-loading');
+          
+          // Remove data-processing-magic-meaning attribute
+          highlight.removeAttribute('data-processing-magic-meaning');
         
         // Remove purple spinner at book icon location on error
         const bookSpinnerWrapper = highlight.querySelector('.vocab-text-book-spinner-wrapper');
         if (bookSpinnerWrapper) {
           bookSpinnerWrapper.remove();
+          }
         }
         
-        // Hide spinner and restore button on error
-        // Restore magic-meaning button from loading state
-        TextSelector.restoreMagicMeaningButton(textKey);
+        // Remove spinner containers on document.body
+        const spinnerOnBody = window.safeQueryByDataTextKey('.vocab-magic-meaning-spinner-container', textKey);
+        if (spinnerOnBody) {
+          spinnerOnBody.remove();
+        }
+        
+        // Remove magic meaning button from buttonWrapper (floating button on body) if it exists
+        const buttonWrapper = TextSelector.buttonWrappers?.get(textKey);
+        if (buttonWrapper) {
+          // Clean up fixed scroll handler if it exists
+          if (buttonWrapper._fixedScrollHandler) {
+            window.removeEventListener('scroll', buttonWrapper._fixedScrollHandler);
+            buttonWrapper._fixedScrollHandler = null;
+            buttonWrapper._fixedPosition = null;
+          }
+          
+          // Clean up event listeners if they exist
+          if (buttonWrapper._cleanupHandlers) {
+            window.removeEventListener('scroll', buttonWrapper._cleanupHandlers.scroll);
+            window.removeEventListener('resize', buttonWrapper._cleanupHandlers.resize);
+            document.removeEventListener('mouseup', buttonWrapper._cleanupHandlers.cleanup);
+            document.removeEventListener('mousedown', buttonWrapper._cleanupHandlers.cleanup);
+            document.removeEventListener('selectionchange', buttonWrapper._cleanupHandlers.cleanup);
+            document.removeEventListener('touchend', buttonWrapper._cleanupHandlers.cleanup);
+          }
+          
+          // Remove buttonWrapper from DOM
+          if (buttonWrapper.parentNode) {
+            buttonWrapper.remove();
+          }
+          
+          // Remove from buttonWrappers map
+          TextSelector.buttonWrappers?.delete(textKey);
+        }
+        
+        // Remove magic meaning button from highlight's iconsWrapper if it exists
+        if (highlight) {
+          const iconsWrapper = highlight.querySelector('.vocab-text-icons-wrapper');
+          if (iconsWrapper) {
+            const magicBtn = iconsWrapper.querySelector('.vocab-text-magic-meaning-btn');
+            if (magicBtn) {
+              magicBtn.remove();
+            }
+            // Remove iconsWrapper if it's now empty
+            if (iconsWrapper.children.length === 0) {
+              iconsWrapper.remove();
+            }
+          }
+          
+          // Also check for magic button directly in highlight (fallback)
+          const magicBtnDirect = highlight.querySelector('.vocab-text-magic-meaning-btn');
+          if (magicBtnDirect) {
+            magicBtnDirect.remove();
+          }
+        }
+        
+        // Revert span element: remove highlight and restore original text
+        if (highlight) {
+          TextSelector.removeHighlight(highlight);
+        }
+        
+        // Clean up data structures
+        TextSelector.selectedTexts.delete(textKey);
+        TextSelector.textToHighlights.delete(textKey);
+        
+        // Update button states after cleanup
+        this.updateButtonStatesFromSelections();
+        
+        // Extract error message from error object (handle various error formats)
+        let errorMessage = 'Error simplifying text. Please try again.';
+        if (error) {
+          if (error.message) {
+            errorMessage = error.message;
+          } else if (error.reason) {
+            errorMessage = error.reason;
+          } else if (error.error?.message) {
+            errorMessage = error.error.message;
+          } else if (error.error?.reason) {
+            errorMessage = error.error.reason;
+          } else if (typeof error === 'string') {
+            errorMessage = error;
+          } else if (error.status && error.statusText) {
+            errorMessage = `API request failed: ${error.status} ${error.statusText}`;
+          }
+        }
+        
+        // Show error notification with actual error message
+        TextSelector.showNotification(errorMessage);
         
         // Mark simplify as completed (even on error) to allow button reset
         this.apiCompletionState.simplifyCompleted = true;
@@ -24848,16 +26924,98 @@ const ButtonPanel = {
           (error) => {
             console.error('[ButtonPanel] Error during text simplification:', error);
             
-            // Remove loading animation from all highlights
+            // Revert all changes for each textKey
             for (const textKey of textKeysToProcess) {
               const highlight = TextSelector.textToHighlights.get(textKey);
+              
+              // Remove pulsating animation
               if (highlight) {
                 highlight.classList.remove('vocab-text-loading');
+                
+                // Remove data-processing-magic-meaning attribute
+                highlight.removeAttribute('data-processing-magic-meaning');
+                
+                // Remove purple spinner at book icon location
+                const bookSpinnerWrapper = highlight.querySelector('.vocab-text-book-spinner-wrapper');
+                if (bookSpinnerWrapper) {
+                  bookSpinnerWrapper.remove();
+                }
               }
+              
+              // Remove spinner containers on document.body
+              const spinnerOnBody = window.safeQueryByDataTextKey('.vocab-magic-meaning-spinner-container', textKey);
+              if (spinnerOnBody) {
+                spinnerOnBody.remove();
+              }
+              
+              // Remove magic meaning button from buttonWrapper (floating button on body) if it exists
+              const buttonWrapper = TextSelector.buttonWrappers?.get(textKey);
+              if (buttonWrapper) {
+                // Clean up fixed scroll handler if it exists
+                if (buttonWrapper._fixedScrollHandler) {
+                  window.removeEventListener('scroll', buttonWrapper._fixedScrollHandler);
+                  buttonWrapper._fixedScrollHandler = null;
+                  buttonWrapper._fixedPosition = null;
+                }
+                
+                // Clean up event listeners if they exist
+                if (buttonWrapper._cleanupHandlers) {
+                  window.removeEventListener('scroll', buttonWrapper._cleanupHandlers.scroll);
+                  window.removeEventListener('resize', buttonWrapper._cleanupHandlers.resize);
+                  document.removeEventListener('mouseup', buttonWrapper._cleanupHandlers.cleanup);
+                  document.removeEventListener('mousedown', buttonWrapper._cleanupHandlers.cleanup);
+                  document.removeEventListener('selectionchange', buttonWrapper._cleanupHandlers.cleanup);
+                  document.removeEventListener('touchend', buttonWrapper._cleanupHandlers.cleanup);
+                }
+                
+                // Remove buttonWrapper from DOM
+                if (buttonWrapper.parentNode) {
+                  buttonWrapper.remove();
+                }
+                
+                // Remove from buttonWrappers map
+                TextSelector.buttonWrappers?.delete(textKey);
+              }
+              
+              // Remove magic meaning button from highlight's iconsWrapper if it exists
+              if (highlight) {
+                const iconsWrapper = highlight.querySelector('.vocab-text-icons-wrapper');
+                if (iconsWrapper) {
+                  const magicBtn = iconsWrapper.querySelector('.vocab-text-magic-meaning-btn');
+                  if (magicBtn) {
+                    magicBtn.remove();
+                  }
+                  // Remove iconsWrapper if it's now empty
+                  if (iconsWrapper.children.length === 0) {
+                    iconsWrapper.remove();
+                  }
+                }
+                
+                // Also check for magic button directly in highlight (fallback)
+                const magicBtnDirect = highlight.querySelector('.vocab-text-magic-meaning-btn');
+                if (magicBtnDirect) {
+                  magicBtnDirect.remove();
+                }
+              }
+              
+              // Revert span element: remove highlight and restore original text
+              if (highlight) {
+                TextSelector.removeHighlight(highlight);
+              }
+              
+              // Clean up data structures
+              TextSelector.selectedTexts.delete(textKey);
+              TextSelector.textToHighlights.delete(textKey);
             }
             
-            // Show error notification
-            TextSelector.showNotification('Error simplifying text. Please try again.');
+            // Update button states after cleanup
+            this.updateButtonStatesFromSelections();
+            
+            // Extract error message from error object
+            const errorMessage = error?.message || error?.reason || error?.error?.message || 'Error simplifying text. Please try again.';
+            
+            // Show error notification with actual error message
+            TextSelector.showNotification(errorMessage);
 
             // Mark simplify API as completed (even on error)
             this.apiCompletionState.simplifyCompleted = true;
@@ -25397,8 +27555,34 @@ const ButtonPanel = {
         },
         // onError callback
         (error) => {
-          console.error('[ButtonPanel] ===== SSE ERROR =====');
+          console.error('[ButtonPanel] ===== WORDS-EXPLANATION ERROR CALLBACK =====');
           console.error('[ButtonPanel] Error during word explanation:', error);
+          console.error('[ButtonPanel] Error name:', error?.name);
+          console.error('[ButtonPanel] Error message:', error?.message);
+          console.error('[ButtonPanel] Error status:', error?.status);
+          console.error('[ButtonPanel] Error errorCode:', error?.errorCode);
+          console.error('[ButtonPanel] Full error object:', error);
+          
+          // Check if this is a LOGIN_REQUIRED error
+          if (error?.errorCode === 'LOGIN_REQUIRED') {
+            console.log('[ButtonPanel] ===== LOGIN_REQUIRED DETECTED IN ERROR CALLBACK =====');
+            console.log('[ButtonPanel] Error has errorCode LOGIN_REQUIRED, login modal should be shown via event');
+            console.log('[ButtonPanel] Checking if api-login-required event was dispatched...');
+            // The event should have been dispatched by ApiService.handleApiError
+            // But we'll add a fallback check below
+            
+            // FALLBACK: Show login modal directly if event wasn't received
+            // This ensures the modal is shown even if the event system fails
+            console.log('[ButtonPanel] FALLBACK: Checking if LoginModal is available...');
+            if (typeof LoginModal !== 'undefined') {
+              console.log('[ButtonPanel] FALLBACK: LoginModal is defined, showing login modal directly');
+              const reason = error?.message || 'Please sign in to continue';
+              LoginModal.show(reason, 'WORDS_EXPLANATION');
+              console.log('[ButtonPanel] FALLBACK: LoginModal.show() called with reason:', reason, 'and apiEndpoint: WORDS_EXPLANATION');
+            } else {
+              console.error('[ButtonPanel] FALLBACK: ⚠️ LoginModal is undefined! Cannot show login modal');
+            }
+          }
           
           // Remove pulsating animation from all highlights
           allWordHighlights.forEach((highlight, idx) => {
@@ -25407,8 +27591,12 @@ const ButtonPanel = {
             highlight.classList.remove('vocab-word-loading');
           });
           
-          // Show error notification
-          TextSelector.showNotification('Error getting word meanings. Please try again.');
+          // Show error notification (but not for LOGIN_REQUIRED - that should show modal)
+          if (error?.errorCode !== 'LOGIN_REQUIRED') {
+            TextSelector.showNotification('Error getting word meanings. Please try again.');
+          } else {
+            console.log('[ButtonPanel] Skipping error notification for LOGIN_REQUIRED (login modal should be shown)');
+          }
 
           // Mark words explanation API as completed (even on error)
           this.apiCompletionState.wordsExplanationCompleted = true;
@@ -25416,6 +27604,8 @@ const ButtonPanel = {
           
           // Check if all APIs are complete
           this.checkAPICompletion();
+          
+          console.error('[ButtonPanel] ===== WORDS-EXPLANATION ERROR CALLBACK COMPLETE =====');
         }
       );
     }
@@ -26123,9 +28313,11 @@ const ButtonPanel = {
     // Create close button
     const closeBtn = document.createElement('button');
     closeBtn.className = 'vocab-notification-close';
+    // Use red color for error type, otherwise use the default from CSS
+    const strokeColor = type === 'error' ? '#dc2626' : '#9527F5';
     closeBtn.innerHTML = `
       <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M9 3L3 9M3 3l6 6" stroke="#9527F5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M9 3L3 9M3 3l6 6" stroke="${strokeColor}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
       </svg>
     `;
     
@@ -26182,19 +28374,69 @@ const ButtonPanel = {
       formData.append('file', file);
       
       console.log('[ButtonPanel] Making API call to:', ApiConfig.getUrl(ApiConfig.ENDPOINTS.PDF_TO_TEXT));
-      // Make API call to process PDF
-      const response = await fetch(ApiConfig.getUrl(ApiConfig.ENDPOINTS.PDF_TO_TEXT), {
-        method: 'POST',
-        body: formData,
-        headers: {
-          'Accept': 'application/json'
-        }
-      });
+      
+      // Retry logic wrapper
+      let retryCount = 0;
+      const maxRetries = 1; // Only retry once to avoid infinite loops
+      
+      const makeRequest = async () => {
+        // Get fresh headers for each request attempt (token may have been refreshed)
+        const currentHeaders = {
+          'Accept': 'application/json',
+          ...(await ApiService.getUnauthenticatedUserIdHeader())
+        };
+        
+        // Add Authorization header if access token is available
+        await ApiService.addAuthorizationHeader(currentHeaders);
+        
+        return await fetch(ApiConfig.getUrl(ApiConfig.ENDPOINTS.PDF_TO_TEXT), {
+          method: 'POST',
+          body: formData,
+          headers: currentHeaders,
+          mode: 'cors',
+          credentials: 'include'
+        });
+      };
+      
+      let response = await makeRequest();
+      
+      // Store X-Unauthenticated-User-Id from response header
+      await ApiService.storeUnauthenticatedUserId(response);
       
       console.log('[ButtonPanel] API response received, status:', response.status);
       
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        // Clone response for error handling (response body can only be read once)
+        const responseClone = response.clone();
+        const errorInfo = await ApiService.handleApiError(responseClone, 'PDF_TO_TEXT');
+        
+        // Check if token was refreshed and we should retry
+        if (errorInfo.errorCode === 'TOKEN_REFRESHED' && errorInfo.shouldRetry && retryCount < maxRetries) {
+          console.log('[ButtonPanel] Token refreshed, retrying PDF upload request (attempt', retryCount + 1, ')');
+          retryCount++;
+          
+          // Retry the request with the new token
+          response = await makeRequest();
+          await ApiService.storeUnauthenticatedUserId(response);
+          
+          // Check if retry also failed
+          if (!response.ok) {
+            const retryResponseClone = response.clone();
+            const retryErrorInfo = await ApiService.handleApiError(retryResponseClone, 'PDF_TO_TEXT');
+            
+            if (retryErrorInfo.errorCode === 'LOGIN_REQUIRED') {
+              throw new Error(retryErrorInfo.message || 'Please sign in to continue');
+            } else {
+              throw new Error(retryErrorInfo.message || `HTTP error! status: ${response.status}`);
+            }
+          }
+        } else {
+          if (errorInfo.errorCode === 'LOGIN_REQUIRED') {
+            throw new Error(errorInfo.message || 'Please sign in to continue');
+          } else {
+            throw new Error(errorInfo.message || `HTTP error! status: ${response.status}`);
+          }
+        }
       }
       
       const data = await response.json();
@@ -27251,15 +29493,69 @@ const ButtonPanel = {
       formData.append('file', file);
       
       console.log('[ButtonPanel] Making API call to image-to-text endpoint...');
-      const response = await fetch(ApiConfig.getUrl(ApiConfig.ENDPOINTS.IMAGE_TO_TEXT), {
-        method: 'POST',
-        body: formData
-      });
+      
+      // Retry logic wrapper
+      let retryCount = 0;
+      const maxRetries = 1; // Only retry once to avoid infinite loops
+      
+      const makeRequest = async () => {
+        // Get fresh headers for each request attempt (token may have been refreshed)
+        // FormData doesn't need Content-Type, browser sets it automatically
+        const currentHeaders = {
+          ...(await ApiService.getUnauthenticatedUserIdHeader())
+        };
+        
+        // Add Authorization header if access token is available
+        await ApiService.addAuthorizationHeader(currentHeaders);
+        
+        return await fetch(ApiConfig.getUrl(ApiConfig.ENDPOINTS.IMAGE_TO_TEXT), {
+          method: 'POST',
+          body: formData,
+          headers: currentHeaders,
+          mode: 'cors',
+          credentials: 'include'
+        });
+      };
+      
+      let response = await makeRequest();
+      
+      // Store X-Unauthenticated-User-Id from response header
+      await ApiService.storeUnauthenticatedUserId(response);
       
       console.log('[ButtonPanel] API response received:', response.status);
       
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        // Clone response for error handling (response body can only be read once)
+        const responseClone = response.clone();
+        const errorInfo = await ApiService.handleApiError(responseClone, 'IMAGE_TO_TEXT');
+        
+        // Check if token was refreshed and we should retry
+        if (errorInfo.errorCode === 'TOKEN_REFRESHED' && errorInfo.shouldRetry && retryCount < maxRetries) {
+          console.log('[ButtonPanel] Token refreshed, retrying image upload request (attempt', retryCount + 1, ')');
+          retryCount++;
+          
+          // Retry the request with the new token
+          response = await makeRequest();
+          await ApiService.storeUnauthenticatedUserId(response);
+          
+          // Check if retry also failed
+          if (!response.ok) {
+            const retryResponseClone = response.clone();
+            const retryErrorInfo = await ApiService.handleApiError(retryResponseClone, 'IMAGE_TO_TEXT');
+            
+            if (retryErrorInfo.errorCode === 'LOGIN_REQUIRED') {
+              throw new Error(retryErrorInfo.message || 'Please sign in to continue');
+            } else {
+              throw new Error(retryErrorInfo.message || `HTTP error! status: ${response.status}`);
+            }
+          }
+        } else {
+          if (errorInfo.errorCode === 'LOGIN_REQUIRED') {
+            throw new Error(errorInfo.message || 'Please sign in to continue');
+          } else {
+            throw new Error(errorInfo.message || `HTTP error! status: ${response.status}`);
+          }
+        }
       }
       
       const data = await response.json();
