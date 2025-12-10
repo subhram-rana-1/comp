@@ -11575,15 +11575,6 @@ const TextSelector = {
         return; // Let WordSelector handle single words
       }
       
-      // Check if text has at least 3 words
-      const wordCount = selectedText.split(/\s+/).filter(word => word.length > 0).length;
-      if (wordCount < 3) {
-        console.log('[TextSelector] Not enough words selected:', wordCount);
-        this.showNotification("Select atleast 3 words");
-        selection.removeAllRanges();
-        return;
-      }
-      
       // Get the range and validate
       if (selection.rangeCount === 0) {
         return;
