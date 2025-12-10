@@ -4544,11 +4544,9 @@ const WordSelector = {
       // Create span without background color (no vocab-word-highlight class initially)
       const highlight = this.createWordSpanWithoutBackground(range, selectedText, normalizedWord);
       
-      // Clear the selection AFTER creating the span (allows Chrome's default highlight to show first)
-      // Use a small delay to ensure Chrome's default behavior completes
-      setTimeout(() => {
-        selection.removeAllRanges();
-      }, 50);
+      // IMPORTANT: Preserve Chrome's default selection (yellow background)
+      // Do NOT clear the selection - let users copy the word
+      // The selection will be cleared naturally when user clicks elsewhere (Chrome's default behavior)
       
       console.log('[WordSelector] ✓ Word selected:', selectedText);
       console.log('[WordSelector] ✓ Normalized word stored:', normalizedWord);
