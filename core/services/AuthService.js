@@ -16,13 +16,19 @@ class AuthService {
     
     try {
       console.log('[AuthService] Sending login request to:', url);
+      console.log('[AuthService] Using credentials: include to receive and store refresh token cookie');
       
+      // CRITICAL: credentials: 'include' is required to:
+      // 1. Receive cookies from the server (refresh token cookie)
+      // 2. Store cookies in the browser automatically
+      // 3. Send cookies in subsequent requests
       const response = await fetch(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
         mode: 'cors',
+        credentials: 'include', // CRITICAL: This allows the browser to receive and store the refresh token cookie
         body: JSON.stringify({
           authVendor: 'GOOGLE',
           idToken: idToken
@@ -87,6 +93,7 @@ class AuthService {
     try {
       console.log('[AuthService] Sending logout request to:', url);
       
+      // Use credentials: 'include' to ensure cookies are sent and can be cleared by server
       const response = await fetch(url, {
         method: 'POST',
         headers: {
@@ -94,6 +101,7 @@ class AuthService {
           'Authorization': `Bearer ${accessToken}`
         },
         mode: 'cors',
+        credentials: 'include', // Required to send cookies and allow server to clear them
         body: JSON.stringify({
           authVendor: 'GOOGLE'
         })

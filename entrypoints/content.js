@@ -175,12 +175,48 @@ export default defineContentScript({
           // Log the structure before storing
           console.log('[OAuthCallback] Login API response data structure:', JSON.stringify(result.data, null, 2));
           console.log('[OAuthCallback] AccessToken in response:', result.data.accessToken || result.data.access_token ? 'FOUND' : 'NOT FOUND');
-          console.log('[OAuthCallback] RefreshToken in response:', result.data.refreshToken || result.data.refresh_token ? 'FOUND' : 'NOT FOUND');
+          console.log('[OAuthCallback] RefreshToken in response:', result.data.refreshToken ? 'FOUND' : 'NOT FOUND');
+          console.log('[OAuthCallback] RefreshTokenExpiresAt in response:', result.data.refreshTokenExpiresAt ? 'FOUND' : 'NOT FOUND');
           
           // Store user account data directly - NO wrapping, NO nesting
           // Store result.data directly as the value for xplaino_userAccountData key
           const dataToStore = result.data; // Direct assignment, no transformation
           await chrome.storage.local.set({ 'xplaino_userAccountData': dataToStore });
+          
+          // Extract access token from response
+          const accessToken = result.data.accessToken || result.data.access_token;
+          
+          // Store access token in ApiService memory
+          if (accessToken) {
+            const { default: ApiService } = await import('../core/services/ApiService.js');
+            ApiService.setAccessToken(accessToken);
+            console.log('[OAuthCallback] Access token stored in ApiService memory');
+          }
+          
+          // Extract refreshToken and refreshTokenExpiresAt from response body
+          const refreshToken = result.data.refreshToken;
+          const refreshTokenExpiresAt = result.data.refreshTokenExpiresAt;
+          
+          if (refreshToken) {
+            console.log('[OAuthCallback] ✓ RefreshToken found in response body (length:', refreshToken.length, ')');
+          } else {
+            console.warn('[OAuthCallback] ⚠ RefreshToken not found in response body');
+          }
+          
+          if (refreshTokenExpiresAt) {
+            console.log('[OAuthCallback] ✓ RefreshTokenExpiresAt found in response body:', refreshTokenExpiresAt);
+          } else {
+            console.warn('[OAuthCallback] ⚠ RefreshTokenExpiresAt not found in response body');
+          }
+          
+          // Store exact login API response in xplaino-user-auth-info for access token retrieval
+          // The response body already contains refreshToken and refreshTokenExpiresAt
+          const authInfoToStore = {
+            ...dataToStore
+          };
+          
+          await chrome.storage.local.set({ 'xplaino-user-auth-info': authInfoToStore });
+          console.log('[OAuthCallback] Stored login response in xplaino-user-auth-info');
           
           // Validate: Read back immediately to verify structure
           const verifyResult = await chrome.storage.local.get(['xplaino_userAccountData']);
@@ -193,49 +229,18 @@ export default defineContentScript({
             console.log('[OAuthCallback] Verification - AccessToken value (first 20 chars):', storedData.access_token.substring(0, 20) + '...');
           }
           
-          // Extract access token and refresh token from response
-          const accessToken = result.data.accessToken || result.data.access_token;
-          const refreshToken = result.data.refreshToken || result.data.refresh_token;
-          
-          // Store access token in ApiService memory
-          if (accessToken) {
-            const { default: ApiService } = await import('../core/services/ApiService.js');
-            ApiService.setAccessToken(accessToken);
-            console.log('[OAuthCallback] Access token stored in ApiService memory');
+          // Validate xplaino-user-auth-info storage
+          const authInfoResult = await chrome.storage.local.get(['xplaino-user-auth-info']);
+          const authInfoData = authInfoResult['xplaino-user-auth-info'];
+          console.log('[OAuthCallback] Verification - xplaino-user-auth-info stored:', authInfoData ? 'YES' : 'NO');
+          if (authInfoData?.accessToken) {
+            console.log('[OAuthCallback] Verification - AccessToken in xplaino-user-auth-info (first 20 chars):', authInfoData.accessToken.substring(0, 20) + '...');
           }
-          
-          // Store refresh token in HTTP cookie
-          if (refreshToken) {
-            // Get base URL domain for cookie
-            const baseUrl = ApiConfig.getCurrentBaseUrl();
-            let cookieDomain = '';
-            try {
-              const urlObj = new URL(baseUrl);
-              cookieDomain = urlObj.hostname;
-            } catch (e) {
-              console.warn('[OAuthCallback] Could not parse base URL for cookie domain:', e);
-            }
-            
-            // Set cookie with appropriate settings
-            // Note: In Chrome extensions, we can't set httpOnly cookies via document.cookie
-            // The backend should set the refresh token cookie via Set-Cookie header
-            // But we'll set it here as a fallback for client-side access
-            const cookieName = 'xplaino_refresh_token';
-            const cookieValue = refreshToken;
-            const maxAge = 30 * 24 * 60 * 60; // 30 days in seconds
-            let cookieString = `${cookieName}=${cookieValue}; max-age=${maxAge}; path=/; SameSite=Lax`;
-            
-            if (cookieDomain && !cookieDomain.includes('localhost')) {
-              cookieString += `; domain=${cookieDomain}`;
-            }
-            
-            // Only set Secure flag if not localhost
-            if (!cookieDomain.includes('localhost') && baseUrl.startsWith('https://')) {
-              cookieString += '; Secure';
-            }
-            
-            document.cookie = cookieString;
-            console.log('[OAuthCallback] Refresh token stored in HTTP cookie');
+          if (authInfoData?.refreshToken) {
+            console.log('[OAuthCallback] Verification - RefreshToken in xplaino-user-auth-info (length):', authInfoData.refreshToken.length);
+          }
+          if (authInfoData?.refreshTokenExpiresAt) {
+            console.log('[OAuthCallback] Verification - RefreshTokenExpiresAt in xplaino-user-auth-info:', authInfoData.refreshTokenExpiresAt);
           }
           
           console.log('[OAuthCallback] Sign-in successful');
@@ -2854,6 +2859,18 @@ export default defineContentScript({
         // Update banner visibility
         BannerModule.updateVisibility(isEnabled);
         }
+        
+        // Check if user account data changed (user logged in)
+        if (changes['xplaino_userAccountData']) {
+          const newValue = changes['xplaino_userAccountData'].newValue;
+          if (newValue && newValue.isLoggedIn === true) {
+            // User just logged in, hide modal
+            if (typeof LoginModal !== 'undefined') {
+              console.log('[Content Script] User account data updated with isLoggedIn=true, hiding login modal');
+              LoginModal.hide();
+            }
+          }
+        }
       }
     });
     
@@ -3709,12 +3726,48 @@ const LoginModal = {
         // Log the structure before storing
         console.log('[LoginModal] Login API response data structure:', JSON.stringify(result.data, null, 2));
         console.log('[LoginModal] AccessToken in response:', result.data.accessToken || result.data.access_token ? 'FOUND' : 'NOT FOUND');
-        console.log('[LoginModal] RefreshToken in response:', result.data.refreshToken || result.data.refresh_token ? 'FOUND' : 'NOT FOUND');
+        console.log('[LoginModal] RefreshToken in response:', result.data.refreshToken ? 'FOUND' : 'NOT FOUND');
+        console.log('[LoginModal] RefreshTokenExpiresAt in response:', result.data.refreshTokenExpiresAt ? 'FOUND' : 'NOT FOUND');
         
         // Store user account data directly - NO wrapping, NO nesting
         // Store result.data directly as the value for xplaino_userAccountData key
         const dataToStore = result.data; // Direct assignment, no transformation
         await chrome.storage.local.set({ 'xplaino_userAccountData': dataToStore });
+        
+        // Extract access token from response
+        const accessToken = result.data.accessToken || result.data.access_token;
+        
+        // Store access token in ApiService memory
+        if (accessToken) {
+          const { default: ApiService } = await import('../core/services/ApiService.js');
+          ApiService.setAccessToken(accessToken);
+          console.log('[LoginModal] Access token stored in ApiService memory');
+        }
+        
+        // Extract refreshToken and refreshTokenExpiresAt from response body
+        const refreshToken = result.data.refreshToken;
+        const refreshTokenExpiresAt = result.data.refreshTokenExpiresAt;
+        
+        if (refreshToken) {
+          console.log('[LoginModal] ✓ RefreshToken found in response body (length:', refreshToken.length, ')');
+        } else {
+          console.warn('[LoginModal] ⚠ RefreshToken not found in response body');
+        }
+        
+        if (refreshTokenExpiresAt) {
+          console.log('[LoginModal] ✓ RefreshTokenExpiresAt found in response body:', refreshTokenExpiresAt);
+        } else {
+          console.warn('[LoginModal] ⚠ RefreshTokenExpiresAt not found in response body');
+        }
+        
+        // Store exact login API response in xplaino-user-auth-info for access token retrieval
+        // The response body already contains refreshToken and refreshTokenExpiresAt
+        const authInfoToStore = {
+          ...dataToStore
+        };
+        
+        await chrome.storage.local.set({ 'xplaino-user-auth-info': authInfoToStore });
+        console.log('[LoginModal] Stored login response in xplaino-user-auth-info');
         
         // Validate: Read back immediately to verify structure
         const verifyResult = await chrome.storage.local.get(['xplaino_userAccountData']);
@@ -3727,49 +3780,18 @@ const LoginModal = {
           console.log('[LoginModal] Verification - AccessToken value (first 20 chars):', storedData.access_token.substring(0, 20) + '...');
         }
         
-        // Extract access token and refresh token from response
-        const accessToken = result.data.accessToken || result.data.access_token;
-        const refreshToken = result.data.refreshToken || result.data.refresh_token;
-        
-        // Store access token in ApiService memory
-        if (accessToken) {
-          const { default: ApiService } = await import('../core/services/ApiService.js');
-          ApiService.setAccessToken(accessToken);
-          console.log('[LoginModal] Access token stored in ApiService memory');
+        // Validate xplaino-user-auth-info storage
+        const authInfoResult = await chrome.storage.local.get(['xplaino-user-auth-info']);
+        const authInfoData = authInfoResult['xplaino-user-auth-info'];
+        console.log('[LoginModal] Verification - xplaino-user-auth-info stored:', authInfoData ? 'YES' : 'NO');
+        if (authInfoData?.accessToken) {
+          console.log('[LoginModal] Verification - AccessToken in xplaino-user-auth-info (first 20 chars):', authInfoData.accessToken.substring(0, 20) + '...');
         }
-        
-        // Store refresh token in HTTP cookie
-        if (refreshToken) {
-          // Get base URL domain for cookie
-          const baseUrl = ApiConfig.getCurrentBaseUrl();
-          let cookieDomain = '';
-          try {
-            const urlObj = new URL(baseUrl);
-            cookieDomain = urlObj.hostname;
-          } catch (e) {
-            console.warn('[LoginModal] Could not parse base URL for cookie domain:', e);
-          }
-          
-          // Set cookie with appropriate settings
-          // Note: In Chrome extensions, we can't set httpOnly cookies via document.cookie
-          // The backend should set the refresh token cookie via Set-Cookie header
-          // But we'll set it here as a fallback for client-side access
-          const cookieName = 'xplaino_refresh_token';
-          const cookieValue = refreshToken;
-          const maxAge = 30 * 24 * 60 * 60; // 30 days in seconds
-          let cookieString = `${cookieName}=${cookieValue}; max-age=${maxAge}; path=/; SameSite=Lax`;
-          
-          if (cookieDomain && !cookieDomain.includes('localhost')) {
-            cookieString += `; domain=${cookieDomain}`;
-          }
-          
-          // Only set Secure flag if not localhost
-          if (!cookieDomain.includes('localhost') && baseUrl.startsWith('https://')) {
-            cookieString += '; Secure';
-          }
-          
-          document.cookie = cookieString;
-          console.log('[LoginModal] Refresh token stored in HTTP cookie');
+        if (authInfoData?.refreshToken) {
+          console.log('[LoginModal] Verification - RefreshToken in xplaino-user-auth-info (length):', authInfoData.refreshToken.length);
+        }
+        if (authInfoData?.refreshTokenExpiresAt) {
+          console.log('[LoginModal] Verification - RefreshTokenExpiresAt in xplaino-user-auth-info:', authInfoData.refreshTokenExpiresAt);
         }
         
         // Hide modal
@@ -4006,12 +4028,58 @@ const ApiErrorHandler = {
       console.log('[ApiErrorHandler] ===== api-login-required EVENT HANDLED =====');
     });
     
+    // Listen for successful login to hide modal
+    window.addEventListener('user-logged-in', (event) => {
+      console.log('[ApiErrorHandler] user-logged-in event received, hiding login modal');
+      if (typeof LoginModal !== 'undefined') {
+        LoginModal.hide();
+      }
+    });
+    
     console.log('[ApiErrorHandler] Error handler initialized');
   }
 };
 
 // Initialize error handler when content script loads
 ApiErrorHandler.init();
+
+// ===================================
+// Login Modal Auto-Close on Page Load
+// ===================================
+/**
+ * Check on page load if user is logged in and hide modal if visible
+ */
+async function checkAndHideLoginModalOnLoad() {
+  try {
+    const result = await chrome.storage.local.get(['xplaino_userAccountData']);
+    const userData = result['xplaino_userAccountData'];
+    
+    if (userData && userData.isLoggedIn === true) {
+      // User is logged in, hide modal if it's visible
+      const overlay = document.getElementById('login-modal-overlay');
+      if (overlay && typeof LoginModal !== 'undefined') {
+        console.log('[Content Script] User is logged in, hiding login modal on page load');
+        LoginModal.hide();
+      }
+    }
+  } catch (error) {
+    console.error('[Content Script] Error checking login state on page load:', error);
+  }
+}
+
+// Check on page load if user is logged in and hide modal
+if (document.readyState === 'complete') {
+  checkAndHideLoginModalOnLoad();
+} else {
+  window.addEventListener('load', checkAndHideLoginModalOnLoad);
+  // Also check when DOM is ready (in case load event already fired)
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', checkAndHideLoginModalOnLoad);
+  } else {
+    // DOM already ready, check immediately
+    checkAndHideLoginModalOnLoad();
+  }
+}
 
 // ===================================
 // Position Manager Module - Handles saving and loading panel position
@@ -9202,37 +9270,92 @@ const WordSelector = {
     try {
       console.log('[WordSelector] Fetching pronunciation for:', word);
       
-      // Get X-Unauthenticated-User-Id header for request
-      const unauthenticatedUserIdHeader = await ApiService.getUnauthenticatedUserIdHeader();
+      // Retry logic wrapper
+      let retryCount = 0;
+      const maxRetries = 1; // Only retry once to avoid infinite loops
       
-      // Prepare request headers
-      const requestHeaders = {
-        'Content-Type': 'application/json',
-        ...unauthenticatedUserIdHeader
+      const makeRequest = async () => {
+        // Get fresh headers for each request attempt (token may have been refreshed)
+        const currentHeaders = {
+          'Content-Type': 'application/json',
+          ...(await ApiService.getUnauthenticatedUserIdHeader())
+        };
+        
+        // Add Authorization header if access token is available
+        await ApiService.addAuthorizationHeader(currentHeaders);
+        
+        return await fetch(`${ApiConfig.BASE_URL}/api/v2/pronunciation`, {
+          method: 'POST',
+          headers: currentHeaders,
+          mode: 'cors',
+          credentials: 'include',
+          body: JSON.stringify({ 
+            word: word,
+            voice: 'alloy' // Default voice
+          })
+        });
       };
       
-      const response = await fetch(`${ApiConfig.BASE_URL}/api/v2/pronunciation`, {
-        method: 'POST',
-        headers: requestHeaders,
-        body: JSON.stringify({ 
-          word: word,
-          voice: 'alloy' // Default voice
-        })
-      });
+      let response = await makeRequest();
       
       // Store X-Unauthenticated-User-Id from response header
       await ApiService.storeUnauthenticatedUserId(response);
       
       if (!response.ok) {
-        if (response.status === 429) {
-          throw new Error('Too many requests. Please wait a moment and try again.');
-        } else if (response.status === 400) {
-          const errorData = await response.json();
-          throw new Error(`Invalid request: ${errorData.detail}`);
-        } else if (response.status === 500) {
-          throw new Error('Server error. Please try again later.');
+        // Clone response for error handling (response body can only be read once)
+        const responseClone = response.clone();
+        const errorInfo = await ApiService.handleApiError(responseClone, 'PRONUNCIATION');
+        
+        // Check if token was refreshed and we should retry
+        if (errorInfo.errorCode === 'TOKEN_REFRESHED' && errorInfo.shouldRetry && retryCount < maxRetries) {
+          console.log('[WordSelector] Token refreshed, retrying pronunciation request (attempt', retryCount + 1, ')');
+          retryCount++;
+          
+          // Retry the request with the new token
+          response = await makeRequest();
+          await ApiService.storeUnauthenticatedUserId(response);
+          
+          // Check if retry also failed
+          if (!response.ok) {
+            const retryResponseClone = response.clone();
+            const retryErrorInfo = await ApiService.handleApiError(retryResponseClone, 'PRONUNCIATION');
+            
+            // Handle specific error cases
+            if (retryErrorInfo.errorCode === 'LOGIN_REQUIRED') {
+              throw new Error(retryErrorInfo.message || 'Please sign in to continue');
+            } else if (response.status === 429) {
+              throw new Error('Too many requests. Please wait a moment and try again.');
+            } else if (response.status === 400) {
+              try {
+                const errorData = await response.json();
+                throw new Error(`Invalid request: ${errorData.detail || retryErrorInfo.message}`);
+              } catch (e) {
+                throw new Error(retryErrorInfo.message || `Invalid request`);
+              }
+            } else if (response.status === 500) {
+              throw new Error('Server error. Please try again later.');
+            } else {
+              throw new Error(retryErrorInfo.message || `HTTP ${response.status}: ${response.statusText}`);
+            }
+          }
         } else {
-          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+          // Handle specific error cases
+          if (errorInfo.errorCode === 'LOGIN_REQUIRED') {
+            throw new Error(errorInfo.message || 'Please sign in to continue');
+          } else if (response.status === 429) {
+            throw new Error('Too many requests. Please wait a moment and try again.');
+          } else if (response.status === 400) {
+            try {
+              const errorData = await response.json();
+              throw new Error(`Invalid request: ${errorData.detail || errorInfo.message}`);
+            } catch (e) {
+              throw new Error(errorInfo.message || `Invalid request`);
+            }
+          } else if (response.status === 500) {
+            throw new Error('Server error. Please try again later.');
+          } else {
+            throw new Error(errorInfo.message || `HTTP ${response.status}: ${response.statusText}`);
+          }
         }
       }
       
@@ -17318,13 +17441,23 @@ const ChatDialog = {
     // Store original content (with icon)
     const originalContent = summariseBtn.innerHTML;
     
-    // Change button to "Stop" instead of showing spinner
-    summariseBtn.disabled = false;
-    summariseBtn.classList.remove('disabled', 'loading');
-    summariseBtn.innerHTML = 'Stop';
+    // Hide the original button and create a separate stop button above summary container
+    summariseBtn.style.display = 'none';
     
     // Store abort function reference
     let abortFunction = null;
+    
+    // Create stop button above summary container
+    let stopButton = document.getElementById('vocab-chat-stop-summarise-btn');
+    if (!stopButton) {
+      stopButton = document.createElement('button');
+      stopButton.id = 'vocab-chat-stop-summarise-btn';
+      stopButton.className = 'vocab-chat-stop-summarise-btn';
+      stopButton.innerHTML = 'Stop';
+      stopButton.style.display = 'block';
+    } else {
+      stopButton.style.display = 'block';
+    }
     
     // Add click handler for Stop button
     const stopHandler = (e) => {
@@ -17339,13 +17472,15 @@ const ChatDialog = {
         abortFunction = null;
       }
       
-      // Get the current button and replace it
+      // Hide stop button
+      const stopBtn = document.getElementById('vocab-chat-stop-summarise-btn');
+      if (stopBtn) {
+        stopBtn.style.display = 'none';
+      }
+      
+      // Get the original summarise button and show it
       const currentBtn = document.getElementById('vocab-chat-summarise-page-btn');
       if (!currentBtn) return;
-      
-      currentBtn.replaceWith(currentBtn.cloneNode(true));
-      const newBtn = document.getElementById('vocab-chat-summarise-page-btn');
-      if (!newBtn) return;
       
       // Check if we have accumulated summary to save
       if (this.pageSummary && this.pageSummary.trim().length > 0) {
@@ -17372,41 +17507,57 @@ const ChatDialog = {
         }
         
         // Change button to "Clear summary"
-        newBtn.disabled = false;
-        newBtn.classList.remove('disabled', 'loading');
-        newBtn.innerHTML = 'Clear summary';
-        newBtn.style.display = 'block';
+        currentBtn.disabled = false;
+        currentBtn.classList.remove('disabled', 'loading');
+        currentBtn.innerHTML = 'Clear summary';
+        currentBtn.style.display = 'block';
         
         // Update click handler to clear summary
-        newBtn.addEventListener('click', (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          e.stopImmediatePropagation();
-          console.log('[ChatDialog] Clear summary button clicked!');
-          this.clearSummary();
-        }, true);
+        currentBtn.replaceWith(currentBtn.cloneNode(true));
+        const newBtn = document.getElementById('vocab-chat-summarise-page-btn');
+        if (newBtn) {
+          newBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            e.stopImmediatePropagation();
+            console.log('[ChatDialog] Clear summary button clicked!');
+            this.clearSummary();
+          }, true);
+        }
       } else {
         // No accumulated summary, reset to original state
-        newBtn.disabled = false;
-        newBtn.classList.remove('disabled', 'loading');
-        newBtn.innerHTML = originalContent;
-        newBtn.style.display = 'block';
+        // Remove typing indicator if it exists
+        const summaryContainer = document.getElementById('vocab-chat-page-summary-container');
+        if (summaryContainer) {
+          summaryContainer.innerHTML = '';
+        }
+        
+        currentBtn.disabled = false;
+        currentBtn.classList.remove('disabled', 'loading');
+        currentBtn.innerHTML = originalContent;
+        currentBtn.style.display = 'block';
         
         // Update click handler back to handleSummarisePage
-        newBtn.addEventListener('click', (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          e.stopImmediatePropagation();
-          console.log('[ChatDialog] Summarise button clicked!');
-          this.handleSummarisePage();
-        }, true);
+        currentBtn.replaceWith(currentBtn.cloneNode(true));
+        const newBtn = document.getElementById('vocab-chat-summarise-page-btn');
+        if (newBtn) {
+          newBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            e.stopImmediatePropagation();
+            console.log('[ChatDialog] Summarise button clicked!');
+            this.handleSummarisePage();
+          }, true);
+        }
       }
     };
     
-    // Replace button to add new click handler
-    summariseBtn.replaceWith(summariseBtn.cloneNode(true));
-    const stopBtn = document.getElementById('vocab-chat-summarise-page-btn');
-    stopBtn.addEventListener('click', stopHandler, true);
+    // Add click handler to stop button
+    stopButton.replaceWith(stopButton.cloneNode(true));
+    const stopBtn = document.getElementById('vocab-chat-stop-summarise-btn');
+    if (stopBtn) {
+      stopBtn.addEventListener('click', stopHandler, true);
+    }
     
     try {
       // Parse pageTextContent to get the text
@@ -17447,6 +17598,34 @@ const ChatDialog = {
             summaryContainer.className = 'vocab-chat-page-summary-container';
             buttonContainer.parentNode.insertBefore(summaryContainer, buttonContainer);
           }
+          
+          // Insert stop button above summary container if it doesn't exist
+          let stopBtn = document.getElementById('vocab-chat-stop-summarise-btn');
+          if (!stopBtn) {
+            stopBtn = document.createElement('button');
+            stopBtn.id = 'vocab-chat-stop-summarise-btn';
+            stopBtn.className = 'vocab-chat-stop-summarise-btn';
+            stopBtn.innerHTML = 'Stop';
+            stopBtn.style.display = 'block';
+            summaryContainer.parentNode.insertBefore(stopBtn, summaryContainer);
+          } else {
+            // Move stop button above summary container if it exists elsewhere
+            if (stopBtn.parentNode !== summaryContainer.parentNode || stopBtn.nextSibling !== summaryContainer) {
+              summaryContainer.parentNode.insertBefore(stopBtn, summaryContainer);
+            }
+            stopBtn.style.display = 'block';
+          }
+        }
+        
+        // Show 3-dot typing indicator while waiting for first event
+        if (summaryContainer) {
+          summaryContainer.innerHTML = `
+            <div class="vocab-chat-typing-indicator">
+              <span class="vocab-chat-typing-dot"></span>
+              <span class="vocab-chat-typing-dot"></span>
+              <span class="vocab-chat-typing-dot"></span>
+            </div>
+          `;
         }
         
         // Call ApiService with SSE callbacks
@@ -17467,13 +17646,13 @@ const ChatDialog = {
                 // Store accumulated summary in global variable during streaming
                 window.pageSummary = eventData.accumulated;
                 
-                // Show summary container on first chunk
+                // Show summary container on first chunk (remove spinner)
                 if (summaryContainer && !summaryShown) {
                   summaryShown = true;
                   console.log('[ChatDialog] Showing summary container on first chunk');
                 }
                 
-                // Update summary UI in real-time
+                // Update summary UI in real-time (spinner will be replaced by content)
                 if (summaryContainer) {
                   summaryContainer.innerHTML = `
                     <h3 class="vocab-chat-page-summary-header">Page summary</h3>
@@ -17539,6 +17718,12 @@ const ChatDialog = {
                 this.renderPageSummaryWithQuestions(summaryContainer);
               }
               
+              // Hide stop button after completion
+              const stopBtnAfterComplete = document.getElementById('vocab-chat-stop-summarise-btn');
+              if (stopBtnAfterComplete) {
+                stopBtnAfterComplete.style.display = 'none';
+              }
+              
               // Change button to "Clear summary" after completion
               const summariseBtnAfterComplete = document.getElementById('vocab-chat-summarise-page-btn');
               if (summariseBtnAfterComplete) {
@@ -17553,13 +17738,15 @@ const ChatDialog = {
                 // Update click handler to clear summary
                 summariseBtnAfterComplete.replaceWith(summariseBtnAfterComplete.cloneNode(true));
                 const newBtn = document.getElementById('vocab-chat-summarise-page-btn');
-                newBtn.addEventListener('click', (e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  e.stopImmediatePropagation();
-                  console.log('[ChatDialog] Clear summary button clicked!');
-                  this.clearSummary();
-                }, true);
+                if (newBtn) {
+                  newBtn.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    e.stopImmediatePropagation();
+                    console.log('[ChatDialog] Clear summary button clicked!');
+                    this.clearSummary();
+                  }, true);
+                }
                 
                 console.log('[ChatDialog] Button changed to "Clear summary" after completion');
               }
@@ -17578,6 +17765,12 @@ const ChatDialog = {
               console.log('[ChatDialog] Summarise request was aborted by user');
               // Don't show error message for user-initiated cancellation
               // The stop handler already handles button state and saving accumulated summary
+              // Remove typing indicator if no accumulated summary (stop handler will handle if there is summary)
+              if (!this.pageSummary || this.pageSummary.trim().length === 0) {
+                if (summaryContainer) {
+                  summaryContainer.innerHTML = '';
+                }
+              }
               abortFunction = null;
               return;
             }
@@ -17595,23 +17788,37 @@ const ChatDialog = {
               // Still need to reset button and clear abort function
               abortFunction = null;
               
+              // Remove spinner if it exists
+              if (summaryContainer) {
+                summaryContainer.innerHTML = '';
+              }
+              
+              // Hide stop button
+              const stopBtnOnError = document.getElementById('vocab-chat-stop-summarise-btn');
+              if (stopBtnOnError) {
+                stopBtnOnError.style.display = 'none';
+              }
+              
               // Reset button
               const summariseBtnOnError = document.getElementById('vocab-chat-summarise-page-btn');
               if (summariseBtnOnError) {
                 summariseBtnOnError.disabled = false;
                 summariseBtnOnError.classList.remove('disabled', 'loading');
                 summariseBtnOnError.innerHTML = originalContent;
+                summariseBtnOnError.style.display = 'block';
                 
                 // Update click handler back to handleSummarisePage
                 summariseBtnOnError.replaceWith(summariseBtnOnError.cloneNode(true));
                 const newBtn = document.getElementById('vocab-chat-summarise-page-btn');
-                newBtn.addEventListener('click', (e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  e.stopImmediatePropagation();
-                  console.log('[ChatDialog] Summarise button clicked!');
-                  this.handleSummarisePage();
-                }, true);
+                if (newBtn) {
+                  newBtn.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    e.stopImmediatePropagation();
+                    console.log('[ChatDialog] Summarise button clicked!');
+                    this.handleSummarisePage();
+                  }, true);
+                }
               }
               return;
             }
@@ -17633,23 +17840,32 @@ const ChatDialog = {
             // Clear abort function reference
             abortFunction = null;
             
+            // Hide stop button
+            const stopBtnOnError = document.getElementById('vocab-chat-stop-summarise-btn');
+            if (stopBtnOnError) {
+              stopBtnOnError.style.display = 'none';
+            }
+            
             // Reset button
             const summariseBtnOnError = document.getElementById('vocab-chat-summarise-page-btn');
             if (summariseBtnOnError) {
               summariseBtnOnError.disabled = false;
               summariseBtnOnError.classList.remove('disabled', 'loading');
               summariseBtnOnError.innerHTML = originalContent;
+              summariseBtnOnError.style.display = 'block';
               
               // Update click handler back to handleSummarisePage
               summariseBtnOnError.replaceWith(summariseBtnOnError.cloneNode(true));
               const newBtn = document.getElementById('vocab-chat-summarise-page-btn');
-              newBtn.addEventListener('click', (e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                e.stopImmediatePropagation();
-                console.log('[ChatDialog] Summarise button clicked!');
-                this.handleSummarisePage();
-              }, true);
+              if (newBtn) {
+                newBtn.addEventListener('click', (e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  e.stopImmediatePropagation();
+                  console.log('[ChatDialog] Summarise button clicked!');
+                  this.handleSummarisePage();
+                }, true);
+              }
             }
           }
         );
@@ -17678,23 +17894,32 @@ const ChatDialog = {
         // Clear abort function reference
         abortFunction = null;
         
+        // Hide stop button
+        const stopBtnOnCatchError = document.getElementById('vocab-chat-stop-summarise-btn');
+        if (stopBtnOnCatchError) {
+          stopBtnOnCatchError.style.display = 'none';
+        }
+        
         // Reset button
         const summariseBtnOnCatchError = document.getElementById('vocab-chat-summarise-page-btn');
         if (summariseBtnOnCatchError) {
           summariseBtnOnCatchError.disabled = false;
           summariseBtnOnCatchError.classList.remove('disabled', 'loading');
           summariseBtnOnCatchError.innerHTML = originalContent;
+          summariseBtnOnCatchError.style.display = 'block';
           
           // Update click handler back to handleSummarisePage
           summariseBtnOnCatchError.replaceWith(summariseBtnOnCatchError.cloneNode(true));
           const newBtn = document.getElementById('vocab-chat-summarise-page-btn');
-          newBtn.addEventListener('click', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            e.stopImmediatePropagation();
-            console.log('[ChatDialog] Summarise button clicked!');
-            this.handleSummarisePage();
-          }, true);
+          if (newBtn) {
+            newBtn.addEventListener('click', (e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              e.stopImmediatePropagation();
+              console.log('[ChatDialog] Summarise button clicked!');
+              this.handleSummarisePage();
+            }, true);
+          }
         }
       }
     } catch (error) {
@@ -17702,6 +17927,12 @@ const ChatDialog = {
       
       // Clear abort function reference
       abortFunction = null;
+      
+      // Hide stop button
+      const stopBtnOnParseError = document.getElementById('vocab-chat-stop-summarise-btn');
+      if (stopBtnOnParseError) {
+        stopBtnOnParseError.style.display = 'none';
+      }
       
       // Show error message in chat
       this.addMessageToChat('ai', `⚠️ **Error:**\n\nFailed to parse page content. ${error.message || 'Please try again.'}`);
@@ -17712,17 +17943,20 @@ const ChatDialog = {
         summariseBtnOnParseError.disabled = false;
         summariseBtnOnParseError.classList.remove('disabled', 'loading');
         summariseBtnOnParseError.innerHTML = originalContent;
+        summariseBtnOnParseError.style.display = 'block';
         
         // Update click handler back to handleSummarisePage
         summariseBtnOnParseError.replaceWith(summariseBtnOnParseError.cloneNode(true));
         const newBtn = document.getElementById('vocab-chat-summarise-page-btn');
-        newBtn.addEventListener('click', (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          e.stopImmediatePropagation();
-          console.log('[ChatDialog] Summarise button clicked!');
-          this.handleSummarisePage();
-        }, true);
+        if (newBtn) {
+          newBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            e.stopImmediatePropagation();
+            console.log('[ChatDialog] Summarise button clicked!');
+            this.handleSummarisePage();
+          }, true);
+        }
       }
     }
   },
@@ -18324,6 +18558,20 @@ const ChatDialog = {
               }
               
               console.log('[ChatDialog] Saved stopped response to chat history for textKey:', requestTextKey);
+            }
+          } else {
+            // No accumulated text - remove the streaming message bubble (with typing indicator)
+            const chatContainer = document.getElementById('vocab-chat-messages');
+            if (chatContainer) {
+              const lastAiMessage = chatContainer.querySelector('.vocab-chat-message-ai:last-child');
+              if (lastAiMessage) {
+                const messageContent = lastAiMessage.querySelector('.vocab-chat-message-content');
+                // Check if it's showing the typing indicator
+                if (messageContent && messageContent.querySelector('.vocab-chat-typing-indicator')) {
+                  lastAiMessage.remove();
+                  console.log('[ChatDialog] Removed streaming message bubble with typing indicator (no content received)');
+                }
+              }
             }
           }
           
@@ -18948,7 +19196,14 @@ const ChatDialog = {
     
     const messageContent = document.createElement('div');
     messageContent.className = 'vocab-chat-message-content';
-    messageContent.innerHTML = ''; // Start empty
+    // Show 3-dot typing indicator while waiting for first event
+    messageContent.innerHTML = `
+      <div class="vocab-chat-typing-indicator">
+        <span class="vocab-chat-typing-dot"></span>
+        <span class="vocab-chat-typing-dot"></span>
+        <span class="vocab-chat-typing-dot"></span>
+      </div>
+    `;
     
     messageBubble.appendChild(messageContent);
     chatContainer.appendChild(messageBubble);
@@ -18969,6 +19224,18 @@ const ChatDialog = {
    */
   updateStreamingMessage(messageContent, accumulatedText, possibleQuestions = undefined) {
     if (!messageContent) return;
+    
+    // Show typing indicator if no content yet, otherwise show the content
+    if (!accumulatedText || accumulatedText.trim().length === 0) {
+      messageContent.innerHTML = `
+        <div class="vocab-chat-typing-indicator">
+          <span class="vocab-chat-typing-dot"></span>
+          <span class="vocab-chat-typing-dot"></span>
+          <span class="vocab-chat-typing-dot"></span>
+        </div>
+      `;
+      return;
+    }
     
     // Update the content with markdown rendering
     messageContent.innerHTML = this.renderMarkdown(accumulatedText);
@@ -21147,6 +21414,47 @@ const ChatDialog = {
         padding: 0;
       }
       
+      .vocab-chat-typing-indicator {
+        display: flex;
+        align-items: center;
+        justify-content: flex-start;
+        padding: 12px 16px;
+        gap: 4px;
+      }
+      
+      .vocab-chat-typing-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background-color: #9527F5;
+        display: inline-block;
+        animation: vocab-chat-typing-bounce 1.4s infinite ease-in-out;
+        opacity: 0.4;
+      }
+      
+      .vocab-chat-typing-dot:nth-child(1) {
+        animation-delay: -0.32s;
+      }
+      
+      .vocab-chat-typing-dot:nth-child(2) {
+        animation-delay: -0.16s;
+      }
+      
+      .vocab-chat-typing-dot:nth-child(3) {
+        animation-delay: 0;
+      }
+      
+      @keyframes vocab-chat-typing-bounce {
+        0%, 80%, 100% {
+          transform: scale(0.8);
+          opacity: 0.4;
+        }
+        40% {
+          transform: scale(1);
+          opacity: 1;
+        }
+      }
+      
       .vocab-chat-page-summary-header {
         text-align: center;
         color: #9527F5;
@@ -21367,6 +21675,33 @@ const ChatDialog = {
         padding-right: 0;
         width: 100%;
         box-sizing: border-box;
+      }
+      
+      .vocab-chat-stop-summarise-btn {
+        background: #ef4444 !important;
+        color: white !important;
+        border: none !important;
+        border-radius: 12px !important;
+        padding: 10px 20px !important;
+        font-size: 14px !important;
+        font-weight: 500 !important;
+        cursor: pointer !important;
+        margin: 16px !important;
+        margin-bottom: 8px !important;
+        display: block !important;
+        width: calc(100% - 32px) !important;
+        box-sizing: border-box !important;
+        transition: all 0.2s ease !important;
+      }
+      
+      .vocab-chat-stop-summarise-btn:hover {
+        background: #dc2626 !important;
+        transform: translateY(-1px) !important;
+        box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3) !important;
+      }
+      
+      .vocab-chat-stop-summarise-btn:active {
+        transform: translateY(0) scale(0.95) !important;
       }
       
       .vocab-chat-simplify-more-btn {
@@ -28040,21 +28375,30 @@ const ButtonPanel = {
       
       console.log('[ButtonPanel] Making API call to:', ApiConfig.getUrl(ApiConfig.ENDPOINTS.PDF_TO_TEXT));
       
-      // Get X-Unauthenticated-User-Id header for request
-      const unauthenticatedUserIdHeader = await ApiService.getUnauthenticatedUserIdHeader();
+      // Retry logic wrapper
+      let retryCount = 0;
+      const maxRetries = 1; // Only retry once to avoid infinite loops
       
-      // Prepare request headers
-      const requestHeaders = {
-        'Accept': 'application/json',
-        ...unauthenticatedUserIdHeader
+      const makeRequest = async () => {
+        // Get fresh headers for each request attempt (token may have been refreshed)
+        const currentHeaders = {
+          'Accept': 'application/json',
+          ...(await ApiService.getUnauthenticatedUserIdHeader())
+        };
+        
+        // Add Authorization header if access token is available
+        await ApiService.addAuthorizationHeader(currentHeaders);
+        
+        return await fetch(ApiConfig.getUrl(ApiConfig.ENDPOINTS.PDF_TO_TEXT), {
+          method: 'POST',
+          body: formData,
+          headers: currentHeaders,
+          mode: 'cors',
+          credentials: 'include'
+        });
       };
       
-      // Make API call to process PDF
-      const response = await fetch(ApiConfig.getUrl(ApiConfig.ENDPOINTS.PDF_TO_TEXT), {
-        method: 'POST',
-        body: formData,
-        headers: requestHeaders
-      });
+      let response = await makeRequest();
       
       // Store X-Unauthenticated-User-Id from response header
       await ApiService.storeUnauthenticatedUserId(response);
@@ -28062,7 +28406,37 @@ const ButtonPanel = {
       console.log('[ButtonPanel] API response received, status:', response.status);
       
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        // Clone response for error handling (response body can only be read once)
+        const responseClone = response.clone();
+        const errorInfo = await ApiService.handleApiError(responseClone, 'PDF_TO_TEXT');
+        
+        // Check if token was refreshed and we should retry
+        if (errorInfo.errorCode === 'TOKEN_REFRESHED' && errorInfo.shouldRetry && retryCount < maxRetries) {
+          console.log('[ButtonPanel] Token refreshed, retrying PDF upload request (attempt', retryCount + 1, ')');
+          retryCount++;
+          
+          // Retry the request with the new token
+          response = await makeRequest();
+          await ApiService.storeUnauthenticatedUserId(response);
+          
+          // Check if retry also failed
+          if (!response.ok) {
+            const retryResponseClone = response.clone();
+            const retryErrorInfo = await ApiService.handleApiError(retryResponseClone, 'PDF_TO_TEXT');
+            
+            if (retryErrorInfo.errorCode === 'LOGIN_REQUIRED') {
+              throw new Error(retryErrorInfo.message || 'Please sign in to continue');
+            } else {
+              throw new Error(retryErrorInfo.message || `HTTP error! status: ${response.status}`);
+            }
+          }
+        } else {
+          if (errorInfo.errorCode === 'LOGIN_REQUIRED') {
+            throw new Error(errorInfo.message || 'Please sign in to continue');
+          } else {
+            throw new Error(errorInfo.message || `HTTP error! status: ${response.status}`);
+          }
+        }
       }
       
       const data = await response.json();
@@ -29120,19 +29494,30 @@ const ButtonPanel = {
       
       console.log('[ButtonPanel] Making API call to image-to-text endpoint...');
       
-      // Get X-Unauthenticated-User-Id header for request
-      const unauthenticatedUserIdHeader = await ApiService.getUnauthenticatedUserIdHeader();
+      // Retry logic wrapper
+      let retryCount = 0;
+      const maxRetries = 1; // Only retry once to avoid infinite loops
       
-      // Prepare request headers (FormData doesn't need Content-Type, browser sets it automatically)
-      const requestHeaders = {
-        ...unauthenticatedUserIdHeader
+      const makeRequest = async () => {
+        // Get fresh headers for each request attempt (token may have been refreshed)
+        // FormData doesn't need Content-Type, browser sets it automatically
+        const currentHeaders = {
+          ...(await ApiService.getUnauthenticatedUserIdHeader())
+        };
+        
+        // Add Authorization header if access token is available
+        await ApiService.addAuthorizationHeader(currentHeaders);
+        
+        return await fetch(ApiConfig.getUrl(ApiConfig.ENDPOINTS.IMAGE_TO_TEXT), {
+          method: 'POST',
+          body: formData,
+          headers: currentHeaders,
+          mode: 'cors',
+          credentials: 'include'
+        });
       };
       
-      const response = await fetch(ApiConfig.getUrl(ApiConfig.ENDPOINTS.IMAGE_TO_TEXT), {
-        method: 'POST',
-        body: formData,
-        headers: requestHeaders
-      });
+      let response = await makeRequest();
       
       // Store X-Unauthenticated-User-Id from response header
       await ApiService.storeUnauthenticatedUserId(response);
@@ -29140,7 +29525,37 @@ const ButtonPanel = {
       console.log('[ButtonPanel] API response received:', response.status);
       
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        // Clone response for error handling (response body can only be read once)
+        const responseClone = response.clone();
+        const errorInfo = await ApiService.handleApiError(responseClone, 'IMAGE_TO_TEXT');
+        
+        // Check if token was refreshed and we should retry
+        if (errorInfo.errorCode === 'TOKEN_REFRESHED' && errorInfo.shouldRetry && retryCount < maxRetries) {
+          console.log('[ButtonPanel] Token refreshed, retrying image upload request (attempt', retryCount + 1, ')');
+          retryCount++;
+          
+          // Retry the request with the new token
+          response = await makeRequest();
+          await ApiService.storeUnauthenticatedUserId(response);
+          
+          // Check if retry also failed
+          if (!response.ok) {
+            const retryResponseClone = response.clone();
+            const retryErrorInfo = await ApiService.handleApiError(retryResponseClone, 'IMAGE_TO_TEXT');
+            
+            if (retryErrorInfo.errorCode === 'LOGIN_REQUIRED') {
+              throw new Error(retryErrorInfo.message || 'Please sign in to continue');
+            } else {
+              throw new Error(retryErrorInfo.message || `HTTP error! status: ${response.status}`);
+            }
+          }
+        } else {
+          if (errorInfo.errorCode === 'LOGIN_REQUIRED') {
+            throw new Error(errorInfo.message || 'Please sign in to continue');
+          } else {
+            throw new Error(errorInfo.message || `HTTP error! status: ${response.status}`);
+          }
+        }
       }
       
       const data = await response.json();
