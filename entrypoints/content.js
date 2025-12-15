@@ -4544,11 +4544,9 @@ const WordSelector = {
       // Create span without background color (no vocab-word-highlight class initially)
       const highlight = this.createWordSpanWithoutBackground(range, selectedText, normalizedWord);
       
-      // Clear the selection AFTER creating the span (allows Chrome's default highlight to show first)
-      // Use a small delay to ensure Chrome's default behavior completes
-      setTimeout(() => {
-        selection.removeAllRanges();
-      }, 50);
+      // IMPORTANT: Preserve Chrome's default selection (yellow background)
+      // Do NOT clear the selection - let users copy the word
+      // The selection will be cleared naturally when user clicks elsewhere (Chrome's default behavior)
       
       console.log('[WordSelector] ✓ Word selected:', selectedText);
       console.log('[WordSelector] ✓ Normalized word stored:', normalizedWord);
@@ -11573,15 +11571,6 @@ const TextSelector = {
       // Or be longer than typical word length
       if (!(/\s/.test(selectedText)) && selectedText.length < 15) {
         return; // Let WordSelector handle single words
-      }
-      
-      // Check if text has at least 3 words
-      const wordCount = selectedText.split(/\s+/).filter(word => word.length > 0).length;
-      if (wordCount < 3) {
-        console.log('[TextSelector] Not enough words selected:', wordCount);
-        this.showNotification("Select atleast 3 words");
-        selection.removeAllRanges();
-        return;
       }
       
       // Get the range and validate
